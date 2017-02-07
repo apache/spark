@@ -112,8 +112,9 @@ private[hive] object IsolatedClientLoader extends Logging {
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        Some("http://www.datanucleus.org/downloads/maven2"),
-        ivyPath,
+        SparkSubmitUtils.buildIvySettings(
+          Some("http://www.datanucleus.org/downloads/maven2"),
+          ivyPath),
         exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
@@ -121,6 +122,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
     allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
+    logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
     tempDir.listFiles().map(_.toURI.toURL)
   }
 

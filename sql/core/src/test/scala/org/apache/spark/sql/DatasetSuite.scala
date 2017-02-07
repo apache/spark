@@ -898,13 +898,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (1, 2), (1, 1), (2, 1), (2, 2))
   }
 
-  test("dropDuplicates should not change child plan output") {
-    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
-    checkDataset(
-      ds.dropDuplicates("_1").select(ds("_1").as[String], ds("_2").as[Int]),
-      ("a", 1), ("b", 1))
-  }
-
   test("SPARK-16097: Encoders.tuple should handle null object correctly") {
     val enc = Encoders.tuple(Encoders.tuple(Encoders.STRING, Encoders.STRING), Encoders.STRING)
     val data = Seq((("a", "b"), "c"), (null, "d"))
@@ -1115,7 +1108,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // instead of Int for avoiding possible overflow.
     val ds = (0 to 10000).map( i =>
       (i, Seq((i, Seq((i, "This is really not that long of a string")))))).toDS()
-    val sizeInBytes = ds.logicalPlan.statistics.sizeInBytes
+    val sizeInBytes = ds.logicalPlan.stats(sqlConf).sizeInBytes
     // sizeInBytes is 2404280404, before the fix, it overflows to a negative number
     assert(sizeInBytes > 0)
   }

@@ -388,6 +388,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
+  // Some tests suing script transformation are skipped as it requires `/bin/bash` which
+  // can be missing or differently located.
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src",
     skip = !TestUtils.testCommandAvailable("/bin/bash"))
@@ -461,7 +463,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue)
       |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
       |WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("transform with SerDe4",
     """
@@ -470,7 +473,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE
       |'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES
       |('serialization.last.column.takes.rest'='true') FROM src;
-    """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    """.stripMargin.replaceAll(System.lineSeparator(), " "),
+    skip = !TestUtils.testCommandAvailable("/bin/bash"))
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
@@ -1043,8 +1047,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
     assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
-        case _: Project => ()
-      }.size
+        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+      }.sum
     }
   }
 
@@ -1062,8 +1066,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
     assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
-        case _: Project => ()
-      }.size
+        case i: InsertIntoHiveTable => i.query.collect { case p: Project => () }.size
+      }.sum
     }
   }
 

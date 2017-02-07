@@ -635,4 +635,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
     }
   }
+
+  test("SPARK-16848: table API throws an exception for user specified schema") {
+    withTable("t") {
+      val schema = StructType(StructField("a", StringType) :: Nil)
+      val e = intercept[AnalysisException] {
+        spark.read.schema(schema).table("t")
+      }.getMessage
+      assert(e.contains("User specified schema not supported with `table`"))
+    }
+  }
 }

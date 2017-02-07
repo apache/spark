@@ -237,7 +237,7 @@ class LocalLDAModel private[spark] (
     vocabSize)
 
   /**
-   * Java-friendly version of [[logLikelihood]]
+   * Java-friendly version of `logLikelihood`
    */
   @Since("1.5.0")
   def logLikelihood(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
@@ -259,7 +259,9 @@ class LocalLDAModel private[spark] (
     -logLikelihood(documents) / corpusTokenCount
   }
 
-  /** Java-friendly version of [[logPerplexity]] */
+  /**
+   * Java-friendly version of `logPerplexity`
+   */
   @Since("1.5.0")
   def logPerplexity(documents: JavaPairRDD[java.lang.Long, Vector]): Double = {
     logPerplexity(documents.rdd.asInstanceOf[RDD[(Long, Vector)]])
@@ -365,7 +367,9 @@ class LocalLDAModel private[spark] (
     }
   }
 
-  /** Get a method usable as a UDF for [[topicDistributions()]] */
+  /**
+   * Get a method usable as a UDF for `topicDistributions()`
+   */
   private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val expElogbetaBc = sc.broadcast(expElogbeta)
@@ -414,7 +418,7 @@ class LocalLDAModel private[spark] (
   }
 
   /**
-   * Java-friendly version of [[topicDistributions]]
+   * Java-friendly version of `topicDistributions`
    */
   @Since("1.4.1")
   def topicDistributions(

@@ -165,6 +165,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    assertNoSpecifiedSchema("jdbc")
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
@@ -235,6 +236,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
+    assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
     val options = new JDBCOptions(url, table, params)
@@ -308,7 +310,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Lines text format or newline-delimited JSON</a>) and returns the result as
    * a `DataFrame`.
    *
-   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * Unless the schema is specified using `schema` function, this function goes through the
    * input once to determine the input schema.
    *
    * @param jsonRDD input RDD with one JSON object per record
@@ -320,7 +322,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
    * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
    *
-   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * Unless the schema is specified using `schema` function, this function goes through the
    * input once to determine the input schema.
    *
    * @param jsonRDD input RDD with one JSON object per record
@@ -363,7 +365,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
-   * specify the schema explicitly using [[schema]].
+   * specify the schema explicitly using `schema`.
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
@@ -475,6 +477,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
+    assertNoSpecifiedSchema("table")
     sparkSession.table(tableName)
   }
 
@@ -540,10 +543,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
-    if (userSpecifiedSchema.nonEmpty) {
-      throw new AnalysisException("User specified schema not supported with `textFile`")
-    }
+    assertNoSpecifiedSchema("textFile")
     text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
+  }
+
+  /**
+   * A convenient function for schema validation in APIs.
+   */
+  private def assertNoSpecifiedSchema(operation: String): Unit = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new AnalysisException(s"User specified schema not supported with `$operation`")
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

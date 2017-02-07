@@ -53,6 +53,20 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     rDataset = rData.map(FeatureData).toDF()
   }
 
+  test("gmm fails on high dimensional data") {
+    val df = Seq(
+      Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(0, 4), Array(3.0, 8.0)),
+      Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(1, 5), Array(4.0, 9.0)))
+      .map(Tuple1.apply).toDF("features")
+    val gm = new GaussianMixture()
+    withClue(s"GMM should restrict the maximum number of features to be < " +
+      s"${GaussianMixture.MAX_NUM_FEATURES}") {
+      intercept[IllegalArgumentException] {
+        gm.fit(df)
+      }
+    }
+  }
+
   test("default parameters") {
     val gm = new GaussianMixture()
 
@@ -207,6 +221,10 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
                 [,1]     [,2]
       [1,] 0.2961543 0.160783
       [2,] 0.1607830 1.008878
+
+      model$loglik
+
+      [1] -46.89499
      */
     val weights = Array(0.5333333, 0.4666667)
     val means = Array(Vectors.dense(10.363673, 9.897081), Vectors.dense(0.11731091, -0.06192351))
@@ -219,6 +237,9 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val expected = new GaussianMixtureModel("dummy", weights, gaussians)
     val actual = new GaussianMixture().setK(2).setSeed(seed).fit(rDataset)
     modelEquals(expected, actual)
+
+    val llk = actual.summary.logLikelihood
+    assert(llk ~== -46.89499 absTol 1E-5)
   }
 
   test("upper triangular matrix unpacking") {

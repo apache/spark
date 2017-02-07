@@ -27,7 +27,7 @@ import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * (private[spark]) Params for classification.
@@ -71,7 +71,7 @@ abstract class Classifier[
    * and put it in an RDD with strong types.
    *
    * @param dataset  DataFrame with columns for labels ([[org.apache.spark.sql.types.NumericType]])
-   *                 and features ([[Vector]]).
+   *                 and features (`Vector`).
    * @param numClasses  Number of classes label can take.  Labels must be integers in the range
    *                    [0, numClasses).
    * @throws SparkException  if any label is not an integer >= 0
@@ -94,7 +94,7 @@ abstract class Classifier[
    * by finding the maximum label value.
    *
    * Label validation (ensuring all labels are integers >= 0) needs to be handled elsewhere,
-   * such as in [[extractLabeledPoints()]].
+   * such as in `extractLabeledPoints()`.
    *
    * @param dataset  Dataset which contains a column [[labelCol]]
    * @param maxNumClasses  Maximum number of classes allowed when inferred from data.  If numClasses
@@ -150,7 +150,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
-   *  - predicted labels as [[predictionCol]] of type [[Double]]
+   *  - predicted labels as [[predictionCol]] of type `Double`
    *  - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`.
    *
    * @param dataset input dataset
@@ -192,10 +192,10 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   * This internal method is used to implement `transform()` and output [[predictionCol]].
    *
    * This default implementation for classification predicts the index of the maximum value
-   * from [[predictRaw()]].
+   * from `predictRaw()`.
    */
   override protected def predict(features: FeaturesType): Double = {
     raw2prediction(predictRaw(features))
@@ -205,7 +205,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * Raw prediction for each possible label.
    * The meaning of a "raw" prediction may vary between algorithms, but it intuitively gives
    * a measure of confidence in each possible label (where larger = more confident).
-   * This internal method is used to implement [[transform()]] and output [[rawPredictionCol]].
+   * This internal method is used to implement `transform()` and output [[rawPredictionCol]].
    *
    * @return  vector where element i is the raw prediction for label i.
    *          This raw prediction may be any real number, where a larger value indicates greater

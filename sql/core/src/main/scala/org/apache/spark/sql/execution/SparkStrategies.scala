@@ -114,9 +114,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * Matches a plan whose output should be small enough to be used in broadcast join.
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
-      plan.planStats(conf).isBroadcastable ||
-        (plan.planStats(conf).sizeInBytes >= 0 &&
-          plan.planStats(conf).sizeInBytes <= conf.autoBroadcastJoinThreshold)
+      plan.stats(conf).isBroadcastable ||
+        (plan.stats(conf).sizeInBytes >= 0 &&
+          plan.stats(conf).sizeInBytes <= conf.autoBroadcastJoinThreshold)
     }
 
     /**
@@ -126,7 +126,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * dynamic.
      */
     private def canBuildLocalHashMap(plan: LogicalPlan): Boolean = {
-      plan.planStats(conf).sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+      plan.stats(conf).sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
     }
 
     /**
@@ -137,7 +137,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * use the size of bytes here as estimation.
      */
     private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
-      a.planStats(conf).sizeInBytes * 3 <= b.planStats(conf).sizeInBytes
+      a.stats(conf).sizeInBytes * 3 <= b.stats(conf).sizeInBytes
     }
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
@@ -206,7 +206,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
-          if (right.planStats(conf).sizeInBytes <= left.planStats(conf).sizeInBytes) {
+          if (right.stats(conf).sizeInBytes <= left.stats(conf).sizeInBytes) {
             BuildRight
           } else {
             BuildLeft
@@ -402,34 +402,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object DDLStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
-        val cmd = CreateTableCommand(tableDesc, ifNotExists = mode == SaveMode.Ignore)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case CreateTable(tableDesc, mode, None) =>
-        val cmd =
-          CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
-        ExecutedCommandExec(cmd) :: Nil
-
-      // CREATE TABLE ... AS SELECT ... for hive serde table is handled in hive module, by rule
-      // `CreateTables`
-
-      case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isDatasourceTable(tableDesc) =>
-        val cmd =
-          CreateDataSourceTableAsSelectCommand(
-            tableDesc,
-            mode,
-            query)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTempViewUsing => ExecutedCommandExec(c) :: Nil
-
       case _ => Nil
     }
   }

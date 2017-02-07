@@ -41,7 +41,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame.
+#' Fits generalized linear model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -52,6 +52,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
+#'               Currently these families are supported: \code{binomial}, \code{gaussian},
+#'               \code{Gamma}, and \code{poisson}.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
@@ -104,8 +106,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- ""
             }
 
+            # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
-                                "fit", formula, data@sdf, family$family, family$link,
+                                "fit", formula, data@sdf, tolower(family$family), family$link,
                                 tol, as.integer(maxIter), as.character(weightCol), regParam)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
@@ -120,6 +123,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
+#'               Currently these families are supported: \code{binomial}, \code{gaussian},
+#'               \code{Gamma}, and \code{poisson}.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
@@ -177,11 +182,11 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             # coefficients, standard error of coefficients, t value and p value. Otherwise,
             # it will be fitted by local "l-bfgs", we can only provide coefficients.
             if (length(features) == length(coefficients)) {
-              coefficients <- matrix(coefficients, ncol = 1)
+              coefficients <- matrix(unlist(coefficients), ncol = 1)
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
             } else {
-              coefficients <- matrix(coefficients, ncol = 4)
+              coefficients <- matrix(unlist(coefficients), ncol = 4)
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
             }
@@ -254,7 +259,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 
 #' Isotonic Regression Model
 #'
-#' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
+#' Fits an Isotonic Regression model against a SparkDataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.

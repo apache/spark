@@ -27,6 +27,46 @@ absoluteSparkPath <- function(x) {
   file.path(sparkHome, x)
 }
 
+test_that("spark.bisectingKmeans", {
+  newIris <- iris
+  newIris$Species <- NULL
+  training <- suppressWarnings(createDataFrame(newIris))
+
+  take(training, 1)
+
+  model <- spark.bisectingKmeans(data = training, ~ .)
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 1)
+
+  # Test fitted works on Bisecting KMeans
+  fitted.model <- fitted(model)
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test summary works on KMeans
+  summary.model <- summary(model)
+  cluster <- summary.model$cluster
+  k <- summary.model$k
+  expect_equal(k, 4)
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction),
+               c(0, 1, 2, 3))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-bisectingkmeans", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  summary2 <- summary(model2)
+  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+  expect_equal(summary.model$coefficients, summary2$coefficients)
+  expect_true(!summary.model$is.loaded)
+  expect_true(summary2$is.loaded)
+
+  unlink(modelPath)
+})
+
 test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
@@ -56,6 +96,10 @@ test_that("spark.gaussianMixture", {
   #            [,1]     [,2]
   #  [1,] 0.2961543 0.160783
   #  [2,] 0.1607830 1.008878
+  #
+  #' model$loglik
+  #
+  #  [1] -46.89499
   # nolint end
   data <- list(list(-0.6264538, 0.1836433), list(-0.8356286, 1.5952808),
                list(0.3295078, -0.8204684), list(0.4874291, 0.7383247),
@@ -72,9 +116,11 @@ test_that("spark.gaussianMixture", {
   rMu <- c(0.11731091, -0.06192351, 10.363673, 9.897081)
   rSigma <- c(0.62049934, 0.06880802, 0.06880802, 1.27431874,
               0.2961543, 0.160783, 0.1607830, 1.008878)
+  rLoglik <- -46.89499
   expect_equal(stats$lambda, rLambda, tolerance = 1e-3)
   expect_equal(unlist(stats$mu), rMu, tolerance = 1e-3)
   expect_equal(unlist(stats$sigma), rSigma, tolerance = 1e-3)
+  expect_equal(unlist(stats$loglik), rLoglik, tolerance = 1e-3)
   p <- collect(select(predict(model, df), "prediction"))
   expect_equal(p$prediction, c(0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1))
 
@@ -88,6 +134,7 @@ test_that("spark.gaussianMixture", {
   expect_equal(stats$lambda, stats2$lambda)
   expect_equal(unlist(stats$mu), unlist(stats2$mu))
   expect_equal(unlist(stats$sigma), unlist(stats2$sigma))
+  expect_equal(unlist(stats$loglik), unlist(stats2$loglik))
 
   unlink(modelPath)
 })
@@ -119,6 +166,10 @@ test_that("spark.kmeans", {
   expect_equal(k, 2)
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
+  # test summary coefficients return matrix type
+  expect_true(class(summary.model$coefficients) == "matrix")
+  expect_true(class(summary.model$coefficients[1, ]) == "numeric")
+
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -132,6 +183,33 @@ test_that("spark.kmeans", {
   expect_true(summary2$is.loaded)
 
   unlink(modelPath)
+
+  # Test Kmeans on dataset that is sensitive to seed value
+  col1 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  col2 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  col3 <- c(1, 2, 3, 4, 0, 1, 2, 3, 4, 0)
+  cols <- as.data.frame(cbind(col1, col2, col3))
+  df <- createDataFrame(cols)
+
+  model1 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
+                         initMode = "random", seed = 1, tol = 1E-5)
+  model2 <- spark.kmeans(data = df, ~ ., k = 5, maxIter = 10,
+                         initMode = "random", seed = 22222, tol = 1E-5)
+
+  summary.model1 <- summary(model1)
+  summary.model2 <- summary(model2)
+  cluster1 <- summary.model1$cluster
+  cluster2 <- summary.model2$cluster
+  clusterSize1 <- summary.model1$clusterSize
+  clusterSize2 <- summary.model2$clusterSize
+
+  # The predicted clusters are different
+  expect_equal(sort(collect(distinct(select(cluster1, "prediction")))$prediction),
+             c(0, 1, 2, 3))
+  expect_equal(sort(collect(distinct(select(cluster2, "prediction")))$prediction),
+             c(0, 1, 2))
+  expect_equal(clusterSize1, 4)
+  expect_equal(clusterSize2, 3)
 })
 
 test_that("spark.lda with libsvm", {
@@ -146,12 +224,16 @@ test_that("spark.lda with libsvm", {
   topics <- stats$topicTopTerms
   weights <- stats$topicTopTermsWeights
   vocabulary <- stats$vocabulary
+  trainingLogLikelihood <- stats$trainingLogLikelihood
+  logPrior <- stats$logPrior
 
-  expect_false(isDistributed)
+  expect_true(isDistributed)
   expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 11)
   expect_true(is.null(vocabulary))
+  expect_true(trainingLogLikelihood <= 0 & !is.na(trainingLogLikelihood))
+  expect_true(logPrior <= 0 & !is.na(logPrior))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
@@ -161,11 +243,13 @@ test_that("spark.lda with libsvm", {
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
 
-  expect_false(stats2$isDistributed)
+  expect_true(stats2$isDistributed)
   expect_equal(logLikelihood, stats2$logLikelihood)
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_equal(vocabulary, stats2$vocabulary)
+  expect_equal(trainingLogLikelihood, stats2$trainingLogLikelihood)
+  expect_equal(logPrior, stats2$logPrior)
 
   unlink(modelPath)
 })
@@ -182,12 +266,16 @@ test_that("spark.lda with text input", {
   topics <- stats$topicTopTerms
   weights <- stats$topicTopTermsWeights
   vocabulary <- stats$vocabulary
+  trainingLogLikelihood <- stats$trainingLogLikelihood
+  logPrior <- stats$logPrior
 
   expect_false(isDistributed)
   expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
   expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 10)
   expect_true(setequal(stats$vocabulary, c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")))
+  expect_true(is.na(trainingLogLikelihood))
+  expect_true(is.na(logPrior))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda-text", fileext = ".tmp")
@@ -202,6 +290,8 @@ test_that("spark.lda with text input", {
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_true(all.equal(vocabulary, stats2$vocabulary))
+  expect_true(is.na(stats2$trainingLogLikelihood))
+  expect_true(is.na(stats2$logPrior))
 
   unlink(modelPath)
 })

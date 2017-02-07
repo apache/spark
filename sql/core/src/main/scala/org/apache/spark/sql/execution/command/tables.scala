@@ -111,10 +111,12 @@ case class CreateTableLikeCommand(
  *   [AS select_statement];
  * }}}
  */
-case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
+case class CreateTableCommand(
+    table: CatalogTable,
+    ignoreIfExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.createTable(table, ifNotExists)
+    sparkSession.sessionState.catalog.createTable(table, ignoreIfExists)
     Seq.empty[Row]
   }
 }
@@ -317,6 +319,10 @@ case class LoadDataCommand(
         holdDDLTime = false,
         isSrcLocal = isLocal)
     }
+
+    // Refresh the metadata cache to ensure the data visible to the users
+    catalog.refreshTable(targetTable.identifier)
+
     Seq.empty[Row]
   }
 }
@@ -446,7 +452,7 @@ case class DescribeTableCommand(
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(catalog.lookupRelation(metadata.identifier).schema, result)
+        describeSchema(sparkSession.table(metadata.identifier).schema, result)
       } else {
         describeSchema(metadata.schema, result)
       }
@@ -524,8 +530,10 @@ case class DescribeTableCommand(
   private def describeViewInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# View Information", "", "")
-    append(buffer, "View Original Text:", metadata.viewOriginalText.getOrElse(""), "")
-    append(buffer, "View Expanded Text:", metadata.viewText.getOrElse(""), "")
+    append(buffer, "View Text:", metadata.viewText.getOrElse(""), "")
+    append(buffer, "View Default Database:", metadata.viewDefaultDatabase.getOrElse(""), "")
+    append(buffer, "View Query Output Columns:",
+      metadata.viewQueryColumnNames.mkString("[", ", ", "]"), "")
   }
 
   private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
