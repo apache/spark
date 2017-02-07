@@ -90,6 +90,7 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
     >>> svm = LinearSVC(maxIter=5, regParam=0.01)
     >>> model = svm.fit(df)
+    >>> model = model.setFeaturesCol("features").setPredictionCol("prediction")
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
