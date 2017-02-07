@@ -694,12 +694,7 @@ class SimpleSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SimpleMo
         override def run(): Unit = {
           task.stageId match {
             case 0 =>
-              task.stageAttemptId match {
-                case 0 =>
-                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 2))
-                case 1 =>
-                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
-              }
+              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 2))
             case 1 =>
               val stageAttempt = task.stageAttemptId
               val partitionId = task.partitionId
