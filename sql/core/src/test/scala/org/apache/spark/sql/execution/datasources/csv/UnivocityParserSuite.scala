@@ -43,30 +43,6 @@ class UnivocityParserSuite extends SparkFunSuite {
     }
   }
 
-  test("Can parse escaped characters") {
-    assert(CSVTypeCast.toChar("""\t""") === '\t')
-    assert(CSVTypeCast.toChar("""\r""") === '\r')
-    assert(CSVTypeCast.toChar("""\b""") === '\b')
-    assert(CSVTypeCast.toChar("""\f""") === '\f')
-    assert(CSVTypeCast.toChar("""\"""") === '\"')
-    assert(CSVTypeCast.toChar("""\'""") === '\'')
-    assert(CSVTypeCast.toChar("""\u0000""") === '\u0000')
-  }
-
-  test("Does not accept delimiter larger than one character") {
-    val exception = intercept[IllegalArgumentException]{
-      CSVTypeCast.toChar("ab")
-    }
-    assert(exception.getMessage.contains("cannot be more than one character"))
-  }
-
-  test("Throws exception for unsupported escaped characters") {
-    val exception = intercept[IllegalArgumentException]{
-      CSVTypeCast.toChar("""\1""")
-    }
-    assert(exception.getMessage.contains("Unsupported special character for delimiter"))
-  }
-
   test("Nullable types are handled") {
     val types = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
       BooleanType, DecimalType.DoubleDecimal, TimestampType, DateType, StringType)

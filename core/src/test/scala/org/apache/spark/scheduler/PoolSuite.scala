@@ -20,12 +20,17 @@ package org.apache.spark.scheduler
 import java.util.Properties
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.scheduler.SchedulingMode._
 
 /**
  * Tests that pools and the associated scheduling algorithms for FIFO and fair scheduling work
  * correctly.
  */
 class PoolSuite extends SparkFunSuite with LocalSparkContext {
+
+  val LOCAL = "local"
+  val APP_NAME = "PoolSuite"
+  val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
 
   def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {
@@ -45,12 +50,11 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("FIFO Scheduler Test") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
+    val rootPool = new Pool("", FIFO, 0, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
-    schedulableBuilder.buildPools()
 
     val taskSetManager0 = createTaskSetManager(0, 2, taskScheduler)
     val taskSetManager1 = createTaskSetManager(1, 2, taskScheduler)
@@ -74,30 +78,24 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
    */
   test("Fair Scheduler Test") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    val conf = new SparkConf().set("spark.scheduler.allocation.file", xmlPath)
-    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
+    val rootPool = new Pool("", FAIR, 0, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
     // Ensure that the XML file was read in correctly.
-    assert(rootPool.getSchedulableByName("default") != null)
-    assert(rootPool.getSchedulableByName("1") != null)
-    assert(rootPool.getSchedulableByName("2") != null)
-    assert(rootPool.getSchedulableByName("3") != null)
-    assert(rootPool.getSchedulableByName("1").minShare === 2)
-    assert(rootPool.getSchedulableByName("1").weight === 1)
-    assert(rootPool.getSchedulableByName("2").minShare === 3)
-    assert(rootPool.getSchedulableByName("2").weight === 1)
-    assert(rootPool.getSchedulableByName("3").minShare === 0)
-    assert(rootPool.getSchedulableByName("3").weight === 1)
+    verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
+    verifyPool(rootPool, "1", 2, 1, FIFO)
+    verifyPool(rootPool, "2", 3, 1, FIFO)
+    verifyPool(rootPool, "3", 0, 1, FIFO)
 
     val properties1 = new Properties()
-    properties1.setProperty("spark.scheduler.pool", "1")
+    properties1.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, "1")
     val properties2 = new Properties()
-    properties2.setProperty("spark.scheduler.pool", "2")
+    properties2.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, "2")
 
     val taskSetManager10 = createTaskSetManager(0, 1, taskScheduler)
     val taskSetManager11 = createTaskSetManager(1, 1, taskScheduler)
@@ -134,22 +132,22 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("Nested Pool Test") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
-    val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1)
-    val pool1 = new Pool("1", SchedulingMode.FAIR, 4, 1)
+    val rootPool = new Pool("", FAIR, 0, 0)
+    val pool0 = new Pool("0", FAIR, 3, 1)
+    val pool1 = new Pool("1", FAIR, 4, 1)
     rootPool.addSchedulable(pool0)
     rootPool.addSchedulable(pool1)
 
-    val pool00 = new Pool("00", SchedulingMode.FAIR, 2, 2)
-    val pool01 = new Pool("01", SchedulingMode.FAIR, 1, 1)
+    val pool00 = new Pool("00", FAIR, 2, 2)
+    val pool01 = new Pool("01", FAIR, 1, 1)
     pool0.addSchedulable(pool00)
     pool0.addSchedulable(pool01)
 
-    val pool10 = new Pool("10", SchedulingMode.FAIR, 2, 2)
-    val pool11 = new Pool("11", SchedulingMode.FAIR, 2, 1)
+    val pool10 = new Pool("10", FAIR, 2, 2)
+    val pool11 = new Pool("11", FAIR, 2, 1)
     pool1.addSchedulable(pool10)
     pool1.addSchedulable(pool11)
 
@@ -178,4 +176,37 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(2, rootPool, 6)
     scheduleTaskAndVerifyId(3, rootPool, 2)
   }
+
+  test("SPARK-17663: FairSchedulableBuilder sets default values for blank or invalid datas") {
+    val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-invalid-data.xml")
+      .getFile()
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE_PROPERTY, xmlPath)
+
+    val rootPool = new Pool("", FAIR, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, conf)
+    schedulableBuilder.buildPools()
+
+    verifyPool(rootPool, schedulableBuilder.DEFAULT_POOL_NAME, 0, 1, FIFO)
+    verifyPool(rootPool, "pool_with_invalid_min_share", 0, 2, FAIR)
+    verifyPool(rootPool, "pool_with_invalid_weight", 1, 1, FAIR)
+    verifyPool(rootPool, "pool_with_invalid_scheduling_mode", 3, 2, FIFO)
+    verifyPool(rootPool, "pool_with_non_uppercase_scheduling_mode", 2, 1, FAIR)
+    verifyPool(rootPool, "pool_with_NONE_scheduling_mode", 1, 2, FIFO)
+    verifyPool(rootPool, "pool_with_whitespace_min_share", 0, 2, FAIR)
+    verifyPool(rootPool, "pool_with_whitespace_weight", 1, 1, FAIR)
+    verifyPool(rootPool, "pool_with_whitespace_scheduling_mode", 3, 2, FIFO)
+    verifyPool(rootPool, "pool_with_empty_min_share", 0, 3, FAIR)
+    verifyPool(rootPool, "pool_with_empty_weight", 2, 1, FAIR)
+    verifyPool(rootPool, "pool_with_empty_scheduling_mode", 2, 2, FIFO)
+    verifyPool(rootPool, "pool_with_surrounded_whitespace", 3, 2, FAIR)
+  }
+
+  private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
+                         expectedInitWeight: Int, expectedSchedulingMode: SchedulingMode): Unit = {
+    assert(rootPool.getSchedulableByName(poolName) != null)
+    assert(rootPool.getSchedulableByName(poolName).minShare === expectedInitMinShare)
+    assert(rootPool.getSchedulableByName(poolName).weight === expectedInitWeight)
+    assert(rootPool.getSchedulableByName(poolName).schedulingMode === expectedSchedulingMode)
+  }
+
 }
