@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -140,7 +140,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   private def requireNonStaticConf(key: String): Unit = {
-    if (StaticSQLConf.globalConfKeys.contains(key)) {
+    if (SQLConf.staticConfKeys.contains(key)) {
       throw new AnalysisException(s"Cannot modify the value of a static config: $key")
     }
   }
