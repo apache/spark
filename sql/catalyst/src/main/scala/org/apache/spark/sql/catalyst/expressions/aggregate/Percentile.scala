@@ -147,7 +147,7 @@ case class Percentile(
       // add only when frequency is positive
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
-      } else if ( frqLong < 0 ) {
+      } else if (frqLong < 0) {
         throw new SparkException(s"Negative values found in ${frequencyExpression.sql}")
       }
     }
