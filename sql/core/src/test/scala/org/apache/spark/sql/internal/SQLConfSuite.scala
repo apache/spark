@@ -270,4 +270,13 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
+
+  test("set the size of table relation cache size") {
+    withTable("t") {
+      withSQLConf(SQLConf.SESSIONCATALOG_TABLE_RELATION_CACHE_SIZE.key -> "25") {
+        assert(spark.sessionState.conf.getConf(SQLConf.
+          SESSIONCATALOG_TABLE_RELATION_CACHE_SIZE) == 25)
+      }
+    }
+  }
 }

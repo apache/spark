@@ -58,6 +58,11 @@ trait CatalystConf {
    * Enables CBO for estimation of plan statistics when set true.
    */
   def cboEnabled: Boolean
+
+  /**
+   * the size of tableRelationCache in SessionCatalog
+   */
+  def tableRelationCacheSize: Int = 1000
 }
 
 
