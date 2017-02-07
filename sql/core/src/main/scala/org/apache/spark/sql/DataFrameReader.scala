@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JacksonParser, JacksonUtils, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -338,6 +338,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         jsonRDD,
         columnNameOfCorruptRecord,
         parsedOptions)
+    }
+    if (parsedOptions.failFast) {
+      // We can fail before starting to parse in case of "FAILFAST" mode. In case of "PERMISIVE"
+      // mode, it allows to read values as null for unsupported types. In case of "DROPMALFORMED"
+      // mode, it drops records only containing non-null values in unsupported types.
+      JacksonUtils.verifySchema(schema)
     }
     val parsed = jsonRDD.mapPartitions { iter =>
       val parser = new JacksonParser(schema, columnNameOfCorruptRecord, parsedOptions)

@@ -1055,6 +1055,37 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
   }
 
+  test("Unsupported types: FAILFAST mode") {
+    val schema = StructType(
+      StructField("a", CalendarIntervalType, true) :: Nil)
+    val exceptionOne = intercept[UnsupportedOperationException] {
+      // Read JSON data from RDD
+      spark.read
+        .option("mode", "FAILFAST")
+        .schema(schema)
+        .json(corruptRecords)
+        .collect()
+    }
+
+    assert(exceptionOne.getMessage.contains(
+      "Unsupported type calendarinterval of column a in JSON conversion."))
+
+    val exceptionTwo = intercept[UnsupportedOperationException] {
+      // Read JSON data from files.
+      withTempDir { path =>
+        spark.read
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .format("json")
+          .load(path.getAbsolutePath)
+          .collect()
+      }
+    }
+
+    assert(exceptionTwo.getMessage.contains(
+      "Unsupported type calendarinterval of column a in JSON conversion."))
+  }
+
   test("Corrupt records: DROPMALFORMED mode") {
     val schemaOne = StructType(
       StructField("a", StringType, true) ::
@@ -1080,6 +1111,41 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       jsonDFTwo,
       Row("str_a_4") :: Nil)
     assert(jsonDFTwo.schema === schemaTwo)
+  }
+
+  test("Unsupported types: DROPMALFORMED mode") {
+    val schema = StructType(
+      StructField("a", CalendarIntervalType, true) :: Nil)
+    val rdd = sparkContext.parallelize(Seq("""{"a": 1}"""))
+    // Read JSON data from RDD
+    val df = spark.read
+      .option("mode", "DROPMALFORMED")
+      .schema(schema)
+      .json(rdd)
+
+    assert(df.collect().isEmpty)
+
+    val nullRdd = sparkContext.parallelize(Seq("""{"a": null}"""))
+    // Read JSON data from RDD
+    val nullDf = spark.read
+      .option("mode", "DROPMALFORMED")
+      .schema(schema)
+      .json(nullRdd)
+
+    // This succeeds to read null even thought it is unsupported.
+    checkAnswer(nullDf, Row(null))
+
+    withTempPath { path =>
+      // Read JSON data from files.
+      rdd.saveAsTextFile(path.getAbsolutePath)
+      val df = spark.read
+        .option("mode", "DROPMALFORMED")
+        .schema(schema)
+        .format("json")
+        .load(path.getAbsolutePath)
+
+      assert(df.collect().isEmpty)
+    }
   }
 
   test("Corrupt records: PERMISSIVE mode, without designated column for malformed records") {
@@ -1160,6 +1226,31 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
             Row("]") :: Nil
         )
       }
+    }
+  }
+
+  test("Unsupported types: PERMISSIVE mode") {
+    val schema = StructType(
+      StructField("a", CalendarIntervalType, true) :: Nil)
+    val rdd = sparkContext.parallelize(Seq("""{"a": 1}"""))
+    // Read JSON data from RDD
+    val df = spark.read
+      .option("mode", "PERMISSIVE")
+      .schema(schema)
+      .json(rdd)
+
+    checkAnswer(df, Row(null))
+
+    withTempPath { path =>
+      // Read JSON data from files.
+      rdd.saveAsTextFile(path.getAbsolutePath)
+      val df = spark.read
+        .option("mode", "PERMISSIVE")
+        .schema(schema)
+        .format("json")
+        .load(path.getAbsolutePath)
+
+      checkAnswer(df, Row(null))
     }
   }
 

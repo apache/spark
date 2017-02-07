@@ -133,6 +133,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil)
   }
 
+  test("from_json unsupported type") {
+    val df = Seq("""{"a" 1}""").toDS()
+    val schema = new StructType().add("a", CalendarIntervalType)
+
+    val e = intercept[AnalysisException]{
+      // Unsupported type throws an exception
+      df.select(from_json($"value", schema)).collect()
+    }
+    assert(e.getMessage.contains(
+      "Unsupported type calendarinterval of column a in JSON conversion"))
+  }
+
   test("to_json") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 
@@ -158,7 +170,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_json($"c")).collect()
     }
     assert(e.getMessage.contains(
-      "Unable to convert column a of type calendarinterval to JSON."))
+      "Unsupported type calendarinterval of column a in JSON conversion"))
   }
 
   test("roundtrip in to_json and from_json") {

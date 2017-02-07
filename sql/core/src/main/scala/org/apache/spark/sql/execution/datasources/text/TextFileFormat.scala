@@ -43,12 +43,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
-      throw new AnalysisException(
+      throw new UnsupportedOperationException(
         s"Text data source supports only a single column, and you have ${schema.size} columns.")
     }
     val tpe = schema(0).dataType
     if (tpe != StringType) {
-      throw new AnalysisException(
+      throw new UnsupportedOperationException(
         s"Text data source supports only a string column, but you have ${tpe.simpleString}.")
     }
   }
@@ -93,9 +93,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    assert(
-      requiredSchema.length <= 1,
-      "Text data source only produces a single data column named \"value\".")
+    if (requiredSchema.nonEmpty) {
+      // `requiredSchema` can be empty when the projected column is only the partitioned column.
+      verifySchema(requiredSchema)
+    }
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))

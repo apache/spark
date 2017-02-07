@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JacksonUtils, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -66,6 +66,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    JacksonUtils.verifySchema(dataSchema)
     val conf = job.getConfiguration
     val parsedOptions: JSONOptions = new JSONOptions(options)
     parsedOptions.compressionCodec.foreach { codec =>
@@ -100,6 +101,15 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+
+    if (parsedOptions.failFast) {
+      // We can fail before starting to parse in case of "FAILFAST" mode. In case of "PERMISIVE"
+      // mode, it allows to read values as null for unsupported types. In case of "DROPMALFORMED"
+      // mode, it drops records only containing non-null values in unsupported types. We should use
+      // `requiredSchema` instead of whole schema `dataSchema` here to not to break the original
+      // behaviour.
+      JacksonUtils.verifySchema(requiredSchema)
+    }
 
     (file: PartitionedFile) => {
       val linesReader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)

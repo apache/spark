@@ -688,13 +688,70 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .write.csv(csvDir)
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type"))
+    }
+  }
 
-      msg = intercept[SparkException] {
+  test("Unsupported types - DROPMALFORMED mode") {
+    val schema = StructType(StructField("a", CalendarIntervalType, true) :: Nil)
+
+    withTempPath { path =>
+      spark.range(1).write.csv(path.getAbsolutePath)
+      val df = spark.read
+        .schema(schema)
+        .option("mode", "DROPMALFORMED")
+        .csv(path.getAbsolutePath)
+
+      assert(df.collect().isEmpty)
+    }
+
+    withTempPath { path =>
+      Seq(Tuple1("null")).toDF().write.csv(path.getAbsolutePath)
+      val nullDf = spark.read
+        .schema(schema)
+        .option("nullValue", "null")
+        .option("mode", "DROPMALFORMED")
+        .csv(path.getAbsolutePath)
+
+      // This succeeds to read null even thought it is unsupported.
+      checkAnswer(nullDf, Row(null))
+    }
+  }
+
+  test("Unsupported types - FAILFAST mode") {
+    withTempPath { path =>
+      val msg = intercept[UnsupportedOperationException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
-        spark.range(1).write.csv(csvDir)
-        spark.read.schema(schema).csv(csvDir).collect()
+        spark.range(1).write.csv(path.getAbsolutePath)
+        spark.read.schema(schema).option("mode", "FAILFAST").csv(path.getAbsolutePath).collect()
+      }.getMessage
+
+      assert(msg.contains("CSV data source does not support array<double> data type"))
+    }
+  }
+
+  test("Unsupported types - PERMISSIVE mode") {
+    withTempDir { dir =>
+      // If the values are null, it is fine to read.
+      val schema = StructType(StructField("a",
+          StructType(StructField("b", StringType, true) :: Nil), true) :: Nil)
+      val path = s"${dir.getAbsolutePath}/tmp1"
+      Seq(Tuple1("null")).toDF().write.csv(path)
+      val df = spark.read
+        .schema(schema)
+        .option("nullValue", "null")
+        .option("mode", "PERMISSIVE")
+        .csv(path)
+
+      checkAnswer(df, Row(null))
+
+      // If the values are non-null and the type is unsupported, it throws an exception.
+      val msg = intercept[SparkException] {
+        val path = s"${dir.getAbsolutePath}/tmp2"
+        spark.range(1).write.csv(path)
+        spark.read.schema(schema).option("mode", "PERMISSIVE").csv(path).collect()
       }.getCause.getMessage
-      assert(msg.contains("Unsupported type: array"))
+
+      assert(msg.contains("Unsupported type: struct"))
     }
   }
 

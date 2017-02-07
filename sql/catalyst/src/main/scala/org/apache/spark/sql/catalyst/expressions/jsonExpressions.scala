@@ -495,6 +495,21 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
 
   override def dataType: DataType = schema
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (StringType.acceptsType(child.dataType)) {
+      try {
+        JacksonUtils.verifySchema(schema)
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName requires that the expression is a string expression.")
+    }
+  }
+
   override def nullSafeEval(json: Any): Any = {
     try parser.parse(json.toString).head catch {
       case _: SparkSQLJsonProcessingException => null
