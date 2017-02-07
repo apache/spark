@@ -131,9 +131,8 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("SparkContext property overriding") {
-    val conf = new SparkConf(false).setMaster("local").setAppName("My app")
+    val conf = new SparkConf(false).setAppName("My app")
     sc = new SparkContext("local[2]", "My other app", conf)
-    assert(sc.master === "local[2]")
     assert(sc.appName === "My other app")
   }
 

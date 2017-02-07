@@ -63,6 +63,8 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
     val newReloadConf = new SparkConf(loadDefaults = true)
     propertiesToReload.foreach { prop =>
       newReloadConf.getOption(prop).foreach { value =>
+        // (trick) avoid SPARK-19482.
+        newSparkConf.remove(prop)
         newSparkConf.set(prop, value)
       }
     }
