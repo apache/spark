@@ -69,12 +69,17 @@ private[spark] class Benchmark(
    * @param name of the benchmark case
    * @param numIters if non-zero, forces exactly this many iterations to be run
    */
-  def addCase(name: String, numIters: Int = 0)(f: Int => Unit): Unit = {
-    addTimerCase(name, numIters) { timer =>
+  def addCase(
+      name: String,
+      numIters: Int = 0,
+      prepare: () => Unit = () => { },
+      cleanup: () => Unit = () => { })(f: Int => Unit): Unit = {
+    val timedF = (timer: Benchmark.Timer) => {
       timer.startTiming()
       f(timer.iteration)
       timer.stopTiming()
     }
+    benchmarks += Benchmark.Case(name, timedF, numIters, prepare, cleanup)
   }
 
   /**
@@ -101,7 +106,7 @@ private[spark] class Benchmark(
 
     val results = benchmarks.map { c =>
       println("  Running case: " + c.name)
-      measure(valuesPerIteration, c.numIters)(c.fn)
+      measure(valuesPerIteration, c.numIters, c.prepare, c.cleanup)(c.fn)
     }
     println
 
@@ -128,21 +133,33 @@ private[spark] class Benchmark(
    * Runs a single function `f` for iters, returning the average time the function took and
    * the rate of the function.
    */
-  def measure(num: Long, overrideNumIters: Int)(f: Timer => Unit): Result = {
+  def measure(num: Long, overrideNumIters: Int, prepare: () => Unit, cleanup: () => Unit)
+      (f: Timer => Unit): Result = {
     System.gc()  // ensures garbage from previous cases don't impact this one
     val warmupDeadline = warmupTime.fromNow
     while (!warmupDeadline.isOverdue) {
-      f(new Benchmark.Timer(-1))
+      try {
+        prepare()
+        f(new Benchmark.Timer(-1))
+      } finally {
+        cleanup()
+      }
     }
     val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
     val minDuration = if (overrideNumIters != 0) 0 else minTime.toNanos
     val runTimes = ArrayBuffer[Long]()
     var i = 0
     while (i < minIters || runTimes.sum < minDuration) {
-      val timer = new Benchmark.Timer(i)
-      f(timer)
-      val runTime = timer.totalTime()
-      runTimes += runTime
+      val runTime = try {
+        prepare()
+        val timer = new Benchmark.Timer(i)
+        f(timer)
+        val time = timer.totalTime()
+        runTimes += time
+        time
+      } finally {
+        cleanup()
+      }
 
       if (outputPerIteration) {
         // scalastyle:off
@@ -188,7 +205,12 @@ private[spark] object Benchmark {
     }
   }
 
-  case class Case(name: String, fn: Timer => Unit, numIters: Int)
+  case class Case(
+      name: String,
+      fn: Timer => Unit,
+      numIters: Int,
+      prepare: () => Unit = () => { },
+      cleanup: () => Unit = () => { })
   case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
 
   /**

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -43,7 +44,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *  - There are many TODOs for the existing APIs. They should throw a not implemented exception.
  *  - Compaction: The batch and columns should be able to compact based on a selection vector.
  */
-public final class ColumnarBatch {
+public final class ColumnarBatch implements Serializable {
   private static final int DEFAULT_BATCH_SIZE = 4 * 1024;
   private static MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
 

@@ -62,11 +62,20 @@ private[columnar] sealed trait ColumnStats extends Serializable {
     count += 1
   }
 
+  def gatherNullStats(): Unit = {
+    nullCount += 1
+    // 1 bytes for null position
+    sizeInBytes += 1
+    count += 1
+  }
+
   /**
    * Column statistics represented as a single row, currently including closed lower bound, closed
    * upper bound and null count.
    */
   def collectedStatistics: GenericInternalRow
+
+  def collectedStats: Array[Any]
 }
 
 /**
@@ -74,6 +83,8 @@ private[columnar] sealed trait ColumnStats extends Serializable {
  */
 private[columnar] class NoopColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = super.gatherStats(row, ordinal)
+
+  override def collectedStats: Array[Any] = Array[Any](null, null, nullCount, count, 0L)
 
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](null, null, nullCount, count, 0L))
@@ -93,6 +104,15 @@ private[columnar] class BooleanColumnStats extends ColumnStats {
     }
   }
 
+  def gatherValueStats(value: Boolean): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += BOOLEAN.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
@@ -110,6 +130,15 @@ private[columnar] class ByteColumnStats extends ColumnStats {
       sizeInBytes += BYTE.defaultSize
     }
   }
+
+  def gatherValueStats(value: Byte): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += BYTE.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
 
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
@@ -129,6 +158,15 @@ private[columnar] class ShortColumnStats extends ColumnStats {
     }
   }
 
+  def gatherValueStats(value: Short): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += SHORT.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
@@ -146,6 +184,15 @@ private[columnar] class IntColumnStats extends ColumnStats {
       sizeInBytes += INT.defaultSize
     }
   }
+
+  def gatherValueStats(value: Int): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += INT.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
 
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
@@ -165,6 +212,15 @@ private[columnar] class LongColumnStats extends ColumnStats {
     }
   }
 
+  def gatherValueStats(value: Long): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += LONG.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
@@ -182,6 +238,15 @@ private[columnar] class FloatColumnStats extends ColumnStats {
       sizeInBytes += FLOAT.defaultSize
     }
   }
+
+  def gatherValueStats(value: Float): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += FLOAT.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
 
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
@@ -201,6 +266,15 @@ private[columnar] class DoubleColumnStats extends ColumnStats {
     }
   }
 
+  def gatherValueStats(value: Double): Unit = {
+    if (value > upper) upper = value
+    if (value < lower) lower = value
+    sizeInBytes += DOUBLE.defaultSize
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
@@ -219,6 +293,15 @@ private[columnar] class StringColumnStats extends ColumnStats {
     }
   }
 
+  def gatherValueStats(value: UTF8String, size: Int): Unit = {
+    if (upper == null || value.compareTo(upper) > 0) upper = value.clone()
+    if (lower == null || value.compareTo(lower) < 0) lower = value.clone()
+    sizeInBytes += (size + 4)
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
@@ -230,6 +313,13 @@ private[columnar] class BinaryColumnStats extends ColumnStats {
       sizeInBytes += BINARY.actualSize(row, ordinal)
     }
   }
+
+  def gatherValueStats(value: Array[Byte], size: Int): Unit = {
+    sizeInBytes += (size + 4)
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](null, null, nullCount, count, sizeInBytes)
 
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
@@ -252,6 +342,15 @@ private[columnar] class DecimalColumnStats(precision: Int, scale: Int) extends C
     }
   }
 
+  def gatherValueStats(value: Decimal, size: Int): Unit = {
+    if (upper == null || value.compareTo(upper) > 0) upper = value
+    if (lower == null || value.compareTo(lower) < 0) lower = value
+    sizeInBytes += size
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](lower, upper, nullCount, count, sizeInBytes)
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
@@ -266,6 +365,25 @@ private[columnar] class ObjectColumnStats(dataType: DataType) extends ColumnStat
     }
   }
 
+  override def collectedStats: Array[Any] = null
+
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
+}
+
+private[columnar] class OtherColumnStats() extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    throw new UnsupportedOperationException()
+  }
+
+  def gatherValueStats(value: Object, size: Int): Unit = {
+    sizeInBytes += size
+    count += 1
+  }
+
+  override def collectedStats: Array[Any] = Array[Any](null, null, nullCount, count, sizeInBytes)
+
+  override def collectedStatistics: GenericInternalRow = {
+    throw new UnsupportedOperationException()
+  }
 }

@@ -33,9 +33,14 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
   val inMemoryTableScan: InMemoryTableScanExec = null
 
+  val columnIndexes: Array[Int] = null
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+
+  lazy val enableScanStatistics: Boolean =
+    sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
 
   /**
    * Generate [[ColumnVector]] expressions for our parent to consume as rows.
@@ -78,6 +83,17 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val scanTimeMetric = metricTerm(ctx, "scanTime")
     val scanTimeTotalNs = ctx.freshName("scanTime")
     ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+    val incReadBatches = if (!enableScanStatistics) "" else {
+      val readPartitions = ctx.addReferenceObj("readPartitions", inMemoryTableScan.readPartitions)
+      val readBatches = ctx.addReferenceObj("readBatches", inMemoryTableScan.readBatches)
+      ctx.addMutableState("int", "initializeInMemoryTableScanStatistics",
+        s"""
+         |$readPartitions.setValue(0);
+         |$readBatches.setValue(0);
+         |if ($input.hasNext()) { $readPartitions.add(1); }
+       """.stripMargin)
+      s"$readBatches.add(1);"
+    }
 
     val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
     val batch = ctx.freshName("batch")
@@ -89,7 +105,8 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
     val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
       ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-      s"$name = $batch.column($i);"
+      val index = if (columnIndexes == null) i else columnIndexes(i)
+      s"$name = $batch.column($index);"
     }
 
     val nextBatch = ctx.freshName("nextBatch")
@@ -99,6 +116,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
          |  long getBatchStart = System.nanoTime();
          |  if ($input.hasNext()) {
          |    $batch = ($columnarBatchClz)$input.next();
+         |    $incReadBatches
          |    $numOutputRows.add($batch.numRows());
          |    $idx = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}

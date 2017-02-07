@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
@@ -25,10 +26,14 @@ import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
+import org.apache.spark.sql.catalyst.expressions.UnsafeMapData;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -57,7 +62,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVectors are intended to be reused.
  */
-public abstract class ColumnVector implements AutoCloseable {
+public abstract class ColumnVector implements AutoCloseable, Serializable {
+  ColumnVector() { }
+
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
@@ -66,6 +73,8 @@ public abstract class ColumnVector implements AutoCloseable {
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
     if (mode == MemoryMode.OFF_HEAP) {
       return new OffHeapColumnVector(capacity, type);
+    } else if (mode == MemoryMode.ON_HEAP_UNSAFE) {
+      return new OnHeapUnsafeColumnVector(capacity, type);
     } else {
       return new OnHeapColumnVector(capacity, type);
     }
@@ -548,18 +557,69 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns a utility object to get structs.
    * provided to keep API compatibility with InternalRow for code generation
    */
-  public ColumnarBatch.Row getStruct(int rowId, int size) {
-    resultStruct.rowId = rowId;
-    return resultStruct;
+  public InternalRow getStruct(int rowId, int size) {
+    if (!unsafeDirectCopy) {
+      resultStruct.rowId = rowId;
+      return resultStruct;
+    }
+    resultArray.data.loadBytes(resultArray);
+    int offset = getArrayOffset(rowId);
+    int length = getArrayLength(rowId);
+    UnsafeRow map = new UnsafeRow(size);
+    map.pointTo(resultArray.byteArray, Platform.BYTE_ARRAY_OFFSET + offset, length);
+    return map;
+  }
+
+  public int putStruct(int rowId, InternalRow row) {
+    if (!unsafeDirectCopy) {
+      throw new UnsupportedOperationException();
+    }
+    assert(row instanceof UnsafeRow);
+    UnsafeRow unsafeRow = (UnsafeRow)row;
+    byte[] value = (byte[])unsafeRow.getBaseObject();
+    long offset = unsafeRow.getBaseOffset() - Platform.BYTE_ARRAY_OFFSET;
+    int length = unsafeRow.getSizeInBytes();
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException("Cannot put this map to ColumnVector as " +
+              "it's too big.");
+    }
+    putByteArray(rowId, value, (int)offset, length);
+    return length;
   }
 
   /**
    * Returns the array at rowid.
    */
-  public final Array getArray(int rowId) {
-    resultArray.length = getArrayLength(rowId);
-    resultArray.offset = getArrayOffset(rowId);
-    return resultArray;
+  public final ArrayData getArray(int rowId) {
+    if (unsafeDirectCopy) {
+      resultArray.data.loadBytes(resultArray); // update resultArray.byteData
+      int offset = getArrayOffset(rowId);
+      int length = getArrayLength(rowId);
+      UnsafeArrayData array = new UnsafeArrayData();
+      array.pointTo(resultArray.byteArray, Platform.BYTE_ARRAY_OFFSET + offset, length);
+      return array;
+    } else {
+      resultArray.length = getArrayLength(rowId);
+      resultArray.offset = getArrayOffset(rowId);
+      return resultArray;
+    }
+  }
+
+  public final int putArray(int rowId, ArrayData array) {
+    if (!unsafeDirectCopy) {
+      throw new UnsupportedOperationException();
+    }
+    assert(array instanceof UnsafeArrayData);
+    UnsafeArrayData unsafeArray = (UnsafeArrayData)array;
+    byte[] value = (byte[])unsafeArray.getBaseObject();
+    long offset = unsafeArray.getBaseOffset() - Platform.BYTE_ARRAY_OFFSET;
+    int length = unsafeArray.getSizeInBytes();
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException("Cannot put this array to ColumnVector as " +
+              "it's too big.");
+    }
+    putByteArray(rowId, value, (int)offset, length);
+    return length;
   }
 
   /**
@@ -579,7 +639,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   private Array getByteArray(int rowId) {
-    Array array = getArray(rowId);
+    resultArray.length = getArrayLength(rowId);
+    resultArray.offset = getArrayOffset(rowId);
+    Array array = resultArray;
     array.data.loadBytes(array);
     return array;
   }
@@ -587,8 +649,33 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the value for rowId.
    */
-  public MapData getMap(int ordinal) {
-    throw new UnsupportedOperationException();
+  public MapData getMap(int rowId) {
+    if (!unsafeDirectCopy) {
+      throw new UnsupportedOperationException();
+    }
+    resultArray.data.loadBytes(resultArray);
+    int offset = getArrayOffset(rowId);
+    int length = getArrayLength(rowId);
+    UnsafeMapData map = new UnsafeMapData();
+    map.pointTo(resultArray.byteArray, Platform.BYTE_ARRAY_OFFSET + offset, length);
+    return map;
+  }
+
+  public int putMap(int rowId, MapData map) {
+    if (!unsafeDirectCopy) {
+      throw new UnsupportedOperationException();
+    }
+    assert(map instanceof UnsafeMapData);
+    UnsafeMapData unsafeMap = (UnsafeMapData)map;
+    byte[] value = (byte[])unsafeMap.getBaseObject();
+    long offset = unsafeMap.getBaseOffset() - Platform.BYTE_ARRAY_OFFSET;
+    int length = unsafeMap.getSizeInBytes();
+    if (offset > Integer.MAX_VALUE) {
+      throw new UnsupportedOperationException("Cannot put this map to ColumnVector as " +
+              "it's too big.");
+    }
+    putByteArray(rowId, value, (int)offset, length);
+    return length;
   }
 
   /**
@@ -609,14 +696,18 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
 
-  public final void putDecimal(int rowId, Decimal value, int precision) {
+  public final int putDecimal(int rowId, Decimal value, int precision) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       putInt(rowId, (int) value.toUnscaledLong());
+      return 4;
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
       putLong(rowId, value.toUnscaledLong());
+      return 8;
     } else {
       BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
-      putByteArray(rowId, bigInteger.toByteArray());
+      byte[] array = bigInteger.toByteArray();
+      putByteArray(rowId, array);
+      return array.length;
     }
   }
 
@@ -633,6 +724,13 @@ public abstract class ColumnVector implements AutoCloseable {
     }
   }
 
+  public final int putUTF8String(int rowId, UTF8String string) {
+    assert(dictionary == null);
+    byte[] array = string.getBytes();
+    putByteArray(rowId, array);
+    return array.length;
+  }
+
   /**
    * Returns the byte array for rowId.
    */
@@ -646,6 +744,11 @@ public abstract class ColumnVector implements AutoCloseable {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return v.getBytes();
     }
+  }
+
+  public final int putBinary(int rowId, byte[] bytes) {
+    putByteArray(rowId, bytes);
+    return bytes.length;
   }
 
   /**
@@ -894,10 +997,12 @@ public abstract class ColumnVector implements AutoCloseable {
   @VisibleForTesting
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
 
+  protected boolean unsafeDirectCopy;
+
   /**
    * Data type for this column.
    */
-  protected final DataType type;
+  protected DataType type;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -929,17 +1034,17 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * If this is a nested type (array or struct), the column for the child data.
    */
-  protected final ColumnVector[] childColumns;
+  protected ColumnVector[] childColumns;
 
   /**
    * Reusable Array holder for getArray().
    */
-  protected final Array resultArray;
+  protected Array resultArray;
 
   /**
    * Reusable Struct holder for getStruct().
    */
-  protected final ColumnarBatch.Row resultStruct;
+  protected ColumnarBatch.Row resultStruct;
 
   /**
    * The Dictionary for this column.
@@ -991,14 +1096,20 @@ public abstract class ColumnVector implements AutoCloseable {
    * type.
    */
   protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
+    this(capacity, type, memMode, false);
+  }
+
+  protected ColumnVector(int capacity, DataType type, MemoryMode memMode, boolean unsafeDirectCopy) {
     this.capacity = capacity;
     this.type = type;
+    this.unsafeDirectCopy = unsafeDirectCopy;
 
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
-        || DecimalType.isByteArrayDecimalType(type)) {
+        || DecimalType.isByteArrayDecimalType(type)
+        || unsafeDirectCopy && (type instanceof MapType || type instanceof StructType)) {
       DataType childType;
       int childCapacity = capacity;
-      if (type instanceof ArrayType) {
+      if (!unsafeDirectCopy && type instanceof ArrayType) {
         childType = ((ArrayType)type).elementType();
       } else {
         childType = DataTypes.ByteType;

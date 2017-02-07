@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 
@@ -32,12 +32,57 @@ case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
-  extends LeafExecNode {
+  extends LeafExecNode with ColumnarBatchScan {
+
+  override val columnIndexes =
+    attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
+
+  override val inMemoryTableScan = this
+
+  override val supportCodegen: Boolean = relation.useColumnarBatches
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    if (relation.useColumnarBatches) {
+      val schema = relation.partitionStatistics.schema
+      val schemaIndex = schema.zipWithIndex
+      val buffers = relation.cachedColumnBuffers.asInstanceOf[RDD[CachedColumnarBatch]]
+      val prunedBuffers = if (inMemoryPartitionPruningEnabled) {
+        buffers.mapPartitionsInternal { cachedColumnarBatchIterator =>
+          val partitionFilter = newPredicate(
+            partitionFilters.reduceOption(And).getOrElse(Literal(true)), schema)
+
+          // Do partition batch pruning if enabled
+          cachedColumnarBatchIterator.filter { cachedColumnarBatch =>
+            if (!partitionFilter.eval(cachedColumnarBatch.stats)) {
+              def statsString: String = schemaIndex.map {
+                case (a, i) =>
+                  val value = cachedColumnarBatch.stats.get(i, a.dataType)
+                  s"${a.name}: $value"
+              }.mkString(", ")
+              logInfo(s"Skipping partition based on stats $statsString")
+              false
+            } else {
+              true
+            }
+          }
+        }
+      } else {
+        buffers
+      }
+
+      // HACK ALERT: This is actually an RDD[CachedColumnarBatch].
+      // We're taking advantage of Scala's type erasure here to pass these batches along.
+      Seq(prunedBuffers.map(_.columnarBatch).asInstanceOf[RDD[InternalRow]])
+    } else {
+      Seq()
+    }
+  }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   override def output: Seq[Attribute] = attributes
 
@@ -130,7 +175,9 @@ case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
+    assert(relation.cachedColumnBuffers != null)
     val buffers = relation.cachedColumnBuffers
+    val conf = if (relation.useColumnarBatches) sqlContext.sparkContext.conf else null
 
     buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
       val partitionFilter = newPredicate(
@@ -169,7 +216,7 @@ case class InMemoryTableScanExec(
         if (enableAccumulators) {
           readBatches.add(1)
         }
-        numOutputRows += batch.numRows
+        numOutputRows += batch.getNumRows()
         batch
       }
 
@@ -177,7 +224,7 @@ case class InMemoryTableScanExec(
         case udt: UserDefinedType[_] => udt.sqlType
         case other => other
       }.toArray
-      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      val columnarIterator = new GenerateColumnAccessor(conf).generate(columnTypes)
       columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions.add(1)
@@ -185,4 +232,5 @@ case class InMemoryTableScanExec(
       columnarIterator
     }
   }
+
 }
