@@ -594,7 +594,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the decimal for rowId.
    */
-  public final Decimal getDecimal(int rowId, int precision, int scale) {
+  public Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -623,7 +623,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the UTF8String for rowId.
    */
-  public final UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
@@ -636,7 +636,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the byte array for rowId.
    */
-  public final byte[] getBinary(int rowId) {
+  public byte[] getBinary(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array array = getByteArray(rowId);
       byte[] bytes = new byte[array.length];
@@ -984,6 +984,14 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public ColumnVector getDictionaryIds() {
     return dictionaryIds;
+  }
+
+  public ColumnVector(DataType type) {
+    this.capacity = 0;
+    this.type = type;
+    this.childColumns = null;
+    this.resultArray = null;
+    this.resultStruct = null;
   }
 
   /**

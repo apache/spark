@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.orc
 import java.net.URI
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -35,10 +37,11 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{AtomicType, StructType, TimestampType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -107,6 +110,20 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     true
   }
 
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    // For Orc data source, `buildReader` already handles partition values appending. Here we
+    // simply delegate to `buildReader`.
+    buildReader(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+  }
+
   override def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -126,6 +143,15 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
+    val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
+    val enableVectorizedReader: Boolean =
+      sparkSession.sessionState.conf.orcVectorizedReaderEnabled &&
+      resultSchema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
+        !f.dataType.isInstanceOf[TimestampType])
+
+    // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+    val returningBatch = supportBatch(sparkSession, resultSchema)
+
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
@@ -139,33 +165,73 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         val physicalSchema = maybePhysicalSchema.get
         OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
 
-        val orcRecordReader = {
-          val job = Job.getInstance(conf)
-          FileInputFormat.setInputPaths(job, file.filePath)
+        val job = Job.getInstance(conf)
+        FileInputFormat.setInputPaths(job, file.filePath)
 
-          val fileSplit = new FileSplit(
-            new Path(new URI(file.filePath)), file.start, file.length, Array.empty
-          )
-          // Custom OrcRecordReader is used to get
-          // ObjectInspector during recordReader creation itself and can
-          // avoid NameNode call in unwrapOrcStructs per file.
-          // Specifically would be helpful for partitioned datasets.
-          val orcReader = OrcFile.createReader(
-            new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
-          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
+        val fileSplit = new FileSplit(
+          new Path(new URI(file.filePath)), file.start, file.length, Array.empty
+        )
+        // Custom OrcRecordReader is used to get
+        // ObjectInspector during recordReader creation itself and can
+        // avoid NameNode call in unwrapOrcStructs per file.
+        // Specifically would be helpful for partitioned datasets.
+        val orcReader = OrcFile.createReader(
+          new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
+
+        if (enableVectorizedReader) {
+          val columnIDs =
+            requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).sorted.asJava
+          val orcRecordReader = new VectorizedSparkOrcNewRecordReader(
+            orcReader,
+            conf,
+            fileSplit,
+            columnIDs,
+            requiredSchema,
+            partitionSchema,
+            file.partitionValues)
+
+          if (returningBatch) {
+            orcRecordReader.enableReturningBatches()
+          }
+          val recordsIterator = new RecordReaderIterator(orcRecordReader)
+          Option(TaskContext.get())
+            .foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
+          // VectorizedSparkOrcNewRecordReader appends the columns internally to avoid another copy.
+          recordsIterator.asInstanceOf[Iterator[InternalRow]]
+        } else {
+          val orcRecordReader =
+            new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
+          val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
+          Option(TaskContext.get())
+            .foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
+
+          // Unwraps `OrcStruct`s to `UnsafeRow`s
+          val iter = OrcRelation.unwrapOrcStructs(
+            conf,
+            requiredSchema,
+            Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
+            recordsIterator)
+
+          if (partitionSchema.length == 0) {
+            // There is no partition columns
+            iter
+          } else {
+            val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+            val joinedRow = new JoinedRow()
+            val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+            iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+          }
         }
-
-        val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
-        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
-
-        // Unwraps `OrcStruct`s to `UnsafeRow`s
-        OrcRelation.unwrapOrcStructs(
-          conf,
-          requiredSchema,
-          Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
-          recordsIterator)
       }
     }
+  }
+
+  /**
+   * Returns whether the reader will return the rows as batch or not.
+   */
+  override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
+    OrcRelation.supportBatch(sparkSession, schema)
   }
 }
 
@@ -305,5 +371,16 @@ private[orc] object OrcRelation extends HiveInspectors {
     val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
+  }
+
+  /**
+   * Returns whether the reader will return the rows as batch or not.
+   */
+  def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
+    val conf = sparkSession.sessionState.conf
+    conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
+      schema.length <= conf.wholeStageMaxNumFields &&
+      schema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
+        !f.dataType.isInstanceOf[TimestampType])
   }
 }

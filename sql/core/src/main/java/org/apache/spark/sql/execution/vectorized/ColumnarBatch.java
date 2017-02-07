@@ -466,6 +466,18 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
+  /**
+   * A public Ctor which accepts allocated ColumnVectors.
+   */
+  public ColumnarBatch(ColumnVector[] columns, int maxRows) {
+    this.columns = columns;
+    this.capacity = maxRows;
+    this.schema = null;
+    this.nullFilteredColumns = new HashSet<>();
+    this.filteredRows = new boolean[maxRows];
+    this.row = new Row(this);
+  }
+
   private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
