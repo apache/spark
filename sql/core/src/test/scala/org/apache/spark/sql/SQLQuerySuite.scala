@@ -999,7 +999,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-19218 `SET -v` should not fail with null value configuration") {
     import SQLConf._
-    val confEntry = SQLConfigBuilder("spark.test").doc("doc").stringConf.createWithDefault(null)
+    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
 
     try {
       val result = sql("SET -v").collect()
