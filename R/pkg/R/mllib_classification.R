@@ -111,7 +111,7 @@ setMethod("spark.linearSvc", signature(data = "SparkDataFrame", formula = "formu
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns the predicted values based on an LinearSVCModel.
 #' @rdname spark.linearSvc
-#' @aliases predict,LogisticRegressionModel,SparkDataFrame-method
+#' @aliases predict,LinearSVCModel,SparkDataFrame-method
 #' @export
 #' @note predict(LinearSVCModel) since 2.2.0
 setMethod("predict", signature(object = "LinearSVCModel"),
