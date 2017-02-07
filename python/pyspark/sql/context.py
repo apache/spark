@@ -186,21 +186,54 @@ class SQLContext(object):
         :param f: python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
 
-        >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
+        >>> sLs =sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
         [Row(stringLengthString(test)=u'4')]
+        >>> df.select(sLs(df.field2)).take(1)
+        [Row(stringLengthString(field2)=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sLi = sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sLi = sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
-        self.sparkSession.catalog.registerFunction(name, f, returnType)
+        return self.sparkSession.catalog.registerFunction(name, f, returnType)
+
+    @since(2.1)
+    def registerJythonFunction(self, name, f, returnType=StringType()):
+        """
+        Register a function to be executed using Jython on the workers.
+        The function passed in must either be a string containing your python lambda expression,
+        or if you have dill installed on the driver a lambda dill can extract the source for.
+        Note that not all Python code will execute in Jython and not all Python
+        code will execute well in Jython. However, for some UDFs, executing in Jython
+        may be faster as we can avoid copying the data from the JVM to the Python
+        executor.
+
+        This is a very experimental feature, and may be removed in future versions
+        once we figure out if it is a good idea or not.
+        ...Note: Experimental
+
+        :param name: name of the UDF
+        :param f: String containing python lambda or python function
+        :param returnType: a :class:`DataType` object
+
+        >>> from pyspark.sql.types import IntegerType
+        >>> add1 = sqlContext.registerJythonFunction("add1", "lambda x: x + 1", IntegerType())
+        >>> df.registerTempTable("magic")
+        >>> sqlContext.sql("SELECT add1(field1) FROM magic").collect()
+        [Row(add1(field1)=2), Row(add1(field1)=3), Row(add1(field1)=4)]
+
+
+        df.select(add1(df.field1)).collect()
+        [Row(add1(field1)=2), Row(add1(field1)=3), Row(add1(field1)=4)]
+        """
+        return self.sparkSession.catalog.registerJythonFunction(name, f, returnType)
 
     @ignore_unicode_prefix
     @since(2.1)

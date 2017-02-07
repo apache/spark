@@ -21,7 +21,7 @@ from collections import namedtuple
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import UserDefinedFunction
+from pyspark.sql.functions import UserDefinedFunction, UserDefinedJythonFunction
 from pyspark.sql.types import IntegerType, StringType, StructType
 
 
@@ -237,22 +237,46 @@ class Catalog(object):
         :param f: python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
 
-        >>> spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
+        >>> strLenStr = spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
         >>> spark.sql("SELECT stringLengthString('test')").collect()
         [Row(stringLengthString(test)=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sli = spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sli = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType, name)
         self._jsparkSession.udf().registerPython(name, udf._judf)
+        return udf
+
+    @since(2.1)
+    def registerJythonFunction(self, name, f, returnType=StringType()):
+        """
+        Register a function to be executed using Jython on the workers.
+        The function passed in must either be a string containing your python lambda expression,
+        or if you have dill installed on the driver a lambda dill can extract the source for.
+        Note that not all Python code will execute in Jython and not all Python
+        code will execute well in Jython. However, for some UDFs, executing in Jython
+        may be faster as we can avoid copying the data from the JVM to the Python
+        executor.
+
+        This is a very experimental feature, and may be removed in future versions
+        once we figure out if it is a good idea or not.
+        ...Note: Experimental
+
+        :param name: name of the UDF
+        :param f: String containing python lambda or python function
+        :param returnType: a :class:`DataType` object
+        """
+        udf = UserDefinedJythonFunction(f, returnType, name)
+        self._jsparkSession.udf().registerJython(name, udf._judf)
+        return udf
 
     @since(2.0)
     def isCached(self, tableName):

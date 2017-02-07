@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
-import py4j
+# Detect when running in Jython and skip py4j
+import sys
+is_jython = "JDK" in sys.version
+if not is_jython:
+    import py4j
 
 
 class CapturedException(Exception):

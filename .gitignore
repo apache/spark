@@ -85,5 +85,7 @@ spark-warehouse/
 .Rhistory
 *.Rproj
 *.Rproj.*
-
 .Rproj.user
+
+# For Jython
+*py.class

@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
-import cProfile
+try:
+    import cProfile as profiler
+except:
+    import profile as profiler
 import pstats
 import os
 import atexit
@@ -156,7 +159,7 @@ class BasicProfiler(Profiler):
 
     def profile(self, func):
         """ Runs and profiles the method to_profile passed in. A profile object is returned. """
-        pr = cProfile.Profile()
+        pr = profiler.Profile()
         pr.runcall(func)
         st = pstats.Stats(pr)
         st.stream = None  # make it picklable
