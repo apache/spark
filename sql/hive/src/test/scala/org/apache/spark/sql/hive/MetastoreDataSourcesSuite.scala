@@ -46,8 +46,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   var jsonFilePath: String = _
 
-  val simpleSchema = new StructType().add("i", "int")
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
@@ -748,7 +746,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType(),
+        schema = new StructType,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -1277,7 +1275,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = new StructType(),
+        schema = new StructType,
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
@@ -1332,7 +1330,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           storage = CatalogStorageFormat.empty.copy(
             properties = Map("path" -> path.getAbsolutePath)
           ),
-          schema = new StructType(),
+          schema = new StructType,
           properties = Map(
             DATASOURCE_PROVIDER -> "parquet",
             SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
