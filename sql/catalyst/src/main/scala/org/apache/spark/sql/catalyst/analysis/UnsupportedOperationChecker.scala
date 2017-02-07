@@ -116,9 +116,6 @@ object UnsupportedOperationChecker {
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
-        case _: InsertIntoTable =>
-          throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
-
         case m: MapGroupsWithState if collectStreamingAggregates(m).nonEmpty =>
           throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
