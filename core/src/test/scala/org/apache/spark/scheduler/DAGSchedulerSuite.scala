@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// scalastyle:off
+
 package org.apache.spark.scheduler
 
 import java.util.Properties
@@ -2159,96 +2159,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
         case e: Throwable => fail("A job with one fetch failure should eventually succeed")
       }
     }
-  }
-
-  test("[SPARK-19263] DAGScheduler should avoid sending conflicting task set") {
-    val mockTaskSchedulerImpl = new TaskSchedulerImpl(sc) {
-      override def submitTasks(taskSet: TaskSet): Unit = {
-        super.submitTasks(taskSet)
-        taskSets += taskSet
-      }
-    }
-    val mockDAGScheduler = new DAGScheduler(
-      sc,
-      mockTaskSchedulerImpl,
-      sc.listenerBus,
-      mapOutputTracker,
-      blockManagerMaster,
-      sc.env
-    ) {
-      override def taskEnded(
-                              task: Task[_],
-                              reason: TaskEndReason,
-                              result: Any,
-                              accumUpdates: Seq[AccumulatorV2[_, _]],
-                              taskInfo: TaskInfo): Unit = {
-        dagEventProcessLoopTester.post(
-          CompletionEvent(task, reason, result, accumUpdates, taskInfo))
-      }
-    }
-
-    val mockSchedulerBackend = new SchedulerBackend {
-      override def stop(): Unit = {}
-
-      override def defaultParallelism(): Int = 2
-
-      override def reviveOffers(): Unit = {}
-
-      override def start(): Unit = {}
-    }
-
-    def getTaskSetManagerByTask(task: Task[_]): TaskSetManager = {
-      val taskSetManagerOpt = mockTaskSchedulerImpl
-        .taskSetManagerForAttempt(task.stageId, task.stageAttemptId)
-      assert(taskSetManagerOpt.isDefined)
-      taskSetManagerOpt.get
-    }
-
-    def resourceOffer(taskSetManager: TaskSetManager, host: String, execId: String): Unit = {
-      taskSetManager.resourceOffer(execId, host, TaskLocality.ANY)
-    }
-
-    def taskSuccessful(tsm: TaskSetManager, task: Task[_], result: Any): Unit = {
-      val taskIdOpt = tsm.taskInfos.find(_._2.index == task.partitionId)
-      assert(taskIdOpt.isDefined)
-      val ser = sc.env.closureSerializer.newInstance()
-      val directResult = new DirectTaskResult(ser.serialize(result), Seq.empty)
-      mockTaskSchedulerImpl.handleSuccessfulTask(tsm, taskIdOpt.get._1, directResult)
-    }
-
-    def taskFailed(tsm: TaskSetManager, task: Task[_], taskFailedReason: TaskFailedReason): Unit = {
-      val taskIdOpt = tsm.taskInfos.find(_._2.index == task.partitionId)
-      assert(taskIdOpt.isDefined)
-      val ser = sc.env.closureSerializer.newInstance()
-      val data = ser.serialize(taskFailedReason)
-      mockTaskSchedulerImpl.handleFailedTask(tsm, taskIdOpt.get._1,
-        TaskState.FAILED, taskFailedReason)
-    }
-
-    mockTaskSchedulerImpl.initialize(mockSchedulerBackend)
-    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(mockDAGScheduler)
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
-    val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
-    submit(reduceRdd, Array(0, 1))
-
-    mockTaskSchedulerImpl.resourceOffers(Seq(new WorkerOffer("0", "hostA", 2)).toIndexedSeq)
-
-    taskFailed(getTaskSetManagerByTask(taskSets(0).tasks(0)), taskSets(0).tasks(0),
-      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"))
-    mockDAGScheduler.resubmitFailedStages()
-
-    taskSuccessful(getTaskSetManagerByTask(taskSets(0).tasks(1)),
-      taskSets(0).tasks(1), makeMapStatus("hostA", 2))
-
-    mockTaskSchedulerImpl.resourceOffers(Seq(new WorkerOffer("0", "hostB", 2)).toIndexedSeq)
-
-    taskSuccessful(getTaskSetManagerByTask(taskSets(1).tasks(0)),
-      taskSets(1).tasks(0), makeMapStatus("hostB", 2))
-
-    taskSuccessful(getTaskSetManagerByTask(taskSets(1).tasks(1)),
-      taskSets(1).tasks(1), makeMapStatus("hostB", 2))
   }
 
   /**

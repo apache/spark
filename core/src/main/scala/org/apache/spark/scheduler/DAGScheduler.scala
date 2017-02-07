@@ -1199,15 +1199,9 @@ class DAGScheduler(
                 }
               }
               activeTaskSetManagerOpt.foreach { activeTsm =>
-                // The scheduler thinks we don't need any more partitions for this stage, but there
-                // is still an active taskset for the stage.  This can happen when there are stage
-                // retries, and we get late task completions from earlier stages.  Note that all of
-                // the map output may or may not be available -- some of those map outputs may have
-                // been lost.  But the most consistent way to make that determination is to end
-                // the running taskset, and mark the stage as finished.  The DAGScheduler will
-                // automatically determine whether there are still partitions missing that need to
-                // be resubmitted.
-                // NOTE: this will get a lock on the TaskScheduler
+                // We need a lock on the taskScheduler because tsm is not thread-safe,
+                // it assumes that all interactions have a lock on the taskScheduler,
+                // even just setting isZombie.
                 // TODO yet another instance we should probably kill all running tasks when we abort
                 // the taskset
                 logInfo(s"Marking ${activeTsm.name} as zombie, as all map output may already be " +

@@ -48,8 +48,8 @@ import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends SparkFunSuite
     with LocalSparkContext {
 
-  var taskScheduler: TestTaskScheduler = null
-  var scheduler: TestDAGScheduler = null
+  var taskScheduler: TaskSchedulerImplWithTracking = null
+  var scheduler: DAGSchedulerWithTracking = null
   var backend: T = _
 
   override def beforeEach(): Unit = {
@@ -75,9 +75,9 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     conf.setMaster(s"mock[${backendClassName}]")
     sc = new SparkContext(conf)
     backend = sc.schedulerBackend.asInstanceOf[T]
-    taskScheduler = sc.taskScheduler.asInstanceOf[TestTaskScheduler]
+    taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImplWithTracking]
     taskScheduler.initialize(sc.schedulerBackend)
-    scheduler = new TestDAGScheduler(sc, taskScheduler)
+    scheduler = new DAGSchedulerWithTracking(sc, taskScheduler)
     taskScheduler.setDAGScheduler(scheduler)
   }
 
@@ -374,7 +374,7 @@ private[spark] abstract class MockBackend(
    * Most likely the only thing that needs to be protected are the inidividual ExecutorTaskStatus,
    * but for simplicity in this mock just lock the whole backend.
    */
-  def executorIdToExecutor: Map[String, ExecutorTaskStatus]
+  var executorIdToExecutor: Map[String, ExecutorTaskStatus] = null
 
   private def generateOffers(): IndexedSeq[WorkerOffer] = {
     executorIdToExecutor.values.filter { exec =>
@@ -435,8 +435,8 @@ private[spark] class SingleCoreMockBackend(
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = "localhost"
 
-  override val executorIdToExecutor: Map[String, ExecutorTaskStatus] = Map(
-    localExecutorId -> new ExecutorTaskStatus(localExecutorHostname, localExecutorId, freeCores)
+  executorIdToExecutor =
+    Map(localExecutorId -> new ExecutorTaskStatus(localExecutorHostname, localExecutorId, freeCores)
   )
 }
 
@@ -484,7 +484,7 @@ private class MockExternalClusterManager extends ExternalClusterManager {
   def createTaskScheduler(
       sc: SparkContext,
       masterURL: String): TaskScheduler = {
-    new TestTaskScheduler(sc)
+    new TaskSchedulerImplWithTracking(sc)
  }
 
   def createSchedulerBackend(
@@ -505,7 +505,7 @@ private class MockExternalClusterManager extends ExternalClusterManager {
 }
 
 /** TaskSchedulerImpl that just tracks a tiny bit more state to enable checks in tests. */
-class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+class TaskSchedulerImplWithTracking(sc: SparkContext) extends TaskSchedulerImpl(sc) {
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val runningTaskSets = HashSet[TaskSet]()
 
@@ -521,7 +521,7 @@ class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
 }
 
 /** DAGScheduler that just tracks a tiny bit more state to enable checks in tests. */
-class TestDAGScheduler(sc: SparkContext, taskScheduler: TaskScheduler)
+class DAGSchedulerWithTracking(sc: SparkContext, taskScheduler: TaskScheduler)
   extends DAGScheduler(sc, taskScheduler) {
 
   val handledCompletionEvent = scala.collection.mutable.ListBuffer[CompletionEvent]()
@@ -661,53 +661,82 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     }
     assertDataStructuresEmpty(noFailure = false)
   }
+}
 
-  testScheduler("[SPARK-19263] DAGScheduler shouldn't resubmit active taskSet.") {
-    val a = new MockRDD(sc, 2, Nil)
-    val b = shuffle(2, a)
-    val shuffleId = b.shuffleDeps.head.shuffleId
+private[spark] class SimpleMockBackend(
+  conf: SparkConf,
+  taskScheduler: TaskSchedulerImpl) extends MockBackend(conf, taskScheduler) {
+
+  freeCores = Int.MaxValue
+
+  override def defaultParallelism(): Int = conf.getInt("spark.default.parallelism", 2)
+}
+
+class SimpleSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SimpleMockBackend] {
+  testScheduler("[SPARK-19263] DAGScheduler should not submit multiple active tasksets," +
+    " even with late completions from earlier stage attempts.") {
+    // Set executor's cores large enough. Since executors are randomly shuffled
+    // when offer resource in TaskSchedulerImpl, Thus it's hard to predict where
+    // tasks run on for this integration test. Here we just provide sufficient
+    // cores and set returning result in backend thread when tasks finish.
+    backend.executorIdToExecutor =
+      Map("0" -> ExecutorTaskStatus("hostX", "0", 10))
+    val rddA = new MockRDD(sc, 2, Nil)
+    val rddB = shuffle(2, rddA)
+    val rddC = shuffle(2, rddB)
 
     def runBackend(): Unit = {
       val (taskDescription, task) = backend.beginTask()
-      task.stageId match {
-        // ShuffleMapTask
-        case 0 =>
-          val stageAttempt = task.stageAttemptId
-          val partitionId = task.partitionId
-          (stageAttempt, partitionId) match {
-            case (0, 0) =>
-              val fetchFailed = FetchFailed(
-                DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored")
-              backend.taskFailed(taskDescription, fetchFailed)
-            case (0, 1) =>
-              // Wait until stage resubmission caused by FetchFailed is finished.
-              waitForCondition(taskScheduler.runningTaskSets.size == 2, 5000,
-                "Wait until stage is resubmitted caused by fetch failed")
 
-              // Task(stageAttempt=0, partition=1) will be bogus, because both two
-              // tasks(stageAttempt=0, partition=0, 1) run on hostA.
-              // Pending partitions are (0, 1) after stage resubmission,
-              // then change to be 0 after this bogus task.
-              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 2))
-            case (1, 1) =>
-              waitForCondition(scheduler.handledCompletionEvent.map(_.task).exists {
-                task => task.stageAttemptId == 1 && task.partitionId == 0
-              }, 5000, "Wait until Success of task(stageAttempt=1 and partition=0)" +
-                " is handled by DAGScheduler.")
-              // Task(stageAttempt=1 and partition=0) should not cause stage resubmission,
-              // even though shuffleStage.pendingPartitions.isEmpty and
-              // shuffleStage.isAvailable is false. Because the stageAttempt=0 is not finished yet.
-              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
-            case _ =>
-              backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
+      // Start blocking operations below (i.e. waitForCondition) in a new thread,
+      // thus do not block backend thread. Backend thread acts as two roles:
+      // running tasks concurrently and delivering result from executor to scheduler.
+      new Thread {
+        override def run(): Unit = {
+          task.stageId match {
+            case 0 =>
+              task.stageAttemptId match {
+                case 0 =>
+                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 2))
+                case 1 =>
+                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
+              }
+            case 1 =>
+              val stageAttempt = task.stageAttemptId
+              val partitionId = task.partitionId
+              (stageAttempt, partitionId) match {
+                case (0, 0) =>
+                  val fetchFailed = FetchFailed(DAGSchedulerSuite.makeBlockManagerId("hostA"),
+                    rddC.shuffleDeps.head.shuffleId, 0, 0, "ignored")
+                  backend.taskFailed(taskDescription, fetchFailed)
+                case (0, 1) =>
+                  // Wait until stage resubmission caused by FetchFailed is finished.
+                  waitForCondition(
+                    taskScheduler.runningTaskSets.exists {
+                      ts => ts.stageId == 1 && ts.stageAttemptId == 1
+                    },
+                    5000, "Wait until stage is resubmitted caused by fetch failed")
+
+                  // The completion of this task is ignored, because it's from an old stage.
+                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostA", 2))
+                case (1, 1) =>
+                  waitForCondition(scheduler.handledCompletionEvent.map(_.task).exists {
+                    task => task.stageId == 1 && task.stageAttemptId == 1 && task.partitionId == 0
+                  }, 5000, "Wait until Success of task(stageId=1, stageAttempt=1, partition=0)" +
+                    " is handled by DAGScheduler.")
+                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
+                case _ =>
+                  backend.taskSuccess(taskDescription, DAGSchedulerSuite.makeMapStatus("hostB", 2))
+              }
+            case 2 =>
+              backend.taskSuccess(taskDescription, 10)
           }
-        // ResultTask
-        case 1 => backend.taskSuccess(taskDescription, 10)
-      }
+        }
+      }.start()
     }
 
     withBackend(runBackend _) {
-      val jobFuture = submit(b, (0 until 2).toArray)
+      val jobFuture = submit(rddC, (0 until 2).toArray)
       val duration = Duration(15, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
@@ -727,4 +756,5 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     throw new TimeoutException(
       s"Condition '$msg' failed to become true before $timeout milliseconds elapsed")
   }
+
 }
