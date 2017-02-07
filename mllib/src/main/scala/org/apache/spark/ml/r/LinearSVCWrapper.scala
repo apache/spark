@@ -36,7 +36,7 @@ private[r] class LinearSVCWrapper private (
   import LinearSVCWrapper._
 
   private val svcModel: LinearSVCModel =
-    pipeline.stages.last.asInstanceOf[LinearSVCModel]
+    pipeline.stages(1).asInstanceOf[LinearSVCModel]
 
   lazy val coefficients: Array[Double] = svcModel.coefficients.toArray
 
