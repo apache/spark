@@ -253,6 +253,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_CASE_INSENSITIVE_RESOLUTION =
+    SQLConfigBuilder("spark.sql.parquet.caseInsensitiveResolution")
+      .doc("Whether to use case insensitive matching when resolving Parquet columns by "
+        + "their field names. Disables Parquet filter push-down if enabled. Defaults to false.")
+      .booleanConf
+      .createWithDefault(false)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
@@ -741,6 +748,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
+  def parquetCaseInsensitiveResolution: Boolean = getConf(PARQUET_CASE_INSENSITIVE_RESOLUTION)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 

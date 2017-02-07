@@ -753,6 +753,41 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       assert(option.compressionCodecClassName == "UNCOMPRESSED")
     }
   }
+
+  // Case class must be defined outside of test scope so TypeTag can be resolved.
+  case class ExampleType(columnA: String, columnB: Integer)
+
+  test("SPARK-19455: Support case insensitive Parquet field resolution") {
+    val lowercaseMetastoreSchema = StructType(
+      StructField("columna", StringType, true) ::
+      StructField("columnb", IntegerType, true) :: Nil)
+
+    val tableName = "temp_external_table"
+    spark.catalog.createExternalTable(
+      tableName,
+      "org.apache.spark.sql.parquet",
+      lowercaseMetastoreSchema,
+      Map.empty[String, String])
+
+    val testData = Seq(
+      ExampleType(columnA = "foo", columnB = 0),
+      ExampleType(columnA = "bar", columnB = 2),
+      ExampleType(columnA = "baz", columnB = 4),
+      ExampleType(columnA = "bat", columnB = 6))
+
+    withSQLConf(
+      SQLConf.PARQUET_CASE_INSENSITIVE_RESOLUTION.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      withParquetFile[ExampleType](testData) { path =>
+        spark.sql(s"""ALTER TABLE $tableName SET LOCATION "$path"""")
+        spark.catalog.refreshTable(tableName)
+        val totalCount = spark.sql(s"SELECT COUNT(columna) FROM $tableName")
+        assert(totalCount.first.getLong(0) == 4L)
+        val filteredCount = spark.sql(s"SELECT COUNT(*) FROM $tableName WHERE columnb > 2")
+        assert(filteredCount.first.getLong(0) == 2L)
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
