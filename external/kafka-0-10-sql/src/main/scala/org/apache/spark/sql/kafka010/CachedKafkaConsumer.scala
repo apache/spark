@@ -340,7 +340,9 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
-    val consumer = cache.get(key)
+    val consumer = synchronized {
+      cache.get(key)
+    }
     if (consumer != null) {
       consumer.inuse = false
     } else {
@@ -359,7 +361,9 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
-    val removedConsumer = cache.remove(key)
+    val removedConsumer = synchronized {
+      cache.remove(key)
+    }
     if (removedConsumer != null) {
       removedConsumer.close()
     }
