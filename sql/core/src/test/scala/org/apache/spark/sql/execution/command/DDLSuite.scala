@@ -1511,6 +1511,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("create a data source table without schema") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withTable("tab1", "tab2") {
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
+
+        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
+        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
+
+        sql(s"CREATE TABLE tab2 using json location '${tempDir.getCanonicalPath}'")
+        checkAnswer(spark.table("tab2"), Row("a", "b"))
+      }
+    }
+  }
+
   test("create table using CLUSTERED BY without schema specification") {
     import testImplicits._
     withTempPath { tempDir =>
@@ -1540,13 +1555,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var e = intercept[AnalysisException] {
         sql("CREATE TABLE t SELECT 1 as a, 1 as b")
       }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
         sql("CREATE TABLE t SELECT a, b from t1")
       }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
   }
 
