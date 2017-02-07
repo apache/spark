@@ -322,6 +322,26 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.validateSettings()
   }
 
+  test("set 'spark.master' with different value") {
+    val conf = new SparkConf()
+    conf.setMaster("local[4]")
+    try {
+      conf.setMaster("yarn-client")
+      assert(false, "previous: local[4], current: yarn-client")
+    } catch {
+      case e: IllegalArgumentException =>
+      // expected
+    }
+
+    try {
+      conf.set("spark.master", "yarn-cluster")
+      assert(false, "previous: local[4], current: yarn-cluster")
+    } catch {
+      case e: IllegalArgumentException =>
+      // expected
+    }
+  }
+
 }
 
 class Class1 {}
