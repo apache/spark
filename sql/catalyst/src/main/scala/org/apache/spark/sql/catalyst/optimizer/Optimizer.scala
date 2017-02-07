@@ -164,7 +164,8 @@ class SimpleTestOptimizer extends Optimizer(
 object RemoveRedundantAliases extends Rule[LogicalPlan] {
 
   /**
-   * Replace the attributes in an expression using the given mapping.
+   * Create an attribute mapping from the old to the new attributes. This function will only
+   * return the attribute pairs that have changed.
    */
   private def createAttributeMapping(current: LogicalPlan, next: LogicalPlan)
       : Seq[(Attribute, Attribute)] = {
