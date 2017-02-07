@@ -1807,6 +1807,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue("+" in functions)
         self.assertTrue("like" in functions)
         self.assertTrue("month" in functions)
+        self.assertTrue("to_date" in functions)
+        self.assertTrue("to_timestamp" in functions)
         self.assertTrue("to_unix_timestamp" in functions)
         self.assertTrue("current_database" in functions)
         self.assertEquals(functions["+"], Function(
@@ -2188,6 +2190,13 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         assert_runs_only_one_job_stage_and_task("take", lambda: df.take(1))
         # Regression test for SPARK-17514: limit(n).collect() should the perform same as take(n)
         assert_runs_only_one_job_stage_and_task("collect_limit", lambda: df.limit(1).collect())
+
+    def test_datetime_functions(self):
+        from pyspark.sql import functions
+        from datetime import date, datetime
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
     @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):

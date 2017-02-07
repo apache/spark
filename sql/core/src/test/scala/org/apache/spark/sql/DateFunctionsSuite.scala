@@ -354,31 +354,58 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
   test("function to_date") {
     val d1 = Date.valueOf("2015-07-22")
     val d2 = Date.valueOf("2015-07-01")
+    val d3 = Date.valueOf("2014-12-31")
     val t1 = Timestamp.valueOf("2015-07-22 10:00:00")
     val t2 = Timestamp.valueOf("2014-12-31 23:59:59")
+    val t3 = Timestamp.valueOf("2014-12-31 23:59:59")
     val s1 = "2015-07-22 10:00:00"
     val s2 = "2014-12-31"
-    val df = Seq((d1, t1, s1), (d2, t2, s2)).toDF("d", "t", "s")
+    val s3 = "2014-31-12"
+    val df = Seq((d1, t1, s1), (d2, t2, s2), (d3, t3, s3)).toDF("d", "t", "s")
 
     checkAnswer(
       df.select(to_date(col("t"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("d"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.select(to_date(col("s"))),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
     checkAnswer(
       df.selectExpr("to_date(t)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.selectExpr("to_date(d)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
     checkAnswer(
       df.selectExpr("to_date(s)"),
-      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31"))))
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
+
+      // Now with format
+    checkAnswer(
+      df.select(to_date(col("t"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("d"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2015-07-01")),
+        Row(Date.valueOf("2014-12-31"))))
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-MM-dd")),
+      Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
+        Row(Date.valueOf("2016-07-12"))))
+
+    //  now switch format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-MM")),
+      Seq(Row(Date.valueOf("2016-10-07")), Row(Date.valueOf("2016-07-12")),
+        Row(Date.valueOf("2014-12-31"))))
   }
 
   test("function trunc") {
@@ -473,6 +500,33 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(date1.getTime / 1000L), Row(date2.getTime / 1000L)))
     checkAnswer(df.selectExpr(s"to_unix_timestamp(s, '$fmt')"), Seq(
       Row(ts1.getTime / 1000L), Row(ts2.getTime / 1000L)))
+  }
+
+
+  test("to_timestamp") {
+    val date1 = Date.valueOf("2015-07-24")
+    val date2 = Date.valueOf("2015-07-25")
+    val ts_date1 = Timestamp.valueOf("2015-07-24 00:00:00")
+    val ts_date2 = Timestamp.valueOf("2015-07-25 00:00:00")
+    val ts1 = Timestamp.valueOf("2015-07-24 10:00:00")
+    val ts2 = Timestamp.valueOf("2015-07-25 02:02:02")
+    val s1 = "2015/07/24 10:00:00.5"
+    val s2 = "2015/07/25 02:02:02.6"
+    val ss1 = "2015-07-24 10:00:00"
+    val ss2 = "2015-07-25 02:02:02"
+    val fmt = "yyyy/MM/dd HH:mm:ss.S"
+    val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
+
+    checkAnswer(df.select(to_timestamp(col("ss"))),
+      df.select(unix_timestamp(col("ss")).cast("timestamp")))
+    checkAnswer(df.select(to_timestamp(col("ss"))), Seq(
+      Row(ts1), Row(ts2)))
+    checkAnswer(df.select(to_timestamp(col("s"), fmt)), Seq(
+      Row(ts1), Row(ts2)))
+    checkAnswer(df.select(to_timestamp(col("ts"), fmt)), Seq(
+      Row(ts1), Row(ts2)))
+    checkAnswer(df.select(to_timestamp(col("d"), "yyyy-MM-dd")), Seq(
+      Row(ts_date1), Row(ts_date2)))
   }
 
   test("datediff") {
