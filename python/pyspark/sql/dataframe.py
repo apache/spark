@@ -1287,7 +1287,6 @@ class DataFrame(object):
             This overwrites the `how` parameter.
         :param subset: optional list of column names to consider.
 
-
         >>> from pyspark.sql import Row
         >>> df4 = spark.createDataFrame([Row(name='Alice', age=10, height=80),
         ...                              Row(name='Bob', age=5, height=None),
