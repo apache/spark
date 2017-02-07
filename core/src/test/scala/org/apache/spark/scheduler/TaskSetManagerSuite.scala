@@ -325,12 +325,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Offer host2: fifth task (also on host2) should get chosen
     assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 4)
 
-    // Now that we've launched a local task, we should no longer launch the task for host3
-    assert(manager.resourceOffer("exec2", "host2", ANY) === None)
-
-    clock.advance(LOCALITY_WAIT_MS)
-
-    // After another delay, we can go ahead and launch that task non-locally
+    // SPARK-18886: after we launch one task non-local in this taskset, we can launch all of the
+    // non-local tasks without any additional delay, even if tasks get launched locally
+    // in-between.
     assert(manager.resourceOffer("exec2", "host2", ANY).get.index === 3)
   }
 
@@ -550,11 +547,15 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       Seq(TaskLocation("host1", "execB")),
       Seq(TaskLocation("host2", "execC")),
       Seq())
-    val manager = new TaskSetManager(sched, taskSet, 1, clock = new ManualClock)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, 1, clock = clock)
     sched.addExecutor("execA", "host1")
     manager.executorAdded()
     sched.addExecutor("execC", "host2")
     manager.executorAdded()
+    // need one resource offer which doesn't schedule anything to start delay scheduling timer
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    clock.advance(sc.getConf.getTimeAsMs("spark.locality.wait", "3s") * 4)
     assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
     sched.removeExecutor("execA")
     manager.executorLost(
@@ -586,6 +587,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY)))
+    // Make one offer (which can't be scheduled) to start the locality timer
+    assert(manager.resourceOffer("execC", "host3", RACK_LOCAL) === None)
     // Set allowed locality to ANY
     clock.advance(LOCALITY_WAIT_MS * 3)
     // Offer host3
@@ -775,6 +778,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Valid locality should contain PROCESS_LOCAL, NODE_LOCAL and ANY
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
     assert(manager.resourceOffer("execA", "host1", ANY) !== None)
+    // SPARK-18886 -- try to schedule once to trigger delay scheduling timeout
+    assert(manager.resourceOffer("execB.2", "host2", ANY) === None)
+    // after waiting long enough, scheduling should succeed
     clock.advance(LOCALITY_WAIT_MS * 4)
     assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
@@ -1037,6 +1043,84 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // the fault of the executor where the task was running.
     verify(blacklist, never())
       .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+  }
+
+  test("Delay scheduling checks utilization at each locality level") {
+    // Create a cluster with 100 executors, and submit 100 tasks, but each task would prefer to
+    // be on the same node in the cluster.  We should not wait to schedule each task on the one
+    // executor.
+    sc = new SparkContext("local", "test")
+    val execs = Seq(("exec0", "host0")) ++ (1 to 100).map { x => (s"exec$x", s"host$x") }
+    val sched = new FakeTaskScheduler(sc, execs: _*)
+    val tasks = FakeTask.createTaskSet(500, (1 to 500).map { _ =>
+      Seq(TaskLocation(TaskLocation.executorLocationTag + "host0_exec0"))}: _*)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, tasks, MAX_TASK_FAILURES, clock = clock)
+    logInfo("initial locality levels = " + manager.myLocalityLevels.mkString(","))
+    assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
+    // initially, the locality preferences should lead us to only schedule tasks on one executor
+    logInfo(s"trying to schedule first task at ${clock.getTimeMillis()}")
+    val firstScheduledTask = execs.flatMap { case (exec, host) =>
+      val schedTaskOpt = manager.resourceOffer(execId = exec, host = host, ANY)
+      assert(schedTaskOpt.isDefined === (exec == "exec0"))
+      schedTaskOpt
+    }.head
+
+    // without advancing the clock, no matter how many times we make offers on the *other*
+    // executors, nothing should get scheduled
+    (0 until 50).foreach { _ =>
+      execs.foreach { case (exec, host) =>
+        if (exec != "exec0") {
+          assert(manager.resourceOffer(execId = exec, host = host, ANY).isEmpty)
+        }
+      }
+    }
+
+    // now we advance the clock till just *before* the locality delay is up, and we finish the first
+    // task
+    val processWait = sc.getConf.getTimeAsMs("spark.locality.wait.process", "3s")
+    val nodeWait = sc.getConf.getTimeAsMs("spark.locality.wait.node", "3s")
+    clock.advance(processWait + nodeWait - 1)
+    logInfo(s"finishing first task at ${clock.getTimeMillis()}")
+    manager.handleSuccessfulTask(firstScheduledTask.taskId,
+      createTaskResult(firstScheduledTask.index))
+    // if we offer all the resources again, still we should only schedule on one executor
+    logInfo(s"trying to schedule second task at ${clock.getTimeMillis()}")
+    val secondScheduledTask = execs.flatMap { case (exec, host) =>
+      val schedTaskOpt = manager.resourceOffer(execId = exec, host = host, ANY)
+      assert(schedTaskOpt.isDefined === (exec == "exec0"))
+      schedTaskOpt
+    }.head
+
+    // Now lets advance the clock further, so that all of our other executors have been sitting
+    // idle for longer than the locality wait time.  We have managed to schedule *something* at a
+    // lower locality level within the time, but regardless, we *should* still schedule on all
+    // the other resources by this point
+    clock.advance(10)
+    // this would pass if we advanced the clock by this much instead
+    // clock.advance(processWait + nodeWait + 10)
+    logInfo(s"trying to schedule everyting at ${clock.getTimeMillis()}")
+    execs.foreach { case (exec, host) =>
+      if (exec != "exec0") {
+        withClue(s"trying to schedule on $exec:$host at time ${clock.getTimeMillis()}") {
+          assert(manager.resourceOffer(execId = exec, host = host, ANY).isDefined)
+        }
+      }
+    }
+
+    // If we schedule one process-local task after scheduling the non-local tasks ...
+    logInfo("scheduling one process-local task")
+    clock.advance(1)
+    assert(manager.resourceOffer(execId = "exec0", host = "host0", ANY).isDefined)
+    // ... we should still immediately be able to schedule more non-local tasks.
+    logInfo(s"trying to schedule everyting at ${clock.getTimeMillis()}")
+    execs.foreach { case (exec, host) =>
+      if (exec != "exec0") {
+        withClue(s"trying to schedule on $exec:$host at time ${clock.getTimeMillis()}") {
+          assert(manager.resourceOffer(execId = exec, host = host, ANY).isDefined)
+        }
+      }
+    }
   }
 
   private def createTaskResult(
