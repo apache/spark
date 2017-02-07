@@ -37,7 +37,6 @@ class TaskDescriptionSuite extends SparkFunSuite {
     originalProperties.put("property1", "18")
     originalProperties.put("property2", "test value")
 
-    // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
 
     val originalTaskDescription = new TaskDescription(
@@ -48,10 +47,15 @@ class TaskDescriptionSuite extends SparkFunSuite {
       index = 19,
       originalFiles,
       originalJars,
-      originalProperties
-    )
+      originalProperties,
+      // Pass in null for the task, because we override the serialize method below anyway (which
+      // is the only time task is used).
+      task = null
+    ) {
+      override def serializeTask() = taskBuffer
+    }
 
-    val serializedTaskDescription = TaskDescription.encode(originalTaskDescription, taskBuffer)
+    val serializedTaskDescription = TaskDescription.encode(originalTaskDescription)
     val (decodedTaskDescription, serializedTask) = TaskDescription.decode(serializedTaskDescription)
 
     // Make sure that all of the fields in the decoded task description match the original.
