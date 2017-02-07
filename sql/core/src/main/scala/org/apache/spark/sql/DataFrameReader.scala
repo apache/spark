@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
-import org.apache.spark.sql.execution.datasources.json.InferSchema
+import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -310,7 +310,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Lines text format or newline-delimited JSON</a>) and returns the result as
    * a `DataFrame`.
    *
-   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * Unless the schema is specified using `schema` function, this function goes through the
    * input once to determine the input schema.
    *
    * @param jsonRDD input RDD with one JSON object per record
@@ -322,7 +322,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
    * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
    *
-   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * Unless the schema is specified using `schema` function, this function goes through the
    * input once to determine the input schema.
    *
    * @param jsonRDD input RDD with one JSON object per record
@@ -334,7 +334,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       parsedOptions.columnNameOfCorruptRecord
         .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
-      InferSchema.infer(
+      JsonInferSchema.infer(
         jsonRDD,
         columnNameOfCorruptRecord,
         parsedOptions)
@@ -365,7 +365,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
-   * specify the schema explicitly using [[schema]].
+   * specify the schema explicitly using `schema`.
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
