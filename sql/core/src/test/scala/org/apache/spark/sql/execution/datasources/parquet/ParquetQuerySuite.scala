@@ -606,6 +606,36 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  test("SPARK-4502 parquet nested fields pruning") {
+    // Schema of "test-data/nested-array-struct.parquet":
+    //    root
+    //    |-- col: struct (nullable = true)
+    //    |    |-- s1: struct (nullable = true)
+    //    |    |    |-- s1_1: long (nullable = true)
+    //    |    |    |-- s1_2: long (nullable = true)
+    //    |    |-- str: string (nullable = true)
+    //    |-- num: long (nullable = true)
+    //    |-- str: string (nullable = true)
+    withTempView("tmp_table") {
+      val df = readResourceParquetFile("test-data/nested-struct.snappy.parquet")
+      df.createOrReplaceTempView("tmp_table")
+      // normal test
+      val query1 = "select num,col.s1.s1_1 from tmp_table"
+      val result1 = sql(query1)
+      withSQLConf(SQLConf.PARQUET_NESTED_COLUMN_PRUNING.key -> "true") {
+        checkAnswer(sql(query1), result1)
+      }
+      // test for same struct meta merge
+      // col.s1.s1_1 and col.str should merge
+      // like col.[s1.s1_1, str] before pass to parquet
+      val query2 = "select col.s1.s1_1,col.str from tmp_table"
+      val result2 = sql(query2)
+      withSQLConf(SQLConf.PARQUET_NESTED_COLUMN_PRUNING.key -> "true") {
+        checkAnswer(sql(query2), result2)
+      }
+    }
+  }
+
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)

@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -97,7 +99,19 @@ object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val outputSchema = readDataColumns.toStructType
+      val outputSchema = if (
+        fsRelation.sqlContext.conf.parquetNestedColumnPruningEnabled &&
+        fsRelation.fileFormat.isInstanceOf[ParquetFileFormat]
+      ) {
+        val fullSchema = readDataColumns.toStructType
+        val prunedSchema = StructType(
+          generateStructFieldsContainsNesting(projects, fullSchema))
+        // Merge schema in same StructType and merge with filterAttributes
+        prunedSchema.fields.map(f => StructType(Array(f))).reduceLeft(_ merge _)
+          .merge(filterAttributes.toSeq.toStructType)
+      } else {
+        readDataColumns.toStructType
+      }
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
@@ -126,4 +140,64 @@ object FileSourceStrategy extends Strategy with Logging {
 
     case _ => Nil
   }
+
+  private[sql] def generateStructFieldsContainsNesting(
+      projects: Seq[Expression],
+      fullSchema: StructType) : Seq[StructField] = {
+    // By traverse projects, we can fisrt generate the access path of nested struct, then use the
+    // access path reconstruct the schema after pruning.
+    // In the process of traversing, we should deal with all expressions releted with complex
+    // struct type like GetArrayItem, GetArrayStructFields, GetMapValue and GetStructField
+    def generateStructField(
+        curField: List[String],
+        node: Expression) : Seq[StructField] = {
+      node match {
+        case ai: GetArrayItem =>
+          // Here we drop the previous for simplify array and map support.
+          // Same strategy in GetArrayStructFields and GetMapValue
+          generateStructField(List.empty[String], ai.child)
+        case asf: GetArrayStructFields =>
+          generateStructField(List.empty[String], asf.child)
+        case mv: GetMapValue =>
+          generateStructField(List.empty[String], mv.child)
+        case attr: AttributeReference =>
+          // Finally reach the leaf node AttributeReference, call getFieldRecursively
+          // and pass the access path of current nested struct
+          Seq(getFieldRecursively(fullSchema, attr.name :: curField))
+        case sf: GetStructField if !sf.child.isInstanceOf[CreateNamedStruct] &&
+          !sf.child.isInstanceOf[CreateStruct] =>
+          val name = sf.name.getOrElse(sf.dataType match {
+            case StructType(fiedls) =>
+              fiedls(sf.ordinal).name
+          })
+          generateStructField(name :: curField, sf.child)
+        case _ =>
+          if (node.children.nonEmpty) {
+            node.children.flatMap(child => generateStructField(curField, child))
+          } else {
+            Seq.empty[StructField]
+          }
+      }
+    }
+
+    def getFieldRecursively(schema: StructType, name: List[String]): StructField = {
+      if (name.length > 1) {
+        val curField = name.head
+        val curFieldType = schema(curField)
+        curFieldType.dataType match {
+          case st: StructType =>
+            val newField = getFieldRecursively(StructType(st.fields), name.drop(1))
+            StructField(curFieldType.name, StructType(Seq(newField)),
+              curFieldType.nullable, curFieldType.metadata)
+          case _ =>
+            throw new IllegalArgumentException(s"""Field "$curField" is not struct field.""")
+        }
+      } else {
+        schema(name.head)
+      }
+    }
+
+    projects.flatMap(p => generateStructField(List.empty[String], p))
+  }
+
 }
