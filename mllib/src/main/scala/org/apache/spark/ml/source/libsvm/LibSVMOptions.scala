@@ -33,7 +33,7 @@ private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsen
    * Number of features. If unspecified or nonpositive, the number of features will be determined
    * automatically at the cost of one additional pass.
    */
-  val numFeatures = parameters.get(NUM_FEATURES).map(_.toInt)
+  val numFeatures = parameters.get(NUM_FEATURES).map(_.toInt).filter(_ > 0)
 
   val isSparse = parameters.getOrElse(VECTOR_TYPE, SPARSE_VECTOR_TYPE) match {
     case SPARSE_VECTOR_TYPE => true

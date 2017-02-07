@@ -88,7 +88,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val libSVMOptions = new LibSVMOptions(options)
-    val numFeatures: Int = libSVMOptions.numFeatures.filter(_ > 0).getOrElse {
+    val numFeatures: Int = libSVMOptions.numFeatures.getOrElse {
       // Infers number of features if the user doesn't specify (a valid) one.
       val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
       val path = if (dataFiles.length == 1) {
