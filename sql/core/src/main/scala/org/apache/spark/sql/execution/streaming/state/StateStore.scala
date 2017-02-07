@@ -58,6 +58,9 @@ trait StateStore {
    */
   def remove(condition: UnsafeRow => Boolean): Unit
 
+  /**
+   * Remove a single key.
+   */
   def remove(key: UnsafeRow): Unit
 
   /**

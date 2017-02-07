@@ -362,7 +362,6 @@ case class MapGroupsWithState(
     stateSerializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
-
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
 object FlatMapGroupsInR {
   def apply(

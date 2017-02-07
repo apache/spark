@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *  - The key of the group.
  *  - An iterator containing all the values for this key.
  *  - A user-defined state object set by previous invocations of the given function.
- * In case of a batch Dataset, there is only invocation and state object will be empty as
+ * In case of a batch Dataset, there is only one invocation and state object will be empty as
  * there is no prior state. Essentially, for batch Datasets, `[map/flatMap]GroupsWithState`
  * is equivalent to `[map/flatMap]Groups`.
  *
@@ -53,17 +53,17 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *  - All the data will be shuffled before applying the function.
  *
  * Important points to note about using KeyedState.
- *  - The value of the state cannot be null. So updating state with null is same as removing it.
+ *  - The value of the state cannot be null. So you cannot update state with null.
  *  - Operations on `KeyedState` are not thread-safe. This is to avoid memory barriers.
- *  - If the `remove()` is called, then `exists()` will return `false`, and
- *    `getOption()` will return `None`.
+ *  - If `remove()` is called, then `exists()` will return `false`, and
+ *    `get()` will return `null`.
  *  - After that `update(newState)` is called, then `exists()` will return `true`,
- *    and `getOption()` will return `Some(...)`.
+ *    and `get()` will return the non-null value.
  *
- * Scala example of using `KeyedState` in `mapGroupsWithState`:
+ * Scala example of using KeyedState` in `mapGroupsWithState`:
  * {{{
  * // A mapping function that maintains an integer state for string keys and returns a string.
- * def mappingFunction(key: String, value: Iterable[Int], state: KeyedState[Int]): Option[String]= {
+ * def mappingFunction(key: String, value: Iterator[Int], state: KeyedState[Int]): String = {
  *   // Check if state exists
  *   if (state.exists) {
  *     val existingState = state.get  // Get the existing state
@@ -90,7 +90,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *    new MapGroupsWithStateFunction<String, Integer, Integer, String>() {
  *
  *      @Override
- *      public String call(String key, Optional<Integer> value, KeyedState<Integer> state) {
+ *      public String call(String key, Iterator<Integer> value, KeyedState<Integer> state) {
  *        if (state.exists()) {
  *          int existingState = state.get(); // Get the existing state
  *          boolean shouldRemove = ...; // Decide whether to remove the state
@@ -124,8 +124,8 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   def get: S
 
   /**
-   * Update the value of the state. Note that null is not a valid value, and `update(null)` is
-   * same as `remove()`
+   * Update the value of the state. Note that `null` is not a valid value, and it throws
+   * IllegalArgumentException.
    */
   def update(newState: S): Unit
 

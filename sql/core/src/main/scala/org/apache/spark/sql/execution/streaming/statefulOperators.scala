@@ -275,7 +275,6 @@ case class MapGroupsWithStateExec(
         val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
 
         val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-        val getKey = GenerateUnsafeProjection.generate(groupingAttributes, child.output)
         val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
         val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
         val getStateObj =

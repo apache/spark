@@ -147,6 +147,7 @@ private[state] class HDFSBackedStateStoreProvider(
       }
     }
 
+    /** Remove a single key. */
     override def remove(key: UnsafeRow): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       if (mapToUpdate.containsKey(key)) {
@@ -161,6 +162,7 @@ private[state] class HDFSBackedStateStoreProvider(
           case Some(ValueRemoved(_, _)) =>
           // Remove already in update map, no need to change
         }
+        writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
       }
     }
 

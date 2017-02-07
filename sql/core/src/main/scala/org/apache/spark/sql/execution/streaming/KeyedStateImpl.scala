@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.KeyedState
 
-/** Internal implementation of the [[KeyedState]] interface */
+/** Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe. */
 private[sql] case class KeyedStateImpl[S](private var value: S) extends KeyedState[S] {
   private var updated: Boolean = false  // whether value has been updated (but not removed)
   private var removed: Boolean = false  // whether value has been removed
@@ -31,7 +31,7 @@ private[sql] case class KeyedStateImpl[S](private var value: S) extends KeyedSta
 
   override def update(newValue: S): Unit = {
     if (newValue == null) {
-      remove()
+      throw new IllegalArgumentException("'null' is not a valid state value")
     } else {
       value = newValue
       updated = true
@@ -45,7 +45,7 @@ private[sql] case class KeyedStateImpl[S](private var value: S) extends KeyedSta
     removed = true
   }
 
-  override def toString: String = "KeyedState($value)"
+  override def toString: String = s"KeyedState($value)"
 
   // ========= Internal API =========
 

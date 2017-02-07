@@ -48,7 +48,7 @@ object UnsupportedOperationChecker {
 
     /** Collect all the streaming aggregates in a sub plan */
     def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
-      subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      subplan.collect { case a: Aggregate if a.isStreaming => a }
     }
 
     // Disallow multiple streaming aggregations
