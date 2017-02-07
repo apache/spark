@@ -799,7 +799,8 @@ private[spark] object SparkConf extends Logging {
             None
         }
         if (previousOne.isDefined && !previousOne.get.equals(value)) {
-          throw new IllegalArgumentException("'spark.master' should not be ")
+          throw new IllegalArgumentException(s"'spark.master' should not be set with different " +
+            s"value, previous value is ${previousOne.get} and current value is $value")
         }
     }
   }
