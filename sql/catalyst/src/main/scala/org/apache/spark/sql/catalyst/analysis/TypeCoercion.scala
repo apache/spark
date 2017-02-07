@@ -335,15 +335,6 @@ object TypeCoercion {
         if left.dataType != StringType =>
         p.makeCopy(Array(left, Cast(right, left.dataType)))
 
-      case i @ In(a @ DateType(), b) if b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(Cast(a, StringType), b))
-      case i @ In(a @ TimestampType(), b) if b.forall(_.dataType == StringType) =>
-        i.makeCopy(Array(a, b.map(Cast(_, TimestampType))))
-      case i @ In(a @ DateType(), b) if b.forall(_.dataType == TimestampType) =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-      case i @ In(a @ TimestampType(), b) if b.forall(_.dataType == DateType) =>
-        i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
-
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
       case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
