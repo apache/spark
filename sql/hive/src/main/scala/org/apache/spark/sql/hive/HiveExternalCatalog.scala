@@ -980,9 +980,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+    val partitionColumnNames = catalogTable.partitionColumnNames.map(_.toLowerCase).toSet
     val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      _.references.map(_.name.toLowerCase).toSet.subsetOf(partitionColumnNames)
     }
 
     if (nonPartitionPruningPredicates.nonEmpty) {
