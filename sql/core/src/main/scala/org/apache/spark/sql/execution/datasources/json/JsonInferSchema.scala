@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-private[sql] object InferSchema {
+private[sql] object JsonInferSchema {
 
   /**
    * Infer the type of a collection of json records in three stages:
