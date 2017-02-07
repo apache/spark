@@ -242,7 +242,8 @@ case class AlterTableAddColumnsCommand(
         case s =>
           throw new AnalysisException(
             s"""${table.toString} is a datasource table with type $s,
-               |which does not support ALTER ADD COLUMNS.""".stripMargin)
+               |which does not support ALTER ADD COLUMNS.
+            """.stripMargin)
       }
     }
 
