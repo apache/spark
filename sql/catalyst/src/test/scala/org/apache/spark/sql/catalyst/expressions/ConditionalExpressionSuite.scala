@@ -226,6 +226,8 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("field") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     val str1 = Literal("花花世界")
     val str2 = Literal("a")
     val str3 = Literal("b")
@@ -264,5 +266,6 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Field(Seq(int4, double3, str5, bool1, date1, timeStamp2, int3)), 0)
     checkEvaluation(Field(Seq(int1, strNull, intNull, bool1, date1, timeStamp2, int3)), 0)
     checkEvaluation(Field(Seq(strNull, int1, str1, str2, str3)), 0)
+    // scalastyle:on
   }
 }
