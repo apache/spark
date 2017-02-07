@@ -236,9 +236,7 @@ case class AlterTableAddColumnsCommand(
         // inferred schema yet. TODO, once this issue is resolved , we can add Orc back.
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
-        case _: JsonFileFormat =>
-        case _: CSVFileFormat =>
-        case _: ParquetFileFormat =>
+        case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
         case s =>
           throw new AnalysisException(
             s"""${table.toString} is a datasource table with type $s,
