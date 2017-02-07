@@ -54,40 +54,27 @@ private[spark] class TaskDescription(
     val index: Int,    // Index within this task's TaskSet
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
-    val properties: Properties) extends Logging {
+    val properties: Properties,
+    // Task object corresponding to the TaskDescription. This is only defined on the master; on
+    // the worker, the Task object is handled separately from the TaskDescription so that it can
+    // deserialized after the TaskDescription is deserialized.
+    @transient private val task: Task[_] = null) extends Logging {
 
-  def this(
-      taskId: Long,
-      attemptNumber: Int,
-      executorId: String,
-      name: String,
-      index: Int, // Index within this task's TaskSet
-      addedFiles: Map[String, Long],
-      addedJars: Map[String, Long],
-      properties: Properties,
-      task: Task[_]) {
-      this(taskId, attemptNumber, executorId, name, index,
-        addedFiles, addedJars, properties)
-      task_ = task
-  }
-
-   def serializedTask: ByteBuffer = {
-      // This is where we serialize the task on the driver before sending it to the executor.
-      // This is not done when creating the TaskDescription so we can postpone this serialization
-      // to later in the scheduling process -- particularly,
-      // so it can happen in another thread by the CoarseGrainedSchedulerBackend.
-      try {
-        ByteBuffer.wrap(Utils.serialize(task_))
-      } catch {
-        case NonFatal(e) =>
-          val msg = s"Failed to serialize task $taskId, not attempting to retry it."
-          logError(msg, e)
-          throw new TaskNotSerializableException(e)
-      }
+  /**
+   * Serializes the task for this TaskDescription and returns the serialized task.
+   *
+   * This method should only be used on the master (to serialize a task to send to a worker).
+   */
+  def serializeTask(): ByteBuffer = {
+    try {
+      ByteBuffer.wrap(Utils.serialize(task))
+    } catch {
+      case NonFatal(e) =>
+        val msg = s"Failed to serialize task ${taskId}."
+        logError(msg, e)
+        throw new TaskNotSerializableException(e)
     }
-
-  private var task_ : Task[_] = null
-
+  }
   override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }
 
@@ -101,7 +88,7 @@ private[spark] object TaskDescription {
   }
 
   @throws[TaskNotSerializableException]
-  def encode(taskDescription: TaskDescription, serializedTask: ByteBuffer): ByteBuffer = {
+  def encode(taskDescription: TaskDescription): ByteBuffer = {
     val bytesOut = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(bytesOut)
 
@@ -124,8 +111,8 @@ private[spark] object TaskDescription {
       dataOut.writeUTF(value)
     }
 
-    // Write the task. The task is already serialized, so write it directly to the byte buffer.
-    Utils.writeByteBuffer(serializedTask, bytesOut)
+    // Serialize and write the task.
+    Utils.writeByteBuffer(taskDescription.serializeTask(), bytesOut)
 
     dataOut.close()
     bytesOut.close()

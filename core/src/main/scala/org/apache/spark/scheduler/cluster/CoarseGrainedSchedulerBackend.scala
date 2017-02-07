@@ -261,7 +261,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val serializedTasks = tasks.flatten.map { task =>
         var serializedTask: ByteBuffer = null
         try {
-          serializedTask = TaskDescription.encode(task, task.serializedTask)
+          serializedTask = TaskDescription.encode(task)
           if (serializedTask.limit >= maxRpcMessageSize) {
             val msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
               "spark.rpc.message.maxSize (%d bytes). Consider increasing " +

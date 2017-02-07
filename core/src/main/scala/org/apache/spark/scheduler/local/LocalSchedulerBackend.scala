@@ -89,7 +89,7 @@ private[spark] class LocalEndpoint(
     val serializedTasks = scheduler.resourceOffers(offers).flatten.map { task =>
       var serializedTask: ByteBuffer = null
       try {
-        serializedTask = task.serializedTask
+        serializedTask = task.serializeTask
       } catch {
         case NonFatal(e) =>
           abortTaskSetManager(scheduler, task.taskId,
