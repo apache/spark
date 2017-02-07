@@ -110,7 +110,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCaseConversionExpressions,
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization,
-      RemoveAliasOnlyProject) ::
+      RemoveAliasOnlyProject,
+      SimplifyCreateStructOps,
+      SimplifyCreateArrayOps,
+      SimplifyCreateMapOps) ::
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,

@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
-import org.apache.spark.sql.execution.datasources.json.InferSchema
+import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -334,7 +334,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       parsedOptions.columnNameOfCorruptRecord
         .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
-      InferSchema.infer(
+      JsonInferSchema.infer(
         jsonRDD,
         columnNameOfCorruptRecord,
         parsedOptions)
