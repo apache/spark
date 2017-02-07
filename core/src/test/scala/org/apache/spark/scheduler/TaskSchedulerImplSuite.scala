@@ -821,7 +821,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("Locality should be used for bulk offers even with delay scheduling off") {
-    // for testing, we create a task scheduler which lets us control how offers are shuffled
     val conf = new SparkConf()
       .set("spark.locality.wait", "0")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
@@ -846,7 +845,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       override def executorAdded(execId: String, host: String) {}
     }
     taskScheduler.initialize(new FakeSchedulerBackend)
-
 
     // Make two different offers -- one in the preferred location, one that is not.
     val offers = IndexedSeq(

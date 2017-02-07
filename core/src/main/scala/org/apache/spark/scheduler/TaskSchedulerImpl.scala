@@ -376,7 +376,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   /**
    * Shuffle offers around to avoid always placing tasks on the same workers.  Exposed to allow
-   * overriding in tests, so it can be deterministic
+   * overriding in tests, so it can be deterministic.
    */
   protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
     Random.shuffle(offers)
