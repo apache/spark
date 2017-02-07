@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis._
@@ -132,6 +133,57 @@ case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Converts the predicates of [[Filter]] operators to CNF form.
+ */
+case class CNFNormalization(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Converts a predicate expression to its CNF format. There is a given parameter `depth` which
+   * can be used to control the processing depth of CNF conversion.
+   */
+  private def toCNF(predicate: Expression, depth: Int = 0): Expression = {
+    if (depth > conf.maxDepthForCNFNormalization) {
+      return predicate
+    }
+    // For a predicate like: (A && B) || (C && D) || (E)
+    // The steps in follows looks like:
+    //   1. (A && B) || (C && D) => (A && B), (C && D), E
+    //   2. (A && B) => A, B
+    //   3. foreach predicate in (C && D), E
+    //     3.a. generate (A || C), (B || C), (A || D), (B || D)
+    //     3.b. generate ((A || C) || E), ((B || C) || E), ((A || D) || E), ((B || D) || E)
+    //   4. Recursively apply on each predicate with increasing depth.
+    //   5. Concatenate them with `AND`:
+    //      ((A || C) || E) && ((B || C) || E) && ((A || D) || E) && ((B || D) || E)
+    val disjunctives = splitDisjunctivePredicates(predicate)
+    var finalPredicates = splitConjunctivePredicates(disjunctives.head)
+    disjunctives.tail.foreach { cond =>
+      val predicates = new ArrayBuffer[Expression]()
+      splitConjunctivePredicates(cond).map { p =>
+        predicates ++= finalPredicates.map(Or(_, p))
+      }
+      finalPredicates = predicates.toSeq
+    }
+    val cnf = finalPredicates.map { p =>
+      if (p.semanticEquals(predicate)) {
+        p
+      } else {
+        toCNF(p, depth + 1)
+      }
+    }
+    // To prevent expression explosion problem in CNF conversion, we throw away the CNF format if
+    // its length is more then a threshold.
+    if (cnf.length > conf.maxPredicateNumberForCNFNormalization) {
+      return predicate
+    } else {
+      cnf.reduce(And)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, _) => f.copy(condition = toCNF(condition))
+  }
+}
 
 /**
  * Simplifies boolean expressions:

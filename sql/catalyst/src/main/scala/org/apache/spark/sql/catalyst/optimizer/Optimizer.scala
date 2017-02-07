@@ -101,6 +101,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReorderAssociativeOperator,
       LikeSimplification,
       BooleanSimplification,
+      CNFNormalization(conf),
       SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
