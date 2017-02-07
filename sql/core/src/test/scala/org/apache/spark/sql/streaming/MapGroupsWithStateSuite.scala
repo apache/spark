@@ -37,7 +37,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     StateStore.stop()
   }
 
-  test("state - get, exists, update, remove") {
+  test("KeyedState - get, exists, update, remove") {
     var state: KeyedStateImpl[String] = null
 
     def testState(
@@ -49,20 +49,23 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
         assert(state.get === expectedData.get)
       } else {
         assert(!state.exists)
-        assert(state.get === null)
+        intercept[NoSuchElementException] {
+          state.get
+        }
       }
+      assert(state.getOption === expectedData)
       assert(state.isUpdated === shouldBeUpdated)
       assert(state.isRemoved === shouldBeRemoved)
     }
 
     // Updating empty state
-    state = KeyedStateImpl[String](null)
+    state = new KeyedStateImpl[String](None)
     testState(None)
     state.update("")
     testState(Some(""), shouldBeUpdated = true)
 
     // Updating exiting state
-    state = KeyedStateImpl[String]("2")
+    state = new KeyedStateImpl[String](Some("2"))
     testState(Some("2"))
     state.update("3")
     testState(Some("3"), shouldBeUpdated = true)
@@ -80,20 +83,21 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     }
   }
 
-  test("state - primitive types") {
-    val intState = new KeyedStateImpl[Int](10)
+  test("KeyedState - primitive type") {
+    var intState = new KeyedStateImpl[Int](None)
+    intercept[NoSuchElementException] {
+      intState.get
+    }
+    assert(intState.getOption === None)
+
+    intState = new KeyedStateImpl[Int](Some(10))
     assert(intState.get == 10)
     intState.update(0)
     assert(intState.get == 0)
     intState.remove()
-    assert(intState.get == null)
-
-    val longState = new KeyedStateImpl[Long](10)
-    assert(longState.get == 10)
-    longState.update(0)
-    assert(longState.get == 0)
-    longState.remove()
-    assert(longState.get == null)
+    intercept[NoSuchElementException] {
+      intState.get
+    }
   }
 
   test("flatMapGroupsWithState - streaming") {
@@ -101,7 +105,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     // Returns the data and the count if state is defined, otherwise does not return anything
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
-      val count = Option(state.get).map(_.count).getOrElse(0L) + values.size
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
         Iterator.empty
@@ -137,13 +141,47 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
+  test("flatMapGroupsWithState - streaming + func returns iterator that updates state lazily") {
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count if state is defined, otherwise does not return anything
+    // Additionally, it updates state lazily as the returned iterator get consumed
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
+      values.flatMap { _ =>
+        val count = state.getOption.map(_.count).getOrElse(0L) + 1
+        if (count == 3) {
+          state.remove()
+          None
+        } else {
+          state.update(RunningCount(count))
+          Some((key, count.toString))
+        }
+      }
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(stateFunc) // State: Int, Out: (Str, Str)
+
+    testStream(result, Append)(
+      AddData(inputData, "a", "a", "b"),
+      CheckLastBatch(("a", "1"), ("a", "2"), ("b", "1")),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
+      CheckLastBatch(("b", "2")),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
+      CheckLastBatch(("a", "1"), ("c", "1"))
+    )
+  }
+
   test("flatMapGroupsWithState - batch") {
     // Function that returns running count only if its even, otherwise does not return
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-      if (state.get != null) {
-        throw new IllegalArgumentException("state.get should be empty")
-      }
       Iterator((key, values.size))
     }
     checkAnswer(
@@ -156,7 +194,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
-      val count = Option(state.get).map(_.count).getOrElse(0L) + values.size
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
         (key, "-1")
@@ -192,12 +230,12 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("mapGroupsWithState - streaming with aggregation later") {
+  test("mapGroupsWithState - streaming + aggregation") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
 
-      val count = Option(state.get).map(_.count).getOrElse(0L) + values.size
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
         (key, "-1")
@@ -239,9 +277,6 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   test("mapGroupsWithState - batch") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-      if (state.get != null) {
-        throw new IllegalArgumentException("state.get should be empty")
-      }
       (key, values.size)
     }
 
@@ -256,7 +291,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
   testQuietly("StateStore.abort on task failure handling") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (MapGroupsWithStateSuite.failInTask) throw new Exception("expected failure")
-      val count = Option(state.get).map(_.count).getOrElse(0L) + values.size
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       state.update(RunningCount(count))
       (key, count)
     }

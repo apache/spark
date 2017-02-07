@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.lang.IllegalArgumentException
+
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
 
@@ -53,16 +55,17 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *  - All the data will be shuffled before applying the function.
  *
  * Important points to note about using KeyedState.
- *  - The value of the state cannot be null. So you cannot update state with null.
+ *  - The value of the state cannot be null. So updating state with null will throw
+ *    `IllegalArgumentException`.
  *  - Operations on `KeyedState` are not thread-safe. This is to avoid memory barriers.
- *  - If `remove()` is called, then `exists()` will return `false`, and
- *    `get()` will return `null`.
- *  - After that `update(newState)` is called, then `exists()` will return `true`,
- *    and `get()` will return the non-null value.
+ *  - If `remove()` is called, then `exists()` will return `false`,
+ *    `get()` will throw `NoSuchElementException` and `getOption()` will return `None`
+ *  - After that, if `update(newState)` is called, then `exists()` will again return `true`,
+ *    `get()` and `getOption()`will return the updated value.
  *
- * Scala example of using KeyedState` in `mapGroupsWithState`:
+ * Scala example of using KeyedState in `mapGroupsWithState`:
  * {{{
- * // A mapping function that maintains an integer state for string keys and returns a string.
+ * /* A mapping function that maintains an integer state for string keys and returns a string. */
  * def mappingFunction(key: String, value: Iterator[Int], state: KeyedState[Int]): String = {
  *   // Check if state exists
  *   if (state.exists) {
@@ -85,7 +88,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  * Java example of using `KeyedState`:
  * {{{
- * // A mapping function that maintains an integer state for string keys and returns a string.
+ * /* A mapping function that maintains an integer state for string keys and returns a string. */
  * MapGroupsWithStateFunction<String, Integer, Integer, String> mappingFunction =
  *    new MapGroupsWithStateFunction<String, Integer, Integer, String>() {
  *
@@ -120,13 +123,18 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   /** Whether state exists or not. */
   def exists: Boolean
 
-  /** Get the state object if it exists, or null. */
+  /** Get the state value if it exists, or throw NoSuchElementException. */
+  @throws[NoSuchElementException]("when state does not exist")
   def get: S
+
+  /** Get the state value as a scala Option. */
+  def getOption: Option[S]
 
   /**
    * Update the value of the state. Note that `null` is not a valid value, and it throws
    * IllegalArgumentException.
    */
+  @throws[IllegalArgumentException]("when updating with null")
   def update(newState: S): Unit
 
   /** Remove this keyed state. */

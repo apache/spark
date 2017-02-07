@@ -20,38 +20,61 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.KeyedState
 
 /** Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe. */
-private[sql] case class KeyedStateImpl[S](private var value: S) extends KeyedState[S] {
-  private var updated: Boolean = false  // whether value has been updated (but not removed)
-  private var removed: Boolean = false  // whether value has been removed
+private[sql] class KeyedStateImpl[S](optionalValue: Option[S]) extends KeyedState[S] {
+  private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
+  private var defined: Boolean = optionalValue.isDefined
+  private var updated: Boolean = false
+  // whether value has been updated (but not removed)
+  private var removed: Boolean = false // whether value has been removed
 
   // ========= Public API =========
-  override def exists: Boolean = { value != null }
+  override def exists: Boolean = defined
 
-  override def get: S = value
+  override def get: S = {
+    if (defined) {
+      value
+    } else {
+      throw new NoSuchElementException("State is either not defined or has already been removed")
+    }
+  }
+
+  override def getOption: Option[S] = {
+    if (defined) {
+      Some(value)
+    } else {
+      None
+    }
+  }
 
   override def update(newValue: S): Unit = {
     if (newValue == null) {
       throw new IllegalArgumentException("'null' is not a valid state value")
-    } else {
-      value = newValue
-      updated = true
-      removed = false
     }
+    value = newValue
+    defined = true
+    updated = true
+    removed = false
   }
 
   override def remove(): Unit = {
-    value = null.asInstanceOf[S]
+    defined = false
     updated = false
     removed = true
   }
 
-  override def toString: String = s"KeyedState($value)"
+  override def toString: String = {
+    s"KeyedState(${getOption.map(_.toString).getOrElse("<undefined>")})"
+  }
 
   // ========= Internal API =========
 
   /** Whether the state has been marked for removing */
-  def isRemoved: Boolean = removed
+  def isRemoved: Boolean = {
+    removed
+  }
 
   /** Whether the state has been been updated */
-  def isUpdated: Boolean = updated
+  def isUpdated: Boolean = {
+    updated
+  }
 }
