@@ -783,25 +783,24 @@ private[spark] object SparkConf extends Logging {
   /**
    * check if the given config key-value is valid.
    */
-  private def checkValidSetting(key: String, value: String, conf: SparkConf): Unit = {
-    key match {
-      case "spark.master" =>
-        // First, there is no need to set 'spark.master' multi-times with different values.
-        // Second, It is possible for users to set the different 'spark.master' in code with
-        // `spark-submit` command, and will confuse users.
-        // So, we should do once check if the 'spark.master' already exists in settings and if
-        // the previous value is the same with current value. Throw a IllegalArgumentException when
-        // previous value is different with current value.
-        val previousOne = try {
-          Some(conf.get(key))
-        } catch {
-          case e: NoSuchElementException =>
-            None
-        }
-        if (previousOne.isDefined && !previousOne.get.equals(value)) {
-          throw new IllegalArgumentException(s"'spark.master' should not be set with different " +
-            s"value, previous value is ${previousOne.get} and current value is $value")
-        }
+  def checkValidSetting(key: String, value: String, conf: SparkConf): Unit = {
+    if (key.equals("spark.master")) {
+      // First, there is no need to set 'spark.master' multi-times with different values.
+      // Second, It is possible for users to set the different 'spark.master' in code with
+      // `spark-submit` command, and will confuse users.
+      // So, we should do once check if the 'spark.master' already exists in settings and if
+      // the previous value is the same with current value. Throw a IllegalArgumentException when
+      // previous value is different with current value.
+      val previousOne = try {
+        Some(conf.get(key))
+      } catch {
+        case e: NoSuchElementException =>
+          None
+      }
+      if (previousOne.isDefined && !previousOne.get.equals(value)) {
+        throw new IllegalArgumentException(s"'spark.master' should not be set with different " +
+          s"value, previous value is ${previousOne.get} and current value is $value")
+      }
     }
   }
 
