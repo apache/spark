@@ -51,6 +51,9 @@ private[hive] case class HiveSimpleUDF(
   @transient
   lazy val function = funcWrapper.createFunction[UDF]()
 
+  {
+    function
+  }
   @transient
   private lazy val method =
     function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)

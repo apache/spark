@@ -163,25 +163,37 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     }
   }
 
-  test("read varchar column from orc tables created by hive") {
+  test("SPARK-19459: read char/varchar column written by Hive") {
+    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+    val location = Utils.createTempDir().toURI
     try {
-      // This is an ORC file with a STRING, a CHAR(10) and a VARCHAR(10) column that has been
-      // created using Hive 1.2.1
-      val hiveOrc = new File(Thread.currentThread().getContextClassLoader
-        .getResource(s"data/files/orc/").getFile).toURI
-      sql(
+      hiveClient.runSqlHive(
+        """
+           |CREATE EXTERNAL TABLE hive_orc(
+           |  a STRING,
+           |  b CHAR(10),
+           |  c VARCHAR(10))
+           |STORED AS orc""".stripMargin)
+      // Hive throws an exception if I assign the location in the create table statment.
+      hiveClient.runSqlHive(
+        s"ALTER TABLE hive_orc SET LOCATION '$location'")
+      hiveClient.runSqlHive(
+        "INSERT INTO TABLE hive_orc SELECT 'a', 'b', 'c' FROM (SELECT 1) t")
+
+      // We create a different table in Spark using the same schema which points to
+      // the same location.
+      spark.sql(
         s"""
-          |CREATE EXTERNAL TABLE test_hive_orc(
-          |  a STRING,
-          |  b CHAR(10),
-          |  c VARCHAR(10)
-          |)
-          |STORED AS ORC
-          |LOCATION '$hiveOrc'
-        """.stripMargin)
-      checkAnswer(spark.table("test_hive_orc"), Row("a", "b         ", "c"))
+           |CREATE EXTERNAL TABLE spark_orc(
+           |  a STRING,
+           |  b CHAR(10),
+           |  c VARCHAR(10))
+           |STORED AS orc
+           |LOCATION '$location'""".stripMargin)
+      checkAnswer(spark.table("spark_orc"), Row("a", "b         ", "c"))
     } finally {
-      sql("DROP TABLE IF EXISTS test_hive_orc")
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
     }
   }
 }

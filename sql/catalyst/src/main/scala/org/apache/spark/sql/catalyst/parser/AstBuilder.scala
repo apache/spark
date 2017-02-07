@@ -1466,12 +1466,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Add Hive type string to metadata.
     dataType match {
       case p: PrimitiveDataTypeContext =>
-        val dt = p.identifier.getText.toLowerCase
-        (dt, p.INTEGER_VALUE().asScala.toList) match {
-          case ("varchar" | "char", Nil) =>
-            builder.putString(HIVE_TYPE_STRING, dt)
-          case ("varchar" | "char", size :: Nil) =>
-            builder.putString(HIVE_TYPE_STRING, dt + "(" + size.getText + ")")
+        p.identifier.getText.toLowerCase match {
+          case "varchar" | "char" =>
+            builder.putString(HIVE_TYPE_STRING, dataType.getText.toLowerCase)
           case _ =>
         }
       case _ =>

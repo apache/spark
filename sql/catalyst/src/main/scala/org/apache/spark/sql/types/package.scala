@@ -23,8 +23,10 @@ package org.apache.spark.sql
  */
 package object types {
   /**
-   * Metadata key used to store the Hive type name. This is relevant for datatypes that do not
-   * have a direct Spark SQL counterpart, such as CHAR and VARCHAR.
+   * Metadata key used to store the the raw hive type string in the metadata of StructField. This
+   * is relevant for datatypes that do not have a direct Spark SQL counterpart, such as CHAR and
+   * VARCHAR. We need to preserve the original type in order to invoke the correct object
+   * inspector in Hive.
    */
   val HIVE_TYPE_STRING = "HIVE_TYPE_STRING"
 }
