@@ -129,21 +129,24 @@ class ConfigEntrySuite extends SparkFunSuite {
   }
 
   test("conf entry: checkValue()") {
-    def createConf(default: Int): ConfigEntry[Int] =
+    def createEntry(default: Int): ConfigEntry[Int] =
       ConfigBuilder(testKey("checkValue"))
         .intConf
         .checkValue(value => value >= 0, "value must be non-negative")
         .createWithDefault(default)
 
-    // this succeeds
-    val conf = createConf(10)
+    val conf = new SparkConf()
 
-    // this fails because valueConverter() calls checkValue()
-    val e1 = intercept[IllegalArgumentException] { conf.valueConverter("-1") }
+    val entry = createEntry(10)
+    conf.set(entry, -1)
+    val e1 = intercept[IllegalArgumentException] {
+      conf.get(entry)
+    }
     assert(e1.getMessage == "value must be non-negative")
 
-    // this fails because createWithDefault() calls valueConverter() which calls checkValue()
-    val e2 = intercept[IllegalArgumentException] { createConf(-1) }
+    val e2 = intercept[IllegalArgumentException] {
+      createEntry(-1)
+    }
     assert(e2.getMessage == "value must be non-negative")
   }
 
