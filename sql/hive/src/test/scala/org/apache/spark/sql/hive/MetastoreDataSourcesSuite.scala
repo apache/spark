@@ -1309,7 +1309,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-
   test("Infer schema for Hive serde tables") {
     val tableName = "tab1"
     val avroSchema =
