@@ -121,7 +121,7 @@ class SessionCatalog(
    * A cache of qualified table names to table relation plans.
    */
   val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    val cacheSize = conf.filesourceTableRelationCacheSize
+    val cacheSize = conf.tableRelationCacheSize
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
   }
 

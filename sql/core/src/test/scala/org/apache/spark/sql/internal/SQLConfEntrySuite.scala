@@ -164,6 +164,18 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConf(confEntry) === Some("a"))
   }
 
+  test("checkValue()") {
+    val key = "spark.sql.SQLConfEntrySuite.int.ckeckValue"
+    val confEntry =
+      buildConf(key).intConf.checkValue(_ >= 0, "value must be non-negative").createWithDefault(1)
+
+    assert(conf.getConf(confEntry) === 1)
+    val e = intercept[IllegalArgumentException] { conf.setConf(confEntry, -1) }
+    assert(e.getMessage === "value must be non-negative")
+    // verify that the conf value is not changed
+    assert(conf.getConf(confEntry) === 1)
+  }
+
   test("duplicate entry") {
     val key = "spark.sql.SQLConfEntrySuite.duplicate"
     buildConf(key).stringConf.createOptional
