@@ -84,8 +84,10 @@ private[spark] class Client(
 
   def run(): Unit = {
     logInfo(s"Starting application $kubernetesAppId in Kubernetes...")
-    val (driverSubmitSslOptions, isKeyStoreLocalFile) = parseDriverSubmitSslOptions()
 
+    Seq(uploadedFiles, uploadedJars, Some(mainAppResource)).foreach(checkForFilesExistence)
+
+    val (driverSubmitSslOptions, isKeyStoreLocalFile) = parseDriverSubmitSslOptions()
     val parsedCustomLabels = parseCustomLabels(customLabels)
     var k8ConfBuilder = new K8SConfigBuilder()
       .withApiVersion("v1")
@@ -660,6 +662,22 @@ private[spark] class Client(
         }
       }).toMap
     }).getOrElse(Map.empty[String, String])
+  }
+
+  private def checkForFilesExistence(maybePaths: Option[String]): Unit = {
+    maybePaths.foreach { paths =>
+      paths.split(",").foreach { path =>
+        val uri = Utils.resolveURI(path)
+        uri.getScheme match {
+          case "file" | null =>
+            val file = new File(uri.getPath)
+            if (!file.isFile) {
+              throw new SparkException(s"""file "${uri}" does not exist!""")
+            }
+          case _ =>
+        }
+      }
+    }
   }
 }
 
