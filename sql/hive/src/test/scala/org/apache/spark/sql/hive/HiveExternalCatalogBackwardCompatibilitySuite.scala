@@ -134,6 +134,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     storage = CatalogStorageFormat.empty.copy(
       properties = Map("path" -> defaultTableURI("tbl4").toString)),
     schema = new StructType(),
+    provider = Some("json"),
     properties = Map(
       "spark.sql.sources.provider" -> "json",
       "spark.sql.sources.schema.numParts" -> "1",
@@ -145,6 +146,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     storage = CatalogStorageFormat.empty.copy(
       properties = Map("path" -> defaultTableURI("tbl5").toString)),
     schema = simpleSchema,
+    provider = Some("parquet"),
     properties = Map(
       "spark.sql.sources.provider" -> "parquet",
       "spark.sql.sources.schema.numParts" -> "1",
@@ -156,6 +158,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
     storage = CatalogStorageFormat.empty.copy(
       properties = Map("path" -> defaultTableURI("tbl6").toString)),
     schema = new StructType(),
+    provider = Some("json"),
     properties = Map(
       "spark.sql.sources.provider" -> "json",
       "spark.sql.sources.schema.numParts" -> "1",
@@ -170,6 +173,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
       locationUri = Some(defaultTableURI("tbl7").toString + "-__PLACEHOLDER__"),
       properties = Map("path" -> tempDirUri)),
     schema = new StructType(),
+    provider = Some("json"),
     properties = Map(
       "spark.sql.sources.provider" -> "json",
       "spark.sql.sources.schema.numParts" -> "1",
@@ -194,6 +198,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
       locationUri = Some(defaultTableURI("tbl9").toString + "-__PLACEHOLDER__"),
       properties = Map("path" -> tempDirUri)),
     schema = new StructType(),
+    provider = Some("json"),
     properties = Map("spark.sql.sources.provider" -> "json"))
 
   // A list of all raw tables we want to test, with their expected schema.
