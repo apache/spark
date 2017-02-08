@@ -1037,7 +1037,8 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(4000)
 
-  val FILESOURCE_TABLE_RELATION_CACHE_SIZE = buildConf("spark.sql.filesourceTableRelationCacheSize")
+  val FILESOURCE_TABLE_RELATION_CACHE_SIZE =
+    buildStaticConf("spark.sql.filesourceTableRelationCacheSize")
       .internal()
       .doc("The maximum size of the cache that maps qualified table names to table relation plans.")
       .intConf
