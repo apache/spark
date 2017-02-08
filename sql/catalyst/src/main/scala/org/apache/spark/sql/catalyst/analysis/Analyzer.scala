@@ -624,6 +624,9 @@ class Analyzer(
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${u.tableName}")
+        // If the database is not valid, also throw an AnalysisException.
+        case _: NoSuchDatabaseException =>
+          u.failAnalysis(s"Table or view not found: ${u.tableName}")
       }
     }
 
