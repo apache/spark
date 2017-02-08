@@ -59,6 +59,11 @@ trait StateStore {
   def remove(condition: UnsafeRow => Boolean): Unit
 
   /**
+   * Remove a single key.
+   */
+  def remove(key: UnsafeRow): Unit
+
+  /**
    * Commit all the updates that have been made to the store, and return the new version.
    */
   def commit(): Long
