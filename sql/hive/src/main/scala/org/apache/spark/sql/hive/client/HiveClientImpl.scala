@@ -798,7 +798,7 @@ private[hive] object HiveClientImpl {
     } else {
       c.dataType.catalogString
     }
-    new FieldSchema(c.name, typeString, c.getComment.orNull)
+    new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
   /** Builds the native StructField from Hive's FieldSchema. */
