@@ -61,7 +61,7 @@ public class JavaBucketedRandomProjectionLSHExample {
 
     StructType schema = new StructType(new StructField[]{
       new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("keys", new VectorUDT(), false, Metadata.empty())
+      new StructField("features", new VectorUDT(), false, Metadata.empty())
     });
     Dataset<Row> dfA = spark.createDataFrame(dataA, schema);
     Dataset<Row> dfB = spark.createDataFrame(dataB, schema);
@@ -71,8 +71,8 @@ public class JavaBucketedRandomProjectionLSHExample {
     BucketedRandomProjectionLSH mh = new BucketedRandomProjectionLSH()
       .setBucketLength(2.0)
       .setNumHashTables(3)
-      .setInputCol("keys")
-      .setOutputCol("values");
+      .setInputCol("features")
+      .setOutputCol("hashes");
 
     BucketedRandomProjectionLSHModel model = mh.fit(dfA);
 

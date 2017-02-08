@@ -40,16 +40,16 @@ if __name__ == "__main__":
     dataA = [(0, Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
              (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
              (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
-    dfA = spark.createDataFrame(dataA, ["id", "keys"])
+    dfA = spark.createDataFrame(dataA, ["id", "features"])
 
     dataB = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
              (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
              (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
-    dfB = spark.createDataFrame(dataB, ["id", "keys"])
+    dfB = spark.createDataFrame(dataB, ["id", "features"])
 
     key = Vectors.sparse(6, [1, 3], [1.0, 1.0])
 
-    mh = MinHashLSH(inputCol="keys", outputCol="values", numHashTables=5)
+    mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
     model = mh.fit(dfA)
 
     # Feature Transformation
@@ -62,13 +62,16 @@ if __name__ == "__main__":
 
     # Approximate similarity join
     print("Approximately joining dfA and dfB on distance smaller than 0.6:")
-    model.approxSimilarityJoin(dfA, dfB, 0.6).show()
+    model.approxSimilarityJoin(dfA, dfB, 0.6)\
+        .select("datasetA.id", "datasetB.id", "distCol").show()
     print("Joining cached datasets to avoid recomputing the hash values:")
-    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show()
+    model.approxSimilarityJoin(transformedA, transformedB, 0.6)\
+        .select("datasetA.id", "datasetB.id", "distCol").show()
 
     # Self Join
     print("Approximately self join of dfB on distance smaller than 0.6:")
-    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show()
+    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id")\
+        .select("datasetA.id", "datasetB.id", "distCol").show()
 
     # Approximate nearest neighbor search
     print("Approximately searching dfA for 2 nearest neighbors of the key:")

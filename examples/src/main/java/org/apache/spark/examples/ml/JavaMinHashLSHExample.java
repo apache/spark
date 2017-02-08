@@ -59,7 +59,7 @@ public class JavaMinHashLSHExample {
 
     StructType schema = new StructType(new StructField[]{
       new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("keys", new VectorUDT(), false, Metadata.empty())
+      new StructField("features", new VectorUDT(), false, Metadata.empty())
     });
     Dataset<Row> dfA = spark.createDataFrame(dataA, schema);
     Dataset<Row> dfB = spark.createDataFrame(dataB, schema);
@@ -70,8 +70,8 @@ public class JavaMinHashLSHExample {
 
     MinHashLSH mh = new MinHashLSH()
       .setNumHashTables(5)
-      .setInputCol("keys")
-      .setOutputCol("values");
+      .setInputCol("features")
+      .setOutputCol("hashes");
 
     MinHashLSHModel model = mh.fit(dfA);
 
@@ -84,13 +84,20 @@ public class JavaMinHashLSHExample {
 
     // Approximate similarity join
     System.out.println("Approximately joining dfA and dfB on distance smaller than 0.6:");
-    model.approxSimilarityJoin(dfA, dfB, 0.6).show();
+    model.approxSimilarityJoin(dfA, dfB, 0.6)
+      .select("datasetA.id", "datasetB.id", "distCol")
+      .show();
     System.out.println("Joining cached datasets to avoid recomputing the hash values:");
-    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show();
+    model.approxSimilarityJoin(transformedA, transformedB, 0.6)
+      .select("datasetA.id", "datasetB.id", "distCol")
+      .show();
 
     // Self Join
     System.out.println("Approximately self join of dfB on distance smaller than 0.6:");
-    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show();
+    model.approxSimilarityJoin(dfA, dfA, 0.6)
+      .filter("datasetA.id < datasetB.id")
+      .select("datasetA.id", "datasetB.id", "distCol")
+      .show();
 
     // Approximate nearest neighbor search
     System.out.println("Approximately searching dfA for 2 nearest neighbors of the key:");

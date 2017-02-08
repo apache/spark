@@ -212,31 +212,31 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> data = [(Vectors.dense([-1.0, -1.0 ]),),
-    ...         (Vectors.dense([-1.0, 1.0 ]),),
-    ...         (Vectors.dense([1.0, -1.0 ]),),
-    ...         (Vectors.dense([1.0, 1.0]),)]
-    >>> df = spark.createDataFrame(data, ["keys"])
-    >>> rp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values",
-    ...                                  seed=12345, bucketLength=1.0)
-    >>> model = rp.fit(df)
-    >>> model.randUnitVectors
-    [DenseVector([-0.3041, 0.9527])]
+    >>> data = [(0, Vectors.dense([-1.0, -1.0 ]),),
+    ...         (1, Vectors.dense([-1.0, 1.0 ]),),
+    ...         (2, Vectors.dense([1.0, -1.0 ]),),
+    ...         (3, Vectors.dense([1.0, 1.0]),)]
+    >>> df = spark.createDataFrame(data, ["id", "features"])
+    >>> brp = BucketedRandomProjectionLSH(inputCol="features", outputCol="hashes",
+    ...                                   seed=12345, bucketLength=1.0)
+    >>> model = brp.fit(df)
     >>> model.transform(df).head()
-    Row(keys=DenseVector([-1.0, -1.0]), values=[DenseVector([-1.0])])
-    >>> data2 = [(Vectors.dense([2.0, 2.0 ]),),
-    ...          (Vectors.dense([2.0, 3.0 ]),),
-    ...          (Vectors.dense([3.0, 2.0 ]),),
-    ...          (Vectors.dense([3.0, 3.0]),)]
-    >>> df2 = spark.createDataFrame(data2, ["keys"])
+    Row(id=0, features=DenseVector([-1.0, -1.0]), hashes=[DenseVector([-1.0])])
+    >>> data2 = [(4, Vectors.dense([2.0, 2.0 ]),),
+    ...          (5, Vectors.dense([2.0, 3.0 ]),),
+    ...          (6, Vectors.dense([3.0, 2.0 ]),),
+    ...          (7, Vectors.dense([3.0, 3.0]),)]
+    >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
-    [Row(keys=DenseVector([2.0, 2.0]), values=[DenseVector([1.0])], distCol=1.0)]
-    >>> model.approxSimilarityJoin(df, df2, 3.0).show()
-    +--------------------+--------------------+----------------+
-    |            datasetA|            datasetB|         distCol|
-    +--------------------+--------------------+----------------+
-    |[[1.0,1.0],Wrappe...|[[3.0,2.0],Wrappe...|2.23606797749979|
-    +--------------------+--------------------+----------------+
+    [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
+    >>> model.approxSimilarityJoin(df, df2, 3.0).select("datasetA.id",
+    ...                                                 "datasetB.id",
+    ...                                                 "distCol").show()
+    +---+---+----------------+
+    | id| id|         distCol|
+    +---+---+----------------+
+    |  3|  6|2.23606797749979|
+    +---+---+----------------+
     >>> brpPath = temp_path + "/brp"
     >>> brp.save(rpPath)
     >>> brp2 = BucketedRandomProjectionLSH.load(rpPath)
@@ -961,34 +961,32 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     .. seealso:: `Wikipedia on MinHash <https://en.wikipedia.org/wiki/MinHash>`_
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> data = [(Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
-    ...         (Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
-    ...         (Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
-    >>> df = spark.createDataFrame(data, ["keys"])
-    >>> mh = MinHashLSH(inputCol="keys", outputCol="values", seed=12345)
+    >>> data = [(0, Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
+    ...         (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
+    ...         (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
+    >>> df = spark.createDataFrame(data, ["id", "features"])
+    >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
-    Row(keys=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), values=[DenseVector([-1638925712.0])])
-    >>> data2 = [(Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
-    ...          (Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
-    ...          (Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
-    >>> df2 = spark.createDataFrame(data2, ["keys"])
+    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([-1638925712.0])])
+    >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
+    ...          (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
+    ...          (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
+    >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> key = Vectors.sparse(6, [1], [1.0])
     >>> model.approxNearestNeighbors(df2, key, 1).show()
-    +--------------------+------------------+------------------+
-    |                keys|            values|           distCol|
-    +--------------------+------------------+------------------+
-    |(6,[1,3,5],[1.0,1...|[[-1.638925712E9]]|0.6666666666666667|
-    +--------------------+------------------+------------------+
-    >>> model.approxSimilarityJoin(df, df2, 1.0).show()
-    +--------------------+--------------------+-------+
-    |            datasetA|            datasetB|distCol|
-    +--------------------+--------------------+-------+
-    |[(6,[2,3,4],[1.0,...|[(6,[2,3,5],[1.0,...|    0.5|
-    |[(6,[0,2,4],[1.0,...|[(6,[2,3,5],[1.0,...|    0.8|
-    |[(6,[0,1,2],[1.0,...|[(6,[1,3,5],[1.0,...|    0.8|
-    |[(6,[0,1,2],[1.0,...|[(6,[1,2,4],[1.0,...|    0.5|
-    +--------------------+--------------------+-------+
+    +---+--------------------+------------------+------------------+
+    | id|            features|            hashes|           distCol|
+    +---+--------------------+------------------+------------------+
+    |  5|(6,[1,2,4],[1.0,1...|[[-1.638925712E9]]|0.6666666666666667|
+    +---+--------------------+------------------+------------------+
+    >>> model.approxSimilarityJoin(df, df2, 0.6).select("datasetA.id", "datasetB.id", "distCol").show()
+    +---+---+-------+
+    | id| id|distCol|
+    +---+---+-------+
+    |  1|  4|    0.5|
+    |  0|  5|    0.5|
+    +---+---+-------+
     >>> mhPath = temp_path + "/mh"
     >>> mh.save(mhPath)
     >>> mh2 = MinHashLSH.load(mhPath)

@@ -37,20 +37,20 @@ object MinHashLSHExample {
       (0, Vectors.sparse(6, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
       (1, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (4, 1.0)))),
       (2, Vectors.sparse(6, Seq((0, 1.0), (2, 1.0), (4, 1.0))))
-    )).toDF("id", "keys")
+    )).toDF("id", "features")
 
     val dfB = spark.createDataFrame(Seq(
       (3, Vectors.sparse(6, Seq((1, 1.0), (3, 1.0), (5, 1.0)))),
       (4, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (5, 1.0)))),
       (5, Vectors.sparse(6, Seq((1, 1.0), (2, 1.0), (4, 1.0))))
-    )).toDF("id", "keys")
+    )).toDF("id", "features")
 
     val key = Vectors.sparse(6, Seq((1, 1.0), (3, 1.0)))
 
     val mh = new MinHashLSH()
       .setNumHashTables(5)
-      .setInputCol("keys")
-      .setOutputCol("values")
+      .setInputCol("features")
+      .setOutputCol("hashes")
 
     val model = mh.fit(dfA)
 
@@ -63,13 +63,20 @@ object MinHashLSHExample {
 
     // Approximate similarity join
     println("Approximately joining dfA and dfB on distance smaller than 0.6:")
-    model.approxSimilarityJoin(dfA, dfB, 0.6).show()
+    model.approxSimilarityJoin(dfA, dfB, 0.6)
+      .select("datasetA.id", "datasetB.id", "distCol")
+      .show()
     println("Joining cached datasets to avoid recomputing the hash values:")
-    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show()
+    model.approxSimilarityJoin(transformedA, transformedB, 0.6)
+      .select("datasetA.id", "datasetB.id", "distCol")
+      .show()
 
     // Self Join
     println("Approximately self join of dfB on distance smaller than 0.6:")
-    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show()
+    model.approxSimilarityJoin(dfA, dfA, 0.6)
+      .filter("datasetA.id < datasetB.id")
+      .select("datasetA.id", "datasetB.id", "distCol")
+      .show()
 
     // Approximate nearest neighbor search
     println("Approximately searching dfA for 2 nearest neighbors of the key:")
