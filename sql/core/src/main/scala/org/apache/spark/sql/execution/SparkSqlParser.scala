@@ -1140,7 +1140,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * For example:
    * {{{
-   *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
    *   LIKE [other_db_name.]existing_table_name [locationSpec]
    * }}}
    */
@@ -1148,10 +1148,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
-    if (ctx.EXTERNAL != null && location.isEmpty) {
-      // If we are creating an EXTERNAL table, then the LOCATION field is required
-      operationNotAllowed("CREATE EXTERNAL TABLE LIKE must be accompanied by LOCATION", ctx)
-    }
     CreateTableLikeCommand(targetTable, sourceTable, location, ctx.EXISTS != null)
   }
 
