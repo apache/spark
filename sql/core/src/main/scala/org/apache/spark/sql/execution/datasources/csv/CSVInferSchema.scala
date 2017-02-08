@@ -99,8 +99,7 @@ private[csv] object CSVInferSchema {
   }
 
   private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
-    val infOrNan = Seq(options.nanValue, options.negativeInf, options.positiveInf)
-    infOrNan.contains(field)
+    field == options.nanValue || field == options.negativeInf || field == options.positiveInf
   }
 
   private def tryParseInteger(field: String, options: CSVOptions): DataType = {
