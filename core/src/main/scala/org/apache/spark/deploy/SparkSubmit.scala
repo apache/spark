@@ -70,7 +70,8 @@ object SparkSubmit extends CommandLineUtils {
   private val STANDALONE = 2
   private val MESOS = 4
   private val LOCAL = 8
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
+  private val KUBERNETES = 16
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | KUBERNETES | LOCAL
 
   // Deploy modes
   private val CLIENT = 1
@@ -231,8 +232,9 @@ object SparkSubmit extends CommandLineUtils {
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
+      case m if m.startsWith("k8s") => KUBERNETES
       case _ =>
-        printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
+        printErrorAndExit("Master must either be yarn or start with spark, mesos, k8s, local")
         -1
     }
 
@@ -275,6 +277,7 @@ object SparkSubmit extends CommandLineUtils {
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
+    val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
 
     // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
     // too for packages that include Python code
@@ -603,6 +606,26 @@ object SparkSubmit extends CommandLineUtils {
       }
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
+      }
+    }
+
+    if (isKubernetesCluster) {
+      childMainClass = "org.apache.spark.deploy.kubernetes.Client"
+      if (args.isPython) {
+        childArgs += ("--primary-py-file", args.primaryResource)
+        childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
+      } else if (args.isR) {
+        val mainFile = new Path(args.primaryResource).getName
+        childArgs += ("--primary-r-file", mainFile)
+        childArgs += ("--class", "org.apache.spark.deploy.RRunner")
+      } else {
+        if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
+          childArgs += ("--jar", args.primaryResource)
+        }
+        childArgs += ("--class", args.mainClass)
+      }
+      if (args.childArgs != null) {
+        args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }
     }
 
