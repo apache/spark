@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query 3
-ALTER TABLE show_t1 ADD PARTITION (c='Us', d=1) PARTITION (c='Us', d=22)
+ALTER TABLE show_t1 ADD PARTITION (c='Us', d=1)
 -- !query 3 schema
 struct<>
 -- !query 3 output
