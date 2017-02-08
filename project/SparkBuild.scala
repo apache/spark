@@ -86,43 +86,11 @@ object SparkBuild extends PomBuild {
 
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
-  // Provides compatibility for older versions of the Spark build
-  def backwardCompatibility = {
-    import scala.collection.mutable
-    var profiles: mutable.Seq[String] = mutable.Seq("sbt")
-    // scalastyle:off println
-    if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
-      println("NOTE: SPARK_GANGLIA_LGPL is deprecated, please use -Pspark-ganglia-lgpl flag.")
-      profiles ++= Seq("spark-ganglia-lgpl")
-    }
-    if (Properties.envOrNone("SPARK_HIVE").isDefined) {
-      println("NOTE: SPARK_HIVE is deprecated, please use -Phive and -Phive-thriftserver flags.")
-      profiles ++= Seq("hive", "hive-thriftserver")
-    }
-    Properties.envOrNone("SPARK_HADOOP_VERSION") match {
-      case Some(v) =>
-        println("NOTE: SPARK_HADOOP_VERSION is deprecated, please use -Dhadoop.version=" + v)
-        System.setProperty("hadoop.version", v)
-      case None =>
-    }
-    if (Properties.envOrNone("SPARK_YARN").isDefined) {
-      println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
-      profiles ++= Seq("yarn")
-    }
-    // scalastyle:on println
-    profiles
-  }
-
   override val profiles = {
     val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
-    case None => backwardCompatibility
-    case Some(v) =>
-      if (backwardCompatibility.nonEmpty)
-        // scalastyle:off println
-        println("Note: We ignore environment variables, when use of profile is detected in " +
-          "conjunction with environment variable.")
-        // scalastyle:on println
-      v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
+      case None => Seq("sbt")
+      case Some(v) =>
+        v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
     if (System.getProperty("scala-2.10") == "") {
