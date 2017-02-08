@@ -860,7 +860,7 @@ private[hive] object HiveClientImpl {
       hiveTable.setFields(
         Seq(new FieldSchema("col", "array<string>", "from deserializer")).asJava)
     } else {
-        hiveTable.setFields(schema.asJava)
+      hiveTable.setFields(schema.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
     conf.foreach(c => hiveTable.setOwner(c.getUser))
