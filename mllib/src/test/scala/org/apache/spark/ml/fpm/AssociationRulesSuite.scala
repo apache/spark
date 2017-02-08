@@ -34,7 +34,7 @@ class AssociationRulesSuite
       .setMinConfidence(0.8)
       .setItemsCol("items")
       .setFreqCol("freq")
-    val rules = associationRules.fit(freqItems).associationRules
+    val rules = associationRules.run(freqItems)
 
     val expectedRules = spark.createDataFrame(Seq(
       (Array("a"), Array("b"), 1.0),

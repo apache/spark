@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.fpm
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -28,6 +30,7 @@ import org.apache.spark.mllib.fpm.{FPGrowth => MLlibFPGrowth, FPGrowthModel => M
 import org.apache.spark.sql.{DataFrame, _}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -62,15 +65,29 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
 
   /**
    * Number of partitions used by parallel FP-growth
-   * @group param
+   * @group expertParam
    */
   @Since("2.2.0")
   val numPartitions: IntParam = new IntParam(this, "numPartitions",
     "Number of partitions used by parallel FP-growth", ParamValidators.gtEq[Int](1))
 
-  /** @group getParam */
+  /** @group expertGetParam */
   @Since("2.2.0")
   def getNumPartitions: Int = $(numPartitions)
+
+  /**
+   * minimal confidence for generating Association Rule
+   * Default: 0.8
+   * @group param
+   */
+  @Since("2.2.0")
+  val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
+    "minimal confidence for generating Association Rule (Default: 0.8)",
+    ParamValidators.inRange(0.0, 1.0))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getMinConfidence: Double = $(minConfidence)
 
 }
 
@@ -88,13 +105,13 @@ class FPGrowth @Since("2.2.0") (
   extends Estimator[FPGrowthModel] with FPGrowthParams with DefaultParamsWritable {
 
   @Since("2.2.0")
-  def this() = this(Identifiable.randomUID("FPGrowth"))
+  def this() = this(Identifiable.randomUID("fpgrowth"))
 
   /** @group setParam */
   @Since("2.2.0")
   def setMinSupport(value: Double): this.type = set(minSupport, value)
 
-  /** @group setParam */
+  /** @group expertSetParam */
   @Since("2.2.0")
   def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
@@ -106,10 +123,10 @@ class FPGrowth @Since("2.2.0") (
   @Since("2.2.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  def fit(dataset: Dataset[_]): FPGrowthModel = {
+  override def fit(dataset: Dataset[_]): FPGrowthModel = {
     val data = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[String](0).toArray)
     val parentModel = new MLlibFPGrowth().setMinSupport($(minSupport)).run(data)
-    copyValues(new FPGrowthModel(uid, parentModel))
+    copyValues(new FPGrowthModel(uid, parentModel)).setParent(this)
   }
 
   @Since("2.2.0")
@@ -141,20 +158,6 @@ class FPGrowthModel private[ml] (
     private val parentModel: MLlibFPGrowthModel[_])
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
-  /**
-   * minimal confidence for generating Association Rule
-   * Default: 0.8
-   * @group param
-   */
-  @Since("2.2.0")
-  val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
-    "minimal confidence for generating Association Rule (Default: 0.8)",
-    ParamValidators.inRange(0.0, 1.0))
-
-  /** @group getParam */
-  @Since("2.2.0")
-  def getMinConfidence: Double = $(minConfidence)
-
   /** @group setParam */
   @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
@@ -170,33 +173,31 @@ class FPGrowthModel private[ml] (
 
    /**
    * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
-   * with three fields, "antecedent", "consequent" and "confidence", with * "antecedent" and
+   * with three fields, "antecedent", "consequent" and "confidence", with "antecedent" and
    * "consequent" being Array[String] and the "confidence" being Double.
    */
   @Since("2.2.0")
-  @transient private lazy val associationRulesModel: AssociationRulesModel = {
-    val freqItems = getFreqItems
+  @transient private lazy val associationRules: DataFrame = {
+    val freqItems = getFreqItemsets
     val associationRules = new AssociationRules()
       .setMinConfidence($(minConfidence))
       .setItemsCol("items")
       .setFreqCol("freq")
-    associationRules.fit(freqItems)
+    associationRules.run(freqItems)
   }
 
-   /**
+  /**
    * Get association rules fitted by AssociationRules using the minConfidence, in the format
    * of DataFrame("antecedent", "consequent", "confidence")
    */
   @Since("2.2.0")
-  def getAssociationRules: DataFrame = {
-     associationRulesModel.associationRules
-  }
+  @transient lazy val getAssociationRules: DataFrame = associationRules
 
   /**
    * Get frequent items fitted by FPGrowth, in the format of DataFrame("items", "freq")
    */
   @Since("2.2.0")
-  @transient lazy val getFreqItems: DataFrame = {
+  @transient lazy val getFreqItemsets: DataFrame = {
     val sqlContext = SparkSession.builder().getOrCreate()
     import sqlContext.implicits._
     parentModel.freqItemsets.map(f => (f.items.map(_.toString), f.freq))
@@ -205,7 +206,48 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    associationRulesModel.setItemsCol($(featuresCol)).transform(dataset)
+    rulesTransform(dataset, associationRules)
+  }
+
+  private def rulesTransform(dataset: Dataset[_], associationRules: DataFrame): DataFrame = {
+    import dataset.sparkSession.implicits._
+
+    val ruleSize = SizeEstimator.estimate(associationRules.rdd)
+    if (ruleSize < 1e8) {
+      val rules = associationRules.rdd.map(r =>
+        (r.getSeq[String](0), r.getSeq[String](1))
+      ).collect()
+      val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
+
+      // For each rule, examine the input items and summarize the consequents
+      val predictUDF = udf((items: Seq[String]) => {
+        val itemset = items.toSet
+        val rulesValue = brRules.value
+        rulesValue.flatMap {
+          r => if (r._1.forall(itemset.contains)) r._2 else Array.empty[String]
+        }.distinct
+      })
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+
+    } else {
+      val itemsRDD = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[String](0))
+        .distinct().zipWithUniqueId().map(t => (t._2, t._1))
+      val rulesRDD = associationRules.rdd.map(r =>
+        (r.getSeq[String](0), r.getSeq[String](1))
+      )
+      val merged = itemsRDD.cartesian(rulesRDD).map {
+        case ((id, items), (antecedent, consequent)) =>
+          val consequents = if (antecedent.forall(items.contains(_))) consequent else Seq.empty
+          (id, consequents)
+      }.aggregateByKey(new ArrayBuffer[String])(
+        (ar, seq) => ar ++= seq, (ar, seq) => ar ++= seq)
+
+      val mapping = itemsRDD.join(merged).map {
+        case (id, (items, consequent)) => (items, consequent)
+      }.toDF($(featuresCol), $(predictionCol))
+
+      dataset.join(mapping, $(featuresCol))
+    }
   }
 
   @Since("2.2.0")
@@ -216,7 +258,7 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
     val copied = new FPGrowthModel(uid, parentModel)
-    copyValues(copied, extra)
+    copyValues(copied, extra).setParent(this.parent)
   }
 
   @Since("2.2.0")

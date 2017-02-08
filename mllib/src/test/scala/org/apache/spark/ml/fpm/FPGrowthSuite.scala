@@ -52,7 +52,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       (Array("2"), 3L),
       (Array("1", "2"), 3L)
     )).toDF("items", "freq")
-    val freqItems = model.getFreqItems
+    val freqItems = model.getFreqItemsets
     assert(freqItems.sort("items").rdd.collect()
       .sameElements(expectedFreq.sort("items").rdd.collect()))
   }
@@ -105,6 +105,9 @@ object FPGrowthSuite {
    * This excludes input columns to simplify some tests.
    */
   val allParamSettings: Map[String, Any] = Map(
-    "minSupport" -> 0.3
+    "minSupport" -> 0.3,
+    "numPartitions" -> 5,
+    "featuresCol" -> "features",
+    "predictionCol" -> "myPrediction"
   )
 }
