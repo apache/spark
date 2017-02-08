@@ -192,26 +192,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * Returns a copy of this node where `f` has been applied to all the nodes children.
-   */
-  def mapChildren(f: BaseType => BaseType): BaseType = {
-    var changed = false
-    val newArgs = mapProductIterator {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (newChild fastEquals arg) {
-          arg
-        } else {
-          changed = true
-          newChild
-        }
-      case nonChild: AnyRef => nonChild
-      case null => null
-    }
-    if (changed) makeCopy(newArgs) else this
-  }
-
-  /**
    * Returns a copy of this node with the children replaced.
    * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
    */
@@ -290,9 +270,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      transformChildren(rule, (t, r) => t.transformDown(r))
+      mapChildren(_.transformDown(rule))
     } else {
-      afterRule.transformChildren(rule, (t, r) => t.transformDown(r))
+      afterRule.mapChildren(_.transformDown(rule))
     }
   }
 
@@ -304,7 +284,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param rule the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
-    val afterRuleOnChildren = transformChildren(rule, (t, r) => t.transformUp(r))
+    val afterRuleOnChildren = mapChildren(_.transformUp(rule))
     if (this fastEquals afterRuleOnChildren) {
       CurrentOrigin.withOrigin(origin) {
         rule.applyOrElse(this, identity[BaseType])
@@ -317,18 +297,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * Returns a copy of this node where `rule` has been recursively applied to all the children of
-   * this node.  When `rule` does not apply to a given node it is left unchanged.
-   * @param rule the function used to transform this nodes children
+   * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
-  protected def transformChildren(
-      rule: PartialFunction[BaseType, BaseType],
-      nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
+  def mapChildren(f: BaseType => BaseType): BaseType = {
     if (children.nonEmpty) {
       var changed = false
       val newArgs = mapProductIterator {
         case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+          val newChild = f(arg.asInstanceOf[BaseType])
           if (!(newChild fastEquals arg)) {
             changed = true
             newChild
@@ -336,7 +312,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             arg
           }
         case Some(arg: TreeNode[_]) if containsChild(arg) =>
-          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+          val newChild = f(arg.asInstanceOf[BaseType])
           if (!(newChild fastEquals arg)) {
             changed = true
             Some(newChild)
@@ -345,7 +321,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           }
         case m: Map[_, _] => m.mapValues {
           case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+            val newChild = f(arg.asInstanceOf[BaseType])
             if (!(newChild fastEquals arg)) {
               changed = true
               newChild
@@ -357,7 +333,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case d: DataType => d // Avoid unpacking Structs
         case args: Traversable[_] => args.map {
           case arg: TreeNode[_] if containsChild(arg) =>
-            val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+            val newChild = f(arg.asInstanceOf[BaseType])
             if (!(newChild fastEquals arg)) {
               changed = true
               newChild
@@ -365,8 +341,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
               arg
             }
           case tuple@(arg1: TreeNode[_], arg2: TreeNode[_]) =>
-            val newChild1 = nextOperation(arg1.asInstanceOf[BaseType], rule)
-            val newChild2 = nextOperation(arg2.asInstanceOf[BaseType], rule)
+            val newChild1 = f(arg1.asInstanceOf[BaseType])
+            val newChild2 = f(arg2.asInstanceOf[BaseType])
             if (!(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
               changed = true
               (newChild1, newChild2)
