@@ -27,6 +27,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -1305,6 +1306,49 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val tableMeta = newSession.sessionState.catalog.getTableMetadata(TableIdentifier("abc"))
       assert(tableMeta.properties(DATASOURCE_SCHEMA_NUMPARTS).toInt == 1)
       assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+    }
+  }
+
+  test("Infer schema for Hive serde tables") {
+    val tableName = "tab1"
+    val avroSchema =
+      """{
+        |  "name": "test_record",
+        |  "type": "record",
+        |  "fields": [ {
+        |    "name": "f0",
+        |    "type": "int"
+        |  }]
+        |}
+      """.stripMargin
+
+    Seq(true, false).foreach { isPartitioned =>
+      withTable(tableName) {
+        val partitionClause = if (isPartitioned) "PARTITIONED BY (ds STRING)" else ""
+        // Creates the (non-)partitioned Avro table
+        val plan = sql(
+          s"""
+             |CREATE TABLE $tableName
+             |$partitionClause
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+             |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+        ).queryExecution.analyzed
+
+        assert(plan.isInstanceOf[CreateTableCommand] &&
+          plan.asInstanceOf[CreateTableCommand].table.dataSchema.nonEmpty)
+
+        if (isPartitioned) {
+          sql(s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1")
+          checkAnswer(spark.table(tableName), Row(1, "a"))
+        } else {
+          sql(s"INSERT OVERWRITE TABLE $tableName SELECT 1")
+          checkAnswer(spark.table(tableName), Row(1))
+        }
+      }
     }
   }
 
