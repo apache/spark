@@ -580,7 +580,7 @@ private[spark] object HiveUtils extends Logging {
    * CatalogTable.
    */
   def inferSchema(table: CatalogTable): CatalogTable = {
-    if (DDLUtils.isDatasourceTable(table) || table.schema.nonEmpty) {
+    if (DDLUtils.isDatasourceTable(table) || table.dataSchema.nonEmpty) {
       table
     } else {
       val hiveTable = toHiveTable(table)
