@@ -22,16 +22,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
-import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalKeyedState}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.TaskContext
+import org.apache.spark.util.CompletionIterator
 
 
 /** Used to identify the state store for a given operator. */
@@ -41,7 +41,7 @@ case class OperatorStateId(
     batchId: Long)
 
 /**
- * An operator that saves or restores state from the [[StateStore]].  The [[OperatorStateId]] should
+ * An operator that reads or writes state from the [[StateStore]].  The [[OperatorStateId]] should
  * be filled in by `prepareForExecution` in [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
@@ -54,6 +54,20 @@ trait StatefulOperator extends SparkPlan {
   }
 }
 
+/** An operator that reads from a StateStore. */
+trait StateStoreReader extends StatefulOperator {
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+}
+
+/** An operator that writes to a StateStore. */
+trait StateStoreWriter extends StatefulOperator {
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
+    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
+}
+
 /**
  * For each input tuple, the key is calculated and the value from the [[StateStore]] is added
  * to the stream (in addition to the input tuple) if present.
@@ -62,10 +76,7 @@ case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
     child: SparkPlan)
-  extends execution.UnaryExecNode with StatefulOperator {
-
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  extends execution.UnaryExecNode with StateStoreReader {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -102,12 +113,7 @@ case class StateStoreSaveExec(
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
-  extends execution.UnaryExecNode with StatefulOperator {
-
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
-    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
+  extends execution.UnaryExecNode with StateStoreWriter {
 
   /** Generate a predicate that matches data older than the watermark */
   private lazy val watermarkPredicate: Option[Predicate] = {
@@ -151,13 +157,6 @@ case class StateStoreSaveExec(
         val numTotalStateRows = longMetric("numTotalStateRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
 
-        // Abort the state store in case of error
-        TaskContext.get().addTaskCompletionListener(_ => {
-          if (!store.hasCommitted) {
-            store.abort()
-          }
-        })
-
         outputMode match {
           // Update and output all rows in the StateStore.
           case Some(Complete) =>
@@ -184,7 +183,7 @@ case class StateStoreSaveExec(
             }
 
             // Assumption: Append mode can be done only when watermark has been specified
-            store.remove(watermarkPredicate.get.eval)
+            store.remove(watermarkPredicate.get.eval _)
             store.commit()
 
             numTotalStateRows += store.numKeys()
@@ -207,7 +206,7 @@ case class StateStoreSaveExec(
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
                   // Remove old aggregates if watermark specified
-                  if (watermarkPredicate.nonEmpty) store.remove(watermarkPredicate.get.eval)
+                  if (watermarkPredicate.nonEmpty) store.remove(watermarkPredicate.get.eval _)
                   store.commit()
                   numTotalStateRows += store.numKeys()
                   false
@@ -234,4 +233,91 @@ case class StateStoreSaveExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+}
+
+
+/** Physical operator for executing streaming mapGroupsWithState. */
+case class MapGroupsWithStateExec(
+    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
+    stateId: Option[OperatorStateId],
+    stateDeserializer: Expression,
+    stateSerializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter {
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  /** Distribute by grouping attributes */
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(groupingAttributes) :: Nil
+
+  /** Ordering needed for using GroupingIterator */
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsWithStateStore[InternalRow](
+      getStateId.checkpointLocation,
+      operatorId = getStateId.operatorId,
+      storeVersion = getStateId.batchId,
+      groupingAttributes.toStructType,
+      child.output.toStructType,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+        val numTotalStateRows = longMetric("numTotalStateRows")
+        val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+        val numOutputRows = longMetric("numOutputRows")
+
+        // Generate a iterator that returns the rows grouped by the grouping function
+        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+
+        // Converters to and from object and rows
+        val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+        val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+        val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
+        val getStateObj =
+          ObjectOperator.deserializeRowToObject(stateDeserializer)
+        val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
+
+        // For every group, get the key, values and corresponding state and call the function,
+        // and return an iterator of rows
+        val allRowsIterator = groupedIter.flatMap { case (keyRow, valueRowIter) =>
+
+          val key = keyRow.asInstanceOf[UnsafeRow]
+          val keyObj = getKeyObj(keyRow)                         // convert key to objects
+          val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
+          val stateObjOption = store.get(key).map(getStateObj)   // get existing state if any
+          val wrappedState = new KeyedStateImpl(stateObjOption)
+          val mappedIterator = func(keyObj, valueObjIter, wrappedState).map { obj =>
+            numOutputRows += 1
+            getOutputRow(obj) // convert back to rows
+          }
+
+          // Return an iterator of rows generated this key,
+          // such that fully consumed, the updated state value will be saved
+          CompletionIterator[InternalRow, Iterator[InternalRow]](
+            mappedIterator, {
+              // When the iterator is consumed, then write changes to state
+              if (wrappedState.isRemoved) {
+                store.remove(key)
+                numUpdatedStateRows += 1
+              } else if (wrappedState.isUpdated) {
+                store.put(key, outputStateObj(wrappedState.get))
+                numUpdatedStateRows += 1
+              }
+            })
+        }
+
+        // Return an iterator of all the rows generated by all the keys, such that when fully
+        // consumer, all the state updates will be committed by the state store
+        CompletionIterator[InternalRow, Iterator[InternalRow]](allRowsIterator, {
+          store.commit()
+          numTotalStateRows += store.numKeys()
+        })
+      }
+  }
 }

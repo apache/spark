@@ -147,6 +147,25 @@ private[state] class HDFSBackedStateStoreProvider(
       }
     }
 
+    /** Remove a single key. */
+    override def remove(key: UnsafeRow): Unit = {
+      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      if (mapToUpdate.containsKey(key)) {
+        val value = mapToUpdate.remove(key)
+        Option(allUpdates.get(key)) match {
+          case Some(ValueUpdated(_, _)) | None =>
+            // Value existed in previous version and maybe was updated, mark removed
+            allUpdates.put(key, ValueRemoved(key, value))
+          case Some(ValueAdded(_, _)) =>
+            // Value did not exist in previous version and was added, should not appear in updates
+            allUpdates.remove(key)
+          case Some(ValueRemoved(_, _)) =>
+          // Remove already in update map, no need to change
+        }
+        writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
+      }
+    }
+
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
       verify(state == UPDATING, "Cannot commit after already committed or aborted")
