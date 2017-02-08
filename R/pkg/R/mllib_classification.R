@@ -64,17 +64,17 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @param threshold The threshold in binary classification, in range [0, 1].
 #' @param weightCol The weight column name.
 #' @param ... additional arguments passed to the method.
-#' @return \code{spark.linearSvc} returns a fitted linear SVM model.
-#' @rdname spark.linearSvc
-#' @aliases spark.linearSvc,SparkDataFrame,formula-method
-#' @name spark.linearSvc
+#' @return \code{spark.svmLinear} returns a fitted linear SVM model.
+#' @rdname spark.svmLinear
+#' @aliases spark.svmLinear,SparkDataFrame,formula-method
+#' @name spark.svmLinear
 #' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
 #' df <- createDataFrame(iris)
 #' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.linearSvc(training, Species ~ ., regParam = 0.5)
+#' model <- spark.svmLinear(training, Species ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -89,8 +89,8 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #' }
-#' @note spark.linearSvc since 2.2.0
-setMethod("spark.linearSvc", signature(data = "SparkDataFrame", formula = "formula"),
+#' @note spark.svmLinear since 2.2.0
+setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, maxIter = 100, tol = 1E-6, standardization = TRUE,
                    threshold = 0.5, weightCol = NULL) {
             formula <- paste(deparse(formula), collapse = "")
@@ -110,7 +110,7 @@ setMethod("spark.linearSvc", signature(data = "SparkDataFrame", formula = "formu
 
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns the predicted values based on an LinearSVCModel.
-#' @rdname spark.linearSvc
+#' @rdname spark.svmLinear
 #' @aliases predict,LinearSVCModel,SparkDataFrame-method
 #' @export
 #' @note predict(LinearSVCModel) since 2.2.0
@@ -121,12 +121,12 @@ setMethod("predict", signature(object = "LinearSVCModel"),
 
 #  Get the summary of an LinearSVCModel
 
-#' @param object an LinearSVCModel fitted by \code{spark.linearSvc}.
+#' @param object an LinearSVCModel fitted by \code{spark.svmLinear}.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list includes \code{coefficients} (coefficients of the fitted model),
 #'         \code{intercept} (intercept of the fitted model), \code{numClasses} (number of classes),
 #'         \code{numFeatures} (number of features).
-#' @rdname spark.linearSvc
+#' @rdname spark.svmLinear
 #' @aliases summary,LinearSVCModel-method
 #' @export
 #' @note summary(LinearSVCModel) since 2.2.0
@@ -147,7 +147,7 @@ setMethod("summary", signature(object = "LinearSVCModel"),
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname spark.linearSvc
+#' @rdname spark.svmLinear
 #' @aliases write.ml,LinearSVCModel,character-method
 #' @export
 #' @note write.ml(LogisticRegression, character) since 2.2.0

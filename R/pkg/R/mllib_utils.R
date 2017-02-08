@@ -35,7 +35,7 @@
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.linearSvc},
+#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.svmLinear},
 #' @seealso \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg},
 #' @seealso \link{read.ml}
@@ -51,7 +51,7 @@ NULL
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.logit}, \link{spark.linearSvc}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.logit}, \link{spark.svmLinear}, \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg}
 NULL
 
