@@ -268,4 +268,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Field(Seq(strNull, int1, str1, str2, str3)), 0)
     // scalastyle:on
   }
+
+  test("case key whn - internal pattern matching expects a List while apply takes a Seq") {
+    val indexedSeq = IndexedSeq(Literal(1), Literal(42), Literal(42), Literal(1))
+    val caseKeyWhaen = CaseKeyWhen(Literal(12), indexedSeq)
+    assert(caseKeyWhaen.branches ==
+      IndexedSeq((Literal(12) === Literal(1), Literal(42)),
+        (Literal(12) === Literal(42), Literal(1))))
+  }
 }
