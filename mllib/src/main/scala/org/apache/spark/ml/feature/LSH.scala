@@ -222,7 +222,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   }
 
   /**
-   * Join two dataset to approximately find all pairs of rows whose distance are smaller than
+   * Join two datasets to approximately find all pairs of rows whose distance are smaller than
    * the threshold. If the [[outputCol]] is missing, the method will transform the data; if the
    * [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the transformed
    * data when necessary.

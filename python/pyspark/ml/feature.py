@@ -124,7 +124,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
 class LSHParams(Params):
     """
-    Mixin for Locality Sensitive Hashing(LSH) algorithm parameters.
+    Mixin for Locality Sensitive Hashing (LSH) algorithm parameters.
     """
 
     numHashTables = Param(Params._dummy(), "numHashTables", "number of hash tables, where " +
@@ -150,19 +150,20 @@ class LSHParams(Params):
         return self.getOrDefault(self.numHashTables)
 
 
-class LSHModel():
+class LSHModel(JavaModel):
     """
-    Mixin for Locality Sensitive Hashing(LSH) models.
+    Mixin for Locality Sensitive Hashing (LSH) models.
     """
 
     @since("2.2.0")
-    def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, singleProbing=True,
-                               distCol="distCol"):
+    def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, distCol="distCol"):
         """
         Given a large dataset and an item, approximately find at most k items which have the
         closest distance to the item. If the :py:attr:`outputCol` is missing, the method will
         transform the data; if the :py:attr:`outputCol` exists, it will use that. This allows
         caching of the transformed data when necessary.
+
+        .. note:: This method is experimental and will likely change behavior in the next release.
 
         :param dataset: The dataset to search for nearest neighbors of the key.
         :param key: Feature vector representing the item to search for.
@@ -178,7 +179,7 @@ class LSHModel():
     @since("2.2.0")
     def approxSimilarityJoin(self, datasetA, datasetB, threshold, distCol="distCol"):
         """
-        Join two dataset to approximately find all pairs of rows whose distance are smaller than
+        Join two datasets to approximately find all pairs of rows whose distance are smaller than
         the threshold. If the :py:attr:`outputCol` is missing, the method will transform the data;
         if the :py:attr:`outputCol` exists, it will use that. This allows caching of the
         transformed data when necessary.
@@ -203,8 +204,8 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
 
     LSH class for Euclidean distance metrics.
     The input is dense or sparse vectors, each of which represents a point in the Euclidean
-    distance space. The output will be vectors of configurable dimension. Hash value in the
-    same dimension is calculated by the same hash function.
+    distance space. The output will be vectors of configurable dimension. Hash values in the same
+    dimension are calculated by the same hash function.
 
     .. seealso:: `Stable Distributions \
     <https://en.wikipedia.org/wiki/Locality-sensitive_hashing#Stable_distributions>`_
@@ -230,18 +231,20 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> df2 = spark.createDataFrame(data2, ["keys"])
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(keys=DenseVector([2.0, 2.0]), values=[DenseVector([1.0])], distCol=1.0)]
-    >>> model.approxSimilarityJoin(df, df2, 3.0).select("distCol").head()[0]
-    2.236...
-    >>> rpPath = temp_path + "/rp"
-    >>> rp.save(rpPath)
-    >>> rp2 = BucketedRandomProjectionLSH.load(rpPath)
-    >>> rp2.getBucketLength() == rp.getBucketLength()
+    >>> model.approxSimilarityJoin(df, df2, 3.0).show()
+    +--------------------+--------------------+----------------+
+    |            datasetA|            datasetB|         distCol|
+    +--------------------+--------------------+----------------+
+    |[[1.0,1.0],Wrappe...|[[3.0,2.0],Wrappe...|2.23606797749979|
+    +--------------------+--------------------+----------------+
+    >>> brpPath = temp_path + "/brp"
+    >>> brp.save(rpPath)
+    >>> brp2 = BucketedRandomProjectionLSH.load(rpPath)
+    >>> brp2.getBucketLength() == rp.getBucketLength()
     True
-    >>> modelPath = temp_path + "/rp-model"
+    >>> modelPath = temp_path + "/brp-model"
     >>> model.save(modelPath)
     >>> model2 = BucketedRandomProjectionLSHModel.load(modelPath)
-    >>> model2.randUnitVectors == model.randUnitVectors
-    True
 
     .. versionadded:: 2.2.0
     """
@@ -294,7 +297,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
         return BucketedRandomProjectionLSHModel(java_model)
 
 
-class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
+class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -306,14 +309,6 @@ class BucketedRandomProjectionLSHModel(JavaModel, LSHModel, JavaMLReadable, Java
 
     .. versionadded:: 2.2.0
     """
-
-    @property
-    @since("2.2.0")
-    def randUnitVectors(self):
-        """
-        An array of random unit vectors. Each vector represents a hash function.
-        """
-        return self._call_java("randUnitVectors")
 
 
 @inherit_doc
@@ -959,12 +954,11 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
 
     LSH class for Jaccard distance.
     The input can be dense or sparse vectors, but it is more efficient if it is sparse.
-    For example, `Vectors.sparse(10, Array[(2, 1.0), (3, 1.0), (5, 1.0)])`
-    means there are 10 elements in the space. This set contains elem 2, elem 3 and elem 5.
-    Also, any input vector must have at least 1 non-zero indices, and all non-zero values
-    are treated as binary "1" values.
+    For example, `Vectors.sparse(10, [(2, 1.0), (3, 1.0), (5, 1.0)])` means there are 10 elements
+    in the space. This set contains elements 2, 3, and 5. Also, any input vector must have at
+    least 1 non-zero index, and all non-zero values are treated as binary "1" values.
 
-    .. seealso:: `MinHash <https://en.wikipedia.org/wiki/MinHash>`_
+    .. seealso:: `Wikipedia on MinHash <https://en.wikipedia.org/wiki/MinHash>`_
 
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
@@ -980,10 +974,21 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     ...          (Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["keys"])
     >>> key = Vectors.sparse(6, [1], [1.0])
-    >>> model.approxNearestNeighbors(df2, key, 1).select("distCol").head()[0]
-    0.66666...
-    >>> model.approxSimilarityJoin(df, df2, 1.0).select("distCol").head()[0]
-    0.5
+    >>> model.approxNearestNeighbors(df2, key, 1).show()
+    +--------------------+------------------+------------------+
+    |                keys|            values|           distCol|
+    +--------------------+------------------+------------------+
+    |(6,[1,3,5],[1.0,1...|[[-1.638925712E9]]|0.6666666666666667|
+    +--------------------+------------------+------------------+
+    >>> model.approxSimilarityJoin(df, df2, 1.0).show()
+    +--------------------+--------------------+-------+
+    |            datasetA|            datasetB|distCol|
+    +--------------------+--------------------+-------+
+    |[(6,[2,3,4],[1.0,...|[(6,[2,3,5],[1.0,...|    0.5|
+    |[(6,[0,2,4],[1.0,...|[(6,[2,3,5],[1.0,...|    0.8|
+    |[(6,[0,1,2],[1.0,...|[(6,[1,3,5],[1.0,...|    0.8|
+    |[(6,[0,1,2],[1.0,...|[(6,[1,2,4],[1.0,...|    0.5|
+    +--------------------+--------------------+-------+
     >>> mhPath = temp_path + "/mh"
     >>> mh.save(mhPath)
     >>> mh2 = MinHashLSH.load(mhPath)
@@ -1021,7 +1026,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
         return MinHashLSHModel(java_model)
 
 
-class MinHashLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
+class MinHashLSHModel(LSHModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1036,14 +1041,6 @@ class MinHashLSHModel(JavaModel, LSHModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 2.2.0
     """
-
-    @property
-    @since("2.2.0")
-    def randCoefficients(self):
-        """
-        An array of random coefficients, each used by one hash function.
-        """
-        return self._call_java("randCoefficients")
 
 
 @inherit_doc

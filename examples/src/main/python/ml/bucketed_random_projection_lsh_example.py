@@ -19,52 +19,53 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.feature import MinHashLSH
+from pyspark.ml.feature import BucketedRandomProjectionLSH
 from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
 """
-An example demonstrating MinHashLSH.
+An example demonstrating BucketedRandomProjectionLSH.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/min_hash_lsh.py
+  bin/spark-submit examples/src/main/python/ml/bucketed_random_projection_lsh_example.py
 """
 
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
-        .appName("MinHashLSHExample") \
+        .appName("BucketedRandomProjectionLSHExample") \
         .getOrCreate()
 
     # $example on$
-    dataA = [(0, Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
-             (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
-             (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
+    dataA = [(0, Vectors.dense([1.0, 1.0]),),
+             (1, Vectors.dense([1.0, -1.0]),),
+             (2, Vectors.dense([-1.0, -1.0]),),
+             (3, Vectors.dense([-1.0, 1.0]),)]
     dfA = spark.createDataFrame(dataA, ["id", "keys"])
 
-    dataB = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
-             (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
-             (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
+    dataB = [(4, Vectors.dense([1.0, 0.0]),),
+             (5, Vectors.dense([-1.0, 0.0]),),
+             (6, Vectors.dense([0.0, 1.0]),),
+             (7, Vectors.dense([0.0, -1.0]),)]
     dfB = spark.createDataFrame(dataB, ["id", "keys"])
 
-    key = Vectors.sparse(6, [1, 3], [1.0, 1.0])
+    key = Vectors.dense([1.0, 0.0])
 
-    mh = MinHashLSH(inputCol="keys", outputCol="values", numHashTables=3)
-    model = mh.fit(dfA)
+    brp = BucketedRandomProjectionLSH(inputCol="keys", outputCol="values", bucketLength=2.0,
+                                      numHashTables=3)
+    model = brp.fit(dfA)
 
     # Feature Transformation
     model.transform(dfA).show()
-
     # Cache the transformed columns
     transformedA = model.transform(dfA).cache()
     transformedB = model.transform(dfB).cache()
 
     # Approximate similarity join
-    model.approxSimilarityJoin(dfA, dfB, 0.6).show()
-    model.approxSimilarityJoin(transformedA, transformedB, 0.6).show()
-
+    model.approxSimilarityJoin(dfA, dfB, 1.5).show()
+    model.approxSimilarityJoin(transformedA, transformedB, 1.5).show()
     # Self Join
-    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show()
+    model.approxSimilarityJoin(dfA, dfA, 2.5).filter("datasetA.id < datasetB.id").show()
 
     # Approximate nearest neighbor search
     model.approxNearestNeighbors(dfA, key, 2).show()

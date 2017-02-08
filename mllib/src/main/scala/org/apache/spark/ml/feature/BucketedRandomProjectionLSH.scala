@@ -111,8 +111,8 @@ class BucketedRandomProjectionLSHModel private[ml](
  * Euclidean distance metrics.
  *
  * The input is dense or sparse vectors, each of which represents a point in the Euclidean
- * distance space. The output will be vectors of configurable dimension. Hash values in the
- * same dimension are calculated by the same hash function.
+ * distance space. The output will be vectors of configurable dimension. Hash values in the same
+ * dimension are calculated by the same hash function.
  *
  * References:
  *
