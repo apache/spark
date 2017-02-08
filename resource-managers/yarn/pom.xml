@@ -132,6 +132,12 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+
      <!--
        Jersey 1 dependencies only required for YARN integration testing. Creating a YARN cluster
        in the JVM requires starting a Jersey 1-based web application.
