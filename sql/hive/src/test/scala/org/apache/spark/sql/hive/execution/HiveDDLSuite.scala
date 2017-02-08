@@ -833,10 +833,10 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a temporary view") {
-    // create table like a temporary view.
+    // CREATE TABLE LIKE a temporary view.
     withCreateTableLikeTempView(None)
 
-    // create table like a temporary view location ...
+    // CREATE TABLE LIKE a temporary view location ...
     withTempDir {tmpDir =>
       withCreateTableLikeTempView(Some(tmpDir.toURI.toString))
     }
@@ -869,10 +869,10 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a data source table") {
-    // create table like a data source table.
+    // CREATE TABLE LIKE a data source table.
     withCreateTableLikeDSTable(None)
 
-    // create table like a data source table location ...
+    // CREATE TABLE LIKE a data source table location ...
     withTempDir { tmpDir =>
       withCreateTableLikeDSTable(Some(tmpDir.toURI.toString))
     }
