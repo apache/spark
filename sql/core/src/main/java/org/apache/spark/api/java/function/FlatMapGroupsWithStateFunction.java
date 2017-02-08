@@ -15,18 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.api.java.function;
 
-import org.apache.kafka.common.TopicPartition
+import java.io.Serializable;
+import java.util.Iterator;
 
-/*
- * Values that can be specified for config startingOffsets
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.Encoder;
+import org.apache.spark.sql.KeyedState;
+
+/**
+ * ::Experimental::
+ * Base interface for a map function used in
+ * {@link org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroupsWithState(FlatMapGroupsWithStateFunction, Encoder, Encoder)}.
+ * @since 2.1.1
  */
-private[kafka010] sealed trait StartingOffsets
-
-private[kafka010] case object EarliestOffsets extends StartingOffsets
-
-private[kafka010] case object LatestOffsets extends StartingOffsets
-
-private[kafka010] case class SpecificOffsets(
-  partitionOffsets: Map[TopicPartition, Long]) extends StartingOffsets
+@Experimental
+@InterfaceStability.Evolving
+public interface FlatMapGroupsWithStateFunction<K, V, S, R> extends Serializable {
+  Iterator<R> call(K key, Iterator<V> values, KeyedState<S> state) throws Exception;
+}
