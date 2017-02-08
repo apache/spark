@@ -49,10 +49,11 @@ if __name__ == "__main__":
 
     key = Vectors.sparse(6, [1, 3], [1.0, 1.0])
 
-    mh = MinHashLSH(inputCol="keys", outputCol="values", numHashTables=3)
+    mh = MinHashLSH(inputCol="keys", outputCol="values", numHashTables=5)
     model = mh.fit(dfA)
 
     # Feature Transformation
+    print("The hashed dataset where hashed values are stored in the column 'values':")
     model.transform(dfA).show()
 
     # Cache the transformed columns
@@ -60,14 +61,20 @@ if __name__ == "__main__":
     transformedB = model.transform(dfB).cache()
 
     # Approximate similarity join
+    print("Approximately joining dfA and dfB on distance smaller than 0.6:")
     model.approxSimilarityJoin(dfA, dfB, 0.6).show()
+    print("Joining cached datasets to avoid recomputing the hash values:")
     model.approxSimilarityJoin(transformedA, transformedB, 0.6).show()
 
     # Self Join
+    print("Approximately self join of dfB on distance smaller than 0.6:")
     model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show()
 
     # Approximate nearest neighbor search
+    print("Approximately searching dfA for 2 nearest neighbors of the key:")
     model.approxNearestNeighbors(dfA, key, 2).show()
+    print("Note: It may return less than 2 rows because of lack of elements in the hash buckets.")
+    print("Searching cached dataset to avoid recomputing the hash values:")
     model.approxNearestNeighbors(transformedA, key, 2).show()
 
     # $example off$

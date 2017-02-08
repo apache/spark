@@ -48,26 +48,35 @@ object MinHashLSHExample {
     val key = Vectors.sparse(6, Seq((1, 1.0), (3, 1.0)))
 
     val mh = new MinHashLSH()
-      .setNumHashTables(3)
+      .setNumHashTables(5)
       .setInputCol("keys")
       .setOutputCol("values")
 
     val model = mh.fit(dfA)
 
     // Feature Transformation
+    println("The hashed dataset where hashed values are stored in the column 'values':")
     model.transform(dfA).show()
     // Cache the transformed columns
     val transformedA = model.transform(dfA).cache()
     val transformedB = model.transform(dfB).cache()
 
     // Approximate similarity join
+    println("Approximately joining dfA and dfB on distance smaller than 0.6:")
     model.approxSimilarityJoin(dfA, dfB, 0.6).show()
+    println("Joining cached datasets to avoid recomputing the hash values:")
     model.approxSimilarityJoin(transformedA, transformedB, 0.6).show()
+
     // Self Join
+    println("Approximately self join of dfB on distance smaller than 0.6:")
     model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id").show()
 
     // Approximate nearest neighbor search
+    println("Approximately searching dfA for 2 nearest neighbors of the key:")
     model.approxNearestNeighbors(dfA, key, 2).show()
+    println("Note: It may return less than 2 rows because of lack of elements in the hash " +
+      "buckets.")
+    println("Searching cached dataset to avoid recomputing the hash values:")
     model.approxNearestNeighbors(transformedA, key, 2).show()
     // $example off$
 

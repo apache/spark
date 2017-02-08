@@ -58,19 +58,25 @@ object BucketedRandomProjectionLSHExample {
     val model = brp.fit(dfA)
 
     // Feature Transformation
+    println("The hashed dataset where hashed values are stored in the column 'values':")
     model.transform(dfA).show()
     // Cache the transformed columns
     val transformedA = model.transform(dfA).cache()
     val transformedB = model.transform(dfB).cache()
 
     // Approximate similarity join
+    println("Approximately joining dfA and dfB on distance smaller than 1.5:")
     model.approxSimilarityJoin(dfA, dfB, 1.5).show()
+    println("Joining cached datasets to avoid recomputing the hash values:")
     model.approxSimilarityJoin(transformedA, transformedB, 1.5).show()
     // Self Join
+    println("Approximately self join of dfB on distance smaller than 2.5:")
     model.approxSimilarityJoin(dfA, dfA, 2.5).filter("datasetA.id < datasetB.id").show()
 
     // Approximate nearest neighbor search
+    println("Approximately searching dfA for 2 nearest neighbors of the key:")
     model.approxNearestNeighbors(dfA, key, 2).show()
+    println("Searching cached dataset to avoid recomputing the hash values:")
     model.approxNearestNeighbors(transformedA, key, 2).show()
     // $example off$
 
