@@ -54,6 +54,7 @@ class HiveDDLSuite
       dbPath: Option[String] = None): Boolean = {
     val expectedTablePath =
       if (dbPath.isEmpty) {
+
         hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
       } else {
         new Path(new Path(dbPath.get), tableIdentifier.table).toString
@@ -812,234 +813,263 @@ class HiveDDLSuite
     }
   }
 
-  test("CREATE TABLE LIKE a temporary view [LOCATION]...") {
-    var createdTableType = "MANAGED"
-    for ( i <- 0 to 1 ) {
-      withTempDir {tmpDir =>
-        val sourceViewName = "tab1"
-        val targetTabName = "tab2"
-        val basePath = tmpDir.toURI
-        withTempView(sourceViewName) {
-          withTable(targetTabName) {
-            spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
-              .createTempView(sourceViewName)
-            if (i == 0) {
-              sql(s"CREATE  TABLE $targetTabName LIKE $sourceViewName ")
-            } else {
-              createdTableType = "EXTERNAL"
-              sql(s"CREATE TABLE $targetTabName " +
-                s"LIKE $sourceViewName LOCATION '$basePath'")
-            }
+  test("CREATE TABLE LIKE a temporary view") {
+    // create table like a temporary view.
+    withCreateTableLikeTempView(None)
 
-            val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
-              TableIdentifier(sourceViewName))
-            val targetTable = spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(targetTabName, Some("default")))
+    // create table like a temporary view location ...
+    withTempDir {tmpDir =>
+      withCreateTableLikeTempView(Some(tmpDir.toURI.toString))
+    }
+  }
 
-            checkCreateTableLike(sourceTable, targetTable, createdTableType)
-          }
+  private def withCreateTableLikeTempView(location : Option[String]): Unit = {
+    val sourceViewName = "tab1"
+    val targetTabName = "tab2"
+    var createdTableType = CatalogTableType.MANAGED
+    withTempView(sourceViewName) {
+      withTable(targetTabName) {
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .createTempView(sourceViewName)
+        if (location.isEmpty) {
+          sql(s"CREATE  TABLE $targetTabName LIKE $sourceViewName ")
+        } else {
+          createdTableType = CatalogTableType.EXTERNAL
+          sql(s"CREATE TABLE $targetTabName " +
+            s"LIKE $sourceViewName LOCATION '$location'")
         }
+
+        val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
+          TableIdentifier(sourceViewName))
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+
+        checkCreateTableLike(sourceTable, targetTable, createdTableType)
       }
     }
   }
 
-  test("CREATE TABLE LIKE a data source table [LOCATION]...") {
-    var createdTableType = "MANAGED"
-    for ( i <- 0 to 1 ) {
+  test("CREATE TABLE LIKE a data source table") {
+    // create table like a data source table.
+    withCreateTableLikeDSTable(None)
+
+    // create table like a data source table location ...
       withTempDir { tmpDir =>
-        val sourceTabName = "tab1"
-        val targetTabName = "tab2"
-        val basePath = tmpDir.toURI
-        withTable(sourceTabName, targetTabName) {
+        withCreateTableLikeDSTable(Some(tmpDir.toURI.toString))
+    }
+  }
+
+  private def withCreateTableLikeDSTable(location : Option[String]): Unit = {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    var createdTableType = CatalogTableType.MANAGED
+    withTable(sourceTabName, targetTabName) {
+      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        .write.format("json").saveAsTable(sourceTabName)
+      if ( location.isEmpty ) {
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+      } else {
+        createdTableType = CatalogTableType.EXTERNAL
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName LOCATION '$location'")
+      }
+
+      val sourceTable =
+        spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceTabName, Some("default")))
+      val targetTable =
+        spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+      // The table type of the source table should be a Hive-managed data source table
+      assert(DDLUtils.isDatasourceTable(sourceTable))
+      assert(sourceTable.tableType == CatalogTableType.MANAGED)
+
+      checkCreateTableLike(sourceTable, targetTable, createdTableType)
+    }
+  }
+
+  test("CREATE TABLE LIKE an external data source table") {
+    // CREATE TABLE LIKE an external data source table.
+    withCreateTableLikeExtDSTable(None)
+
+    // CREATE TABLE LIKE an external data source table location ...
+    withTempDir { tmpDir =>
+      withCreateTableLikeExtDSTable(Some(tmpDir.toURI.toString))
+    }
+  }
+
+    private def withCreateTableLikeExtDSTable(location : Option[String]): Unit = {
+      val sourceTabName = "tab1"
+      val targetTabName = "tab2"
+      var createdTableType = CatalogTableType.MANAGED
+      withTable(sourceTabName, targetTabName) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
           spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
-            .write.format("json").saveAsTable(sourceTabName)
-          if ( i == 0 ) {
+            .write.format("parquet").save(path)
+          sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
+          if ( location.isEmpty ) {
             sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
           } else {
-            createdTableType = "EXTERNAL"
-            sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath'")
+            createdTableType = CatalogTableType.EXTERNAL
+            sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName LOCATION '$location'")
           }
 
-          val sourceTable =
-            spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(sourceTabName, Some("default")))
-          val targetTable =
-            spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(targetTabName, Some("default")))
-          // The table type of the source table should be a Hive-managed data source table
-          assert(DDLUtils.isDatasourceTable(sourceTable))
-          assert(sourceTable.tableType == CatalogTableType.MANAGED)
-
-          checkCreateTableLike(sourceTable, targetTable, createdTableType)
-        }
-      }
-    }
-  }
-
-  test("CREATE TABLE LIKE an external data source table [LOCATION]...") {
-    var createdTableType = "MANAGED"
-    for ( i <- 0 to 1 ) {
-      withTempDir { tmpDir =>
-        val sourceTabName = "tab1"
-        val targetTabName = "tab2"
-        val basePath = tmpDir.toURI
-        withTable(sourceTabName, targetTabName) {
-          withTempPath { dir =>
-            val path = dir.getCanonicalPath
-            spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
-              .write.format("parquet").save(path)
-            sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
-            if ( i == 0 ) {
-              sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-            } else {
-              createdTableType = "EXTERNAL"
-              sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath'")
-            }
-
-            // The source table should be an external data source table
-            val sourceTable = spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(sourceTabName, Some("default")))
-            val targetTable = spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(targetTabName, Some("default")))
-            // The table type of the source table should be an external data source table
-            assert(DDLUtils.isDatasourceTable(sourceTable))
-            assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
-
-            checkCreateTableLike(sourceTable, targetTable, createdTableType)
-          }
-        }
-      }
-    }
-  }
-
-  test("CREATE TABLE LIKE a managed Hive serde table [LOCATION]...") {
-    var createdTableType = "MANAGED"
-    for ( i <- 0 to 1 ) {
-      val catalog = spark.sessionState.catalog
-      withTempDir { tmpDir =>
-        val sourceTabName = "tab1"
-        val targetTabName = "tab2"
-        val basePath = tmpDir.toURI
-        withTable(sourceTabName, targetTabName) {
-          sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
-
-          if ( i == 0 ) {
-            sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-          } else {
-            createdTableType = "EXTERNAL"
-            sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName LOCATION '$basePath'")
-          }
-
-          val sourceTable = catalog.getTableMetadata(
+          // The source table should be an external data source table
+          val sourceTable = spark.sessionState.catalog.getTableMetadata(
             TableIdentifier(sourceTabName, Some("default")))
-          assert(sourceTable.tableType == CatalogTableType.MANAGED)
-          assert(sourceTable.properties.get("prop1").nonEmpty)
-          val targetTable = catalog.getTableMetadata(
+          val targetTable = spark.sessionState.catalog.getTableMetadata(
             TableIdentifier(targetTabName, Some("default")))
+          // The table type of the source table should be an external data source table
+          assert(DDLUtils.isDatasourceTable(sourceTable))
+          assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
 
           checkCreateTableLike(sourceTable, targetTable, createdTableType)
         }
       }
     }
+
+
+  test("CREATE TABLE LIKE a managed Hive serde table") {
+    // CREATE TABLE LIKE a managed Hive serde table.
+    withCreateTableLikeManagedHiveTable(None)
+
+    // CREATE TABLE LIKE a managed Hive serde table location ...
+    withTempDir { tmpDir =>
+      withCreateTableLikeManagedHiveTable(Some(tmpDir.toURI.toString))
+    }
   }
 
-  test("CREATE TABLE LIKE an external Hive serde table [LOCATION]...") {
-    var createdTableType = "MANAGED"
-    for ( i <- 0 to 1 ) {
-      val catalog = spark.sessionState.catalog
-      withTempDir { tmpDir =>
-        val basePath = tmpDir.toURI
-        withTempDir { tmpDir1 =>
-          val basePath1 = tmpDir1.toURI
-          val sourceTabName = "tab1"
-          val targetTabName = "tab2"
-          withTable(sourceTabName, targetTabName) {
-            assert(tmpDir.listFiles.isEmpty)
-            sql(
-              s"""
-                 |CREATE EXTERNAL TABLE $sourceTabName (key INT comment 'test', value STRING)
-                 |COMMENT 'Apache Spark'
-                 |PARTITIONED BY (ds STRING, hr STRING)
-                 |LOCATION '$basePath'
+  private def withCreateTableLikeManagedHiveTable(location : Option[String]): Unit = {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    var createdTableType = CatalogTableType.MANAGED
+    val catalog = spark.sessionState.catalog
+    withTable(sourceTabName, targetTabName) {
+      sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
+
+      if ( location.isEmpty ) {
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+      } else {
+        createdTableType = CatalogTableType.EXTERNAL
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName LOCATION '$location'")
+      }
+
+      val sourceTable = catalog.getTableMetadata(
+        TableIdentifier(sourceTabName, Some("default")))
+      assert(sourceTable.tableType == CatalogTableType.MANAGED)
+      assert(sourceTable.properties.get("prop1").nonEmpty)
+      val targetTable = catalog.getTableMetadata(
+        TableIdentifier(targetTabName, Some("default")))
+
+      checkCreateTableLike(sourceTable, targetTable, createdTableType)
+    }
+  }
+
+  test("CREATE TABLE LIKE an external Hive serde table") {
+    // CREATE TABLE LIKE an external Hive serde table.
+    withCreateTableLikeExtHiveTable(None)
+
+    // CREATE TABLE LIKE an external Hive serde table location ...
+    withTempDir { tmpDir =>
+      withCreateTableLikeExtHiveTable(Some(tmpDir.toURI.toString))
+    }
+
+  }
+
+  private def withCreateTableLikeExtHiveTable(location : Option[String]): Unit = {
+    val catalog = spark.sessionState.catalog
+    var createdTableType = CatalogTableType.MANAGED
+    withTempDir { tmpDir =>
+      val basePath1 = tmpDir.toURI
+      val sourceTabName = "tab1"
+      val targetTabName = "tab2"
+      withTable(sourceTabName, targetTabName) {
+        assert(tmpDir.listFiles.isEmpty)
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $sourceTabName (key INT comment 'test', value STRING)
+             |COMMENT 'Apache Spark'
+             |PARTITIONED BY (ds STRING, hr STRING)
+             |LOCATION '$basePath1'
              """.stripMargin)
-            for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
-              sql(
-                s"""
-                   |INSERT OVERWRITE TABLE $sourceTabName
-                   |partition (ds='$ds',hr='$hr')
-                   |SELECT 1, 'a'
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $sourceTabName
+               |partition (ds='$ds',hr='$hr')
+               |SELECT 1, 'a'
                """.stripMargin)
-            }
-
-            if ( i == 0 ) {
-              sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-            } else {
-              createdTableType = "EXTERNAL"
-              sql(s"CREATE TABLE $targetTabName " +
-                s"LIKE $sourceTabName LOCATION '$basePath1'")
-            }
-
-            val sourceTable = catalog.getTableMetadata(
-              TableIdentifier(sourceTabName, Some("default")))
-            assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
-            assert(sourceTable.comment == Option("Apache Spark"))
-            val targetTable = catalog.getTableMetadata(
-              TableIdentifier(targetTabName, Some("default")))
-
-            checkCreateTableLike(sourceTable, targetTable, createdTableType)
-          }
         }
+
+        if ( location.isEmpty ) {
+          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+        } else {
+          createdTableType = CatalogTableType.EXTERNAL
+          sql(s"CREATE TABLE $targetTabName " +
+            s"LIKE $sourceTabName LOCATION '$location'")
+        }
+
+        val sourceTable = catalog.getTableMetadata(
+          TableIdentifier(sourceTabName, Some("default")))
+        assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
+        assert(sourceTable.comment == Option("Apache Spark"))
+        val targetTable = catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+
+        checkCreateTableLike(sourceTable, targetTable, createdTableType)
       }
     }
-
   }
 
-  test("CREATE TABLE LIKE a view [LOCATION]...") {
-    var createdTableType = "MANAGED"
-    for ( i <- 0 to 1 ) {
-      withTempDir { tmpDir =>
-        val sourceTabName = "tab1"
-        val sourceViewName = "view"
-        val targetTabName = "tab2"
-        val basePath = tmpDir.toURI
-        withTable(sourceTabName, targetTabName) {
-          withView(sourceViewName) {
-            spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
-              .write.format("json").saveAsTable(sourceTabName)
-            sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
+  test("CREATE TABLE LIKE a view") {
+    // CREATE TABLE LIKE a view.
+    withCreateTableLikeView(None)
 
-            if ( i == 0 ) {
-              sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
-            } else {
-              createdTableType = "EXTERNAL"
-              sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName LOCATION '$basePath'")
-            }
+    // CREATE TABLE LIKE a view location ...
+    withTempDir { tmpDir =>
+      withCreateTableLikeView(Some(tmpDir.toURI.toString))
+    }
+  }
 
-            val sourceView = spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(sourceViewName, Some("default")))
-            // The original source should be a VIEW with an empty path
-            assert(sourceView.tableType == CatalogTableType.VIEW)
-            assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
-            val targetTable = spark.sessionState.catalog.getTableMetadata(
-              TableIdentifier(targetTabName, Some("default")))
+  private def withCreateTableLikeView(location : Option[String]): Unit = {
+    val sourceTabName = "tab1"
+    val sourceViewName = "view"
+    val targetTabName = "tab2"
+    var createdTableType = CatalogTableType.MANAGED
+    withTable(sourceTabName, targetTabName) {
+      withView(sourceViewName) {
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .write.format("json").saveAsTable(sourceTabName)
+        sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
 
-            checkCreateTableLike(sourceView, targetTable, createdTableType)
-          }
+        if ( location.isEmpty ) {
+          sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
+        } else {
+          createdTableType = CatalogTableType.EXTERNAL
+          sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName LOCATION '$location'")
         }
+
+        val sourceView = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceViewName, Some("default")))
+        // The original source should be a VIEW with an empty path
+        assert(sourceView.tableType == CatalogTableType.VIEW)
+        assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+
+        checkCreateTableLike(sourceView, targetTable, createdTableType)
       }
     }
-
   }
 
   private def checkCreateTableLike(
       sourceTable: CatalogTable,
       targetTable: CatalogTable,
-      tableType: String): Unit = {
+      tableType: CatalogTableType): Unit = {
     // The created table should be a MANAGED table or EXTERNAL table with empty view text
     // and original text.
-    val expectTableType = CatalogTableType.apply(tableType)
-    assert(targetTable.tableType == expectTableType,
-      s"the created table must be a Hive ${expectTableType.name} table")
+    assert(targetTable.tableType == tableType,
+      s"the created table must be a Hive ${tableType.name} table")
     assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
       "the view text and original text in the created table must be empty")
     assert(targetTable.comment.isEmpty,
