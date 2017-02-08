@@ -335,6 +335,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       throw new SparkException(msg)
     }
 
+    require(numFeatures > 0 || $(fitIntercept),
+      "GeneralizedLinearRegression was given data with 0 features, and with Param fitIntercept " +
+        "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
+
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
