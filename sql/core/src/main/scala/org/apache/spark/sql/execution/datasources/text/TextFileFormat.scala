@@ -65,9 +65,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema)
 
+    val textOptions = new TextOptions(options)
     val conf = job.getConfiguration
-    val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
-    compressionCodec.foreach { codec =>
+
+    textOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
