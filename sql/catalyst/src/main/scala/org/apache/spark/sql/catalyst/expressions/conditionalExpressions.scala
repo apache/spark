@@ -333,8 +333,8 @@ object CaseWhen {
 object CaseKeyWhen {
   def apply(key: Expression, branches: Seq[Expression]): CaseWhen = {
     val cases = branches.grouped(2).flatMap {
-      case cond :: value :: Nil => Some((EqualTo(key, cond), value))
-      case value :: Nil => None
+      case Seq(cond, value) => Some((EqualTo(key, cond), value))
+      case Seq(value) => None
     }.toArray.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
     CaseWhen(cases, elseValue)
