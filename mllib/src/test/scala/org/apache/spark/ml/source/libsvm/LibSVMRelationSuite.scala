@@ -77,12 +77,26 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(v == Vectors.dense(1.0, 0.0, 2.0, 0.0, 3.0, 0.0))
   }
 
+  test("illegal vector types") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.format("libsvm").options(Map("VectorType" -> "sparser")).load(path)
+    }.getMessage
+    assert(e.contains("Invalid value `sparser` for parameter `vectorType`. Expected " +
+      "types are `sparse` and `dense`."))
+  }
+
   test("select a vector with specifying the longer dimension") {
     val df = spark.read.option("numFeatures", "100").format("libsvm")
       .load(path)
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+  }
+
+  test("case insensitive option") {
+    val df = spark.read.option("NuMfEaTuReS", "100").format("libsvm").load(path)
+    assert(df.first().getAs[SparseVector](1) ==
+      Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
   }
 
   test("write libsvm data and read it again") {
