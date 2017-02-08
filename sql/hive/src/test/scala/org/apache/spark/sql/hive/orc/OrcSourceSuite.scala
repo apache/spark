@@ -152,18 +152,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     assert(new OrcOptions(Map("Orc.Compress" -> "NONE")).compressionCodec == "NONE")
   }
 
-  test("SPARK-18220: read Hive orc table with varchar column") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-    try {
-      hiveClient.runSqlHive("CREATE TABLE orc_varchar(a VARCHAR(10)) STORED AS orc")
-      hiveClient.runSqlHive("INSERT INTO TABLE orc_varchar SELECT 'a' FROM (SELECT 1) t")
-      checkAnswer(spark.table("orc_varchar"), Row("a"))
-    } finally {
-      hiveClient.runSqlHive("DROP TABLE IF EXISTS orc_varchar")
-    }
-  }
-
-  test("SPARK-19459: read char/varchar column written by Hive") {
+  test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
     val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     val location = Utils.createTempDir().toURI
     try {
@@ -174,7 +163,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
            |  b CHAR(10),
            |  c VARCHAR(10))
            |STORED AS orc""".stripMargin)
-      // Hive throws an exception if I assign the location in the create table statment.
+      // Hive throws an exception if I assign the location in the create table statement.
       hiveClient.runSqlHive(
         s"ALTER TABLE hive_orc SET LOCATION '$location'")
       hiveClient.runSqlHive(
@@ -190,7 +179,9 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
            |  c VARCHAR(10))
            |STORED AS orc
            |LOCATION '$location'""".stripMargin)
-      checkAnswer(spark.table("spark_orc"), Row("a", "b         ", "c"))
+      val result = Row("a", "b         ", "c")
+      checkAnswer(spark.table("hive_orc"), result)
+      checkAnswer(spark.table("spark_orc"), result)
     } finally {
       hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
       hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
