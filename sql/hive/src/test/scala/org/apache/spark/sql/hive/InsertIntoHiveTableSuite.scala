@@ -376,7 +376,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       val e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
       }
-      assert(e.message.contains("the number of columns are different"))
+      assert(e.message.contains(
+        "target table has 4 column(s) but the inserted data has 5 column(s)"))
   }
 
   testPartitionedTable("SPARK-16037: INSERT statement should match columns by position") {

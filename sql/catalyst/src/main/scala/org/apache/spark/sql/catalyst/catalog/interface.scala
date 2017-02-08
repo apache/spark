@@ -194,6 +194,14 @@ case class CatalogTable(
     StructType(partitionFields)
   }
 
+  /**
+   * schema of this table's data columns
+   */
+  def dataSchema: StructType = {
+    val dataFields = schema.dropRight(partitionColumnNames.length)
+    StructType(dataFields)
+  }
+
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify database")
