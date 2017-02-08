@@ -337,7 +337,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
   Defines the validity interval for AM failure tracking.
   If the AM has been running for at least the defined interval, the AM failure count will be reset.
-  This feature is not enabled if not configured, and only supported in Hadoop 2.6+.
+  This feature is not enabled if not configured.
   </td>
 </tr>
 <tr>

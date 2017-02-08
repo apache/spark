@@ -47,7 +47,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 
 #' Bisecting K-Means Clustering Model
 #'
-#' Fits a bisecting k-means clustering model against a Spark DataFrame.
+#' Fits a bisecting k-means clustering model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -189,7 +189,7 @@ setMethod("write.ml", signature(object = "BisectingKMeansModel", path = "charact
 
 #' Multivariate Gaussian Mixture Model (GMM)
 #'
-#' Fits multivariate gaussian mixture model against a Spark DataFrame, similarly to R's
+#' Fits multivariate gaussian mixture model against a SparkDataFrame, similarly to R's
 #' mvnormalmixEM(). Users can call \code{summary} to print a summary of the fitted model,
 #' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml}
 #' to save/load fitted models.
@@ -314,7 +314,7 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 
 #' K-Means Clustering Model
 #'
-#' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
+#' Fits a k-means clustering model against a SparkDataFrame, similarly to R's kmeans().
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -375,10 +375,13 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 
 #' @param object a fitted k-means model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes the model's \code{k} (number of cluster centers),
+#'         The list includes the model's \code{k} (the configured number of cluster centers),
 #'         \code{coefficients} (model cluster centers),
-#'         \code{size} (number of data points in each cluster), and \code{cluster}
-#'         (cluster centers of the transformed data).
+#'         \code{size} (number of data points in each cluster), \code{cluster}
+#'         (cluster centers of the transformed data), {is.loaded} (whether the model is loaded
+#'         from a saved file), and \code{clusterSize}
+#'         (the actual number of cluster centers. When using initMode = "random",
+#'         \code{clusterSize} may not equal to \code{k}).
 #' @rdname spark.kmeans
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
@@ -390,16 +393,17 @@ setMethod("summary", signature(object = "KMeansModel"),
             coefficients <- callJMethod(jobj, "coefficients")
             k <- callJMethod(jobj, "k")
             size <- callJMethod(jobj, "size")
-            coefficients <- t(matrix(coefficients, ncol = k))
+            clusterSize <- callJMethod(jobj, "clusterSize")
+            coefficients <- t(matrix(unlist(coefficients), ncol = clusterSize))
             colnames(coefficients) <- unlist(features)
-            rownames(coefficients) <- 1:k
+            rownames(coefficients) <- 1:clusterSize
             cluster <- if (is.loaded) {
               NULL
             } else {
               dataFrame(callJMethod(jobj, "cluster"))
             }
             list(k = k, coefficients = coefficients, size = size,
-                 cluster = cluster, is.loaded = is.loaded)
+                 cluster = cluster, is.loaded = is.loaded, clusterSize = clusterSize)
           })
 
 #  Predicted values based on a k-means model

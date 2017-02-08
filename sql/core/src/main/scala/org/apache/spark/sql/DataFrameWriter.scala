@@ -265,7 +265,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
-        child = df.logicalPlan,
+        query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false)).toRdd
   }
