@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.util.Random
+import java.util.{Properties, Random}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -28,6 +28,7 @@ import org.mockito.Mockito.{mock, never, spy, verify, when}
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
+import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
@@ -662,6 +663,55 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       sc.makeRDD(0 until 10, 10).map(genBytes(1 << 20)).collect()
     }
     assert(thrown2.getMessage().contains("bigger than spark.driver.maxResultSize"))
+  }
+
+  test("taskSetManager should not send Resubmitted tasks after being a zombie") {
+    // Regression test for SPARK-13931
+    val conf = new SparkConf().set("spark.speculation", "true")
+    sc = new SparkContext("local", "test", conf)
+
+    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    sched.initialize(new FakeSchedulerBackend() {
+      override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {}
+    })
+
+    // count for Resubmitted tasks
+    var resubmittedTasks = 0
+    val dagScheduler = new FakeDAGScheduler(sc, sched) {
+      override def taskEnded(task: Task[_], reason: TaskEndReason, result: Any,
+                             accumUpdates: Seq[AccumulatorV2[_, _]], taskInfo: TaskInfo): Unit = {
+        super.taskEnded(task, reason, result, accumUpdates, taskInfo)
+        reason match {
+          case Resubmitted => resubmittedTasks += 1
+          case _ =>
+        }
+      }
+    }
+    sched.setDAGScheduler(dagScheduler)
+
+    val tasks = Array.tabulate[Task[_]](1) { i =>
+      new ShuffleMapTask(i, 0, null, new Partition {
+        override def index: Int = 0
+      }, Seq(TaskLocation("host1", "execA")), new Properties, null)
+    }
+    val taskSet = new TaskSet(tasks, 0, 0, 0, null)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    manager.speculatableTasks += tasks.head.partitionId
+    val task1 = manager.resourceOffer("execA", "host1", TaskLocality.PROCESS_LOCAL).get
+    val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY).get
+
+    assert(manager.runningTasks == 2)
+    assert(manager.isZombie == false)
+
+    val directTaskResult = new DirectTaskResult[String](null, Seq()) {
+      override def value(resultSer: SerializerInstance): String = ""
+    }
+    manager.handleSuccessfulTask(task1.taskId, directTaskResult)
+    assert(manager.isZombie == true)
+    assert(resubmittedTasks == 0)
+
+    manager.executorLost("execB", "host2", new SlaveLost())
+    assert(resubmittedTasks == 0)
   }
 
   test("speculative and noPref task should be scheduled after node-local") {
