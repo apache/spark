@@ -1808,8 +1808,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-18352: Parse normal multi-line JSON files (compressed)") {
-    withTempDir { dir =>
-      dir.delete()
+    withTempPath { dir =>
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .toDF("value")
@@ -1846,8 +1845,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-18352: Parse normal multi-line JSON files (uncompressed)") {
-    withTempDir { dir =>
-      dir.delete()
+    withTempPath { dir =>
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .toDF("value")
@@ -1882,8 +1880,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     // alternatively the parser could continue parsing following objects, which may further reduce
     // allocations by skipping the line reader entirely
 
-    withTempDir { dir =>
-      dir.delete()
+    withTempPath { dir =>
       val path = dir.getCanonicalPath
       primitiveFieldAndType
         .flatMap(Iterator.fill(3)(_) ++ Iterator("\n{invalid}"))
@@ -1898,8 +1895,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-18352: Handle corrupt documents") {
-    withTempDir { dir =>
-      dir.delete()
+    withTempPath { dir =>
       val path = dir.getCanonicalPath
       val corruptRecordCount = additionalCorruptRecords.count().toInt
       assert(corruptRecordCount === 5)
