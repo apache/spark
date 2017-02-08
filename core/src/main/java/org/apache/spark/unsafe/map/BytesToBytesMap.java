@@ -118,11 +118,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
   // full base addresses in the page table for off-heap mode so that we can reconstruct the full
   // absolute memory addresses.
 
-  /**
-   * Whether or not the longArray can grow. We will not insert more elements if it's false.
-   */
-  private boolean canGrowArray = true;
-
   private final double loadFactor;
 
   /**
@@ -695,11 +690,16 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert (vlen % 8 == 0);
       assert (longArray != null);
 
-      if (numKeys == MAX_CAPACITY
-        // The map could be reused from last spill (because of no enough memory to grow),
-        // then we don't try to grow again if hit the `growthThreshold`.
-        || !canGrowArray && numKeys >= growthThreshold) {
-        return false;
+      if (numKeys >= growthThreshold) {
+        if (longArray.size() / 2 == MAX_CAPACITY) {
+          // Should not grow beyond the max capacity
+          return false;
+        }
+        try {
+          growAndRehash();
+        } catch (OutOfMemoryError oom) {
+          return false;
+        }
       }
 
       // Here, we'll copy the data into our data pages. Because we only store a relative offset from
@@ -741,14 +741,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
         numKeys++;
         longArray.set(pos * 2 + 1, keyHashcode);
         isDefined = true;
-
-        if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
-          try {
-            growAndRehash();
-          } catch (OutOfMemoryError oom) {
-            canGrowArray = false;
-          }
-        }
       }
       return true;
     }
