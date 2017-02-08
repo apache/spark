@@ -51,7 +51,7 @@ import org.apache.spark.util.Utils
  *
  * The syntax of using this command in SQL is:
  * {{{
- *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
  *   LIKE [other_db_name.]existing_table_name [locationSpec]
  * }}}
  */
