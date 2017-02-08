@@ -30,12 +30,10 @@ private[sql] object CreateJacksonParser extends Serializable {
   }
 
   def utf8String(jsonFactory: JsonFactory, record: UTF8String): JsonParser = {
-    record.getByteBuffer match {
-      case bb if bb.hasArray =>
-        jsonFactory.createParser(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    val bb = record.getByteBuffer
+    assert(bb.hasArray)
 
-      case _ => jsonFactory.createParser(record.getBytes)
-    }
+    jsonFactory.createParser(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
   }
 
   def text(jsonFactory: JsonFactory, record: Text): JsonParser = {
