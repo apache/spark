@@ -125,8 +125,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     val taskContext = new TaskAttemptContextImpl(hadoopConf, attemptId)
     committer.setupTask(taskContext)
 
-    val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
-      SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
+    val (outputMetrics, callback) = SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
     // Initiate the writer.
     val taskFormat = outputFormat.newInstance()
@@ -149,8 +148,7 @@ object SparkHadoopMapReduceWriter extends Logging {
           writer.write(pair._1, pair._2)
 
           // Update bytes written metric every few records
-          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
-            outputMetricsAndBytesWrittenCallback, recordsWritten)
+          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(outputMetrics, callback, recordsWritten)
           recordsWritten += 1
         }
         if (writer != null) {
@@ -171,11 +169,8 @@ object SparkHadoopMapReduceWriter extends Logging {
         }
       })
 
-      outputMetricsAndBytesWrittenCallback.foreach {
-        case (om, callback) =>
-          om.setBytesWritten(callback())
-          om.setRecordsWritten(recordsWritten)
-      }
+      outputMetrics.setBytesWritten(callback())
+      outputMetrics.setRecordsWritten(recordsWritten)
 
       ret
     } catch {
@@ -222,24 +217,18 @@ object SparkHadoopWriterUtils {
   // TODO: these don't seem like the right abstractions.
   // We should abstract the duplicate code in a less awkward way.
 
-  // return type: (output metrics, bytes written callback), defined only if the latter is defined
-  def initHadoopOutputMetrics(
-      context: TaskContext): Option[(OutputMetrics, () => Long)] = {
+  def initHadoopOutputMetrics(context: TaskContext): (OutputMetrics, () => Long) = {
     val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
-    bytesWrittenCallback.map { b =>
-      (context.taskMetrics().outputMetrics, b)
-    }
+    (context.taskMetrics().outputMetrics, bytesWrittenCallback)
   }
 
   def maybeUpdateOutputMetrics(
-      outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)],
+      outputMetrics: OutputMetrics,
+      callback: () => Long,
       recordsWritten: Long): Unit = {
     if (recordsWritten % RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
-      outputMetricsAndBytesWrittenCallback.foreach {
-        case (om, callback) =>
-          om.setBytesWritten(callback())
-          om.setRecordsWritten(recordsWritten)
-      }
+      outputMetrics.setBytesWritten(callback())
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
   }
 
