@@ -388,6 +388,20 @@ class SparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("executor memory in local-cluster mode") {
+    val executorMemoryMb = 1888
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", LocalClusterExecutorMemoryTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--master", "local-cluster[2,1,%d]".format(executorMemoryMb),
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      unusedJar.toString,
+      executorMemoryMb.toString)
+    runSparkSubmit(args)
+  }
+
   test("includes jars passed in through --jars") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
@@ -717,6 +731,21 @@ object JarCreationTest extends Logging {
       throw new Exception("Could not load user class from jar:\n" + result(0))
     }
     sc.stop()
+  }
+}
+
+object LocalClusterExecutorMemoryTest {
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+    val sc = new SparkContext
+    if (args.length != 1) {
+      throw new IllegalArgumentException("Excepted exactly 1 argument, got " + args.length)
+    }
+    val executorMemory = args.head.toInt
+    if (sc.executorMemory != executorMemory) {
+      throw new SparkException(
+        "Expected executor memory to be %s, was %s".format(executorMemory, sc.executorMemory))
+    }
   }
 }
 
