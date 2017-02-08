@@ -163,6 +163,10 @@ case class BucketSpec(
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
  *                                  catalog. If false, it is inferred automatically based on file
  *                                  structure.
+ * @param schemaFromTableProps Whether the schema field was obtained by parsing a case-sensitive
+ *                             schema embedded in the table properties. Used to trigger schema
+ *                             inference when using a Hive Metastore, if configured. Defaults to
+ *                             false.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -180,7 +184,8 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    tracksPartitionsInCatalog: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false,
+    schemaFromTableProps: Boolean = false) {
 
   import CatalogTable._
 
