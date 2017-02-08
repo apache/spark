@@ -1057,9 +1057,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 }
 
 object HiveExternalCatalog {
-  // a property for test, to create an old spark source table
-  val SPARK_TEST_OLD_SOURCE_TABLE_CREATE = "spark.test.old.source.table.create"
-
   val SPARK_SQL_PREFIX = "spark.sql."
 
   val DATASOURCE_PREFIX = SPARK_SQL_PREFIX + "sources."

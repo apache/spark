@@ -759,7 +759,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
           DATASOURCE_SCHEMA -> schema.json,
-          SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true",
           "EXTERNAL" -> "FALSE"))
 
       hiveClient.createTable(hiveTable, ignoreIfExists = false)
@@ -1280,8 +1279,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
           // no DATASOURCE_SCHEMA_NUMPARTS
-          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json,
-          SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
+          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
 
       hiveClient.createTable(hiveTable, ignoreIfExists = false)
 
@@ -1332,8 +1330,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           ),
           schema = new StructType(),
           properties = Map(
-            DATASOURCE_PROVIDER -> "parquet",
-            SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
+            DATASOURCE_PROVIDER -> "parquet"))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)
 
         checkAnswer(spark.table("old"), Row(1, "a"))

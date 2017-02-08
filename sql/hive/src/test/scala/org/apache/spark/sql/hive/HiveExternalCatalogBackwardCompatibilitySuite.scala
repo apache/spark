@@ -194,8 +194,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
       locationUri = Some(defaultTableURI("tbl9").toString + "-__PLACEHOLDER__"),
       properties = Map("path" -> tempDirUri)),
     schema = new StructType(),
-    properties = Map("spark.sql.sources.provider" -> "json",
-    HiveExternalCatalog.SPARK_TEST_OLD_SOURCE_TABLE_CREATE -> "true"))
+    properties = Map("spark.sql.sources.provider" -> "json"))
 
   // A list of all raw tables we want to test, with their expected schema.
   lazy val rawTablesAndExpectations = Seq(
