@@ -1882,14 +1882,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      primitiveFieldAndType
-        .flatMap(Iterator.fill(3)(_) ++ Iterator("\n{invalid}"))
-        .toDF("value")
+      spark
+        .createDataFrame(Seq(Tuple1("{}{invalid}")))
         .coalesce(1)
         .write
         .text(path)
 
       val jsonDF = spark.read.option("wholeFile", true).json(path)
+      // no corrupt record column should be created
+      assert(jsonDF.schema === StructType(Seq()))
+      // only the first object should be read
       assert(jsonDF.count() === 1)
     }
   }
