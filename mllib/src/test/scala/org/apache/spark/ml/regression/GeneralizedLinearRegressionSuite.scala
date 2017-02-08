@@ -850,10 +850,10 @@ class GeneralizedLinearRegressionSuite
       [1] -0.17118812  0.31200361 -0.02541656
     */
     val dataset = Seq(
-      OffsetInstance(1.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
-      OffsetInstance(2.0, 2.0, 0.5, Vectors.dense(1.0, 2.0)),
-      OffsetInstance(1.0, 3.0, 1.0, Vectors.dense(2.0, 1.0)),
-      OffsetInstance(2.0, 4.0, 0.0, Vectors.dense(3.0, 3.0))
+      OffsetInstance(1.0, 1.0, 2.0, Vectors.zeros(0)),
+      OffsetInstance(2.0, 2.0, 0.5, Vectors.zeros(0)),
+      OffsetInstance(1.0, 3.0, 1.0, Vectors.zeros(0)),
+      OffsetInstance(2.0, 4.0, 0.0, Vectors.zeros(0))
     ).toDF()
 
     val expected = Seq(1.0, -0.3559835, 0.3618836, 0.558434)
