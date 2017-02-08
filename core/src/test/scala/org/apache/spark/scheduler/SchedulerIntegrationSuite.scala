@@ -397,12 +397,11 @@ private[spark] abstract class MockBackend(
       val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
       // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
       // tests from introducing a race if they need it.
-      val newTasks =
-        newTaskDescriptions.map { taskDescription =>
-          val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
-          val task = taskSet.tasks(taskDescription.index)
-          (taskDescription, task)
-        }
+      val newTasks = newTaskDescriptions.map { taskDescription =>
+        val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
+        val task = taskSet.tasks(taskDescription.index)
+        (taskDescription, task)
+      }
       newTasks.foreach { case (taskDescription, _) =>
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
