@@ -672,6 +672,12 @@ object SQLConf {
       .stringConf
       .createWithDefault(TimeZone.getDefault().getID())
 
+  val SESSIONCATALOG_TABLE_RELATION_CACHE_SIZE =
+    SQLConfigBuilder("spark.sql.tableRelation.cache.size")
+      .doc("""The size of a cache of qualified table name to table relation plan.""")
+      .intConf
+      .createWithDefault(1000)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -871,6 +877,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
+
+  override def tableRelationCacheSize: Int =
+    getConf(SQLConf.SESSIONCATALOG_TABLE_RELATION_CACHE_SIZE)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
