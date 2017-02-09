@@ -216,9 +216,10 @@ class DAGScheduler(
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
-      taskInfo: TaskInfo): Unit = {
+      taskInfo: TaskInfo,
+      allTasksInStageComplete: Boolean): Unit = {
     eventProcessLoop.post(
-      CompletionEvent(task, reason, result, accumUpdates, taskInfo))
+      CompletionEvent(task, reason, result, accumUpdates, taskInfo, allTasksInStageComplete))
   }
 
   /**
@@ -1010,11 +1011,9 @@ class DAGScheduler(
       val serializedTaskMetrics = closureSerializer.serialize(stage.latestInfo.taskMetrics).array()
       stage match {
         case stage: ShuffleMapStage =>
-          stage.pendingPartitions.clear()
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
-            stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId)
@@ -1158,6 +1157,7 @@ class DAGScheduler(
                   job.numFinished += 1
                   // If the whole job has finished, remove it
                   if (job.numFinished == job.numPartitions) {
+                    assert(event.allTasksInStageComplete)
                     markStageAsFinished(resultStage)
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(
@@ -1180,7 +1180,6 @@ class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            shuffleStage.pendingPartitions -= task.partitionId
             updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
@@ -1191,7 +1190,7 @@ class DAGScheduler(
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
 
-            if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
+            if (runningStages.contains(shuffleStage) && event.allTasksInStageComplete) {
               markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
@@ -1212,6 +1211,7 @@ class DAGScheduler(
               clearCacheLocs()
 
               if (!shuffleStage.isAvailable) {
+                // TODO: UPDATE COMMENT!!!!!
                 // Some tasks had failed; let's resubmit this shuffleStage
                 // TODO: Lower-level scheduler should also deal with this
                 logInfo("Resubmitting " + shuffleStage + " (" + shuffleStage.name +
@@ -1232,15 +1232,9 @@ class DAGScheduler(
         }
 
       case Resubmitted =>
-        logInfo("Resubmitted " + task + ", so marking it as still running")
-        stage match {
-          case sms: ShuffleMapStage =>
-            sms.pendingPartitions += task.partitionId
-
-          case _ =>
-            assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
-              "tasks in ShuffleMapStages.")
-        }
+        logInfo(s"Task $task has been Resubmitted by the task scheduler, because the executor " +
+          "that it ran on has died, so its output has been lost.")
+        // No need to do anything else here: the task scheduler handles re-running the task.
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)

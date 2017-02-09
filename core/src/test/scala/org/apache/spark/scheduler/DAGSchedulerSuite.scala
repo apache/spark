@@ -2209,7 +2209,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       case ef: ExceptionFailure => ef.accums
       case _ => Seq.empty
     }
-    CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)
+    // TODO(kay)
+    CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo, false)
   }
 }
 

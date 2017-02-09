@@ -72,7 +72,8 @@ private[scheduler] case class CompletionEvent(
     reason: TaskEndReason,
     result: Any,
     accumUpdates: Seq[AccumulatorV2[_, _]],
-    taskInfo: TaskInfo)
+    taskInfo: TaskInfo,
+    allTasksInStageComplete: Boolean)
   extends DAGSchedulerEvent
 
 private[scheduler] case class ExecutorAdded(execId: String, host: String) extends DAGSchedulerEvent
