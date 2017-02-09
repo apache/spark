@@ -2339,6 +2339,13 @@ object SparkContext extends Logging {
     }
   }
 
+  /** Return the current active [[SparkContext]] if any. */
+  private[spark] def getActive: Option[SparkContext] = {
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      Option(activeContext.get())
+    }
+  }
+
   /**
    * Called at the beginning of the SparkContext constructor to ensure that no SparkContext is
    * running.  Throws an exception if a running context is detected and logs a warning if another
