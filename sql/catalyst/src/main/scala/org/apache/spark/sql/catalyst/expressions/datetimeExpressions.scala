@@ -566,7 +566,7 @@ abstract class UnixTime
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: DateFormat =
     try {
-      DateTimeUtils.newStrictDateFormat(constFormat.toString, timeZone)
+      DateTimeUtils.newDateFormat(constFormat.toString, timeZone, isLenient = false)
     } catch {
       case NonFatal(_) => null
     }
@@ -599,7 +599,7 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              DateTimeUtils.newStrictDateFormat(formatString, timeZone).parse(
+              DateTimeUtils.newDateFormat(formatString, timeZone, isLenient = false).parse(
                 t.asInstanceOf[UTF8String].toString).getTime / 1000L
             } catch {
               case NonFatal(_) => null

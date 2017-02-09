@@ -95,7 +95,9 @@ object DateTimeUtils {
     sdf
   }
 
-  def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
+  def newDateFormat(formatString: String,
+      timeZone: TimeZone,
+      isLenient: Boolean = true): DateFormat = {
     val sdf = new SimpleDateFormat(formatString, Locale.US)
     sdf.setTimeZone(timeZone)
     sdf
