@@ -20,19 +20,24 @@ import feign.{Request, RequestTemplate, RetryableException, Retryer, Target}
 import scala.reflect.ClassTag
 import scala.util.Random
 
+import org.apache.spark.internal.Logging
+
 private[kubernetes] class MultiServerFeignTarget[T : ClassTag](
-    private val servers: Seq[String]) extends Target[T] with Retryer {
+    private val servers: Seq[String],
+    private val maxRetriesPerServer: Int = 1,
+    private val delayBetweenRetriesMillis: Int = 1000) extends Target[T] with Retryer with Logging {
   require(servers.nonEmpty, "Must provide at least one server URI.")
 
   private val threadLocalShuffledServers = new ThreadLocal[Seq[String]] {
     override def initialValue(): Seq[String] = Random.shuffle(servers)
   }
+  private val threadLocalCurrentAttempt = new ThreadLocal[Int] {
+    override def initialValue(): Int = 0
+  }
 
   override def `type`(): Class[T] = {
     implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
   }
-
-  override def url(): String = threadLocalShuffledServers.get.head
 
   /**
    * Cloning the target is done on every request, for use on the current
@@ -54,14 +59,31 @@ private[kubernetes] class MultiServerFeignTarget[T : ClassTag](
     requestTemplate.request()
   }
 
+  override def url(): String = threadLocalShuffledServers.get.head
+
   override def continueOrPropagate(e: RetryableException): Unit = {
-    threadLocalShuffledServers.set(threadLocalShuffledServers.get.drop(1))
-    if (threadLocalShuffledServers.get.isEmpty) {
-      throw e
+    threadLocalCurrentAttempt.set(threadLocalCurrentAttempt.get + 1)
+    val currentAttempt = threadLocalCurrentAttempt.get
+    if (threadLocalCurrentAttempt.get < maxRetriesPerServer) {
+      logWarning(s"Attempt $currentAttempt of $maxRetriesPerServer failed for" +
+        s" server ${url()}. Retrying request...", e)
+      Thread.sleep(delayBetweenRetriesMillis)
+    } else {
+      val previousUrl = url()
+      threadLocalShuffledServers.set(threadLocalShuffledServers.get.drop(1))
+      if (threadLocalShuffledServers.get.isEmpty) {
+        logError(s"Failed request to all servers $maxRetriesPerServer times.", e)
+        throw e
+      } else {
+        logWarning(s"Failed request to $previousUrl $maxRetriesPerServer times." +
+          s" Trying to access ${url()} instead.", e)
+        threadLocalCurrentAttempt.set(0)
+      }
     }
   }
 
   def reset(): Unit = {
     threadLocalShuffledServers.set(Random.shuffle(servers))
+    threadLocalCurrentAttempt.set(0)
   }
 }
