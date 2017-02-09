@@ -233,47 +233,42 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
    *
    * @throws IncompatibleUnionException if either are null, different classes, or different size or number of hash functions
    */
-  public static BloomFilterImpl createUnionBloomFilter(BloomFilter bf1, BloomFilter bf2) throws IncompatibleUnionException {
+  public BloomFilterImpl createUnionBloomFilter(BloomFilter other) throws IncompatibleUnionException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
-    if (bf1 == null || bf2 == null) {
+    if (other == null) {
       throw new IncompatibleUnionException("Cannot union null bloom filters");
     }
 
-    if (!(bf1 instanceof BloomFilterImpl)) {
+    if (!(other instanceof BloomFilterImpl)) {
       throw new IncompatibleUnionException(
-          "Cannot union bloom filter of class " + bf1.getClass().getName()
-      );
-    } else if (!(bf2 instanceof BloomFilterImpl)) {
-      throw new IncompatibleUnionException(
-          "Cannot union bloom filter of class " + bf2.getClass().getName()
+          "Cannot union bloom filter of class " + other.getClass().getName()
       );
     }
 
-    BloomFilterImpl bfImpl1 = (BloomFilterImpl) bf1;
-    BloomFilterImpl bfImpl2 = (BloomFilterImpl) bf2;
+    BloomFilterImpl that = (BloomFilterImpl) other;
 
-    if (bfImpl1.bitSize() != bfImpl2.bitSize()) {
+    if (this.bitSize() != that.bitSize()) {
       throw new IncompatibleUnionException("Cannot union bloom filters with different bit size");
     }
 
-    if (bfImpl1.numHashFunctions != bfImpl2.numHashFunctions) {
+    if (this.numHashFunctions != that.numHashFunctions) {
       throw new IncompatibleUnionException("Cannot union bloom filters with different number of hash functions");
     }
 
-    BloomFilterImpl bfUnion = (BloomFilterImpl)BloomFilter.create(bf1.bitSize());
+    BloomFilterImpl bfUnion = (BloomFilterImpl)BloomFilter.create(bitSize());
 
-    bfUnion.bits.putAll(bfImpl1.bits);
-    bfUnion.bits.putAll(bfImpl2.bits);
+    bfUnion.bits.putAll(this.bits);
+    bfUnion.bits.putAll(that.bits);
     return bfUnion;
   }
 
   /**
    * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
    */
-  public static double approxItemsInIntersection(BloomFilterImpl bf1, BloomFilterImpl bf2) throws IncompatibleUnionException {
-    BloomFilterImpl union = createUnionBloomFilter(bf1, bf2);
+  public double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException {
+    BloomFilterImpl union = createUnionBloomFilter(that);
 
-    return bf1.approxItems() + bf2.approxItems() - union.approxItems();
+    return this.approxItems() + that.approxItems() - union.approxItems();
   }
 
   @Override
