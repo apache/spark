@@ -68,12 +68,17 @@ test_that("spark.logit", {
   df <- suppressWarnings(createDataFrame(iris))
   model <- spark.logit(df, Species ~ ., regParam = 0.5)
   summary <- summary(model)
+
+  # test summary coefficients return matrix type
+  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(class(summary$coefficients[, 1]) == "numeric")
+
   versicolorCoefsR <- c(1.52, 0.03, -0.53, 0.04, 0.00)
   virginicaCoefsR <- c(-2.62, 0.27, -0.02, 0.16, 0.42)
   setosaCoefsR <- c(1.10, -0.29, 0.55, -0.19, -0.42)
-  versicolorCoefs <- unlist(summary$coefficients[, "versicolor"])
-  virginicaCoefs <- unlist(summary$coefficients[, "virginica"])
-  setosaCoefs <- unlist(summary$coefficients[, "setosa"])
+  versicolorCoefs <- summary$coefficients[, "versicolor"]
+  virginicaCoefs <- summary$coefficients[, "virginica"]
+  setosaCoefs <- summary$coefficients[, "setosa"]
   expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
   expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
   expect_true(all(abs(setosaCoefs - setosaCoefs) < 0.1))
@@ -136,8 +141,8 @@ test_that("spark.logit", {
   summary <- summary(model)
   versicolorCoefsR <- c(3.94, -0.16, -0.02, -0.35, -0.78)
   virginicaCoefsR <- c(-3.94, 0.16, -0.02, 0.35, 0.78)
-  versicolorCoefs <- unlist(summary$coefficients[, "versicolor"])
-  virginicaCoefs <- unlist(summary$coefficients[, "virginica"])
+  versicolorCoefs <- summary$coefficients[, "versicolor"]
+  virginicaCoefs <- summary$coefficients[, "virginica"]
   expect_true(all(abs(versicolorCoefsR - versicolorCoefs) < 0.1))
   expect_true(all(abs(virginicaCoefsR - virginicaCoefs) < 0.1))
 
@@ -145,7 +150,7 @@ test_that("spark.logit", {
   model <- spark.logit(training, Species ~ ., regParam = 0.5)
   summary <- summary(model)
   coefsR <- c(-6.08, 0.25, 0.16, 0.48, 1.04)
-  coefs <- unlist(summary$coefficients[, "Estimate"])
+  coefs <- summary$coefficients[, "Estimate"]
   expect_true(all(abs(coefsR - coefs) < 0.1))
 
   # Test prediction with string label

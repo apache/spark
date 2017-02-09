@@ -145,7 +145,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
             labels <- callJMethod(jobj, "labels")
             coefficients <- callJMethod(jobj, "rCoefficients")
             nCol <- length(coefficients) / length(features)
-            coefficients <- matrix(coefficients, ncol = nCol)
+            coefficients <- matrix(unlist(coefficients), ncol = nCol)
             # If nCol == 1, means this is a binomial logistic regression model with pivoting.
             # Otherwise, it's a multinomial logistic regression model without pivoting.
             if (nCol == 1) {

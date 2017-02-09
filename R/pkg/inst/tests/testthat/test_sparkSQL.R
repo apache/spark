@@ -869,6 +869,14 @@ test_that("names() colnames() set the column names", {
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
 
+  expect_error(names(df) <- NULL, "Invalid column names.")
+  expect_error(names(df) <- c("sepal.length", "sepal_width"),
+               "Column names cannot contain the '.' symbol.")
+  expect_error(names(df) <- c(1, 2), "Invalid column names.")
+  expect_error(names(df) <- c("a"),
+               "Column names must have the same length as the number of columns in the dataset.")
+  expect_error(names(df) <- c("1", NA), "Column names cannot be NA.")
+
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
                "Column names cannot contain the '.' symbol.")
   expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
@@ -1229,6 +1237,7 @@ test_that("column functions", {
   c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
   c19 <- spark_partition_id()
+  c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
