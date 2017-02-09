@@ -100,6 +100,7 @@ object DateTimeUtils {
       isLenient: Boolean = true): DateFormat = {
     val sdf = new SimpleDateFormat(formatString, Locale.US)
     sdf.setTimeZone(timeZone)
+    sdf.setLenient(isLenient)
     sdf
   }
 
