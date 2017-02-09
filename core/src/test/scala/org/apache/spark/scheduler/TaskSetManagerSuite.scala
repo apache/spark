@@ -689,29 +689,37 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     sched.setDAGScheduler(dagScheduler)
 
-    val tasks = Array.tabulate[Task[_]](1) { i =>
-      new ShuffleMapTask(i, 0, null, new Partition {
+    val singleTask = new ShuffleMapTask(0, 0, null, new Partition {
         override def index: Int = 0
       }, Seq(TaskLocation("host1", "execA")), new Properties, null)
-    }
-    val taskSet = new TaskSet(tasks, 0, 0, 0, null)
+    val taskSet = new TaskSet(Array(singleTask), 0, 0, 0, null)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
-    manager.speculatableTasks += tasks.head.partitionId
+
+    // Offer host1, which should be accepted as a PROCESS_LOCAL location
+    // by the one task in the task set
     val task1 = manager.resourceOffer("execA", "host1", TaskLocality.PROCESS_LOCAL).get
+
+    // Mark the task as available for speculation, and then offer another resource,
+    // which should be used to launch a speculative copy of the task.
+    manager.speculatableTasks += singleTask.partitionId
     val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY).get
 
-    assert(manager.runningTasks == 2)
-    assert(manager.isZombie == false)
+    assert(manager.runningTasks === 2)
+    assert(manager.isZombie === false)
 
     val directTaskResult = new DirectTaskResult[String](null, Seq()) {
       override def value(resultSer: SerializerInstance): String = ""
     }
+    // Complete one copy of the task, which should result in the task set manager
+    // being marked as a zombie, because at least one copy of its only task has completed.
     manager.handleSuccessfulTask(task1.taskId, directTaskResult)
-    assert(manager.isZombie == true)
-    assert(resubmittedTasks == 0)
+    assert(manager.isZombie === true)
+    assert(resubmittedTasks === 0)
+    assert(manager.runningTasks === 1)
 
     manager.executorLost("execB", "host2", new SlaveLost())
-    assert(resubmittedTasks == 0)
+    assert(manager.runningTasks === 0)
+    assert(resubmittedTasks === 0)
   }
 
   test("speculative and noPref task should be scheduled after node-local") {
