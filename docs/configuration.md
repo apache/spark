@@ -1402,6 +1402,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,
+    executors when they are blacklisted.  Note that, when an entire node is added to the blacklist,
+    all of the executors on that node will be killed.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
