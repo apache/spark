@@ -56,7 +56,8 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   extends SchedulableBuilder with Logging {
 
-  val schedulerAllocFile = conf.getOption("spark.scheduler.allocation.file")
+  val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
+  val schedulerAllocFile = conf.getOption(SCHEDULER_ALLOCATION_FILE_PROPERTY)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
   val DEFAULT_POOL_NAME = "default"
@@ -82,9 +83,9 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
           logInfo(s"Creating Fair Scheduler pools from default file: $DEFAULT_SCHEDULER_FILE")
           Some((is, DEFAULT_SCHEDULER_FILE))
         } else {
-          logWarning("Fair Scheduler configuration file not found so jobs will be scheduled " +
-            s"in FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE " +
-            "or set spark.scheduler.allocation.file to a file that contains the configuration.")
+          logWarning("Fair Scheduler configuration file not found so jobs will be scheduled in " +
+            s"FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE or " +
+            s"set $SCHEDULER_ALLOCATION_FILE_PROPERTY to a file that contains the configuration.")
           None
         }
       }
