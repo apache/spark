@@ -112,7 +112,7 @@ object functions {
    * @group normal_funcs
    * @since 2.2.0
    */
-  def lit2[T : TypeTag](literal: T): Column = {
+  def typedLit[T : TypeTag](literal: T): Column = {
     literal match {
       case c: Column => return c
       case s: Symbol => return new ColumnName(literal.asInstanceOf[Symbol].name)
