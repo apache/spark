@@ -83,7 +83,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
           Some((is, DEFAULT_SCHEDULER_FILE))
         } else {
           logWarning("Fair Scheduler configuration file not found so jobs will be scheduled " +
-            "in FIFO order")
+            s"in FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE " +
+            "or set spark.scheduler.allocation.file to a file that contains the configuration.")
           None
         }
       }
@@ -91,7 +92,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       fileData.foreach { case (is, fileName) => buildFairSchedulerPool(is, fileName) }
     } catch {
       case NonFatal(t) =>
-        logError("Error while building the fair scheduler pools: ", t)
+        val defaultMessage = "Error while building the fair scheduler pools"
+        val message = fileData.map { case (is, fileName) => s"$defaultMessage from $fileName" }
+          .getOrElse(defaultMessage)
+        logError(message, t)
         throw t
     } finally {
       fileData.foreach { case (is, fileName) => is.close() }
@@ -134,7 +138,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   private def getSchedulingModeValue(
       poolNode: Node,
       poolName: String,
-      defaultValue: SchedulingMode, fileName: String): SchedulingMode = {
+      defaultValue: SchedulingMode,
+      fileName: String): SchedulingMode = {
 
     val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase
     val warningMessage = s"Unsupported schedulingMode: $xmlSchedulingMode found in " +
@@ -158,7 +163,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       poolNode: Node,
       poolName: String,
       propertyName: String,
-      defaultValue: Int, fileName: String): Int = {
+      defaultValue: Int,
+      fileName: String): Int = {
 
     val data = (poolNode \ propertyName).text.trim
     try {
