@@ -775,7 +775,6 @@ class GeneralizedLinearRegressionSuite
     import GeneralizedLinearRegression._
 
     var idx = 0
-
     for (family <- Seq("gaussian", "poisson", "binomial", "gamma", "tweedie")) {
       for (useWeight <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily(family)
