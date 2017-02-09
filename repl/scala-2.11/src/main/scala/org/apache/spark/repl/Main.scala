@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
 object Main extends Logging {
 
   initializeLogIfNecessary(true)
+  Signaling.cancelOnInterrupt()
 
   val conf = new SparkConf()
   val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
@@ -108,7 +109,6 @@ object Main extends Logging {
       logInfo("Created Spark session")
     }
     sparkContext = sparkSession.sparkContext
-    Signaling.cancelOnInterrupt(sparkContext)
     sparkSession
   }
 
