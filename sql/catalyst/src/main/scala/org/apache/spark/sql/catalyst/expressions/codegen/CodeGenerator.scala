@@ -555,7 +555,6 @@ class CodegenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
-      INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -566,7 +565,6 @@ class CodegenContext {
             if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
               return 0;
             }
-            InternalRow i = null;
             $comparisons
             return 0;
           }
