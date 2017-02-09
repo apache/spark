@@ -781,16 +781,6 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl {
-  private lazy val shimForHiveExecution = IsolatedClientLoader.hiveVersion(
-    HiveUtils.hiveExecutionVersion) match {
-    case hive.v12 => new Shim_v0_12()
-    case hive.v13 => new Shim_v0_13()
-    case hive.v14 => new Shim_v0_14()
-    case hive.v1_0 => new Shim_v1_0()
-    case hive.v1_1 => new Shim_v1_1()
-    case hive.v1_2 => new Shim_v1_2()
-  }
-
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
@@ -826,7 +816,8 @@ private[hive] object HiveClientImpl {
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
-  /** Converts the native table metadata representation format CatalogTable to Hive's Table.
+  /**
+   * Converts the native table metadata representation format CatalogTable to Hive's Table.
    * the default value shimForHiveExecution is only used for hive execution, a Shim instance
    * with a specific metastore version should be passed to this function to interact with metastore
    */
