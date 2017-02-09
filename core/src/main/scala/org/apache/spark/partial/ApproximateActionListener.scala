@@ -56,6 +56,8 @@ private[spark] class ApproximateActionListener[T, U, R](
     }
   }
 
+  override def markJobSucceeded(): Unit = {}
+
   override def jobFailed(exception: Exception) {
     synchronized {
       failure = Some(exception)

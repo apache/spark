@@ -190,6 +190,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   var failure: Exception = _
   val jobListener = new JobListener() {
     override def taskSucceeded(index: Int, result: Any) = results.put(index, result)
+    override def markJobSucceeded(): Unit = {}
     override def jobFailed(exception: Exception) = { failure = exception }
   }
 
@@ -198,6 +199,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val results = new HashMap[Int, Any]
     var failure: Exception = null
     override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+    override def markJobSucceeded(): Unit = {}
     override def jobFailed(exception: Exception): Unit = { failure = exception }
   }
 
@@ -328,8 +330,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   /** Sends JobCancelled to the DAG scheduler. */
-  private def cancel(jobId: Int) {
-    runEvent(JobCancelled(jobId))
+  private def cancel(jobId: Int, failJob: Boolean = true) {
+    runEvent(JobCancelled(jobId, failJob = failJob))
   }
 
   test("[SPARK-3353] parent stage should have lower stage id") {
@@ -399,6 +401,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     var failureReason: Option[Exception] = None
     val fakeListener = new JobListener() {
       override def taskSucceeded(partition: Int, value: Any): Unit = numResults += 1
+      override def markJobSucceeded(): Unit = {}
       override def jobFailed(exception: Exception): Unit = {
         failureReason = Some(exception)
       }
@@ -535,6 +538,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(sparkListener.failedStages.contains(0))
     assert(sparkListener.failedStages.size === 1)
+    assertDataStructuresEmpty()
+  }
+
+  test("job cancellation with failJob=false") {
+    val rdd = new MyRDD(sc, 1, Nil)
+    val jobId = submit(rdd, Array(0))
+    cancel(jobId, failJob = false)
+    assert(failure === null)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.failedStages.isEmpty)
+    assert(sparkListener.successfulStages.contains(0))
+    assert(sparkListener.successfulStages.size === 1)
     assertDataStructuresEmpty()
   }
 
@@ -1446,6 +1461,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     class FailureRecordingJobListener() extends JobListener {
       var failureMessage: String = _
       override def taskSucceeded(index: Int, result: Any) {}
+      override def markJobSucceeded(): Unit = {}
       override def jobFailed(exception: Exception): Unit = { failureMessage = exception.getMessage }
     }
     val listener1 = new FailureRecordingJobListener()

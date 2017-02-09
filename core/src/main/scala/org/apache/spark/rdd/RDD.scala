@@ -21,6 +21,8 @@ import java.util.Random
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.io.Codec
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
@@ -1325,7 +1327,9 @@ abstract class RDD[T: ClassTag](
    */
   def take(num: Int): Array[T] = withScope {
     val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
-    if (num == 0) {
+    if (conf.getBoolean("spark.driver.adaptiveTakeEnabled", true)) {
+      mapPartitions(_.take(num)).adaptiveTake[T](num, (x: Array[T]) => x.iterator)
+    } else if (num == 0) {
       new Array[T](0)
     } else {
       val buf = new ArrayBuffer[T]
@@ -1357,6 +1361,125 @@ abstract class RDD[T: ClassTag](
       }
 
       buf.toArray
+    }
+  }
+
+  /**
+   * An optimized implementation of `take` which cancels the running Spark job as soon as enough
+   * output has been received (instead of waiting for all tasks to complete).
+   *
+   * This method assumes that per-partition limits have already been performed on the input RDD.
+   * This assumption allows the type of the input RDD to differ from the final output type. This is
+   * used in Spark SQL to allow individual partitions' outputs to be serialized as single objects
+   * which are then unpacked and counted on the driver.
+   *
+   * @param num the number of elements to take.
+   * @param unpackPartition a function for unpacking an individual partition's result into a
+   *                        sequence of elements to be counted.
+   */
+  private[spark] def adaptiveTake[R: ClassTag](
+      num: Int,
+      unpackPartition: Array[T] => Iterator[R]): Array[R] = withScope {
+    require(num >= 0, s"num cannot be negative, but got num=$num")
+    val scaleUpFactor = Math.max(conf.getInt("spark.rdd.limit.scaleUpFactor", 4), 2)
+    val lock = new Object()
+    val totalPartitions = partitions.length
+    var partitionsScanned = 0
+    var gotEnoughRows = false
+    // This buffer accumulates the rows to be returned.
+    val resultToReturn = new ArrayBuffer[R]
+    // In order to preserve the behavior of the old `take()` implementation, it's important that
+    // we process partitions in order of their partition ids. Partitions may be computed out of
+    // order. Once we have received all partitions up to partition N then we can perform driver-side
+    // processing on partitions 1 through N to determine whether we've received enough items.
+    val completedPartitions = new mutable.HashMap[Int, Array[T]]() // key is partition id
+    var firstMissingPartition: Int = 0
+
+    var jobFuture: SimpleFutureAction[Unit] = null
+
+    // This callback is invoked as individual partitions complete.
+    def handleResult(taskIndex: Int, result: Array[T]): Unit = lock.synchronized {
+      val partitionId = partitionsScanned + taskIndex
+      assert(partitionId < totalPartitions)
+      if (gotEnoughRows) {
+        logDebug(s"Ignoring result for partition $partitionId of $this because we have enough rows")
+      } else {
+        logDebug(s"Handling result for partition $partitionId of $this")
+        // Buffer the result in case we can't process it now.
+        completedPartitions(partitionId) = result
+        if (partitionId == firstMissingPartition) {
+          while (!gotEnoughRows && completedPartitions.contains(firstMissingPartition)) {
+            logDebug(s"Unpacking partition $firstMissingPartition of $this")
+            val rawPartitionData = completedPartitions.remove(firstMissingPartition).get
+            resultToReturn ++= unpackPartition(rawPartitionData)
+            firstMissingPartition += 1
+
+            if (resultToReturn.size >= num) {
+              // We have unpacked enough results to reach the desired number of results, so discard
+              // any remaining partitions' data:
+              completedPartitions.clear()
+              // Set a flag so that future task completion events are ignored:
+              gotEnoughRows = true
+              // Cancel the job so we can return sooner
+              jobFuture.cancelWithoutFailing()
+            }
+          }
+        }
+      }
+    }
+
+    while (!gotEnoughRows && partitionsScanned < totalPartitions) {
+      var numPartitionsToCompute = 0
+      lock.synchronized {
+        // The number of partitions to try in this iteration. It is ok for this number to be
+        // greater than totalParts because we actually cap it at totalParts in runJob.
+        var numPartsToTry = 1L
+        if (partitionsScanned > 0) {
+          // If we didn't find any rows after the previous iteration, quadruple and retry.
+          // Otherwise, interpolate the number of partitions we need to try, but overestimate
+          // it by 50%. We also cap the estimation in the end.
+          if (resultToReturn.isEmpty) {
+            numPartsToTry = partitionsScanned * scaleUpFactor
+          } else {
+            // the left side of max is >=1 whenever partitionsScanned >= 2
+            numPartsToTry = Math.max(
+              (1.5 * num * partitionsScanned / resultToReturn.size).toInt - partitionsScanned, 1)
+            numPartsToTry = Math.min(numPartsToTry, partitionsScanned * scaleUpFactor)
+          }
+        }
+
+        val partitionsToCompute = partitionsScanned.until(
+          math.min(partitionsScanned + numPartsToTry, totalPartitions).toInt)
+        numPartitionsToCompute = partitionsToCompute.length
+
+        jobFuture = sc.submitJob(
+          this,
+          (it: Iterator[T]) => it.toArray,
+          partitionsToCompute,
+          handleResult,
+          resultFunc = ())
+      }
+
+      // scalastyle:off awaitresult
+      Await.result(jobFuture, Duration.Inf)
+      // scalastyle:on awaitresult
+
+      // Remove the console progress bar. submitJob (and AsyncRDDActions, more generally) lack
+      // task completion callbacks to remove the progress bar and it may not be a good idea to put
+      // this logic into submitJob / JobWaiter itself because that might introduce the potential for
+      // races between output being printed after the take() returns and the progress bar removal's
+      // backspace sequences being sent.
+      sparkContext.progressBar.foreach(_.finishAll())
+
+      partitionsScanned += numPartitionsToCompute
+    }
+
+    lock.synchronized {
+      if (resultToReturn.size > num) {
+        resultToReturn.take(num).toArray
+      } else {
+        resultToReturn.toArray
+      }
     }
   }
 
