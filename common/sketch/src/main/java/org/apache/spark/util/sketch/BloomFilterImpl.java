@@ -223,7 +223,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
   @Override
   public double approxItems() {
     double m = bitSize();
-    return (m / numHashFunctions) * Math.log(1 - (bits.cardinality() / m));
+    return (-m / numHashFunctions) * Math.log(1 - (bits.cardinality() / m));
   }
 
   @Override
