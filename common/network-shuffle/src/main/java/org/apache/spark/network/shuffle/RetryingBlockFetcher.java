@@ -164,12 +164,9 @@ public class RetryingBlockFetcher {
     logger.info("Retrying fetch ({}/{}) for {} outstanding blocks after {} ms",
       retryCount, maxRetries, outstandingBlocksIds.size(), retryWaitTime);
 
-    executorService.submit(new Runnable() {
-      @Override
-      public void run() {
-        Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
-        fetchAllOutstanding();
-      }
+    executorService.submit(() -> {
+      Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
+      fetchAllOutstanding();
     });
   }
 
