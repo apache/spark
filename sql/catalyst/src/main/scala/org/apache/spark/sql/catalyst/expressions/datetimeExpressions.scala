@@ -586,7 +586,6 @@ abstract class UnixTime
             null
           } else {
             try {
-              formatter.setLenient(false)
               formatter.parse(
                 t.asInstanceOf[UTF8String].toString).getTime / 1000L
             } catch {
