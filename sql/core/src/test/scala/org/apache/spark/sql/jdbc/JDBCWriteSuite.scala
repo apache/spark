@@ -75,7 +75,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW PEOPLE1
         |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
+        |OPTIONS (url '$url1', dbTable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
   }
 

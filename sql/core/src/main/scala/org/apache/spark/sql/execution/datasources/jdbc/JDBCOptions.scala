@@ -31,7 +31,12 @@ class JDBCOptions(
 
   import JDBCOptions._
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(params: Map[String, String]) = {
+    this(params match {
+      case cMap: CaseInsensitiveMap => cMap
+      case _ => new CaseInsensitiveMap(params)
+    })
+  }
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
     this(new CaseInsensitiveMap(parameters ++ Map(
@@ -44,7 +49,8 @@ class JDBCOptions(
    */
   val asProperties: Properties = {
     val properties = new Properties()
-    parameters.foreach { case (k, v) => properties.setProperty(k, v) }
+    parameters.foreach { case (k, v) => properties
+      .setProperty(parameters.getCaseSensitiveKey(k).get, v) }
     properties
   }
 
@@ -56,7 +62,8 @@ class JDBCOptions(
   val asConnectionProperties: Properties = {
     val properties = new Properties()
     parameters.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
-      .foreach { case (k, v) => properties.setProperty(k, v) }
+      .foreach { case (k, v) => properties.setProperty(parameters
+        .getCaseSensitiveKey(k).getOrElse(k), v) }
     properties
   }
 
