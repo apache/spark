@@ -18,12 +18,21 @@
 package org.apache.spark.scheduler
 
 import java.io.{IOException, NotSerializableException, ObjectInputStream, ObjectOutputStream}
+import java.util.Properties
+
+import scala.collection.mutable
+
+import org.mockito.Matchers._
+import org.mockito.Mockito._
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, ReviveOffers}
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
-class NotSerializablePartitionRDD(
+private[spark] class NotSerializablePartitionRDD(
     sc: SparkContext,
     numPartitions: Int) extends RDD[(Int, Int)](sc, Nil) with Serializable {
 
@@ -78,5 +87,57 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assertResult(10) {
       sc.parallelize(1 to 10).count()
     }
+  }
+
+  test("serialization task errors do not affect each other") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    val rpcEnv = sc.env.rpcEnv
+
+    val endpointRef = mock(classOf[RpcEndpointRef])
+    val mockAddress = mock(classOf[RpcAddress])
+    when(endpointRef.address).thenReturn(mockAddress)
+    val message = RegisterExecutor("1", endpointRef, "localhost", 4, Map.empty)
+
+    val taskScheduler = mock(classOf[TaskSchedulerImpl])
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(1)
+    when(taskScheduler.sc).thenReturn(sc)
+    when(taskScheduler.mapOutputTracker).thenReturn(sc.env.mapOutputTracker)
+    val taskIdToTaskSetManager = new mutable.HashMap[Long, TaskSetManager]
+    when(taskScheduler.taskIdToTaskSetManager).thenReturn(taskIdToTaskSetManager)
+    val dagScheduler = mock(classOf[DAGScheduler])
+    when(taskScheduler.dagScheduler).thenReturn(dagScheduler)
+    val taskSet1 = FakeTask.createTaskSet(1)
+    val taskSet2 = FakeTask.createTaskSet(1)
+    taskSet1.tasks(0) = new NotSerializableFakeTask(1, 0)
+
+    def createTaskDescription(taskId: Long, task: Task[_]): TaskDescription = {
+      new TaskDescription(
+        taskId = 1L,
+        attemptNumber = 0,
+        executorId = "1",
+        name = "localhost",
+        index = 0,
+        addedFiles = mutable.Map.empty[String, Long],
+        addedJars = mutable.Map.empty[String, Long],
+        properties = new Properties(),
+        task = task)
+    }
+
+    when(taskScheduler.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenReturn(Seq(Seq(
+      createTaskDescription(1, taskSet1.tasks.head),
+      createTaskDescription(2, taskSet2.tasks.head))))
+    taskIdToTaskSetManager(1L) = new TaskSetManager(taskScheduler, taskSet1, 1)
+    taskIdToTaskSetManager(2L) = new TaskSetManager(taskScheduler, taskSet2, 1)
+
+    val backend = new CoarseGrainedSchedulerBackend(taskScheduler, rpcEnv)
+    backend.start()
+    backend.driverEndpoint.askWithRetry[Boolean](message)
+    backend.driverEndpoint.askWithRetry[Boolean](ReviveOffers)
+    assert(taskIdToTaskSetManager(1L).isZombie === true)
+    assert(taskIdToTaskSetManager(2L).isZombie === false)
+    backend.stop()
   }
 }

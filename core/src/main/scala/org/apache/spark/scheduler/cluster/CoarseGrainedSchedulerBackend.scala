@@ -197,6 +197,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           makeOffers()
         }
 
+      // Only be used for testing.
+      case ReviveOffers =>
+        makeOffers()
+        context.reply(true)
+
       case StopDriver =>
         context.reply(true)
         stop()
