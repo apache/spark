@@ -17,14 +17,20 @@
 
 package org.apache.spark.sql
 
+import scala.concurrent.duration._
 import scala.math.abs
 import scala.util.Random
 
+import org.scalatest.concurrent.Eventually
+
+import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerTaskStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-class DataFrameRangeSuite extends QueryTest with SharedSQLContext {
+
+class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventually {
 
   test("SPARK-7150 range api") {
     // numSlice is greater than length
@@ -124,6 +130,36 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext {
             }
           }
         }
+      }
+    }
+  }
+
+  test("Cancelling stage in a query with Range.") {
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        Thread.sleep(100)
+        sparkContext.cancelStage(taskStart.stageId)
+      }
+    }
+
+    sparkContext.addSparkListener(listener)
+    for (codegen <- Seq(true, false)) {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
+        val ex = intercept[SparkException] {
+          spark.range(100000L).crossJoin(spark.range(100000L))
+            .toDF("a", "b").agg(sum("a"), sum("b")).collect()
+        }
+        ex.getCause() match {
+          case null =>
+            assert(ex.getMessage().contains("cancelled"))
+          case cause: SparkException =>
+            assert(cause.getMessage().contains("cancelled"))
+          case cause: Throwable =>
+            fail("Expected the casue to be SparkException, got " + cause.toString() + " instead.")
+        }
+      }
+      eventually(timeout(20.seconds)) {
+        assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
     }
   }

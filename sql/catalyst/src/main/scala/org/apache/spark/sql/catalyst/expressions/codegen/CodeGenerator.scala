@@ -23,14 +23,14 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
-import scala.language.existentials
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -933,7 +933,9 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[Expression].getName
+      classOf[Expression].getName,
+      classOf[TaskContext].getName,
+      classOf[TaskKilledException].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
