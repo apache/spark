@@ -975,13 +975,8 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     ...          (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
     >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> key = Vectors.sparse(6, [1], [1.0])
-    >>> model.approxNearestNeighbors(df2, key, 1).show()
-    +---+--------------------+------------------+------------------+
-    | id|            features|            hashes|           distCol|
-    +---+--------------------+------------------+------------------+
-    |  5|(6,[1,2,4],[1.0,1...|[[-1.638925712E9]]|0.6666666666666667|
-    +---+--------------------+------------------+------------------+
-    ...
+    >>> model.approxNearestNeighbors(df2, key, 1).collect()
+    [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([-163892...
     >>> model.approxSimilarityJoin(df, df2, 0.6).select("datasetA.id",
     ...                                                 "datasetB.id",
     ...                                                 "distCol").show()
