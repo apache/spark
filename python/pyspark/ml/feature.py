@@ -237,10 +237,11 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     +---+---+----------------+
     |  3|  6|2.23606797749979|
     +---+---+----------------+
+    ...
     >>> brpPath = temp_path + "/brp"
-    >>> brp.save(rpPath)
-    >>> brp2 = BucketedRandomProjectionLSH.load(rpPath)
-    >>> brp2.getBucketLength() == rp.getBucketLength()
+    >>> brp.save(brpPath)
+    >>> brp2 = BucketedRandomProjectionLSH.load(brpPath)
+    >>> brp2.getBucketLength() == brp.getBucketLength()
     True
     >>> modelPath = temp_path + "/brp-model"
     >>> model.save(modelPath)
@@ -968,7 +969,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> mh = MinHashLSH(inputCol="features", outputCol="hashes", seed=12345)
     >>> model = mh.fit(df)
     >>> model.transform(df).head()
-    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([-1638925712.0])])
+    Row(id=0, features=SparseVector(6, {0: 1.0, 1: 1.0, 2: 1.0}), hashes=[DenseVector([-1638925...
     >>> data2 = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
     ...          (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
@@ -980,13 +981,17 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     +---+--------------------+------------------+------------------+
     |  5|(6,[1,2,4],[1.0,1...|[[-1.638925712E9]]|0.6666666666666667|
     +---+--------------------+------------------+------------------+
-    >>> model.approxSimilarityJoin(df, df2, 0.6).select("datasetA.id", "datasetB.id", "distCol").show()
+    ...
+    >>> model.approxSimilarityJoin(df, df2, 0.6).select("datasetA.id",
+    ...                                                 "datasetB.id",
+    ...                                                 "distCol").show()
     +---+---+-------+
     | id| id|distCol|
     +---+---+-------+
     |  1|  4|    0.5|
     |  0|  5|    0.5|
     +---+---+-------+
+    ...
     >>> mhPath = temp_path + "/mh"
     >>> mh.save(mhPath)
     >>> mh2 = MinHashLSH.load(mhPath)
