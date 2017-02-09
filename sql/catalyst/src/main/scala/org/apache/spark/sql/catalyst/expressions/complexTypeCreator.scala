@@ -407,7 +407,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
-  override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
+  override def dataType: DataType = MapType(StringType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {

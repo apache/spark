@@ -259,4 +259,17 @@ public class UnsafeRowWriter {
     // move the cursor forward.
     holder.cursor += 16;
   }
+
+  public void writeNull(int ordinal, int numBytes) {
+    assert numBytes % 8 == 0;
+    BitSetMethods.set(holder.buffer, startingOffset, ordinal);
+    setOffsetAndSize(ordinal, numBytes);
+
+    holder.grow(numBytes);
+    // zero-out the bytes
+    for (int i=0; i < numBytes; i+=8) {
+      Platform.putLong(holder.buffer, holder.cursor + i, 0L);
+    }
+    holder.cursor += numBytes;
+  }
 }
