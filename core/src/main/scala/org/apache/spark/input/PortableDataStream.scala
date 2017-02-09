@@ -176,6 +176,7 @@ class PortableDataStream(
    * Create a new DataInputStream from the split and context. The user of this method is responsible
    * for closing the stream after usage.
    */
+  @Since("1.2.0")
   def open(): DataInputStream = {
     val pathp = split.getPath(index)
     val fs = pathp.getFileSystem(conf)
@@ -185,6 +186,7 @@ class PortableDataStream(
   /**
    * Read the file as a byte array
    */
+  @Since("1.2.0")
   def toArray(): Array[Byte] = {
     val stream = open()
     try {
@@ -194,6 +196,7 @@ class PortableDataStream(
     }
   }
 
+  @Since("1.2.0")
   def getPath(): String = path
 
   @Since("2.2.0")
