@@ -391,6 +391,9 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStruct(schema, Map.empty, Literal(jsonData1), gmtId),
       InternalRow(c.getTimeInMillis * 1000L)
     )
+    // The result doesn't change because the json string includes timezone string ("Z" here),
+    // which means the string represents the timestamp string in the timezone regardless of
+    // the timeZoneId parameter.
     checkEvaluation(
       JsonToStruct(schema, Map.empty, Literal(jsonData1), Option("PST")),
       InternalRow(c.getTimeInMillis * 1000L)
