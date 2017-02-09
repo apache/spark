@@ -226,13 +226,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return (m / numHashFunctions) * Math.log(1 - (bits.cardinality() / m));
   }
 
-  /**
-   * Returns a new Bloom filter of the union of two Bloom filters.
-   * Unlike mergeInplace, this will not cause a mutation.
-   * Callers must ensure the bloom filters are appropriately sized to avoid saturating them.
-   *
-   * @throws IncompatibleUnionException if either are null, different classes, or different size or number of hash functions
-   */
+  @Override
   public BloomFilterImpl createUnionBloomFilter(BloomFilter other) throws IncompatibleUnionException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
@@ -262,9 +256,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return bfUnion;
   }
 
-  /**
-   * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
-   */
+  @Override
   public double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException {
     BloomFilterImpl union = createUnionBloomFilter(that);
 
