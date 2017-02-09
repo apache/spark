@@ -103,17 +103,6 @@ object DateTimeUtils {
     sdf
   }
 
-  /*
-   * if the time is invalid it will throw an exception, e.g.
-   * to parse("2015-13-11", "yyyy-MM-dd") will throw an exception
-   */
-  def newStrictDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
-    val sdf = new SimpleDateFormat(formatString, Locale.US)
-    sdf.setTimeZone(timeZone)
-    sdf.setLenient(false)
-    sdf
-  }
-
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
     millisToDays(millisUtc, defaultTimeZone())
