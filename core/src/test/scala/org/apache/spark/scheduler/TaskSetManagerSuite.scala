@@ -429,7 +429,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // We don't directly use the application blacklist, but its presence triggers blacklisting
     // within the taskset.
     val mockListenerBus = mock(classOf[LiveListenerBus])
-    val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, clock))
+    val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
     val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
 
     {
