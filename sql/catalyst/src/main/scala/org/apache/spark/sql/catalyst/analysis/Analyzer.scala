@@ -307,7 +307,8 @@ class Analyzer(
 
         val attrLength = groupByAliases.length
         val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          a.toAttribute.withNullability(((nullBitmask >> (attrLength - idx - 1)) & 1) == 1)
+          val canBeNull = ((nullBitmask >> (attrLength - idx - 1)) & 1) == 1
+          a.toAttribute.withNullability(a.nullable || canBeNull)
         }
 
         val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
