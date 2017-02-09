@@ -110,6 +110,32 @@ public class MessageWithHeaderSuite {
 
   private static class TestFileRegion extends AbstractReferenceCounted implements FileRegion {
 
+
+    @Override
+    public FileRegion touch() {
+      return this;
+    }
+
+    @Override
+    public FileRegion touch(Object hint) {
+      return this;
+    }
+
+    public @Override
+    FileRegion retain() {
+      return this;
+    }
+
+    @Override
+    public FileRegion retain(int increment) {
+      return this;
+    }
+
+
+
+
+
+
     private final int writeCount;
     private final int writesPerCall;
     private int written;
@@ -129,6 +155,12 @@ public class MessageWithHeaderSuite {
       return 0;
     }
 
+    @Override
+    public long transferred() {
+      return 8 * written;
+    }
+
+    
     @Override
     public long transfered() {
       return 8 * written;

@@ -33,6 +33,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.FileRegion;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.util.AbstractReferenceCounted;
+import io.netty.util.ReferenceCounted;
 
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
@@ -135,6 +136,31 @@ class SaslEncryption {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
+
+    @Override
+    public FileRegion touch() {
+      return region;
+    }
+
+    @Override
+    public FileRegion touch(Object hint) {
+      return region;
+    }
+
+    @Override
+    public FileRegion retain() {
+      return region;
+    }
+    
+    @Override
+    public FileRegion retain(int increment) {
+      return region;
+    }
+
+    @Override
+    public long transferred() {
+      return 0;
+    }
 
     /**
      * A channel used to buffer input data for encryption. The channel has an upper size bound
