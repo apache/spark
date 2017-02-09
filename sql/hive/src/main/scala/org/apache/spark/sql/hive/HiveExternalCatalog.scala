@@ -917,11 +917,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       newSpec: TablePartitionSpec): Path = {
     import ExternalCatalogUtils.getPartitionPathString
 
-    var totalPath = tablePath
+    var currentFullPath = tablePath
     partCols.foreach { col =>
       val partValue = newSpec(col)
       val expectedPartitionString = getPartitionPathString(col, partValue)
-      val expectedPartitionPath = new Path(totalPath, expectedPartitionString)
+      val expectedPartitionPath = new Path(currentFullPath, expectedPartitionString)
 
       if (fs.exists(expectedPartitionPath)) {
         // It is possible that some parental partition directories already exist or doesn't need to
@@ -931,7 +931,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // just move `a=1/b=3` into `A=1` with new name `B=3`.
       } else {
         val actualPartitionString = getPartitionPathString(col.toLowerCase, partValue)
-        val actualPartitionPath = new Path(totalPath, actualPartitionString)
+        val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
           fs.rename(actualPartitionPath, expectedPartitionPath)
         } catch {
@@ -940,10 +940,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
               s"$actualPartitionPath to $expectedPartitionPath", e)
         }
       }
-      totalPath = expectedPartitionPath
+      currentFullPath = expectedPartitionPath
     }
 
-    totalPath
+    currentFullPath
   }
 
   override def alterPartitions(
