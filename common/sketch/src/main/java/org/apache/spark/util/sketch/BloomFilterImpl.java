@@ -227,7 +227,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
   }
 
   @Override
-  public BloomFilterImpl createUnion(BloomFilter other) throws IncompatibleUnionException {
+  public BloomFilterImpl union(BloomFilter other) throws IncompatibleUnionException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
       throw new IncompatibleUnionException("Cannot union null bloom filters");
@@ -258,7 +258,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException {
-    BloomFilterImpl union = createUnion(that);
+    BloomFilterImpl union = union(that);
 
     return this.approxItems() + that.approxItems() - union.approxItems();
   }

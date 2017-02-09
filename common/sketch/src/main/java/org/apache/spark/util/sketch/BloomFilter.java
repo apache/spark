@@ -159,7 +159,7 @@ public abstract class BloomFilter {
    *
    * @throws IncompatibleUnionException if either are null, different classes, or different size or number of hash functions
    */
-  public abstract BloomFilterImpl createUnionBloomFilter(BloomFilter other) throws IncompatibleUnionException;
+  public abstract BloomFilterImpl union(BloomFilter other) throws IncompatibleUnionException;
 
   /**
    * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
