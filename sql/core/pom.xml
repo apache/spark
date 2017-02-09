@@ -129,6 +129,19 @@
       <artifactId>parquet-avro</artifactId>
       <scope>test</scope>
     </dependency>
+    <!--
+      This version of avro test-dep is different from the one defined
+      in the parent pom. The parent pom has avro 1.7.7 test-dep for Hadoop.
+      Here, ParquetAvroCompatibilitySuite uses parquet-avro's AvroParquetWriter
+      which uses avro 1.8.0+ specific API. In Maven 3, we need to have
+      this here to have different versions for the same artifact.
+    -->
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+      <version>1.8.1</version>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>

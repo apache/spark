@@ -172,22 +172,6 @@ class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLR
         """
         return self._call_java("intercept")
 
-    @property
-    @since("2.2.0")
-    def numClasses(self):
-        """
-        Number of classes.
-        """
-        return self._call_java("numClasses")
-
-    @property
-    @since("2.2.0")
-    def numFeatures(self):
-        """
-        Number of features.
-        """
-        return self._call_java("numFeatures")
-
 
 @inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,

@@ -95,7 +95,7 @@ $env:MAVEN_OPTS = "-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 Pop-Location
 
 # ========================== Hadoop bin package
-$hadoopVer = "2.6.0"
+$hadoopVer = "2.6.5"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
