@@ -727,8 +727,8 @@ class DAGScheduler(
   /**
    * Cancel all jobs associated with a running or scheduled stage.
    */
-  def cancelStage(stageId: Int) {
-    eventProcessLoop.post(StageCancelled(stageId))
+  def cancelStage(stageId: Int, reason: String = "") {
+    eventProcessLoop.post(StageCancelled(stageId, reason))
   }
 
   /**
@@ -1377,12 +1377,17 @@ class DAGScheduler(
     }
   }
 
-  private[scheduler] def handleStageCancellation(stageId: Int) {
+  private[scheduler] def handleStageCancellation(stageId: Int, reason: String = "") {
     stageIdToStage.get(stageId) match {
       case Some(stage) =>
         val jobsThatUseStage: Array[Int] = stage.jobIds.toArray
         jobsThatUseStage.foreach { jobId =>
-          handleJobCancellation(jobId, s"because Stage $stageId was cancelled")
+          val reasonStr = if (reason != "") {
+            s"because $reason"
+          } else {
+            s"because Stage $stageId was cancelled"
+          }
+          handleJobCancellation(jobId, reasonStr)
         }
       case None =>
         logInfo("No active jobs to kill for Stage " + stageId)
@@ -1636,8 +1641,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case MapStageSubmitted(jobId, dependency, callSite, listener, properties) =>
       dagScheduler.handleMapStageSubmitted(jobId, dependency, callSite, listener, properties)
 
-    case StageCancelled(stageId) =>
-      dagScheduler.handleStageCancellation(stageId)
+    case StageCancelled(stageId, reason) =>
+      dagScheduler.handleStageCancellation(stageId, reason)
 
     case JobCancelled(jobId) =>
       dagScheduler.handleJobCancellation(jobId)
