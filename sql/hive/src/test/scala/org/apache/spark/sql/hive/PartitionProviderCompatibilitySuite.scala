@@ -19,8 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -479,6 +482,32 @@ class PartitionProviderCompatibilitySuite
       df2.write.partitionBy("P1", "P2").mode("append").saveAsTable("test")
       assert(spark.sql("select * from test").count() == 3)
       assert(spark.sql("show partitions test").count() == 5)
+    }
+  }
+
+  test("SPARK-19359: renaming partition should not leave useless directories") {
+    withTable("t", "t1") {
+      Seq((1, 2, 3)).toDF("id", "A", "B").write.partitionBy("A", "B").saveAsTable("t")
+      spark.sql("alter table t partition(A=2, B=3) rename to partition(A=4, B=5)")
+
+      var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      var tablePath = new Path(table.location)
+      val fs = tablePath.getFileSystem(spark.sessionState.newHadoopConf())
+      // the `A=2` directory is still there, we follow this behavior from hive.
+      assert(fs.listStatus(tablePath)
+        .filterNot(_.getPath.toString.contains("A=2")).count(_.isDirectory) == 1)
+      assert(fs.listStatus(new Path(tablePath, "A=4")).count(_.isDirectory) == 1)
+
+
+      Seq((1, 2, 3, 4)).toDF("id", "A", "b", "C").write.partitionBy("A", "b", "C").saveAsTable("t1")
+      spark.sql("alter table t1 partition(A=2, b=3, C=4) rename to partition(A=4, b=5, C=6)")
+      table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      tablePath = new Path(table.location)
+      // the `A=2` directory is still there, we follow this behavior from hive.
+      assert(fs.listStatus(tablePath)
+        .filterNot(_.getPath.toString.contains("A=2")).count(_.isDirectory) == 1)
+      assert(fs.listStatus(new Path(tablePath, "A=4")).count(_.isDirectory) == 1)
+      assert(fs.listStatus(new Path(new Path(tablePath, "A=4"), "b=5")).count(_.isDirectory) == 1)
     }
   }
 }
