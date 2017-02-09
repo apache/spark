@@ -157,12 +157,16 @@ public abstract class BloomFilter {
    * Unlike mergeInplace, this will not cause a mutation.
    * Callers must ensure the bloom filters are appropriately sized to avoid saturating them.
    *
-   * @throws IncompatibleUnionException if either are null, different classes, or different size or number of hash functions
+   * @param other The bloom filter to union this bloom filter with.
+   * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
    */
   public abstract BloomFilterImpl union(BloomFilter other) throws IncompatibleUnionException;
 
   /**
    * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
+   *
+   * @param other The bloom filter to intersect this bloom filter with.
+   * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
    */
   public abstract double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException;
 
