@@ -249,7 +249,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
       throw new IncompatibleUnionException("Cannot union bloom filters with different number of hash functions");
     }
 
-    BloomFilterImpl bfUnion = (BloomFilterImpl)BloomFilter.create(bitSize());
+    BloomFilterImpl bfUnion = (BloomFilterImpl)BloomFilter.create(bitSize()/Long.SIZE);
 
     bfUnion.bits.putAll(this.bits);
     bfUnion.bits.putAll(that.bits);
