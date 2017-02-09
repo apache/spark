@@ -363,6 +363,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
 
+    val taskContext = ctx.freshName("taskContext")
+    ctx.addMutableState("TaskContext", taskContext, s"$taskContext = TaskContext.get();")
+
     // In order to periodically update the metrics without inflicting performance penalty, this
     // operator produces elements in batches. After a batch is complete, the metrics are updated
     // and a new batch is started.
@@ -443,7 +446,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     if (shouldStop()) return;
       |   }
       |
-      |   if (TaskContext.get().isInterrupted()) {
+      |   if ($taskContext.isInterrupted()) {
       |     throw new TaskKilledException();
       |   }
       |

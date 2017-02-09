@@ -149,8 +149,14 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
           spark.range(100000L).crossJoin(spark.range(100000L))
             .toDF("a", "b").agg(sum("a"), sum("b")).collect()
         }
-        val msg = if (ex.getCause() != null) ex.getCause().getMessage() else ex.getMessage()
-        assert(msg.contains("cancelled"))
+        ex.getCause() match {
+          case null =>
+            assert(ex.getMessage().contains("cancelled"))
+          case cause: SparkException =>
+            assert(cause.getMessage().contains("cancelled"))
+          case cause: Throwable =>
+            fail("Expected the casue to be SparkException, got " + cause.toString() + " instead.")
+        }
       }
       eventually(timeout(20.seconds)) {
         assert(sparkContext.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
