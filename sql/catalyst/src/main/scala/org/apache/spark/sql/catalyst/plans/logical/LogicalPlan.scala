@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystConf
@@ -301,6 +304,11 @@ abstract class LeafNode extends LogicalPlan {
   override def producedAttributes: AttributeSet = outputSet
 }
 
+object UnaryNode {
+  private[spark] lazy val taskSupport =
+    new ForkJoinTaskSupport(new ForkJoinPool(8))
+}
+
 /**
  * A logical plan node with single child.
  */
@@ -314,19 +322,29 @@ abstract class UnaryNode extends LogicalPlan {
    * expressions with the corresponding alias
    */
   protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
-    var additionalConstraints = Set.empty[Expression]
-    val attrs = projectList.collect {
-        case a @ Alias(e, _) => (e, a.toAttribute)
-    }
+    val relativeReferences = AttributeSet(projectList.collect {
+      case a: Alias => a
+    }.flatMap(_.references))
+    val parAllConstraints = child.constraints.asInstanceOf[Set[Expression]].filter { constraint =>
+      constraint.references.intersect(relativeReferences).nonEmpty
+    }.par
+    parAllConstraints.tasksupport = UnaryNode.taskSupport
 
-    // For every alias in `projectList`, replace the reference in constraints by its attribute.
-    child.constraints.asInstanceOf[Set[Expression]].map(_ transform {
-      case expr: Expression =>
-        attrs.find(attrPair => attrPair._1.semanticEquals(expr)).map { attrPair =>
-         additionalConstraints += EqualNullSafe(expr, attrPair._2)
-          attrPair._2
-        }.getOrElse(expr)
-    }) ++ additionalConstraints -- child.constraints
+    parAllConstraints.flatMap { constraint =>
+      var partConstraints = Set(constraint)
+      projectList.foreach {
+        case a @ Alias(e, _) =>
+          // For every alias in `projectList`, replace the reference in constraints
+          // by its attribute.
+          partConstraints ++= partConstraints.map(_ transform {
+            case expr: Expression if expr.semanticEquals(e) =>
+              a.toAttribute
+          })
+          partConstraints += EqualNullSafe(e, a.toAttribute)
+        case _ => // Don't change.
+      }
+      partConstraints
+    }.seq -- child.constraints
   }
 
   override protected def validConstraints: Set[Expression] = child.constraints
