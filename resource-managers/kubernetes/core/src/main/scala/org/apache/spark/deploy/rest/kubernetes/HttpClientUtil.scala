@@ -32,7 +32,8 @@ import org.apache.spark.status.api.v1.JacksonMessageWriter
 private[spark] object HttpClientUtil {
 
   def createClient[T: ClassTag](
-      uris: Array[String],
+      uris: Set[String],
+      maxRetriesPerServer: Int = 1,
       sslSocketFactory: SSLSocketFactory = SSLContext.getDefault.getSocketFactory,
       trustContext: X509TrustManager = null,
       readTimeoutMillis: Int = 20000,
@@ -45,12 +46,12 @@ private[spark] object HttpClientUtil {
       .registerModule(new DefaultScalaModule)
       .setDateFormat(JacksonMessageWriter.makeISODateFormat)
     objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    val target = new MultiServerFeignTarget[T](uris)
+    val target = new MultiServerFeignTarget[T](uris.toSeq, maxRetriesPerServer)
     val baseHttpClient = new feign.okhttp.OkHttpClient(httpClientBuilder.build())
     val resetTargetHttpClient = new Client {
       override def execute(request: Request, options: Options): Response = {
         val response = baseHttpClient.execute(request, options)
-        if (response.status() >= 200 && response.status() < 300) {
+        if (response.status() / 100 == 2) {
           target.reset()
         }
         response
