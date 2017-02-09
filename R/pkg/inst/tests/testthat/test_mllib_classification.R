@@ -27,10 +27,10 @@ absoluteSparkPath <- function(x) {
   file.path(sparkHome, x)
 }
 
-test_that("spark.linearSvc", {
+test_that("spark.svmLinear", {
   df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
-  model <- model <- spark.linearSvc(training,  Species ~ ., regParam = 0.01, maxIter = 10)
+  model <- model <- spark.svmLinear(training,  Species ~ ., regParam = 0.01, maxIter = 10)
   summary <- summary(model)
   expect_equal(summary$coefficients, list(-0.1563083, -0.460648, 0.2276626, 1.055085),
                tolerance = 1e-2)
@@ -59,7 +59,7 @@ test_that("spark.linearSvc", {
   feature <- c(1.1419053, 0.9194079, -0.9498666, -1.1069903, 0.2809776)
   data <- as.data.frame(cbind(label, feature))
   df <- createDataFrame(data)
-  model <- spark.linearSvc(df, label ~ feature, regParam = 0.1)
+  model <- spark.svmLinear(df, label ~ feature, regParam = 0.1)
   prediction <- collect(select(predict(model, df), "prediction"))
   expect_equal(sort(prediction$prediction), c("0.0", "0.0", "0.0", "1.0", "1.0"))
 
