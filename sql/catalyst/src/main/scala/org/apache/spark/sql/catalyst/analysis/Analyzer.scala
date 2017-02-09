@@ -299,15 +299,8 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        // The rightmost bit in the bitmasks corresponds to the last expression in groupByAliases
-        // with 0 indicating this expression is in the grouping set. The following line of code
-        // calculates the bitmask representing the expressions that absent in at least one grouping
-        // set (indicated by 1).
-        val nullBitmask = x.bitmasks.reduce(_ | _)
-
-        val attrLength = groupByAliases.length
-        val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          a.toAttribute.withNullability(((nullBitmask >> (attrLength - idx - 1)) & 1) == 1)
+        val expandedAttributes = groupByAliases.map { case a =>
+          a.toAttribute.withNullability(true)
         }
 
         val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
