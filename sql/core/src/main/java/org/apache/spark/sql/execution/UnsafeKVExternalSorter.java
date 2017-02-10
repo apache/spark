@@ -19,10 +19,6 @@ package org.apache.spark.sql.execution;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
-import java.util.List;
-
-import scala.collection.JavaConverters;
-import scala.collection.Seq;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -30,7 +26,6 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
-import org.apache.spark.sql.catalyst.expressions.SortOrder;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
@@ -63,7 +58,7 @@ public final class UnsafeKVExternalSorter {
       long pageSizeBytes,
       long numElementsForSpillThreshold) throws IOException {
     this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
-      numElementsForSpillThreshold, null, null);
+      numElementsForSpillThreshold, null);
   }
 
   public UnsafeKVExternalSorter(
@@ -74,34 +69,14 @@ public final class UnsafeKVExternalSorter {
       long pageSizeBytes,
       long numElementsForSpillThreshold,
       @Nullable BytesToBytesMap map) throws IOException {
-    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
-      numElementsForSpillThreshold, map, null);
-  }
-
-  public UnsafeKVExternalSorter(
-      StructType keySchema,
-      StructType valueSchema,
-      BlockManager blockManager,
-      SerializerManager serializerManager,
-      long pageSizeBytes,
-      long numElementsForSpillThreshold,
-      @Nullable BytesToBytesMap map,
-      @Nullable List<SortOrder> ordering) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
     final TaskContext taskContext = TaskContext.get();
 
     prefixComputer = SortPrefixUtils.createPrefixGenerator(keySchema);
     PrefixComparator prefixComparator = SortPrefixUtils.getPrefixComparator(keySchema);
-    KVComparator recordComparator = null;
-    if (ordering == null) {
-      recordComparator = new KVComparator(GenerateOrdering.create(keySchema), keySchema.length());
-    } else {
-      Seq<SortOrder> orderingSeq =
-        JavaConverters.collectionAsScalaIterableConverter(ordering).asScala().toSeq();
-      recordComparator = new KVComparator((BaseOrdering)GenerateOrdering.generate(orderingSeq),
-        ordering.size());
-    }
+    BaseOrdering ordering = GenerateOrdering.create(keySchema);
+    KVComparator recordComparator = new KVComparator(ordering, keySchema.length());
     boolean canUseRadixSort = keySchema.length() == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0));
 
@@ -162,7 +137,7 @@ public final class UnsafeKVExternalSorter {
         blockManager,
         serializerManager,
         taskContext,
-        recordComparator,
+        new KVComparator(ordering, keySchema.length()),
         prefixComparator,
         SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
