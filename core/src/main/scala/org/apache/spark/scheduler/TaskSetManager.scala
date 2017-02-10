@@ -697,13 +697,6 @@ private[spark] class TaskSetManager(
     val index = info.index
     info.markFinished(TaskState.FINISHED)
     removeRunningTask(tid)
-    // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
-    // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
-    // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
-    // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
-    // Note: "result.value()" only deserializes the value when it's called at the first time, so
-    // here "result.value()" just returns the value and won't block other threads.
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
     // Kill any other attempts for the same task (since those are unnecessary now that one
     // attempt completed successfully).
     for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
@@ -726,6 +719,14 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
+    // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
+    // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
+    // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
+    // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
+    // Note: "result.value()" only deserializes the value when it's called at the first time, so
+    // here "result.value()" just returns the value and won't block other threads.
+    sched.dagScheduler.taskEnded(
+      tasks(index), Success, result.value(), result.accumUpdates, info, tasksSuccessful == numTasks)
     maybeFinishTaskSet()
   }
 
@@ -803,7 +804,8 @@ private[spark] class TaskSetManager(
         None
     }
 
-    sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
+    sched.dagScheduler.taskEnded(
+      tasks(index), reason, null, accumUpdates, info, tasksSuccessful == numTasks)
 
     if (successful(index)) {
       logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
@@ -882,10 +884,11 @@ private[spark] class TaskSetManager(
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
           addPendingTask(index)
-          // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
-          // stage finishes when a total of tasks.size tasks finish.
+          // Tell the DAGScheduler that this task's output is gone (because the executor it ran
+          // on died) so it will be re-executed.  This allows the DAGScheduler to update per-task
+          // state accordingly.
           sched.dagScheduler.taskEnded(
-            tasks(index), Resubmitted, null, Seq.empty, info)
+            tasks(index), Resubmitted, null, Seq.empty, info, allTasksInStageComplete = false)
         }
       }
     }
