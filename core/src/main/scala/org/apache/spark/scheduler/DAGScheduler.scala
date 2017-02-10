@@ -719,7 +719,7 @@ class DAGScheduler(
   private[scheduler] def doCancelAllJobs() {
     // Cancel all running jobs.
     runningStages.map(_.firstJobId).foreach(handleJobCancellation(_,
-      Some("as part of cancellation of all jobs")))
+      Option("as part of cancellation of all jobs")))
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
   }
@@ -786,7 +786,7 @@ class DAGScheduler(
     }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
-        Some("part of cancelled job group %s".format(groupId))))
+        Option("part of cancelled job group %s".format(groupId))))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
@@ -1389,7 +1389,7 @@ class DAGScheduler(
             case None =>
               s"because Stage $stageId was cancelled"
           }
-          handleJobCancellation(jobId, Some(reasonStr))
+          handleJobCancellation(jobId, Option(reasonStr))
         }
       case None =>
         logInfo("No active jobs to kill for Stage " + stageId)

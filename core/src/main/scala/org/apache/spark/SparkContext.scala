@@ -2211,7 +2211,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelJob(jobId: Int, reason: String): Unit = {
-    dagScheduler.cancelJob(jobId, Some(reason))
+    dagScheduler.cancelJob(jobId, Option(reason))
   }
 
   /**
@@ -2232,7 +2232,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
   def cancelStage(stageId: Int, reason: String): Unit = {
-    dagScheduler.cancelStage(stageId, Some(reason))
+    dagScheduler.cancelStage(stageId, Option(reason))
   }
 
   /**
