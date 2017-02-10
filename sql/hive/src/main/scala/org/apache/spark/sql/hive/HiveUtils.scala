@@ -61,14 +61,6 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  /**
-   * The property key that is used to store the raw hive type string in the metadata of StructField.
-   * For example, in the case where the Hive type is varchar, the type gets mapped to a string type
-   * in Spark SQL, but we need to preserve the original type in order to invoke the correct object
-   * inspector in Hive.
-   */
-  val hiveTypeString: String = "HIVE_TYPE_STRING"
-
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
@@ -465,8 +457,8 @@ private[spark] object HiveUtils extends Logging {
 
   /** Converts the native StructField to Hive's FieldSchema. */
   private def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
-      c.metadata.getString(HiveUtils.hiveTypeString)
+    val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
+      c.metadata.getString(HIVE_TYPE_STRING)
     } else {
       c.dataType.catalogString
     }
@@ -482,7 +474,7 @@ private[spark] object HiveUtils extends Logging {
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
 
-    val metadata = new MetadataBuilder().putString(HiveUtils.hiveTypeString, hc.getType).build()
+    val metadata = new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
     val field = StructField(
       name = hc.getName,
       dataType = columnType,
