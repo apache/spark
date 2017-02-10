@@ -41,6 +41,8 @@ Below is a list of the submodules for this cluster manager and what they do.
 
 Note that the integration test framework is currently being heavily revised and is subject to change.
 
+Note that currently the integration tests only run with Java 8.
+
 Running any of the integration tests requires including `kubernetes-integration-tests` profile in the build command. In
 order to prepare the environment for running the integration tests, the `pre-integration-test` step must be run in Maven
 on the `resource-managers/kubernetes/integration-tests` module:
