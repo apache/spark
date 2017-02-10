@@ -26,7 +26,11 @@ case class TypedUserDefinedFunction[T1: Encoder, R: Encoder](f: T1 => R) {
   def apply(exprs: Column*): Column = {
     val t1Encoder = encoderFor[T1]
     val rEncoder = encoderFor[R]
-    val expr1 = if (exprs.size == 0) lit(0) else if (exprs.size == 1) exprs.head else struct(exprs: _*)
+    val expr1 = exprs match {
+      case Seq() => lit(0)
+      case Seq(expr1) => expr1
+      case exprs => struct(exprs: _*)
+    }
     Column(TypedScalaUDF(f, t1Encoder, rEncoder, expr1.expr))
   }
 }
