@@ -1000,7 +1000,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val boundPredicate =
         InterpretedPredicate.create(predicates.reduce(And).transform {
           case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
+            val index = partitionSchema.indexWhere(_.name.toLowerCase == att.name.toLowerCase)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
       clientPrunedPartitions.filter { p => boundPredicate(p.toRow(partitionSchema)) }
