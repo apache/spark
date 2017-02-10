@@ -465,7 +465,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = DateTimeUtils.newDateFormat(format.toString, timeZone)
+    val df = DateTimeUtils.newDateFormat(format.toString, timeZone, isLenient = true)
     UTF8String.fromString(df.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
@@ -707,7 +707,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: DateFormat =
     try {
-      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
+      DateTimeUtils.newDateFormat(constFormat.toString, timeZone, isLenient = true)
     } catch {
       case NonFatal(_) => null
     }
@@ -734,8 +734,8 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(DateTimeUtils.newDateFormat(f.toString, timeZone)
-              .format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+            UTF8String.fromString(DateTimeUtils.newDateFormat(f.toString, timeZone,
+              isLenient = true).format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
           } catch {
             case NonFatal(_) => null
           }
