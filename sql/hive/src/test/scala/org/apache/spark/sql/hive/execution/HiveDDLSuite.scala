@@ -682,8 +682,8 @@ class HiveDDLSuite
         ))
       }
     }
-
   }
+
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"
@@ -850,12 +850,9 @@ class HiveDDLSuite
       withTable(targetTabName) {
         spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
           .createTempView(sourceViewName)
-        if (location.isEmpty) {
-          sql(s"CREATE  TABLE $targetTabName LIKE $sourceViewName ")
-        } else {
-          sql(s"CREATE TABLE $targetTabName " +
-            s"LIKE $sourceViewName LOCATION '${location.getOrElse("")}'")
-        }
+
+        val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause")
 
         val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
           TableIdentifier(sourceViewName))
@@ -884,12 +881,9 @@ class HiveDDLSuite
     withTable(sourceTabName, targetTabName) {
       spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
         .write.format("json").saveAsTable(sourceTabName)
-      if ( location.isEmpty ) {
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-      } else {
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName" +
-          s" LOCATION '${location.getOrElse("")}'")
-      }
+
+      val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
 
       val sourceTable =
         spark.sessionState.catalog.getTableMetadata(
@@ -925,12 +919,9 @@ class HiveDDLSuite
         spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
           .write.format("parquet").save(path)
         sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
-        if ( location.isEmpty ) {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-        } else {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName" +
-            s" LOCATION '${location.getOrElse("")}'")
-        }
+
+        val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
 
         // The source table should be an external data source table
         val sourceTable = spark.sessionState.catalog.getTableMetadata(
@@ -964,12 +955,8 @@ class HiveDDLSuite
     withTable(sourceTabName, targetTabName) {
       sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
 
-      if ( location.isEmpty ) {
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-      } else {
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName" +
-          s" LOCATION '${location.getOrElse("")}'")
-      }
+      val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
 
       val sourceTable = catalog.getTableMetadata(
         TableIdentifier(sourceTabName, Some("default")))
@@ -1017,12 +1004,8 @@ class HiveDDLSuite
                """.stripMargin)
         }
 
-        if ( location.isEmpty ) {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-        } else {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName" +
-            s" LOCATION '${location.getOrElse("")}'")
-        }
+        val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
 
         val sourceTable = catalog.getTableMetadata(
           TableIdentifier(sourceTabName, Some("default")))
@@ -1057,12 +1040,8 @@ class HiveDDLSuite
           .write.format("json").saveAsTable(sourceTabName)
         sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
 
-        if ( location.isEmpty ) {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
-        } else {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName " +
-            s"LOCATION '${location.getOrElse("")}'")
-        }
+        val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause")
 
         val sourceView = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(sourceViewName, Some("default")))
