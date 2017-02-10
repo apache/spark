@@ -1690,6 +1690,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("block creating duplicate temp table") {
+    withView("t_temp") {
+      sql("CREATE TEMPORARY TABLE t_temp (c1, c2) as select 1, 2")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CREATE TEMPORARY TABLE t_temp (c1, c2) as select 2, 3")
+      }.getMessage
+      assert(e.contains("already exists"))
+    }
+  }
+
   test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
     withTempPath { tempDir =>

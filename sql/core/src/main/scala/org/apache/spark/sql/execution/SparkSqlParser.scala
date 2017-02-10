@@ -425,7 +425,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
         logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
-        CreateTempViewUsing(table, schema, replace = true, global = false, provider, options)
+        // Since we don't support IF NOT EXISTS for temp table, we should not allow
+        // replacing existing temp table, that may accidentally remove a temp view in use.
+        CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
       } else {
         CreateTable(tableDesc, mode, None)
       }

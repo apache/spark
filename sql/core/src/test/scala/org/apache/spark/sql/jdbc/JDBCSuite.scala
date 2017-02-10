@@ -75,14 +75,14 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE foobar
+        |CREATE OR REPLACE TEMPORARY VIEW foobar
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE fetchtwo
+        |CREATE OR REPLACE TEMPORARY VIEW fetchtwo
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         ${JDBCOptions.JDBC_BATCH_FETCH_SIZE} '2')
@@ -90,7 +90,7 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE parts
+        |CREATE OR REPLACE TEMPORARY VIEW parts
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
@@ -105,7 +105,7 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE inttypes
+        |CREATE OR REPLACE TEMPORARY VIEW inttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
@@ -122,7 +122,7 @@ class JDBCSuite extends SparkFunSuite
     stmt.executeUpdate()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE strtypes
+        |CREATE OR REPLACE TEMPORARY VIEW strtypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
@@ -136,7 +136,7 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE timetypes
+        |CREATE OR REPLACE TEMPORARY VIEW timetypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
@@ -151,7 +151,7 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE flttypes
+        |CREATE OR REPLACE TEMPORARY VIEW flttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
@@ -168,7 +168,7 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-         |CREATE TEMPORARY TABLE nulltypes
+         |CREATE OR REPLACE TEMPORARY VIEW nulltypes
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
@@ -198,7 +198,7 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-         |CREATE TEMPORARY TABLE nullparts
+         |CREATE OR REPLACE TEMPORARY VIEW nullparts
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
          |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '3')
@@ -214,7 +214,7 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-         |CREATE TEMPORARY TABLE mixedCaseCols
+         |CREATE OR REPLACE TEMPORARY VIEW mixedCaseCols
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
@@ -371,7 +371,7 @@ class JDBCSuite extends SparkFunSuite
     // Regression test for bug SPARK-7345
     sql(
       s"""
-        |CREATE TEMPORARY TABLE renamed
+        |CREATE OR REPLACE TEMPORARY VIEW renamed
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)',
         |user 'testUser', password 'testPass')
@@ -589,7 +589,7 @@ class JDBCSuite extends SparkFunSuite
   test("SQL query as table name") {
     sql(
       s"""
-        |CREATE TEMPORARY TABLE hack
+        |CREATE OR REPLACE TEMPORARY VIEW hack
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable '(SELECT B, B*B FROM TEST.FLTTYPES)',
         |         user 'testUser', password 'testPass')
@@ -606,7 +606,7 @@ class JDBCSuite extends SparkFunSuite
     intercept[JdbcSQLException] {
       sql(
         s"""
-          |CREATE TEMPORARY TABLE abc
+          |CREATE OR REPLACE TEMPORARY VIEW abc
           |USING org.apache.spark.sql.jdbc
           |OPTIONS (url '$url', dbtable '(SELECT _ROWID_ FROM test.people)',
           |         user 'testUser', password 'testPass')
