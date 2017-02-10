@@ -54,13 +54,13 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     return this;
   }
 
-  public @Override
-  FileRegion retain() {
+  @Override
+  public FileRegion retain() {
     return this;
   }
 
-  public @Override
-  FileRegion retain(int increment) {
+  @Override
+  public FileRegion retain(int increment) {
     return this;
   }
 
