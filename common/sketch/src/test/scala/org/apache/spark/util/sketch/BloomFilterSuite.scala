@@ -101,13 +101,15 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
 
   def testApproxItems[T: ClassTag](): Unit = {
     test("approxItems") {
-      val filter = BloomFilter.create(10)
-
+      val filter1 = BloomFilter.create(10)
+      val filter2 = BloomFilter.create(10000)
       for (x <- 1 to 1000) {
-        filter.putLong(x)
+        filter1.putLong(x)
+        filter2.putLong(x)
       }
 
-      assert(filter.approxItems().isInfinite)
+      assert(filter1.approxItems().isInfinite)
+      assert(!filter2.approxItems().isInfinite)
     }
   }
 
