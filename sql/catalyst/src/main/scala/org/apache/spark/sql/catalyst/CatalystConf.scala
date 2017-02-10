@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.util.TimeZone
+
 import org.apache.spark.sql.catalyst.analysis._
 
 /**
@@ -32,9 +34,13 @@ trait CatalystConf {
   def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
 
+  def tableRelationCacheSize: Int
+
   def runSQLonFile: Boolean
 
   def warehousePath: String
+
+  def sessionLocalTimeZone: String
 
   /** If true, cartesian products between relations will be allowed for all
    * join types(inner, (left|right|full) outer).
@@ -65,8 +71,10 @@ case class SimpleCatalystConf(
     optimizerMaxIterations: Int = 100,
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
+    tableRelationCacheSize: Int = 1000,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,
-    warehousePath: String = "/user/hive/warehouse")
+    warehousePath: String = "/user/hive/warehouse",
+    sessionLocalTimeZone: String = TimeZone.getDefault().getID)
   extends CatalystConf

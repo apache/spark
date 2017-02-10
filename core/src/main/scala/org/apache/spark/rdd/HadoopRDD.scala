@@ -25,15 +25,7 @@ import scala.collection.immutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.mapred.FileSplit
-import org.apache.hadoop.mapred.InputFormat
-import org.apache.hadoop.mapred.InputSplit
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapred.JobID
-import org.apache.hadoop.mapred.RecordReader
-import org.apache.hadoop.mapred.Reporter
-import org.apache.hadoop.mapred.TaskAttemptID
-import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.util.ReflectionUtils
@@ -47,7 +39,7 @@ import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -229,11 +221,11 @@ class HadoopRDD[K, V](
       // creating RecordReader, because RecordReader's constructor might read some bytes
       private val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
         case _: FileSplit | _: CombineFileSplit =>
-          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+          Some(SparkHadoopUtil.get.getFSBytesReadOnThreadCallback())
         case _ => None
       }
 
-      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // We get our input bytes from thread-local Hadoop FileSystem statistics.
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
@@ -280,13 +272,9 @@ class HadoopRDD[K, V](
         (key, value)
       }
 
-      override def close() {
+      override def close(): Unit = {
         if (reader != null) {
           InputFileBlockHolder.unset()
-          // Close the reader and release it. Note: it's very important that we don't close the
-          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
-          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
-          // corruption issues when reading compressed input.
           try {
             reader.close()
           } catch {
@@ -326,18 +314,10 @@ class HadoopRDD[K, V](
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     val hsplit = split.asInstanceOf[HadoopPartition].inputSplit.value
-    val locs: Option[Seq[String]] = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
-      case Some(c) =>
-        try {
-          val lsplit = c.inputSplitWithLocationInfo.cast(hsplit)
-          val infos = c.getLocationInfo.invoke(lsplit).asInstanceOf[Array[AnyRef]]
-          HadoopRDD.convertSplitLocationInfo(infos)
-        } catch {
-          case e: Exception =>
-            logDebug("Failed to use InputSplitWithLocations.", e)
-            None
-        }
-      case None => None
+    val locs = hsplit match {
+      case lsplit: InputSplitWithLocationInfo =>
+        HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
+      case _ => None
     }
     locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
@@ -413,32 +393,12 @@ private[spark] object HadoopRDD extends Logging {
     }
   }
 
-  private[spark] class SplitInfoReflections {
-    val inputSplitWithLocationInfo =
-      Utils.classForName("org.apache.hadoop.mapred.InputSplitWithLocationInfo")
-    val getLocationInfo = inputSplitWithLocationInfo.getMethod("getLocationInfo")
-    val newInputSplit = Utils.classForName("org.apache.hadoop.mapreduce.InputSplit")
-    val newGetLocationInfo = newInputSplit.getMethod("getLocationInfo")
-    val splitLocationInfo = Utils.classForName("org.apache.hadoop.mapred.SplitLocationInfo")
-    val isInMemory = splitLocationInfo.getMethod("isInMemory")
-    val getLocation = splitLocationInfo.getMethod("getLocation")
-  }
-
-  private[spark] val SPLIT_INFO_REFLECTIONS: Option[SplitInfoReflections] = try {
-    Some(new SplitInfoReflections)
-  } catch {
-    case e: Exception =>
-      logDebug("SplitLocationInfo and other new Hadoop classes are " +
-          "unavailable. Using the older Hadoop location info code.", e)
-      None
-  }
-
-  private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Option[Seq[String]] = {
+  private[spark] def convertSplitLocationInfo(
+       infos: Array[SplitLocationInfo]): Option[Seq[String]] = {
     Option(infos).map(_.flatMap { loc =>
-      val reflections = HadoopRDD.SPLIT_INFO_REFLECTIONS.get
-      val locationStr = reflections.getLocation.invoke(loc).asInstanceOf[String]
+      val locationStr = loc.getLocation
       if (locationStr != "localhost") {
-        if (reflections.isInMemory.invoke(loc).asInstanceOf[Boolean]) {
+        if (loc.isInMemory) {
           logDebug(s"Partition $locationStr is cached by Hadoop.")
           Some(HDFSCacheTaskLocation(locationStr).toString)
         } else {

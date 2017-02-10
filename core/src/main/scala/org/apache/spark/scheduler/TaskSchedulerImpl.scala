@@ -54,7 +54,7 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    blacklistTrackerOpt: Option[BlacklistTracker],
+    private[scheduler] val blacklistTrackerOpt: Option[BlacklistTracker],
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
@@ -337,8 +337,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }.getOrElse(offers)
 
-    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
-    val shuffledOffers = Random.shuffle(filteredOffers)
+    val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -373,6 +372,14 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       hasLaunchedTask = true
     }
     return tasks
+  }
+
+  /**
+   * Shuffle offers around to avoid always placing tasks on the same workers.  Exposed to allow
+   * overriding in tests, so it can be deterministic.
+   */
+  protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
+    Random.shuffle(offers)
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
@@ -719,7 +726,11 @@ private[spark] object TaskSchedulerImpl {
 
   private def maybeCreateBlacklistTracker(sc: SparkContext): Option[BlacklistTracker] = {
     if (BlacklistTracker.isBlacklistEnabled(sc.conf)) {
-      Some(new BlacklistTracker(sc))
+      val executorAllocClient: Option[ExecutorAllocationClient] = sc.schedulerBackend match {
+        case b: ExecutorAllocationClient => Some(b)
+        case _ => None
+      }
+      Some(new BlacklistTracker(sc, executorAllocClient))
     } else {
       None
     }

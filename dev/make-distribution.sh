@@ -52,20 +52,6 @@ function exit_with_usage {
 # Parse arguments
 while (( "$#" )); do
   case $1 in
-    --hadoop)
-      echo "Error: '--hadoop' is no longer supported:"
-      echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3, hadoop-2.4, hadoop-2.6 and hadoop-2.7."
-      exit_with_usage
-      ;;
-    --with-yarn)
-      echo "Error: '--with-yarn' is no longer supported, use Maven option -Pyarn"
-      exit_with_usage
-      ;;
-    --with-hive)
-      echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
-      exit_with_usage
-      ;;
     --tgz)
       MAKE_TGZ=true
       ;;
@@ -220,6 +206,8 @@ cp -r "$SPARK_HOME/data" "$DISTDIR"
 if [ "$MAKE_PIP" == "true" ]; then
   echo "Building python distribution package"
   pushd "$SPARK_HOME/python" > /dev/null
+  # Delete the egg info file if it exists, this can cache older setup files.
+  rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
   python setup.py sdist
   popd > /dev/null
 else

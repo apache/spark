@@ -50,7 +50,7 @@ component-specific configuration namespaces used to override the default setting
   </tr>
   <tr>
     <td><code>spark.ssl.fs</code></td>
-    <td>HTTP file server and broadcast server</td>
+    <td>File download client (used to download jars and files from HTTPS-enabled servers).</td>
   </tr>
   <tr>
     <td><code>spark.ssl.ui</code></td>

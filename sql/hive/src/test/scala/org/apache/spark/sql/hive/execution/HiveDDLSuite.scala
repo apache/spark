@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.StructType
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
-  import spark.implicits._
+  import testImplicits._
 
   override def afterEach(): Unit = {
     try {
@@ -76,6 +76,25 @@ class HiveDDLSuite
       assert(!tableDirectoryExists(TableIdentifier(tabName)))
       sql(s"DROP TABLE IF EXISTS $tabName")
       sql(s"DROP VIEW IF EXISTS $tabName")
+    }
+  }
+
+  test("create a hive table without schema") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withTable("tab1", "tab2") {
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
+
+        var e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING hive") }.getMessage
+        assert(e.contains("Unable to infer the schema. The schema specification is required to " +
+          "create the table `default`.`tab1`"))
+
+        e = intercept[AnalysisException] {
+          sql(s"CREATE TABLE tab2 location '${tempDir.getCanonicalPath}'")
+        }.getMessage
+        assert(e.contains("Unable to infer the schema. The schema specification is required to " +
+          "create the table `default`.`tab2`"))
+      }
     }
   }
 
@@ -199,7 +218,7 @@ class HiveDDLSuite
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
     }
-    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+    assert(e.message == "Found duplicate column(s) in table definition of `default`.`tbl`: a")
   }
 
   test("add/drop partition with location - managed table") {
@@ -1192,7 +1211,7 @@ class HiveDDLSuite
         assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
 
         val e3 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tbl TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
+          sql(s"CREATE TABLE tbl (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
         }
         assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
       }
@@ -1425,6 +1444,17 @@ class HiveDDLSuite
         Seq(1 -> "a").toDF("i", "j").write.format("hive").save(dir.getAbsolutePath)
       }
       assert(e2.message.contains("Hive data source can only be used with tables"))
+
+      val e3 = intercept[AnalysisException] {
+        spark.readStream.format("hive").load(dir.getAbsolutePath)
+      }
+      assert(e3.message.contains("Hive data source can only be used with tables"))
+
+      val e4 = intercept[AnalysisException] {
+        spark.readStream.schema(new StructType()).parquet(dir.getAbsolutePath)
+          .writeStream.format("hive").start(dir.getAbsolutePath)
+      }
+      assert(e4.message.contains("Hive data source can only be used with tables"))
     }
   }
 
