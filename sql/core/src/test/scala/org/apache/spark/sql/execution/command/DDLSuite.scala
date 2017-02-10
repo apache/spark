@@ -1692,9 +1692,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("block creating duplicate temp table") {
     withView("t_temp") {
-      sql("CREATE TEMPORARY TABLE t_temp (c1, c2) as select 1, 2")
+      sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
       val e = intercept[TempTableAlreadyExistsException] {
-        sql("CREATE TEMPORARY TABLE t_temp (c1, c2) as select 2, 3")
+        sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
       }.getMessage
       assert(e.contains("already exists"))
     }
