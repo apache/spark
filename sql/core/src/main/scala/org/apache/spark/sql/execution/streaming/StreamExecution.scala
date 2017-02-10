@@ -218,6 +218,7 @@ class StreamExecution(
    * has been posted to all the listeners.
    */
   def start(): Unit = {
+    logInfo(s"Starting $prettyIdString. Use $checkpointRoot to store the query checkpoint.")
     microBatchThread.setDaemon(true)
     microBatchThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
