@@ -2489,6 +2489,13 @@ object SparkContext extends Logging {
     }
   }
 
+  /** Return the current active [[SparkContext]] if any. */
+  private[spark] def getActive: Option[SparkContext] = {
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      Option(activeContext.get())
+    }
+  }
+
   /**
    * Called at the beginning of the SparkContext constructor to ensure that no SparkContext is
    * running.  Throws an exception if a running context is detected and logs a warning if another
@@ -2745,11 +2752,12 @@ private object SparkMasterRegex {
 }
 
 /**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The getter for the writable class takes a ClassTag[T] in case this is a generic object
- * that doesn't know the type of T when it is created. This sounds strange but is necessary to
- * support converting subclasses of Writable to themselves (writableWritableConverter).
+ * A class encapsulating how to convert some type `T` from `Writable`. It stores both the `Writable`
+ * class corresponding to `T` (e.g. `IntWritable` for `Int`) and a function for doing the
+ * conversion.
+ * The getter for the writable class takes a `ClassTag[T]` in case this is a generic object
+ * that doesn't know the type of `T` when it is created. This sounds strange but is necessary to
+ * support converting subclasses of `Writable` to themselves (`writableWritableConverter()`).
  */
 private[spark] class WritableConverter[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
@@ -2800,9 +2808,10 @@ object WritableConverter {
 }
 
 /**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The Writable class will be used in `SequenceFileRDDFunctions`.
+ * A class encapsulating how to convert some type `T` to `Writable`. It stores both the `Writable`
+ * class corresponding to `T` (e.g. `IntWritable` for `Int`) and a function for doing the
+ * conversion.
+ * The `Writable` class will be used in `SequenceFileRDDFunctions`.
  */
 private[spark] class WritableFactory[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
