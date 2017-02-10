@@ -755,6 +755,10 @@ private[spark] class BlockManager(
   /**
    * Put a new block of serialized bytes to the block manager.
    *
+   * @param encrypt If true, asks the block manager to encrypt the data block before storing,
+   *                when I/O encryption is enabled. This is required for blocks that have been
+   *                read from unencrypted sources, since all the BlockManager read APIs
+   *                automatically do decryption.
    * @return true if the block was stored or false if an error occurred.
    */
   def putBytes[T: ClassTag](
