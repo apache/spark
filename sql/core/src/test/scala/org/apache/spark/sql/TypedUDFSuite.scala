@@ -29,6 +29,7 @@ class TypedUDFSuite extends QueryTest with SharedSQLContext {
   test("typedUdf") {
     import java.lang.{ Integer => JInt }
 
+    // this seems to use TypedScalaUDF.eval, not sure why
     val df1 = Seq((1, "a", 1: JInt), (2, "b", 2: JInt), (3, "c", null)).toDF("x", "y", "z").select(
       typedUdf{ () => false }.apply() as "f0",
       typedUdf{ x: Int => x * 2 }.apply('x) as "f1",
@@ -43,9 +44,16 @@ class TypedUDFSuite extends QueryTest with SharedSQLContext {
     df1.printSchema
     df1.explain
     df1.show
+    checkAnswer(df1, Seq(
+      Row(false, 2, "a!", Row(2, "a"), Row(2, "a"), 2, 2, 2, 3),
+      Row(false, 4, "b!", Row(3, "b"), Row(3, "b"), 3, 3, 3, 5),
+      Row(false, 6, "c!", Row(4, "c"), Row(4, "c"), 1, null, null, 7)
+    ))
 
+    // this seems to use TypedScalaUDF.doGenCode, not sure why
     val df2 = testData
-      .withColumn("z", udf{ (x: JInt) => if (x > 10) x else null }.apply('value) as 'z)
+      .filter("key < 4")
+      .withColumn("z", udf{ (x: JInt) => if (x < 3) x else null }.apply('value) as 'z)
       .select(
         typedUdf{ () => false }.apply() as "f0",
         typedUdf{ x: Int => x * 2 }.apply('key) as "f1",
@@ -60,6 +68,11 @@ class TypedUDFSuite extends QueryTest with SharedSQLContext {
     df2.printSchema
     df2.explain
     df2.show
+    checkAnswer(df2, Seq(
+      Row(false, 2, "1!", Row(2, "1"), Row(2, "1"), 2, 2, 2, 3),
+      Row(false, 4, "2!", Row(3, "2"), Row(3, "2"), 3, 3, 3, 5),
+      Row(false, 6, "3!", Row(4, "3"), Row(4, "3"), 1, null, null, 7)
+    ))
   }
 
 }

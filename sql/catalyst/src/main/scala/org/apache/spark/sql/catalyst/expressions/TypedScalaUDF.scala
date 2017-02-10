@@ -55,10 +55,19 @@ case class TypedScalaUDF[T1, R](
   def internalRow(x: Any): InternalRow = InternalRow(x)
 
   override def eval(input: InternalRow): Any = {
-    val rowIn = if (t1Encoder.flat || t1IsOption) InternalRow(child1.eval(input)) else child1.eval(input).asInstanceOf[InternalRow]
+    val eval1 = child1.eval(input)
+    //println("eval1 " + eval1)
+    val rowIn = if (t1Encoder.flat || t1IsOption) InternalRow(eval1) else eval1.asInstanceOf[InternalRow]
+    //println("rowIn" + rowIn)
     val t1 = boundT1Encoder.fromRow(rowIn)
-    val rowOut = rEncoder.toRow(function(t1))
-    if (rEncoder.flat || rIsOption) rowOut.get(0, dataType) else rowOut
+    //println("t1 " + t1)
+    val r = function(t1)
+    //println("r " + r)
+    val rowOut = rEncoder.toRow(r).copy() // not entirely sure why i need the copy but i do
+    //println("rowOut " + rowOut)
+    val result = if (rEncoder.flat || rIsOption) rowOut.get(0, dataType) else rowOut
+    //println("result " + result)
+    result
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -89,6 +98,7 @@ case class TypedScalaUDF[T1, R](
     // put it all in place
     ev.copy(code = s"""
       $evalCode1
+      //System.out.println("eval1 is " + ${eval1.value});
       $rowIn
       //System.out.println("rowIn is " + $rowInTerm);
       $t1
