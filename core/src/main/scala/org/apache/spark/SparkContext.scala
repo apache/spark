@@ -2207,10 +2207,11 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
+   * @param reason optional reason for cancellation
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
-  def cancelJob(jobId: Int) {
-    dagScheduler.cancelJob(jobId)
+  def cancelJob(jobId: Int, reason: String = "") {
+    dagScheduler.cancelJob(jobId, reason)
   }
 
   /**

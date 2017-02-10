@@ -696,9 +696,9 @@ class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(jobId: Int): Unit = {
+  def cancelJob(jobId: Int, reason: String = ""): Unit = {
     logInfo("Asked to cancel job " + jobId)
-    eventProcessLoop.post(JobCancelled(jobId))
+    eventProcessLoop.post(JobCancelled(jobId, reason))
   }
 
   /**
@@ -1644,8 +1644,8 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     case StageCancelled(stageId, reason) =>
       dagScheduler.handleStageCancellation(stageId, reason)
 
-    case JobCancelled(jobId) =>
-      dagScheduler.handleJobCancellation(jobId)
+    case JobCancelled(jobId, reason) =>
+      dagScheduler.handleJobCancellation(jobId, reason)
 
     case JobGroupCancelled(groupId) =>
       dagScheduler.handleJobGroupCancelled(groupId)
