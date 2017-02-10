@@ -64,7 +64,7 @@ class StringIndexerSuite
 
   test("StringIndexerUnseen") {
     val data = Seq((0, "a"), (1, "b"), (4, "b"))
-    val data2 = Seq((0, "a"), (1, "b"), (2, "c"))
+    val data2 = Seq((0, "a"), (1, "b"), (2, "c"), (3, "d"))
     val df = data.toDF("id", "label")
     val df2 = data2.toDF("id", "label")
     val indexer = new StringIndexer()
@@ -75,22 +75,32 @@ class StringIndexerSuite
     intercept[SparkException] {
       indexer.transform(df2).collect()
     }
-    val indexerSkipInvalid = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("labelIndex")
-      .setHandleInvalid("skip")
-      .fit(df)
+
+    indexer.setHandleInvalid("skip")
     // Verify that we skip the c record
-    val transformed = indexerSkipInvalid.transform(df2)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+    var transformed = indexer.transform(df2)
+    var attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("b", "a"))
-    val output = transformed.select("id", "labelIndex").rdd.map { r =>
+    val outputSkip = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 1, b -> 0
-    val expected = Set((0, 1.0), (1, 0.0))
-    assert(output === expected)
+    val expectedSkip = Set((0, 1.0), (1, 0.0))
+    assert(outputSkip === expectedSkip)
+
+    indexer.setHandleInvalid("keep")
+    // Verify that we keep the unseen records
+    transformed = indexer.transform(df2)
+    attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr.values.get === Array("b", "a"))
+    val outputKeep = transformed.select("id", "labelIndex").rdd.map { r =>
+      (r.getInt(0), r.getDouble(1))
+    }.collect().toSet
+    // a -> 1, b -> 0, c -> 2, d -> 3
+    val expectedKeep = Set((0, 1.0), (1, 0.0), (2, 2.0), (3, 2.0))
+    assert(outputKeep === expectedKeep)
   }
 
   test("StringIndexer with a numeric input column") {

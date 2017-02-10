@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
@@ -34,9 +34,34 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
-    with HasHandleInvalid {
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+  val SKIP_UNSEEN_LABEL: String = "skip"
+  val ERROR_UNSEEN_LABEL: String = "error"
+  val KEEP_UNSEEN_LABEL: String = "keep"
+  val supportedHandleInvalids: Array[String] =
+    Array(SKIP_UNSEEN_LABEL, ERROR_UNSEEN_LABEL, KEEP_UNSEEN_LABEL)
 
+  /**
+   * Param for how to handle unseen labels. Options are 'skip' (filter out rows with
+   * unseen labels), 'error' (throw an error), or 'keep' (map unseen labels with
+   * indices [numLabels]).
+   * Default: "error"
+   * @group param
+   */
+  @Since("2.1.0")
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
+    "unseen labels. Options are 'skip' (filter out rows with unseen labels), " +
+    "error (throw an error), or 'keep' (map unseen labels with indices [numLabels]).",
+    ParamValidators.inArray(supportedHandleInvalids))
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getHandleInvalid: String = $(handleInvalid)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, ERROR_UNSEEN_LABEL)
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
@@ -69,11 +94,6 @@ class StringIndexer @Since("1.4.0") (
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("strIdx"))
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
 
   /** @group setParam */
   @Since("1.4.0")
@@ -142,11 +162,6 @@ class StringIndexerModel (
   }
 
   /** @group setParam */
-  @Since("1.6.0")
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
-
-  /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
@@ -163,25 +178,28 @@ class StringIndexerModel (
     }
     transformSchema(dataset.schema, logging = true)
 
+    val metadata = NominalAttribute.defaultAttr
+      .withName($(outputCol)).withValues(labels).toMetadata()
+    // If we are skipping invalid records, filter them out.
+    val (filteredDataset, keepInvalid) = getHandleInvalid match {
+      case SKIP_UNSEEN_LABEL =>
+        val filterer = udf { label: String =>
+          labelToIndex.contains(label)
+        }
+        (dataset.where(filterer(dataset($(inputCol)))), false)
+      case _ => (dataset, getHandleInvalid == KEEP_UNSEEN_LABEL)
+    }
+
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
+      } else if (keepInvalid) {
+        labels.length
       } else {
         throw new SparkException(s"Unseen label: $label.")
       }
     }
 
-    val metadata = NominalAttribute.defaultAttr
-      .withName($(outputCol)).withValues(labels).toMetadata()
-    // If we are skipping invalid records, filter them out.
-    val filteredDataset = getHandleInvalid match {
-      case "skip" =>
-        val filterer = udf { label: String =>
-          labelToIndex.contains(label)
-        }
-        dataset.where(filterer(dataset($(inputCol))))
-      case _ => dataset
-    }
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
