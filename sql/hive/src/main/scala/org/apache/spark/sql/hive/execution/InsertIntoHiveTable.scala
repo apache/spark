@@ -50,10 +50,10 @@ import org.apache.spark.SparkException
  * blame Reynold for this! He was just moving code around!
  *
  * In the future we should converge the write path for Hive with the normal data source write path,
- * as defined in [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
+ * as defined in `org.apache.spark.sql.execution.datasources.FileFormatWriter`.
  *
  * @param table the logical plan representing the table. In the future this should be a
- *              [[org.apache.spark.sql.catalyst.catalog.CatalogTable]] once we converge Hive tables
+ *              `org.apache.spark.sql.catalyst.catalog.CatalogTable` once we converge Hive tables
  *              and data source tables.
  * @param partition a map from the partition key to the partition value (optional). If the partition
  *                  value is optional, dynamic partition insert will be performed.

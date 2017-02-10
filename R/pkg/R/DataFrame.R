@@ -323,10 +323,8 @@ setMethod("names",
 setMethod("names<-",
           signature(x = "SparkDataFrame"),
           function(x, value) {
-            if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
-              dataFrame(sdf)
-            }
+            colnames(x) <- value
+            x
           })
 
 #' @rdname columns
@@ -1831,6 +1829,8 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' Return subsets of SparkDataFrame according to given conditions
 #' @param x a SparkDataFrame.
 #' @param i,subset (Optional) a logical expression to filter on rows.
+#'                 For extract operator [[ and replacement operator [[<-, the indexing parameter for
+#'                 a single Column.
 #' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
@@ -1841,6 +1841,7 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
+#' @seealso \link{withColumn}
 #' @rdname subset
 #' @name subset
 #' @family subsetting functions
@@ -1858,6 +1859,10 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #'   subset(df, df$age %in% c(19, 30), 1:2)
 #'   subset(df, df$age %in% c(19), select = c(1,2))
 #'   subset(df, select = c(1,2))
+#'   # Columns can be selected and set
+#'   df[["age"]] <- 23
+#'   df[[1]] <- df$age
+#'   df[[2]] <- NULL # drop column
 #' }
 #' @note subset since 1.5.0
 setMethod("subset", signature(x = "SparkDataFrame"),
@@ -1982,7 +1987,7 @@ setMethod("selectExpr",
 #' @aliases withColumn,SparkDataFrame,character-method
 #' @rdname withColumn
 #' @name withColumn
-#' @seealso \link{rename} \link{mutate}
+#' @seealso \link{rename} \link{mutate} \link{subset}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1993,6 +1998,10 @@ setMethod("selectExpr",
 #' # Replace an existing column
 #' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
 #' newDF3 <- withColumn(newDF, "newCol", 42)
+#' # Use extract operator to set an existing or new column
+#' df[["age"]] <- 23
+#' df[[2]] <- df$col1
+#' df[[2]] <- NULL # drop column
 #' }
 #' @note withColumn since 1.4.0
 setMethod("withColumn",
@@ -3427,4 +3436,27 @@ setMethod("randomSplit",
               sdfs <- callJMethod(x@sdf, "randomSplit", normalized_list)
             }
             sapply(sdfs, dataFrame)
+          })
+
+#' getNumPartitions
+#'
+#' Return the number of partitions
+#'
+#' @param x A SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases getNumPartitions,SparkDataFrame-method
+#' @rdname getNumPartitions
+#' @name getNumPartitions
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- createDataFrame(cars, numPartitions = 2)
+#' getNumPartitions(df)
+#' }
+#' @note getNumPartitions since 2.1.1
+setMethod("getNumPartitions",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            callJMethod(callJMethod(x@sdf, "rdd"), "getNumPartitions")
           })

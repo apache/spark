@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType, TimestampType}
 
 class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -105,6 +105,16 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Row(1)) :: Nil)
   }
 
+  test("from_json with option") {
+    val df = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
+    val schema = new StructType().add("time", TimestampType)
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+  }
+
   test("from_json missing columns") {
     val df = Seq("""{"a": 1}""").toDS()
     val schema = new StructType().add("b", IntegerType)
@@ -129,6 +139,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(to_json($"a")),
       Row("""{"_1":1}""") :: Nil)
+  }
+
+  test("to_json with option") {
+    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+
+    checkAnswer(
+      df.select(to_json($"a", options)),
+      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
   test("to_json unsupported type") {
