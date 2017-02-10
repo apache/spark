@@ -53,9 +53,15 @@ private[scheduler] case class MapStageSubmitted(
   properties: Properties = null)
   extends DAGSchedulerEvent
 
-private[scheduler] case class StageCancelled(stageId: Int, reason: String) extends DAGSchedulerEvent
+private[scheduler] case class StageCancelled(
+    stageId: Int,
+    reason: Option[String])
+  extends DAGSchedulerEvent
 
-private[scheduler] case class JobCancelled(jobId: Int, reason: String) extends DAGSchedulerEvent
+private[scheduler] case class JobCancelled(
+    jobId: Int,
+    reason: Option[String])
+  extends DAGSchedulerEvent
 
 private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
 

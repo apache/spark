@@ -696,7 +696,7 @@ class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(jobId: Int, reason: String = ""): Unit = {
+  def cancelJob(jobId: Int, reason: Option[String]): Unit = {
     logInfo("Asked to cancel job " + jobId)
     eventProcessLoop.post(JobCancelled(jobId, reason))
   }
@@ -719,7 +719,7 @@ class DAGScheduler(
   private[scheduler] def doCancelAllJobs() {
     // Cancel all running jobs.
     runningStages.map(_.firstJobId).foreach(handleJobCancellation(_,
-      reason = "as part of cancellation of all jobs"))
+      Some("as part of cancellation of all jobs")))
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
   }
@@ -727,7 +727,7 @@ class DAGScheduler(
   /**
    * Cancel all jobs associated with a running or scheduled stage.
    */
-  def cancelStage(stageId: Int, reason: String = "") {
+  def cancelStage(stageId: Int, reason: Option[String]) {
     eventProcessLoop.post(StageCancelled(stageId, reason))
   }
 
@@ -785,7 +785,8 @@ class DAGScheduler(
       }
     }
     val jobIds = activeInGroup.map(_.jobId)
-    jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
+    jobIds.foreach(handleJobCancellation(_,
+        Some("part of cancelled job group %s".format(groupId))))
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
@@ -1377,29 +1378,30 @@ class DAGScheduler(
     }
   }
 
-  private[scheduler] def handleStageCancellation(stageId: Int, reason: String = "") {
+  private[scheduler] def handleStageCancellation(stageId: Int, reason: Option[String]) {
     stageIdToStage.get(stageId) match {
       case Some(stage) =>
         val jobsThatUseStage: Array[Int] = stage.jobIds.toArray
         jobsThatUseStage.foreach { jobId =>
-          val reasonStr = if (reason != "") {
-            s"because $reason"
-          } else {
-            s"because Stage $stageId was cancelled"
+          val reasonStr = reason match {
+            case Some(originalReason) =>
+              s"because $originalReason"
+            case None =>
+              s"because Stage $stageId was cancelled"
           }
-          handleJobCancellation(jobId, reasonStr)
+          handleJobCancellation(jobId, Some(reasonStr))
         }
       case None =>
         logInfo("No active jobs to kill for Stage " + stageId)
     }
   }
 
-  private[scheduler] def handleJobCancellation(jobId: Int, reason: String = "") {
+  private[scheduler] def handleJobCancellation(jobId: Int, reason: Option[String]) {
     if (!jobIdToStageIds.contains(jobId)) {
       logDebug("Trying to cancel unregistered job " + jobId)
     } else {
       failJobAndIndependentStages(
-        jobIdToActiveJob(jobId), "Job %d cancelled %s".format(jobId, reason))
+        jobIdToActiveJob(jobId), "Job %d cancelled %s".format(jobId, reason.getOrElse("")))
     }
   }
 
