@@ -472,6 +472,42 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("create view for json table") {
+    // json table is not hive-compatible, make sure the new flag fix it.
+    withView("testView") {
+      sql("CREATE VIEW testView AS SELECT id FROM jt")
+      checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+    }
+  }
+
+  test("create view for partitioned parquet table") {
+    // partitioned parquet table is not hive-compatible, make sure the new flag fix it.
+    withTable("parTable") {
+      withView("testView") {
+        val df = Seq(1 -> "a").toDF("i", "j")
+        df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
+        sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
+        checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
+      }
+    }
+  }
+
+  test("create view for joined tables") {
+    // make sure the new flag can handle some complex cases like join and schema change.
+    withTable("jt1", "jt2") {
+      spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
+      spark.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
+      withView("testView") {
+        sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+
+        val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
+        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+      }
+    }
+  }
+
   test("CTE within view") {
     withView("cte_view") {
       sql("CREATE VIEW cte_view AS WITH w AS (SELECT 1 AS n) SELECT n FROM w")
