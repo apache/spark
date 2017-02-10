@@ -53,32 +53,24 @@ if __name__ == "__main__":
     model = mh.fit(dfA)
 
     # Feature Transformation
-    print("The hashed dataset where hashed values are stored in the column 'values':")
+    print("The hashed dataset where hashed values are stored in the column 'hashes':")
     model.transform(dfA).show()
 
-    # Cache the transformed columns
-    transformedA = model.transform(dfA).cache()
-    transformedB = model.transform(dfB).cache()
-
-    # Approximate similarity join
+    # Compute the locality sensitive hashes for the input rows, then perform approximate
+    # similarity join.
+    # We could avoid computing hashes by passing in the already-transformed dataset, e.g.
+    # `model.approxSimilarityJoin(transformedA, transformedB, 0.6)`
     print("Approximately joining dfA and dfB on distance smaller than 0.6:")
     model.approxSimilarityJoin(dfA, dfB, 0.6)\
         .select("datasetA.id", "datasetB.id", "distCol").show()
-    print("Joining cached datasets to avoid recomputing the hash values:")
-    model.approxSimilarityJoin(transformedA, transformedB, 0.6)\
-        .select("datasetA.id", "datasetB.id", "distCol").show()
 
-    # Self Join
-    print("Approximately self join of dfB on distance smaller than 0.6:")
-    model.approxSimilarityJoin(dfA, dfA, 0.6).filter("datasetA.id < datasetB.id")\
-        .select("datasetA.id", "datasetB.id", "distCol").show()
-
-    # Approximate nearest neighbor search
+    # Compute the locality sensitive hashes for the input rows, then perform approximate nearest
+    # neighbor search.
+    # We could avoid computing hashes by passing in the already-transformed dataset, e.g.
+    # `model.approxNearestNeighbors(transformedA, key, 2)`
+    # It may return less than 2 rows because of lack of elements in the hash buckets.
     print("Approximately searching dfA for 2 nearest neighbors of the key:")
     model.approxNearestNeighbors(dfA, key, 2).show()
-    print("Note: It may return less than 2 rows because of lack of elements in the hash buckets.")
-    print("Searching cached dataset to avoid recomputing the hash values:")
-    model.approxNearestNeighbors(transformedA, key, 2).show()
 
     # $example off$
 

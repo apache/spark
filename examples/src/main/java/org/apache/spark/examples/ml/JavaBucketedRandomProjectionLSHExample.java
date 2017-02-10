@@ -77,27 +77,22 @@ public class JavaBucketedRandomProjectionLSHExample {
     BucketedRandomProjectionLSHModel model = mh.fit(dfA);
 
     // Feature Transformation
-    System.out.println("The hashed dataset where hashed values are stored in the column 'values':");
+    System.out.println("The hashed dataset where hashed values are stored in the column 'hashes':");
     model.transform(dfA).show();
-    // Cache the transformed columns
-    Dataset<Row> transformedA = model.transform(dfA).cache();
-    Dataset<Row> transformedB = model.transform(dfB).cache();
 
-    // Approximate similarity join
+    // Compute the locality sensitive hashes for the input rows, then perform approximate
+    // similarity join.
+    // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
+    // `model.approxSimilarityJoin(transformedA, transformedB, 1.5)`
     System.out.println("Approximately joining dfA and dfB on distance smaller than 1.5:");
     model.approxSimilarityJoin(dfA, dfB, 1.5).show();
-    System.out.println("Joining cached datasets to avoid recomputing the hash values:");
-    model.approxSimilarityJoin(transformedA, transformedB, 1.5).show();
 
-    // Self Join
-    System.out.println("Approximately self join of dfB on distance smaller than 2.5:");
-    model.approxSimilarityJoin(dfA, dfA, 2.5).filter("datasetA.id < datasetB.id").show();
-
-    // Approximate nearest neighbor search
+    // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
+    // neighbor search.
+    // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
+    // `model.approxNearestNeighbors(transformedA, key, 2)`
     System.out.println("Approximately searching dfA for 2 nearest neighbors of the key:");
     model.approxNearestNeighbors(dfA, key, 2).show();
-    System.out.println("Searching cached dataset to avoid recomputing the hash values:");
-    model.approxNearestNeighbors(transformedA, key, 2).show();
     // $example off$
 
     spark.stop();
