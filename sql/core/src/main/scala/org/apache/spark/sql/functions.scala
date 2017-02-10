@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.expressions.{UserDefinedFunction, TypedUserDefinedFunction}
+import org.apache.spark.sql.expressions.{TypedUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -3272,6 +3272,9 @@ object functions {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
 
+  // scalastyle:off parameter.number
+  // scalastyle:off line.size.limit
+
   def typedUdf[R: Encoder](f: Function0[R]): TypedUserDefinedFunction[Int, R] = {
     implicit val intEncoder: Encoder[Int] = Encoders.scalaInt
     TypedUserDefinedFunction{ (i: Int) => f() }
@@ -3290,5 +3293,8 @@ object functions {
     implicit val t1t2t3Encoder: Encoder[(T1, T2, T3)] = ExpressionEncoder.tuple(encoderFor[T1], encoderFor[T2], encoderFor[T3])
     TypedUserDefinedFunction(f.tupled)
   }
+
+  // scalastyle:on parameter.number
+  // scalastyle:on line.size.limit
 }
 

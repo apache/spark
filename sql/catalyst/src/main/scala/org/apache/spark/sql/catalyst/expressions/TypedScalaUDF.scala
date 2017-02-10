@@ -35,20 +35,20 @@ case class TypedScalaUDF[T1, R](
   override def children: Seq[Expression] = Seq(child1)
 
   // something is wrong with encoders and Option so this is used to handle that
-  private val t1IsOption = t1Encoder.clsTag == implicitly[ClassTag[Option[_]]] 
+  private val t1IsOption = t1Encoder.clsTag == implicitly[ClassTag[Option[_]]]
   private val rIsOption = rEncoder.clsTag == implicitly[ClassTag[Option[_]]]
 
-  override val dataType: DataType =
-    if (rEncoder.flat || rIsOption)
-      rEncoder.schema.head.dataType
-    else
-      rEncoder.schema
+  override val dataType: DataType = if (rEncoder.flat || rIsOption) {
+    rEncoder.schema.head.dataType
+  } else {
+    rEncoder.schema
+  }
 
-  override val nullable: Boolean =
-    if (rEncoder.flat)
-      rEncoder.schema.head.nullable
-    else
-      true
+  override val nullable: Boolean = if (rEncoder.flat) {
+    rEncoder.schema.head.nullable
+  } else {
+    true
+  }
 
   val boundT1Encoder: ExpressionEncoder[T1] = t1Encoder.resolveAndBind()
 
@@ -56,60 +56,70 @@ case class TypedScalaUDF[T1, R](
 
   override def eval(input: InternalRow): Any = {
     val eval1 = child1.eval(input)
-    //println("eval1 " + eval1)
-    val rowIn = if (t1Encoder.flat || t1IsOption) InternalRow(eval1) else eval1.asInstanceOf[InternalRow]
-    //println("rowIn" + rowIn)
+    // println("eval1 " + eval1)
+    val rowIn = if (t1Encoder.flat || t1IsOption) {
+      InternalRow(eval1)
+    } else {
+      eval1.asInstanceOf[InternalRow]
+    }
+    // println("rowIn" + rowIn)
     val t1 = boundT1Encoder.fromRow(rowIn)
-    //println("t1 " + t1)
+    // println("t1 " + t1)
     val r = function(t1)
-    //println("r " + r)
+    // println("r " + r)
     val rowOut = rEncoder.toRow(r).copy() // not entirely sure why i need the copy but i do
-    //println("rowOut " + rowOut)
+    // println("rowOut " + rowOut)
     val result = if (rEncoder.flat || rIsOption) rowOut.get(0, dataType) else rowOut
-    //println("result " + result)
+    // println("result " + result)
     result
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val typedScalaUDF = ctx.addReferenceObj("typedScalaUDF", this, classOf[TypedScalaUDF[_, _]].getName)
+    val typedScalaUDF = ctx.addReferenceObj("typedScalaUDF", this,
+      classOf[TypedScalaUDF[_, _]].getName)
 
     // codegen for children expressions
     val eval1 = child1.genCode(ctx)
     val evalCode1 = eval1.code.mkString
 
     // codegen for this expression
+    val rowClass = classOf[InternalRow].getName
     val rowInTerm = ctx.freshName("rowIn")
-    val rowIn = if (t1Encoder.flat || t1IsOption)
-      s"${classOf[InternalRow].getName} $rowInTerm = ${eval1.isNull} ? ${typedScalaUDF}.internalRow(null) : ${typedScalaUDF}.internalRow(${eval1.value});"
-    else
-      s"${classOf[InternalRow].getName} $rowInTerm = (${classOf[InternalRow].getName}) ${eval1.value};"
+    val rowIn = if (t1Encoder.flat || t1IsOption) {
+      s"""$rowClass $rowInTerm = ${eval1.isNull} ?
+            ${typedScalaUDF}.internalRow(null) :
+            ${typedScalaUDF}.internalRow(${eval1.value});"""
+    } else {
+      s"""$rowClass $rowInTerm =($rowClass) ${eval1.value};"""
+    }
     val t1Term = ctx.freshName("t1")
     val t1 = s"Object $t1Term = ${typedScalaUDF}.boundT1Encoder().fromRow($rowInTerm);"
     val rTerm = ctx.freshName("r")
     val r = s"Object $rTerm = ${typedScalaUDF}.function().apply($t1Term);"
     val rowOutTerm = ctx.freshName("rowOut")
-    val rowOut = s"${classOf[InternalRow].getName} $rowOutTerm = ${typedScalaUDF}.rEncoder().toRow($rTerm);"
+    val rowOut = s"$rowClass $rowOutTerm = ${typedScalaUDF}.rEncoder().toRow($rTerm);"
     val resultTerm = ctx.freshName("result")
-    val result = if (rEncoder.flat || rIsOption)
+    val result = if (rEncoder.flat || rIsOption) {
       s"Object $resultTerm = ${rowOutTerm}.get(0, ${typedScalaUDF}.dataType());"
-    else
+    } else {
       s"Object $resultTerm = ${rowOutTerm};"
+    }
 
     // put it all in place
     ev.copy(code = s"""
       $evalCode1
-      //System.out.println("eval1 is " + ${eval1.value});
+      // System.out.println("eval1 is " + ${eval1.value});
       $rowIn
-      //System.out.println("rowIn is " + $rowInTerm);
+      // System.out.println("rowIn is " + $rowInTerm);
       $t1
-      //System.out.println("t1 is " + $t1Term);
+      // System.out.println("t1 is " + $t1Term);
       $r
-      //System.out.println("r is " + $rTerm);
+      // System.out.println("r is " + $rTerm);
       $rowOut
-      //System.out.println("rowOut is " + $rowOutTerm);
+      // System.out.println("rowOut is " + $rowOutTerm);
       $result
-      //System.out.println("result is " + $resultTerm);
-      
+      // System.out.println("result is " + $resultTerm);
+
       boolean ${ev.isNull} = $resultTerm == null;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {

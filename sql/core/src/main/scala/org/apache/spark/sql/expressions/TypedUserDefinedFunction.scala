@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.catalyst.expressions.TypedScalaUDF
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.{Column, Encoder}
+import org.apache.spark.sql.catalyst.expressions.TypedScalaUDF
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.functions.{lit, struct}
 
 case class TypedUserDefinedFunction[T1: Encoder, R: Encoder](f: T1 => R) {

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions.{col, typedUdf, udf}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.functions.{ col, udf, typedUdf }
 
 case class Blah(a: Int, b: String)
 
@@ -41,9 +41,9 @@ class TypedUDFSuite extends QueryTest with SharedSQLContext {
       typedUdf[JInt, JInt]{ z => if (z != null) z + 1 else null }.apply('z) as "f7",
       typedUdf{ x: Int => x + 1 }.apply(col("x") * 2) as "f8"
     )
-    df1.printSchema
-    df1.explain
-    df1.show
+    // df1.printSchema
+    // df1.explain
+    // df1.show
     checkAnswer(df1, Seq(
       Row(false, 2, "a!", Row(2, "a"), Row(2, "a"), 2, 2, 2, 3),
       Row(false, 4, "b!", Row(3, "b"), Row(3, "b"), 3, 3, 3, 5),
@@ -65,9 +65,9 @@ class TypedUDFSuite extends QueryTest with SharedSQLContext {
         typedUdf[JInt, JInt]{ z => if (z != null) z + 1 else null }.apply('z) as "f7",
         typedUdf{ x: Int => x + 1 }.apply(col("key") * 2) as "f8"
       )
-    df2.printSchema
-    df2.explain
-    df2.show
+    // df2.printSchema
+    // df2.explain
+    // df2.show
     checkAnswer(df2, Seq(
       Row(false, 2, "1!", Row(2, "1"), Row(2, "1"), 2, 2, 2, 3),
       Row(false, 4, "2!", Row(3, "2"), Row(3, "2"), 3, 3, 3, 5),
