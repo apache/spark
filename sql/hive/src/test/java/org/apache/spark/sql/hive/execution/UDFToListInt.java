@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 public class UDFToListInt extends UDF {
-    public ArrayList<Integer> evaluate(Object o) {
-        return new ArrayList<>(Arrays.asList(1, 2, 3));
-    }
+  public ArrayList<Integer> evaluate(Object o) {
+    return new ArrayList<>(Arrays.asList(1, 2, 3));
+  }
 }

@@ -25,7 +25,7 @@ import java.util.Map;
  * UDF that returns a raw (non-parameterized) java Map.
  */
 public class UDFRawMap extends UDF {
-    public Map evaluate(Object o) {
-        return Collections.singletonMap("a", "1");
-    }
+  public Map evaluate(Object o) {
+    return Collections.singletonMap("a", "1");
+  }
 }

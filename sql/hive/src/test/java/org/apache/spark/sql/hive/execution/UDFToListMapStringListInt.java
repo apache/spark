@@ -25,10 +25,10 @@ import java.util.*;
  * values.
  */
 public class UDFToListMapStringListInt extends UDF {
-    public List<Map<String, List<Integer>>> evaluate(Object o) {
-        final Map<String, List<Integer>> map = new HashMap<>();
-        map.put("a", Arrays.asList(1, 2));
-        map.put("b", Arrays.asList(3, 4));
-        return Collections.singletonList(map);
-    }
+  public List<Map<String, List<Integer>>> evaluate(Object o) {
+    final Map<String, List<Integer>> map = new HashMap<>();
+    map.put("a", Arrays.asList(1, 2));
+    map.put("b", Arrays.asList(3, 4));
+    return Collections.singletonList(map);
+  }
 }
