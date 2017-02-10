@@ -497,7 +497,7 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
   override def dataType: DataType = schema
 
   override def nullSafeEval(json: Any): Any = {
-    try parser.parse(json.toString).head catch {
+    try parser.parse(json.toString).headOption.orNull catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
