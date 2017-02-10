@@ -225,6 +225,14 @@ private[hive] trait HiveInspectors {
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
 
+    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.List[_]]) =>
+      val Array(elementType) = p.getActualTypeArguments
+      ArrayType(javaTypeToDataType(elementType))
+
+    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.Map[_, _]]) =>
+      val Array(keyType, valueType) = p.getActualTypeArguments
+      MapType(javaTypeToDataType(keyType), javaTypeToDataType(valueType))
+
     // raw java list type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.List[_]]) =>
       throw new AnalysisException(
@@ -234,14 +242,6 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if isSubClassOf(c, classOf[java.util.Map[_, _]]) =>
       throw new AnalysisException(
         "Raw map type in java is unsupported because Spark cannot infer key and value types.")
-
-    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.List[_]]) =>
-      val Array(elementType) = p.getActualTypeArguments
-      ArrayType(javaTypeToDataType(elementType))
-
-    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.Map[_, _]]) =>
-      val Array(keyType, valueType) = p.getActualTypeArguments
-      MapType(javaTypeToDataType(keyType), javaTypeToDataType(valueType))
 
     case _: WildcardType =>
       throw new AnalysisException(
