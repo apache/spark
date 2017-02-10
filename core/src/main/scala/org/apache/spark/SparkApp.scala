@@ -28,13 +28,13 @@ private[spark] trait SparkApp {
    * The Client should implement this as entry method to provide application,
    * spark conf and system configuration.
    *
-   * @param args    - all argouments for SparkApp.
+   * @param args    - all arguments for SparkApp.
    * @param conf    - Spark Configuration.
-   * @param envVars - system environment Variables.
+   * @param envvars - system environment Variables.
    */
   def sparkMain(
     args: Array[String],
     conf: scala.collection.immutable.Map[String, String],
-    envVars: scala.collection.immutable.Map[String, String]): Unit
+    envvars: scala.collection.immutable.Map[String, String]): Unit
 
 }

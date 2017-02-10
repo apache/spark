@@ -1170,7 +1170,7 @@ private object Client extends SparkApp with Logging {
   override def sparkMain(
     args: Array[String],
     conf: scala.collection.immutable.Map[String, String],
-    envVars: scala.collection.immutable.Map[String, String]): Unit = {
+    envvars: scala.collection.immutable.Map[String, String]): Unit = {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
@@ -1180,14 +1180,9 @@ private object Client extends SparkApp with Logging {
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
 
-    val threadEnabled: Boolean = conf.get(SparkLauncher.LAUNCHER_INTERNAL_THREAD_ENABLED).
-      getOrElse("false").toBoolean
-
     val sparkConf = new SparkConf
-    if (threadEnabled) {
-      for ((key, value) <- conf if key.startsWith("spark.")) {
-        sparkConf.set(key, value, true)
-      }
+    for ((key, value) <- conf if key.startsWith("spark.")) {
+      sparkConf.set(key, value, true)
     }
 
     // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
@@ -1195,7 +1190,7 @@ private object Client extends SparkApp with Logging {
     sparkConf.remove("spark.jars")
     sparkConf.remove("spark.files")
     val argsForClient = new ClientArguments(args)
-    new Client(argsForClient, sparkConf, envVars).run()
+    new Client(argsForClient, sparkConf, envvars).run()
   }
 
   // Alias for the user jar

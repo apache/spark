@@ -25,7 +25,7 @@ import java.util.List;
  * This class used to by {@link SparkLauncher#startApplicationAsThread(SparkAppHandle.Listener...)}
  * <p>
  * This class to start Spark applications programmatically as a Thread. This uses reflection and relies
- * on find SparkSubmit main class.
+ * on the SparkSubmit main class being in the classpath.
  * </p>
  */
 class SparkSubmitRunner implements Runnable {

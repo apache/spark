@@ -25,8 +25,8 @@
  *
  * <p>
  * The {@link org.apache.spark.launcher.SparkLauncher#startApplication(
- * org.apache.spark.launcher.SparkAppHandle.Listener...)} can be used to start Spark and provide
- * a handle to monitor and control the running application:
+ * org.apache.spark.launcher.SparkAppHandle.Listener...)} can be used to start Spark application
+ * as a process and providea handle to monitor and control the running application:
  * </p>
  *
  * <pre>
@@ -49,7 +49,7 @@
  * </pre>
  *
  * <p>
- * Currently, for currently while launching spark application with
+ * Currently, while launching spark application with
  * {@link org.apache.spark.launcher.SparkLauncher#startApplication(
  * org.apache.spark.launcher.SparkAppHandle.Listener...)}, there are two options available
  * for YARN manager in cluster deploy mode:
@@ -70,6 +70,7 @@
  *         .setAppResource("/my/app.jar")
  *         .setMainClass("my.spark.app.Main")
  *         .setMaster("yarn")
+ *         .setDeployMode("cluster")
  *         .stopIfLauncherShutdown()
  *         .launchAsThread(true)
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")

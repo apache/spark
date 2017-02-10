@@ -103,12 +103,10 @@ public class SparkLauncher {
 
   static final Map<String, String> launcherConfig = new HashMap<>();
 
-
   private boolean stopIfLauncherShutdown = false;
 
   /** Flag to decide on launching spark-submit as a child process or a thread **/
   private boolean launchAsThread = false;
-
 
   /**
    * Set a configuration value for the launcher library. These config values do not affect the

@@ -719,9 +719,12 @@ object SparkSubmit extends CommandLineUtils {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val isSparkApp = mainClass.getMethods().filter{_.getName() == "sparkMain"}.length > 0
+    val sparkAppMainMethodArr = mainClass.getMethods().filter{_.getName() == "sparkMain"}
+    val isSparkApp = sparkAppMainMethodArr.length > 0
 
     val childSparkConf = sysProps.filter{ p => p._1.startsWith("spark.")}.toMap
+    // If running sparkApp or in thread mode, the System properties should not be cluttered.
+    // This helps keep clean isolation between multiple Spark Apps launched in different threads.
     if (!isSparkApp || !threadEnabled) {
       sysProps.foreach { case (key, value) =>
         System.setProperty(key, value)
@@ -729,7 +732,7 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     val mainMethod = if (isSparkApp) {
-      mainClass.getMethods().filter{_.getName() == "sparkMain"}(0)
+      sparkAppMainMethodArr(0)
     } else {
       mainClass.getMethod("main", new Array[String](0).getClass)
     }

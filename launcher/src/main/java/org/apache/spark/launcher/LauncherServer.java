@@ -108,7 +108,6 @@ class LauncherServer implements Closeable {
     return (ChildThreadAppHandle) LauncherServer.newAppHandle(true);
   }
 
-
   /**
    * Creates a handle for an app to be launched. This method will start a server if one hasn't been
    * started yet. The server is shared for multiple handles, and once all handles are disposed of,
