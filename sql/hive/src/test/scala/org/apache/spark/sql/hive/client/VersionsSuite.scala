@@ -570,7 +570,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       }
     }
 
-
     test(s"$version: SPARK-13709: reading partitioned Avro table with nested schema") {
       withTempDir { dir =>
         val path = dir.toURI.toString
@@ -649,6 +648,17 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       }
     }
 
+    test(s"$version: create table should success to test HiveClientImpl.toHiveTable compatible") {
+      withTable("t", "t1") {
+        import spark.implicits._
+        Seq("1").toDF("a").write.saveAsTable("t")
+        checkAnswer(spark.table("t"), Row("1") :: Nil)
+
+        spark.sql("create table t1 as select 2 as a")
+        checkAnswer(spark.table("t1"), Row(2) :: Nil)
+
+      }
+    }
     // TODO: add more tests.
   }
 }
