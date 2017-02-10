@@ -17,18 +17,16 @@
 
 package org.apache.spark.mllib.evaluation;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
-
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.api.java.JavaRDD;
+import org.junit.Assert;
+import org.junit.Test;
 import scala.Tuple2;
 import scala.Tuple2$;
 
-import org.junit.Assert;
-import org.junit.Test;
-
-import org.apache.spark.SharedSparkSession;
-import org.apache.spark.api.java.JavaRDD;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 public class JavaRankingMetricsSuite extends SharedSparkSession {
   private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
@@ -50,6 +48,7 @@ public class JavaRankingMetricsSuite extends SharedSparkSession {
     @SuppressWarnings("unchecked")
     RankingMetrics<?> metrics = RankingMetrics.of(predictionAndLabels);
     Assert.assertEquals(0.355026, metrics.meanAveragePrecision(), 1e-5);
+    Assert.assertEquals(0.4375, metrics.meanPercentileRank(), 1e-5);
     Assert.assertEquals(0.75 / 3.0, metrics.precisionAt(4), 1e-5);
   }
 }

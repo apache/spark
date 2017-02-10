@@ -84,6 +84,9 @@ object RankingMetricsExample {
     // Mean average precision
     println(s"Mean average precision = ${metrics.meanAveragePrecision}")
 
+    // Mean percentile rank
+    println(s"Mean percentile rank = ${metrics.meanPercentileRank}")
+
     // Normalized discounted cumulative gain
     Array(1, 3, 5).foreach { k =>
       println(s"NDCG at $k = ${metrics.ndcgAt(k)}")
