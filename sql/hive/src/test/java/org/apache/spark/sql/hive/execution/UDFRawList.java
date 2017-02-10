@@ -14,16 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.hive.execution;
 
 import org.apache.hadoop.hive.ql.exec.UDF;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
-public class UDFToListString extends UDF {
-  public List<String> evaluate(Object o) {
-    return Arrays.asList("data1", "data2", "data3");
+/**
+ * UDF that returns a raw (non-parameterized) java List.
+ */
+public class UDFRawList extends UDF {
+  public List evaluate(Object o) {
+    return Collections.singletonList("data1");
   }
 }
