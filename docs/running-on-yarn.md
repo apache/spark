@@ -445,7 +445,7 @@ To use a custom metrics.properties for the application master and executors, upd
   This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
   <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
   configured in yarn-site.xml.
-  This feature can only be used with Hadoop 2.6.1+. The Spark log4j appender needs be changed to use
+  This feature can only be used with Hadoop 2.6.4+. The Spark log4j appender needs be changed to use
   FileAppender or another appender that can handle the files being removed while its running. Based
   on the file name configured in the log4j configuration (like spark.log), the user should set the
   regex (spark*) to include all the log files that need to be aggregated.
@@ -524,8 +524,8 @@ pre-packaged distribution.
 1. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
 `org.apache.spark.network.yarn.YarnShuffleService`.
-1. Increase `NodeManager's` heap size by setting `YARN_HEAPSIZE` (1000 by default) in `etc/hadoop/yarn-env.sh` 
-to avoid garbage collection issues during shuffle. 
+1. Increase `NodeManager's` heap size by setting `YARN_HEAPSIZE` (1000 by default) in `etc/hadoop/yarn-env.sh`
+to avoid garbage collection issues during shuffle.
 1. Restart all `NodeManager`s in your cluster.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
