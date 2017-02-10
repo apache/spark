@@ -226,20 +226,20 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
 
     // raw java list type unsupported
-    case c: Class[_] if c == classOf[java.util.List[_]] =>
+    case c: Class[_] if isSubClassOf(c, classOf[java.util.List[_]]) =>
       throw new AnalysisException(
         "Raw list type in java is unsupported because Spark cannot infer the element type.")
 
     // raw java map type unsupported
-    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+    case c: Class[_] if isSubClassOf(c, classOf[java.util.Map[_, _]]) =>
       throw new AnalysisException(
         "Raw map type in java is unsupported because Spark cannot infer key and value types.")
 
-    case p: ParameterizedType if p.getRawType == classOf[java.util.List[_]] =>
+    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.List[_]]) =>
       val Array(elementType) = p.getActualTypeArguments
       ArrayType(javaTypeToDataType(elementType))
 
-    case p: ParameterizedType if p.getRawType == classOf[java.util.Map[_, _]] =>
+    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.Map[_, _]]) =>
       val Array(keyType, valueType) = p.getActualTypeArguments
       MapType(javaTypeToDataType(keyType), javaTypeToDataType(valueType))
 
@@ -249,6 +249,11 @@ private[hive] trait HiveInspectors {
           "Spark cannot infer the data type for these type parameters.")
 
     case c => throw new AnalysisException(s"Unsupported java type $c")
+  }
+
+  private def isSubClassOf(t: Type, parent: Class[_]): Boolean = t match {
+    case cls: Class[_] => parent.isAssignableFrom(cls)
+    case _ => false
   }
 
   private def withNullSafe(f: Any => Any): Any => Any = {

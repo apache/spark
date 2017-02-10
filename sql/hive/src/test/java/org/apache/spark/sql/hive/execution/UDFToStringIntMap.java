@@ -20,10 +20,9 @@ package org.apache.spark.sql.hive.execution;
 import org.apache.hadoop.hive.ql.exec.UDF;
 
 import java.util.HashMap;
-import java.util.Map;
 
 public class UDFToStringIntMap extends UDF {
-    public Map<String, Integer> evaluate(Object o) {
+    public HashMap<String, Integer> evaluate(Object o) {
         return new HashMap<String, Integer>() {
             {
                 put("key1", 1);
