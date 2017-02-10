@@ -203,9 +203,9 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-    * spark.scheduler.pool property should be ignored for the FIFO scheduler,
-    * because pools are only needed for fair scheduling.
-    */
+   * spark.scheduler.pool property should be ignored for the FIFO scheduler,
+   * because pools are only needed for fair scheduling.
+   */
   test("FIFO scheduler uses root pool and not spark.scheduler.pool property") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
