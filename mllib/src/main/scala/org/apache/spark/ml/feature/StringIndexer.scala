@@ -56,14 +56,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     "error (throw an error), or 'keep' (map unseen labels with indices [numLabels]).",
     ParamValidators.inArray(supportedHandleInvalids))
 
-  /** @group getParam */
-  @Since("2.1.0")
-  def getHandleInvalid: String = $(handleInvalid)
-
-  /** @group setParam */
-  @Since("2.1.0")
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, ERROR_UNSEEN_LABEL)
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
@@ -104,6 +96,15 @@ class StringIndexer @Since("1.4.0") (
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getHandleInvalid: String = $(handleInvalid)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, ERROR_UNSEEN_LABEL)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
@@ -170,6 +171,15 @@ class StringIndexerModel (
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getHandleInvalid: String = $(handleInvalid)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, ERROR_UNSEEN_LABEL)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
