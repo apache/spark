@@ -51,7 +51,7 @@ connect without SSL on a different port, the master would be set to `k8s://http:
 
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
- 
+
 ### Adding Other JARs
  
 Spark allows users to provide dependencies that are bundled into the driver's Docker image, or that are on the local
@@ -149,6 +149,34 @@ container image's disk. Thus `spark.ssl.kubernetes.submit.keyStore` can be a URI
 or `container:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
 the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
 `container:`, the file is assumed to already be on the container's disk at the appropriate path.
+
+### Kubernetes Clusters and the authenticated proxy endpoint
+
+Spark-submit also supports submission through the
+[local kubectl proxy](https://kubernetes.io/docs/user-guide/connecting-to-applications-proxy/). One can use the
+authenticating proxy to communicate with the api server directly without passing credentials to spark-submit.
+
+The local proxy can be started by running:
+
+    kubectl proxy
+
+If our local proxy were listening on port 8001, we would have our submission looking like the following:
+
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class org.apache.spark.examples.SparkPi \
+      --master k8s://http://127.0.0.1:8001 \
+      --kubernetes-namespace default \
+      --conf spark.executor.instances=5 \
+      --conf spark.app.name=spark-pi \
+      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
+      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
+      examples/jars/spark_examples_2.11-2.2.0.jar
+
+Communication between Spark and Kubernetes clusters is performed using the fabric8 kubernetes-client library.
+The above mechanism using `kubectl proxy` can be used when we have authentication providers that the fabric8
+kubernetes-client library does not support. Authentication using X509 Client Certs and oauth tokens
+is currently supported.
 
 ### Spark Properties
 
