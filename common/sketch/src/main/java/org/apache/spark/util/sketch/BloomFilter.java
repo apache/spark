@@ -82,6 +82,16 @@ public abstract class BloomFilter {
 
   /**
    * Swamidass & Baldi (2007) approximation for number of items in a Bloom filter
+   *
+   * n* = - m/k * ln(1- X/m)
+   * where:
+   *  n* = the estimated number of items in the Bloom filter,
+   *  k = the number of hash functions used (k-fold compression),
+   *  m = the length of the filter,
+   *  X = the number of bits set to one
+   *
+   * @seealso <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
+   *   Mathematical Correction for Fingerprint Similarity Measures to Improve Chemical Retrieval</a>
    */
   public abstract double approxItems();
 
@@ -165,8 +175,14 @@ public abstract class BloomFilter {
   /**
    * Swamidass & Baldi (2007) approximation for number of items in the intersection of two Bloom filters
    *
+   * n(A* ∩ B*) = n(A*) + n(B*) - n(A* ∪ B*)
+   * The approx. of the intersection is the approx. of A plus B minus the approx. of their union
+   *
    * @param other The bloom filter to intersect this bloom filter with.
    * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
+   * @seealso #approxItems()
+   * @seealso <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
+   *   Mathematical Correction for Fingerprint Similarity Measures to Improve Chemical Retrieval</a>
    */
   public abstract double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException;
 
