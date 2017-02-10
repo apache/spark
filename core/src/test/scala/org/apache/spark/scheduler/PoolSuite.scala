@@ -33,7 +33,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
   val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
   val TEST_POOL = "testPool"
 
-  def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
+  private def createTaskSetManager(stageId: Int, numTasks: Int, taskScheduler: TaskSchedulerImpl)
     : TaskSetManager = {
     val tasks = Array.tabulate[Task[_]](numTasks) { i =>
       new FakeTask(stageId, i, Nil)
@@ -41,7 +41,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null), 0)
   }
 
-  def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int) {
+  private def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int): Unit = {
     val taskSetQueue = rootPool.getSortedTaskSetQueue
     val nextTaskSetToSchedule =
       taskSetQueue.find(t => (t.runningTasks + t.tasksSuccessful) < t.numTasks)
@@ -202,7 +202,11 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     verifyPool(rootPool, "pool_with_surrounded_whitespace", 3, 2, FAIR)
   }
 
-  test("SPARK-18066: FIFO Scheduler just uses root pool") {
+  /**
+    * spark.scheduler.pool property should be ignored for the FIFO scheduler,
+    * because pools are only needed for fair scheduling.
+    */
+  test("FIFO scheduler uses root pool and not spark.scheduler.pool property") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -215,19 +219,19 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val properties = new Properties()
     properties.setProperty("spark.scheduler.pool", TEST_POOL)
 
-    // FIFOSchedulableBuilder just uses rootPool so even if properties are set, related pool
-    // (testPool) is not created and TaskSetManagers are added to rootPool
+    // When FIFO Scheduler is used and task sets are submitted, they should be added to
+    // the root pool, and no additional pools should be created
+    // (even though there's a configured default pool).
     schedulableBuilder.addTaskSetManager(taskSetManager0, properties)
     schedulableBuilder.addTaskSetManager(taskSetManager1, properties)
 
-    assert(rootPool.getSchedulableByName(TEST_POOL) == null)
-    assert(rootPool.schedulableQueue.size == 2)
+    assert(rootPool.getSchedulableByName(TEST_POOL) === null)
+    assert(rootPool.schedulableQueue.size === 2)
     assert(rootPool.getSchedulableByName(taskSetManager0.name) === taskSetManager0)
     assert(rootPool.getSchedulableByName(taskSetManager1.name) === taskSetManager1)
   }
 
-  test("SPARK-18066: FAIR Scheduler uses default pool when spark.scheduler.pool property is not " +
-    "set") {
+  test("FAIR Scheduler uses default pool when spark.scheduler.pool property is not set") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -235,39 +239,27 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
-    // FAIR Scheduler uses default pool when pool properties are null
+    // Submit a new task set manager with pool properties set to null. This should result
+    // in the task set manager getting added to the default pool.
     val taskSetManager0 = createTaskSetManager(stageId = 0, numTasks = 1, taskScheduler)
-
     schedulableBuilder.addTaskSetManager(taskSetManager0, null)
 
     val defaultPool = rootPool.getSchedulableByName(schedulableBuilder.DEFAULT_POOL_NAME)
     assert(defaultPool != null)
-    assert(defaultPool.schedulableQueue.size == 1)
+    assert(defaultPool.schedulableQueue.size === 1)
     assert(defaultPool.getSchedulableByName(taskSetManager0.name) === taskSetManager0)
 
-    // FAIR Scheduler uses default pool when spark.scheduler.pool property is not set
+    // When a task set manager is submitted with spark.scheduler.pool unset, it should be added to
+    // the default pool (as above).
     val taskSetManager1 = createTaskSetManager(stageId = 1, numTasks = 1, taskScheduler)
-
     schedulableBuilder.addTaskSetManager(taskSetManager1, new Properties())
 
-    assert(defaultPool.schedulableQueue.size == 2)
+    assert(defaultPool.schedulableQueue.size === 2)
     assert(defaultPool.getSchedulableByName(taskSetManager1.name) === taskSetManager1)
-
-    // FAIR Scheduler uses default pool when spark.scheduler.pool property is set as default pool
-    val taskSetManager2 = createTaskSetManager(stageId = 2, numTasks = 1, taskScheduler)
-
-    val properties = new Properties()
-    properties.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, schedulableBuilder
-      .DEFAULT_POOL_NAME)
-
-    schedulableBuilder.addTaskSetManager(taskSetManager2, properties)
-
-    assert(defaultPool.schedulableQueue.size == 3)
-    assert(defaultPool.getSchedulableByName(taskSetManager2.name) === taskSetManager2)
   }
 
-  test("SPARK-18066: FAIR Scheduler creates a new pool when spark.scheduler.pool property points " +
-    "non-existent") {
+  test("FAIR Scheduler creates a new pool when spark.scheduler.pool property points to " +
+      "a non-existent pool") {
     sc = new SparkContext("local", "PoolSuite")
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -275,32 +267,36 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
 
-    assert(rootPool.getSchedulableByName(TEST_POOL) == null)
+    assert(rootPool.getSchedulableByName(TEST_POOL) === null)
 
     val taskSetManager = createTaskSetManager(stageId = 0, numTasks = 1, taskScheduler)
 
     val properties = new Properties()
     properties.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, TEST_POOL)
 
-    // FAIR Scheduler creates a new pool with default values when spark.scheduler.pool property
-    // points non-existent pool. This can be happened when scheduler allocation file is not set or
-    // it does not contain related pool
+    // The fair scheduler should create a new pool with default values when spark.scheduler.pool
+    // points to a pool that doesn't exist yet (this can happen when the file that pools are read
+    // from isn't set, or when that file doesn't contain the pool name specified
+    // by spark.scheduler.pool).
     schedulableBuilder.addTaskSetManager(taskSetManager, properties)
 
     val testPool = rootPool.getSchedulableByName(TEST_POOL)
     assert(testPool != null)
-    assert(testPool.schedulingMode == schedulableBuilder.DEFAULT_SCHEDULING_MODE)
-    assert(testPool.minShare == schedulableBuilder.DEFAULT_MINIMUM_SHARE)
-    assert(testPool.weight == schedulableBuilder.DEFAULT_WEIGHT)
+    assert(testPool.schedulingMode === schedulableBuilder.DEFAULT_SCHEDULING_MODE)
+    assert(testPool.minShare === schedulableBuilder.DEFAULT_MINIMUM_SHARE)
+    assert(testPool.weight === schedulableBuilder.DEFAULT_WEIGHT)
+
+    verifyPool(rootPool, TEST_POOL, schedulableBuilder.DEFAULT_MINIMUM_SHARE,
+      schedulableBuilder.DEFAULT_WEIGHT, schedulableBuilder.DEFAULT_SCHEDULING_MODE)
     assert(testPool.getSchedulableByName(taskSetManager.name) === taskSetManager)
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
                          expectedInitWeight: Int, expectedSchedulingMode: SchedulingMode): Unit = {
-    assert(rootPool.getSchedulableByName(poolName) != null)
-    assert(rootPool.getSchedulableByName(poolName).minShare === expectedInitMinShare)
-    assert(rootPool.getSchedulableByName(poolName).weight === expectedInitWeight)
-    assert(rootPool.getSchedulableByName(poolName).schedulingMode === expectedSchedulingMode)
+    val selectedPool = rootPool.getSchedulableByName(poolName)
+    assert(selectedPool != null)
+    assert(selectedPool.minShare === expectedInitMinShare)
+    assert(selectedPool.weight === expectedInitWeight)
+    assert(selectedPool.schedulingMode === expectedSchedulingMode)
   }
-  
 }
