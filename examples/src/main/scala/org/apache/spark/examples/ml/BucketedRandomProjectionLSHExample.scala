@@ -21,6 +21,7 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.feature.BucketedRandomProjectionLSH
 import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.sql.functions._
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -67,8 +68,9 @@ object BucketedRandomProjectionLSHExample {
     // `model.approxSimilarityJoin(transformedA, transformedB, 1.5)`
     println("Approximately joining dfA and dfB on Euclidean distance smaller than 1.5:")
     model.approxSimilarityJoin(dfA, dfB, 1.5)
-      .select("datasetA.id", "datasetB.id", "distCol")
-      .show()
+      .select(col("datasetA.id").alias("idA"),
+        col("datasetB.id").alias("idB"),
+        col("distCol").alias("EuclideanDistance")).show()
 
     // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     // neighbor search.

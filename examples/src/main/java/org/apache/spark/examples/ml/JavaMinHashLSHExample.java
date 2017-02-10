@@ -35,6 +35,8 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
+import static org.apache.spark.sql.functions.*;
 // $example off$
 
 public class JavaMinHashLSHExample {
@@ -85,8 +87,9 @@ public class JavaMinHashLSHExample {
     // `model.approxSimilarityJoin(transformedA, transformedB, 0.6)`
     System.out.println("Approximately joining dfA and dfB on Jaccard distance smaller than 0.6:");
     model.approxSimilarityJoin(dfA, dfB, 0.6)
-      .select("datasetA.id", "datasetB.id", "distCol")
-      .show();
+      .select(col("datasetA.id").alias("idA"),
+        col("datasetB.id").alias("idB"),
+        col("distCol").alias("JaccardDistance")).show();
 
     // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     // neighbor search.

@@ -35,6 +35,8 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
+import static org.apache.spark.sql.functions.*;
 // $example off$
 
 public class JavaBucketedRandomProjectionLSHExample {
@@ -85,7 +87,10 @@ public class JavaBucketedRandomProjectionLSHExample {
     // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     // `model.approxSimilarityJoin(transformedA, transformedB, 1.5)`
     System.out.println("Approximately joining dfA and dfB on distance smaller than 1.5:");
-    model.approxSimilarityJoin(dfA, dfB, 1.5).show();
+    model.approxSimilarityJoin(dfA, dfB, 1.5)
+      .select(col("datasetA.id").alias("idA"),
+        col("datasetB.id").alias("idB"),
+        col("distCol").alias("EuclideanDistance")).show();
 
     // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     // neighbor search.

@@ -21,6 +21,7 @@ from __future__ import print_function
 # $example on$
 from pyspark.ml.feature import MinHashLSH
 from pyspark.ml.linalg import Vectors
+from pyspark.sql.functions import col
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -62,7 +63,9 @@ if __name__ == "__main__":
     # `model.approxSimilarityJoin(transformedA, transformedB, 0.6)`
     print("Approximately joining dfA and dfB on distance smaller than 0.6:")
     model.approxSimilarityJoin(dfA, dfB, 0.6)\
-        .select("datasetA.id", "datasetB.id", "distCol").show()
+        .select(col("datasetA.id").alias("idA"),
+                col("datasetB.id").alias("idB"),
+                col("distCol").alias("JaccardDistance")).show()
 
     # Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     # neighbor search.

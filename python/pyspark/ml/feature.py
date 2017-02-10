@@ -212,6 +212,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     .. seealso:: `Hashing for Similarity Search: A Survey <https://arxiv.org/abs/1408.2927>`_
 
     >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.sql.functions import col
     >>> data = [(0, Vectors.dense([-1.0, -1.0 ]),),
     ...         (1, Vectors.dense([-1.0, 1.0 ]),),
     ...         (2, Vectors.dense([1.0, -1.0 ]),),
@@ -229,14 +230,15 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
-    >>> model.approxSimilarityJoin(df, df2, 3.0).select("datasetA.id",
-    ...                                                 "datasetB.id",
-    ...                                                 "distCol").show()
-    +---+---+----------------+
-    | id| id|         distCol|
-    +---+---+----------------+
-    |  3|  6|2.23606797749979|
-    +---+---+----------------+
+    >>> model.approxSimilarityJoin(df, df2, 3.0).select(
+    ...     col("datasetA.id").alias("idA"),
+    ...     col("datasetB.id").alias("idB"),
+    ...     col("distCol").alias("EuclideanDistance")).show()
+    +---+---+-----------------+
+    |idA|idB|EuclideanDistance|
+    +---+---+-----------------+
+    |  3|  6| 2.23606797749979|
+    +---+---+-----------------+
     ...
     >>> brpPath = temp_path + "/brp"
     >>> brp.save(brpPath)
@@ -962,6 +964,7 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     .. seealso:: `Wikipedia on MinHash <https://en.wikipedia.org/wiki/MinHash>`_
 
     >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.sql.functions import col
     >>> data = [(0, Vectors.sparse(6, [0, 1, 2], [1.0, 1.0, 1.0]),),
     ...         (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
     ...         (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
@@ -977,15 +980,16 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> key = Vectors.sparse(6, [1, 2], [1.0, 1.0])
     >>> model.approxNearestNeighbors(df2, key, 1).collect()
     [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([-163892...
-    >>> model.approxSimilarityJoin(df, df2, 0.6).select("datasetA.id",
-    ...                                                 "datasetB.id",
-    ...                                                 "distCol").show()
-    +---+---+-------+
-    | id| id|distCol|
-    +---+---+-------+
-    |  1|  4|    0.5|
-    |  0|  5|    0.5|
-    +---+---+-------+
+    >>> model.approxSimilarityJoin(df, df2, 0.6).select(
+    ...     col("datasetA.id").alias("idA"),
+    ...     col("datasetB.id").alias("idB"),
+    ...     col("distCol").alias("JaccardDistance")).show()
+    +---+---+---------------+
+    |idA|idB|JaccardDistance|
+    +---+---+---------------+
+    |  1|  4|            0.5|
+    |  0|  5|            0.5|
+    +---+---+---------------+
     ...
     >>> mhPath = temp_path + "/mh"
     >>> mh.save(mhPath)

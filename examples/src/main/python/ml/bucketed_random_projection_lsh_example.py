@@ -21,6 +21,7 @@ from __future__ import print_function
 # $example on$
 from pyspark.ml.feature import BucketedRandomProjectionLSH
 from pyspark.ml.linalg import Vectors
+from pyspark.sql.functions import col
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -65,7 +66,9 @@ if __name__ == "__main__":
     # `model.approxSimilarityJoin(transformedA, transformedB, 1.5)`
     print("Approximately joining dfA and dfB on Euclidean distance smaller than 1.5:")
     model.approxSimilarityJoin(dfA, dfB, 1.5)\
-        .select("datasetA.id", "datasetB.id", "distCol").show()
+        .select(col("datasetA.id").alias("idA"),
+                col("datasetB.id").alias("idB"),
+                col("distCol").alias("EuclideanDistance")).show()
 
     # Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     # neighbor search.
