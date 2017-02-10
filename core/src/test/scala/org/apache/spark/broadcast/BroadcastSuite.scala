@@ -24,8 +24,10 @@ import org.scalatest.Assertions
 import org.apache.spark._
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
+import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 // Dummy class that creates a broadcast variable but doesn't use it
 class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
@@ -43,7 +45,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
   }
 }
 
-class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
+class BroadcastSuite extends SparkFunSuite with LocalSparkContext with EncryptionFunSuite {
 
   test("Using TorrentBroadcast locally") {
     sc = new SparkContext("local", "test")
@@ -61,9 +63,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     assert(results.collect().toSet === (1 to 10).map(x => (x, 10)).toSet)
   }
 
-  test("Accessing TorrentBroadcast variables in a local cluster") {
+  encryptionTest("Accessing TorrentBroadcast variables in a local cluster") { conf =>
     val numSlaves = 4
-    val conf = new SparkConf
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.broadcast.compress", "true")
     sc = new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", conf)
@@ -85,7 +86,9 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       val size = 1 + rand.nextInt(1024 * 10)
       val data: Array[Byte] = new Array[Byte](size)
       rand.nextBytes(data)
-      val blocks = blockifyObject(data, blockSize, serializer, compressionCodec)
+      val blocks = blockifyObject(data, blockSize, serializer, compressionCodec).map { b =>
+        new ChunkedByteBuffer(b).toInputStream(dispose = true)
+      }
       val unblockified = unBlockifyObject[Array[Byte]](blocks, serializer, compressionCodec)
       assert(unblockified === data)
     }
@@ -137,9 +140,8 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("Cache broadcast to disk") {
-    val conf = new SparkConf()
-      .setMaster("local")
+  encryptionTest("Cache broadcast to disk") { conf =>
+    conf.setMaster("local")
       .setAppName("test")
       .set("spark.memory.useLegacyMode", "true")
       .set("spark.storage.memoryFraction", "0.0")
