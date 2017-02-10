@@ -99,6 +99,18 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
+  def testApproxItems[T: ClassTag](): Unit = {
+    test("approxItems") {
+      val filter = BloomFilter.create(10)
+
+      for (x <- 1 to 1000) {
+        filter.putLong(x)
+      }
+
+      assert(filter.approxItems().isInfinite)
+    }
+  }
+
   def testItemType[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     testAccuracy[T](typeName, numItems)(itemGen)
     testMergeInPlace[T](typeName, numItems)(itemGen)
@@ -131,4 +143,6 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
       filter1.mergeInPlace(filter2)
     }
   }
+
+  testApproxItems()
 }
