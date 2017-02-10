@@ -37,9 +37,7 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
   public static final MessageDecoder INSTANCE = new MessageDecoder();
 
-  private MessageDecoder() {
-    super();
-  }
+  private MessageDecoder() {}
 
   @Override
   public void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {

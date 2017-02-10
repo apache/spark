@@ -2599,7 +2599,7 @@ private[spark] object Utils extends Logging {
 
 private[util] object CallerContext extends Logging {
   val callerContextSupported: Boolean = {
-    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", true) && {
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
       try {
         Utils.classForName("org.apache.hadoop.ipc.CallerContext")
         Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")

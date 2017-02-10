@@ -37,9 +37,7 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
   public static final MessageEncoder INSTANCE = new MessageEncoder();
 
-  private MessageEncoder() {
-    super();
-  }
+  private MessageEncoder() {}
 
   /***
    * Encodes a Message by invoking its encode() method. For non-data messages, we will add one
