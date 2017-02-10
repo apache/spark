@@ -670,4 +670,30 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
       }
     }
   }
+
+  test("temp checkpoint dir should be deleted if a query is stopped without errors") {
+    import testImplicits._
+    val query = MemoryStream[Int].toDS.writeStream.format("console").start()
+    val checkpointDir = new Path(
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+    val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
+    assert(fs.exists(checkpointDir))
+    query.stop()
+    assert(!fs.exists(checkpointDir))
+  }
+
+  testQuietly("temp checkpoint dir should not be deleted if a query is stopped with an error") {
+    import testImplicits._
+    val input = MemoryStream[Int]
+    val query = input.toDS.map(_ / 0).writeStream.format("console").start()
+    val checkpointDir = new Path(
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+    val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
+    assert(fs.exists(checkpointDir))
+    input.addData(1)
+    intercept[StreamingQueryException] {
+      query.awaitTermination()
+    }
+    assert(fs.exists(checkpointDir))
+  }
 }
