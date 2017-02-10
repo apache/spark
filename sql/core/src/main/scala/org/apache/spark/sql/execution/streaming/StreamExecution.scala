@@ -337,9 +337,9 @@ class StreamExecution(
             val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
             fs.delete(checkpointPath, true)
           } catch {
-            case e: IOException =>
-              // Deleting temp checkpoint folder is best effort, don't throw IOException when we
-              // cannot delete them.
+            case NonFatal(e) =>
+              // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
+              // when we cannot delete them.
               logWarning(s"Cannot delete $checkpointPath", e)
           }
         }
