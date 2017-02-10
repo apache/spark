@@ -501,10 +501,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       SparkContextSuite.cancelJob = (cancelWhat == "job")
 
       val ex = intercept[SparkException] {
-        sc.range(0, 10000L).map { x =>
-          if (x == 10L) {
-            org.apache.spark.SparkContextSuite.isTaskStarted = true
-          }
+        sc.range(0, 10000L).mapPartitions { x =>
+          org.apache.spark.SparkContextSuite.isTaskStarted = true
           x
         }.cartesian(sc.range(0, 10L))count()
       }
