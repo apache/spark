@@ -90,7 +90,10 @@ public abstract class BloomFilter {
    *  m = the length of the filter,
    *  X = the number of bits set to one
    *
-   * @seealso <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
+   *  Note: the approximation is not valid when the Bloom filter is close to full
+   *  since it yields a diverging value.
+   *
+   * @see <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
    *   Mathematical Correction for Fingerprint Similarity Measures to Improve Chemical Retrieval</a>
    */
   public abstract double approxItems();
@@ -169,6 +172,7 @@ public abstract class BloomFilter {
    *
    * @param other The bloom filter to union this bloom filter with.
    * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
+   * @see #approxItems()
    */
   public abstract BloomFilterImpl union(BloomFilter other) throws IncompatibleUnionException;
 
@@ -180,8 +184,8 @@ public abstract class BloomFilter {
    *
    * @param other The bloom filter to intersect this bloom filter with.
    * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
-   * @seealso #approxItems()
-   * @seealso <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
+   * @see #approxItems()
+   * @see <a href="http://pubs.acs.org/doi/abs/10.1021/ci600526a">
    *   Mathematical Correction for Fingerprint Similarity Measures to Improve Chemical Retrieval</a>
    */
   public abstract double approxItemsInIntersection(BloomFilter that) throws IncompatibleUnionException;
