@@ -1038,8 +1038,8 @@ class DAGScheduler(
     }
 
     if (tasks.size > 0) {
-      logInfo(s"Submitting ${tasks.size} missing tasks (for partitions " +
-        s"${tasks.map(_.partitionId)}) from $stage (${stage.rdd})")
+      logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
+        s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
