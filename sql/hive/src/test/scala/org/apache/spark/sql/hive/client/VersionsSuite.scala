@@ -656,7 +656,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
         spark.sql("create table t1 as select 2 as a")
         checkAnswer(spark.table("t1"), Row(2) :: Nil)
-
       }
     }
     // TODO: add more tests.
