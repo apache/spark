@@ -70,7 +70,7 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val conversionHelper = new ConversionHelper(method, arguments)
 
-  override lazy val dataType = javaClassToDataType(method.getReturnType)
+  override lazy val dataType = javaTypeToDataType(method.getGenericReturnType)
 
   @transient
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
