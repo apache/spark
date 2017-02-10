@@ -30,6 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.util.Utils
 
 class UISuite extends SparkFunSuite {
 
@@ -52,13 +53,16 @@ class UISuite extends SparkFunSuite {
     (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
-  private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+  private def sslEnabledConf(sslPort: Option[Int] = None): (SparkConf, SSLOptions) = {
     val keyStoreFilePath = getTestResourcePath("spark.keystore")
     val conf = new SparkConf()
       .set("spark.ssl.ui.enabled", "true")
       .set("spark.ssl.ui.keyStore", keyStoreFilePath)
       .set("spark.ssl.ui.keyStorePassword", "123456")
       .set("spark.ssl.ui.keyPassword", "123456")
+    sslPort.foreach { p =>
+      conf.set("spark.ssl.ui.port", p.toString)
+    }
     (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
@@ -272,6 +276,28 @@ class UISuite extends SparkFunSuite {
       }
     } finally {
       stopServer(serverInfo)
+    }
+  }
+
+  test("specify both http and https ports separately") {
+    var socket: ServerSocket = null
+    var serverInfo: ServerInfo = null
+    try {
+      socket = new ServerSocket(0)
+
+      // Make sure the SSL port lies way outside the "http + 400" range used as the default.
+      val baseSslPort = Utils.userPort(socket.getLocalPort(), 10000)
+      val (conf, sslOptions) = sslEnabledConf(sslPort = Some(baseSslPort))
+
+      serverInfo = JettyUtils.startJettyServer("0.0.0.0", socket.getLocalPort() + 1,
+        sslOptions, Seq[ServletContextHandler](), conf, "server1")
+
+      val notAllowed = Utils.userPort(serverInfo.boundPort, 400)
+      assert(serverInfo.securePort.isDefined)
+      assert(serverInfo.securePort.get != Utils.userPort(serverInfo.boundPort, 400))
+    } finally {
+      stopServer(serverInfo)
+      closeSocket(socket)
     }
   }
 
