@@ -1279,17 +1279,19 @@ class GeneralizedLinearRegressionSummary private[regression] (
           label.minus(offset))), sum(weight)).first()
         link.link(agg.getDouble(0) / agg.getDouble(1))
       } else {
+        // Create empty feature column and fit intercept only model using param setting from model
         val featureNull = "feature_" + java.util.UUID.randomUUID.toString
-        val glr = new GeneralizedLinearRegression().copy(model.extractParamMap)
-          .setFeaturesCol(featureNull)
+        val paramMap = model.extractParamMap()
+        paramMap.put(model.featuresCol, featureNull)
+        if (family.name != "tweedie") {
+          paramMap.remove(model.variancePower)
+        }
         val emptyVectorUDF = udf{ () => Vectors.zeros(0) }
-        glr.fit(
-          predictions.withColumn(featureNull, emptyVectorUDF())
+        model.parent.fit(
+          dataset.withColumn(featureNull, emptyVectorUDF()), paramMap
         ).intercept
       }
     }
-
-    println("intercept is: " + intercept)
     predictions.select(label, offset, weight).rdd.map {
       case Row(y: Double, offset: Double, weight: Double) =>
         family.deviance(y, link.unlink(intercept + offset), weight)
