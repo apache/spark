@@ -31,6 +31,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 
 class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventually {
+  import testImplicits._
 
   test("SPARK-7150 range api") {
     // numSlice is greater than length
@@ -137,7 +138,9 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
   test("Cancelling stage in a query with Range.") {
     val listener = new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-        Thread.sleep(100)
+        eventually(timeout(10.seconds)) {
+          assert(DataFrameRangeSuite.isTaskStarted)
+        }
         sparkContext.cancelStage(taskStart.stageId)
       }
     }
@@ -145,9 +148,12 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     sparkContext.addSparkListener(listener)
     for (codegen <- Seq(true, false)) {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
+        DataFrameRangeSuite.isTaskStarted = false
         val ex = intercept[SparkException] {
-          spark.range(100000L).crossJoin(spark.range(100000L))
-            .toDF("a", "b").agg(sum("a"), sum("b")).collect()
+          spark.range(100000L).mapPartitions { x =>
+            DataFrameRangeSuite.isTaskStarted = true
+            x
+          }.crossJoin(spark.range(100L)).toDF("a", "b").agg(sum("a"), sum("b")).collect()
         }
         ex.getCause() match {
           case null =>
@@ -155,7 +161,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
           case cause: SparkException =>
             assert(cause.getMessage().contains("cancelled"))
           case cause: Throwable =>
-            fail("Expected the casue to be SparkException, got " + cause.toString() + " instead.")
+            fail("Expected the cause to be SparkException, got " + cause.toString() + " instead.")
         }
       }
       eventually(timeout(20.seconds)) {
@@ -164,3 +170,8 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     }
   }
 }
+
+object DataFrameRangeSuite {
+  @volatile var isTaskStarted = false
+}
+
