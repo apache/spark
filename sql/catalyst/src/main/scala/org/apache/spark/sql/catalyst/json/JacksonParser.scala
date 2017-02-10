@@ -60,7 +60,10 @@ class JacksonParser(
   private val corruptFieldIndex = schema.getFieldIndex(options.columnNameOfCorruptRecord)
 
   @transient
-  private var printWarningForMalformedRecord: (() => UTF8String) => Unit = { record =>
+  private[this] var isWarningPrinted: Boolean = false
+
+  @transient
+  private def printWarningForMalformedRecord(record: () => UTF8String): Unit = {
     def sampleRecord: String = {
       if (options.wholeFile) {
         ""
@@ -99,12 +102,10 @@ class JacksonParser(
            |
          """.stripMargin)
     }
-
-    printWarningForMalformedRecord = _ => ()
   }
 
   @transient
-  private var printWarningIfWholeFile: () => Unit = { () =>
+  private def printWarningIfWholeFile(): Unit = {
     if (options.wholeFile && corruptFieldIndex.isDefined) {
       logWarning(
         s"""Enabling wholeFile mode and defining columnNameOfCorruptRecord may result
@@ -112,8 +113,6 @@ class JacksonParser(
            |
          """.stripMargin)
     }
-
-    printWarningIfWholeFile = () => ()
   }
 
   /**
@@ -130,15 +129,24 @@ class JacksonParser(
         }
 
       case _ if options.dropMalformed =>
-        printWarningForMalformedRecord(record)
+        if (!isWarningPrinted) {
+          printWarningForMalformedRecord(record)
+          isWarningPrinted = true
+        }
         Nil
 
       case None =>
-        printWarningForMalformedRecord(record)
+        if (!isWarningPrinted) {
+          printWarningForMalformedRecord(record)
+          isWarningPrinted = true
+        }
         emptyRow
 
       case Some(corruptIndex) =>
-        printWarningIfWholeFile()
+        if (!isWarningPrinted) {
+          printWarningIfWholeFile()
+          isWarningPrinted = true
+        }
         val row = new GenericInternalRow(schema.length)
         require(schema(corruptIndex).dataType == StringType)
         row.update(corruptIndex, record())
