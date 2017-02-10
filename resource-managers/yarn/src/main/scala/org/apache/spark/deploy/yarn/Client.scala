@@ -245,12 +245,27 @@ private[spark] class Client(
     }
 
     sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
-      val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
-      logAggregationContext.setRolledLogsIncludePattern(includePattern)
-      sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
-        logAggregationContext.setRolledLogsExcludePattern(excludePattern)
+      try {
+        val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
+
+        // These two methods were added in Hadoop 2.6.4, so we still need to use reflection to
+        // avoid compile error when building against Hadoop 2.6.0 ~ 2.6.3.
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
+        sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+        }
+
+        appContext.setLogAggregationContext(logAggregationContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
+            "does not support it", e)
       }
-      appContext.setLogAggregationContext(logAggregationContext)
     }
 
     appContext
