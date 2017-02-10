@@ -42,7 +42,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 private[sql] class SessionState(
     sparkSession: SparkSession,
-    existingSessionState: Option[SessionState]) {
+    parentSessionState: Option[SessionState]) {
 
   private[sql] def this(sparkSession: SparkSession) = {
     this(sparkSession, None)
@@ -55,13 +55,7 @@ private[sql] class SessionState(
    * SQL-specific key-value configurations.
    */
   lazy val conf: SQLConf = {
-    val result = new SQLConf
-    if (existingSessionState.nonEmpty) {
-      existingSessionState.get.conf.getAllConfs.foreach {
-        case (k, v) => if (v ne null) result.setConfString(k, v)
-      }
-    }
-    result
+    parentSessionState.map(_.conf.clone).getOrElse(new SQLConf)
   }
 
   def newHadoopConf(): Configuration = {
@@ -81,7 +75,7 @@ private[sql] class SessionState(
   }
 
   lazy val experimentalMethods: ExperimentalMethods = {
-    existingSessionState
+    parentSessionState
       .map(_.experimentalMethods.clone)
       .getOrElse(new ExperimentalMethods)
   }
@@ -90,18 +84,7 @@ private[sql] class SessionState(
    * Internal catalog for managing functions registered by the user.
    */
   lazy val functionRegistry: FunctionRegistry = {
-    val registry = FunctionRegistry.builtin.copy()
-
-    if (existingSessionState.nonEmpty) {
-      val sourceRegistry = existingSessionState.get.functionRegistry
-      sourceRegistry
-        .listFunction()
-        .foreach(name => registry.registerFunction(
-          name,
-          sourceRegistry.lookupFunction(name).get,
-          sourceRegistry.lookupFunctionBuilder(name).get))
-    }
-    registry
+    parentSessionState.map(_.functionRegistry.copy()).getOrElse(FunctionRegistry.builtin.copy())
   }
 
   /**
@@ -126,7 +109,7 @@ private[sql] class SessionState(
    * Internal catalog for managing table and database states.
    */
   lazy val catalog: SessionCatalog = {
-    existingSessionState
+    parentSessionState
       .map(_.catalog.clone)
       .getOrElse(new SessionCatalog(
         sparkSession.sharedState.externalCatalog,
@@ -202,10 +185,10 @@ private[sql] class SessionState(
   }
 
   /**
-   * Get an identical copy of the `SessionState`.
+   * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  override def clone: SessionState = {
-    new SessionState(sparkSession, Some(this))
+  def clone(sc: SparkSession): SessionState = {
+    new SessionState(sc, Some(this))
   }
 
   // ------------------------------------------------------

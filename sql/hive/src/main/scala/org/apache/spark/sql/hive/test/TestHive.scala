@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -113,7 +113,6 @@ class TestHiveContext(
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
-    existingSessionState: Option[SessionState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
@@ -121,12 +120,7 @@ private[hive] class TestHiveSparkSession(
     this(
       sc,
       existingSharedState = None,
-      existingSessionState = None,
       loadTestTables)
-  }
-
-  def this(sc: SparkContext, existingSharedState: Option[SharedState], loadTestTables: Boolean) {
-    this(sc, existingSharedState, existingSessionState = None, loadTestTables)
   }
 
   { // set the metastore temporary configuration
@@ -155,7 +149,7 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionState(self)
 
   override def newSession(): TestHiveSparkSession = {
-    new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
+    new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
   }
 
   private var cacheTables: Boolean = false

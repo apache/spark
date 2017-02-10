@@ -112,7 +112,7 @@ class SparkSession private(
    */
   @transient
   private[sql] lazy val sessionState: SessionState = {
-    existingSessionState.getOrElse(SparkSession.reflect[SessionState, SparkSession](
+    existingSessionState.map(_.clone(this)).getOrElse(SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
       self))
   }
@@ -219,21 +219,24 @@ class SparkSession private(
   }
 
   /**
-   * Start a new session, sharing the underlying `SparkContext` and cached data.
-   * If inheritSessionState is enabled, then SQL configurations, temporary tables,
-   * registered functions are copied over from parent `SparkSession`.
+   * :: Experimental ::
+   * Create an identical copy of this `SparkSession`, sharing the underlying `SparkContext`
+   * and cached data. SessionState (SQL configurations, temporary tables, registered functions)
+   * is also copied over.
+   * Changes to base session are not propagated to cloned session, cloned is independent
+   * after creation.
    *
    * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
+   *
+   * @since 2.1.1
    */
-  def newSession(inheritSessionState: Boolean): SparkSession = {
-    if (inheritSessionState) {
-      new SparkSession(sparkContext, Some(sharedState), Some(sessionState.clone))
-    } else {
-      newSession()
-    }
+  @Experimental
+  @InterfaceStability.Evolving
+  def cloneSession(): SparkSession = {
+    new SparkSession(sparkContext, Some(sharedState), Some(sessionState))
   }
 
 
