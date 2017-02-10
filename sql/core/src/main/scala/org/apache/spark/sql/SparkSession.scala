@@ -112,9 +112,11 @@ class SparkSession private(
    */
   @transient
   private[sql] lazy val sessionState: SessionState = {
-    existingSessionState.map(_.clone(this)).getOrElse(SparkSession.reflect[SessionState, SparkSession](
-      SparkSession.sessionStateClassName(sparkContext.conf),
-      self))
+    existingSessionState
+      .map(_.copy(this))
+      .getOrElse(SparkSession.reflect[SessionState, SparkSession](
+        SparkSession.sessionStateClassName(sparkContext.conf),
+        self))
   }
 
   /**
@@ -231,7 +233,7 @@ class SparkSession private(
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
    *
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving

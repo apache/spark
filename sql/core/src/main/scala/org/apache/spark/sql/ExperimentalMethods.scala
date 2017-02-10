@@ -48,14 +48,7 @@ class ExperimentalMethods private[sql]() {
 
   @volatile var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
 
-  /**
-   * Get an identical copy of this `ExperimentalMethods` instance.
-   *
-   * @note `clone` is provided here instead of implementing equivalent functionality
-   * in `SparkSession.clone` since it needs to be updated
-   * as the class `ExperimentalMethods` is extended or  modified.
-   */
-  override def clone: ExperimentalMethods = {
+  def copy: ExperimentalMethods = {
     val result = new ExperimentalMethods
     result.extraStrategies = extraStrategies
     result.extraOptimizations = extraOptimizations

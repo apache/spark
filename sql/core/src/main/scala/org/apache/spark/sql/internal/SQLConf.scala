@@ -981,7 +981,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     settings.clear()
   }
 
-  override def clone: SQLConf = {
+  def copy: SQLConf = {
     val result = new SQLConf
     getAllConfs.foreach {
       case(k, v) => if (v ne null) result.setConfString(k, v)

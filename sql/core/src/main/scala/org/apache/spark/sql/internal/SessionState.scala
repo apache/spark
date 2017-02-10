@@ -55,7 +55,7 @@ private[sql] class SessionState(
    * SQL-specific key-value configurations.
    */
   lazy val conf: SQLConf = {
-    parentSessionState.map(_.conf.clone).getOrElse(new SQLConf)
+    parentSessionState.map(_.conf.copy).getOrElse(new SQLConf)
   }
 
   def newHadoopConf(): Configuration = {
@@ -76,7 +76,7 @@ private[sql] class SessionState(
 
   lazy val experimentalMethods: ExperimentalMethods = {
     parentSessionState
-      .map(_.experimentalMethods.clone)
+      .map(_.experimentalMethods.copy)
       .getOrElse(new ExperimentalMethods)
   }
 
@@ -84,7 +84,7 @@ private[sql] class SessionState(
    * Internal catalog for managing functions registered by the user.
    */
   lazy val functionRegistry: FunctionRegistry = {
-    parentSessionState.map(_.functionRegistry.copy()).getOrElse(FunctionRegistry.builtin.copy())
+    parentSessionState.map(_.functionRegistry.copy).getOrElse(FunctionRegistry.builtin.copy)
   }
 
   /**
@@ -110,7 +110,7 @@ private[sql] class SessionState(
    */
   lazy val catalog: SessionCatalog = {
     parentSessionState
-      .map(_.catalog.clone)
+      .map(_.catalog.copy)
       .getOrElse(new SessionCatalog(
         sparkSession.sharedState.externalCatalog,
         sparkSession.sharedState.globalTempViewManager,
@@ -187,7 +187,7 @@ private[sql] class SessionState(
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  def clone(sc: SparkSession): SessionState = {
+  def copy(sc: SparkSession): SessionState = {
     new SessionState(sc, Some(this))
   }
 

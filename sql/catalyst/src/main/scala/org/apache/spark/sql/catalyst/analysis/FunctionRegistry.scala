@@ -64,8 +64,8 @@ trait FunctionRegistry {
   /** Clear all registered functions. */
   def clear(): Unit
 
-  /* Create a copy of this registry with identical functions as this registry */
-  def copy(): FunctionRegistry
+  /** Create a copy of this registry with identical functions as this registry. */
+  def copy: FunctionRegistry
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -109,7 +109,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.clear()
   }
 
-  override def copy(): FunctionRegistry = synchronized {
+  override def copy: FunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)
@@ -152,7 +152,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
-  override def copy(): FunctionRegistry = {
+  override def copy: FunctionRegistry = {
     throw new UnsupportedOperationException
   }
 }
