@@ -1374,7 +1374,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           ),
           schema = new StructType(),
           properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
+            DATASOURCE_PROVIDER -> "parquet"))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)
 
         checkAnswer(spark.table("old"), Row(1, "a"))
