@@ -48,7 +48,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 
 Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
 
-    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -DskipTests clean package
+    ./build/mvn -DskipTests clean package
 
 Other build examples can be found below.
 
@@ -63,48 +63,21 @@ with Maven profile settings and so on like the direct Maven build. Example:
 
 This will build Spark distribution along with Python pip and R packages. For more information on usage, run `./dev/make-distribution.sh --help`
 
-## Specifying the Hadoop Version
+## Specifying the Hadoop Version and Enabling YARN
 
-Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the `hadoop.version` property. If unset, Spark will build against Hadoop 2.2.0 by default. Note that certain build profiles are required for particular Hadoop versions:
+You can specify the exact version of Hadoop to compile against through the `hadoop.version` property. 
+If unset, Spark will build against Hadoop 2.6.X by default.
 
-<table class="table">
-  <thead>
-    <tr><th>Hadoop version</th><th>Profile required</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>2.2.x</td><td>hadoop-2.2</td></tr>
-    <tr><td>2.3.x</td><td>hadoop-2.3</td></tr>
-    <tr><td>2.4.x</td><td>hadoop-2.4</td></tr>
-    <tr><td>2.6.x</td><td>hadoop-2.6</td></tr>
-    <tr><td>2.7.x and later 2.x</td><td>hadoop-2.7</td></tr>
-  </tbody>
-</table>
-
-Note that support for versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0 and may be
-removed in Spark 2.2.0.
-
-
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different from `hadoop.version`. Spark only supports YARN versions 2.2.0 and later.
+You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different 
+from `hadoop.version`.
 
 Examples:
 
-    # Apache Hadoop 2.2.X
-    ./build/mvn -Pyarn -Phadoop-2.2 -DskipTests clean package
-
-    # Apache Hadoop 2.3.X
-    ./build/mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
-
-    # Apache Hadoop 2.4.X or 2.5.X
-    ./build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
-
     # Apache Hadoop 2.6.X
-    ./build/mvn -Pyarn -Phadoop-2.6 -Dhadoop.version=2.6.0 -DskipTests clean package
+    ./build/mvn -Pyarn -DskipTests clean package
 
     # Apache Hadoop 2.7.X and later
-    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.0 -DskipTests clean package
-
-    # Different versions of HDFS and YARN.
-    ./build/mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=2.7.3 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -112,8 +85,8 @@ To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
 By default Spark will build with Hive 1.2.1 bindings.
 
-    # Apache Hadoop 2.4.X with Hive 1.2.1 support
-    ./build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
+    # With Hive 1.2.1 support
+    ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
 
@@ -132,7 +105,7 @@ like ZooKeeper and Hadoop itself.
 To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
 
     ./dev/change-scala-version.sh 2.10
-    ./build/mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
+    ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
 
 Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
 
@@ -192,7 +165,7 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    ./build/sbt -Pyarn -Phadoop-2.3 package
+    ./build/sbt package
 
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
@@ -225,7 +198,7 @@ Note that tests should not be run as root or an admin user.
 
 The following is an example of a command to run the tests:
 
-    ./build/mvn -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
+    ./build/mvn test
 
 The ScalaTest plugin also supports running only a specific Scala test suite as follows:
 
@@ -240,16 +213,16 @@ or a Java test:
 
 The following is an example of a command to run the tests:
 
-    ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
+    ./build/sbt test
 
 To run only a specific test suite as follows:
 
-    ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.ReplSuite"
-    ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.*"
+    ./build/sbt "test-only org.apache.spark.repl.ReplSuite"
+    ./build/sbt "test-only org.apache.spark.repl.*"
 
 To run test suites of a specific sub project as follows:
 
-    ./build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
+    ./build/sbt core/test
 
 ## Running Java 8 Test Suites
 
