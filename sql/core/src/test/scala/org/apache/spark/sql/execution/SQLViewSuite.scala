@@ -271,20 +271,17 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("correctly parse a view with custom column names") {
-    withTable("tab1") {
-      spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("tab1")
-      withView("testView1", "testView2") {
-        // Correctly create a view with custom column names
-        sql("CREATE VIEW testView1(x, y) AS SELECT * FROM tab1")
-        checkAnswer(sql("SELECT * FROM testView1 ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
+    withView("testView1", "testView2") {
+      // Correctly create a view with custom column names
+      sql("CREATE VIEW testView1(x, y) AS SELECT id, id1 + 1 FROM jt")
+      checkAnswer(sql("SELECT * FROM testView1 ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
 
-        // Throw an AnalysisException if the number of columns don't match up.
-        val e = intercept[AnalysisException] {
-          sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
-        }.getMessage
-        assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
-          "not match the number of column names specified by CREATE VIEW (num: `3`)."))
-      }
+      // Throw an AnalysisException if the number of columns don't match up.
+      val e = intercept[AnalysisException] {
+        sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM jt")
+      }.getMessage
+      assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
+        "not match the number of column names specified by CREATE VIEW (num: `3`)."))
     }
   }
 
@@ -390,21 +387,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("correctly handle ALTER VIEW on a referenced view") {
-    withTable("jt2") {
-      val df = (1 until 10).map(i => (i, i + 1)).toDF("i", "j")
-      df.write.format("json").saveAsTable("jt2")
+    withView("view1", "view2") {
+      sql("CREATE VIEW view1(x, y) AS SELECT * FROM jt")
 
-      withView("view1", "view2") {
-        sql("CREATE VIEW view1(x, y) AS SELECT * FROM jt")
+      // Create a nested view.
+      sql("CREATE VIEW view2(id, id1) AS SELECT * FROM view1")
+      checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
 
-        // Create a nested view.
-        sql("CREATE VIEW view2(id, id1) AS SELECT * FROM view1")
-        checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
-
-        // Alter the referenced view.
-        sql("ALTER VIEW view1 AS SELECT i AS x, j AS y FROM jt2")
-        checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i + 1)))
-      }
+      // Alter the referenced view.
+      sql("ALTER VIEW view1 AS SELECT id AS x, id1 + 1 As y FROM jt")
+      checkAnswer(sql("SELECT * FROM view2 ORDER BY id"), (1 to 9).map(i => Row(i, i + 1)))
     }
   }
 
