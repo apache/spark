@@ -1898,7 +1898,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       additionalCorruptRecords
         .toDF("value")
-        .repartition(corruptRecordCount * 4)
+        // this is the minimum partition count that avoids hash collisions
+        .repartition(corruptRecordCount * 4, F.hash($"value"))
         .write
         .text(path)
 
