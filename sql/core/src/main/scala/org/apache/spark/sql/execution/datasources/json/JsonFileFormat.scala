@@ -96,11 +96,13 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions = new JSONOptions(options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    val readFile = JsonDataSource(parsedOptions).readFile _
 
     (file: PartitionedFile) => {
       val parser = new JacksonParser(requiredSchema, parsedOptions)
-      readFile(broadcastedHadoopConf.value.value, file, parser)
+      JsonDataSource(parsedOptions).readFile(
+        broadcastedHadoopConf.value.value,
+        file,
+        parser)
     }
   }
 
