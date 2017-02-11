@@ -17,18 +17,24 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
+
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
 
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
     // clear().
-    val newContext = new SQLContext(sparkContext)
+    val newContext = new SQLContext(SparkSession.builder().sparkContext(sparkContext).getOrCreate())
     assert(newContext.getConf("spark.sql.testkey", "false") === "true")
   }
 
@@ -126,17 +132,17 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
   test("reset - internal conf") {
     spark.sessionState.conf.clear()
-    val original = spark.conf.get(SQLConf.NATIVE_VIEW)
+    val original = spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS)
     try {
-      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
-      sql(s"set ${SQLConf.NATIVE_VIEW.key}=false")
-      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === false)
-      assert(sql(s"set").where(s"key = '${SQLConf.NATIVE_VIEW.key}'").count() == 1)
+      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
+      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=10")
+      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 10)
+      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
       sql(s"reset")
-      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
-      assert(sql(s"set").where(s"key = '${SQLConf.NATIVE_VIEW.key}'").count() == 0)
+      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
+      assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
     } finally {
-      sql(s"set ${SQLConf.NATIVE_VIEW}=$original")
+      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
     }
   }
 
@@ -209,15 +215,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("default value of WAREHOUSE_PATH") {
-    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
-    try {
-      // to get the default value, always unset it
-      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(spark.sessionState.conf.warehousePath
-        === s"file:${System.getProperty("user.dir")}/spark-warehouse")
-    } finally {
-      sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
-    }
+    // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
+    // In our comparison, strip trailing slash off of both sides, to account for such cases
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+      .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("MAX_CASES_BRANCHES") {
@@ -247,5 +248,26 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
       }
     }
+  }
+
+  test("static SQL conf comes from SparkConf") {
+    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+    try {
+      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
+      val newSession = new SparkSession(sparkContext)
+      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
+      checkAnswer(
+        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
+        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+    } finally {
+      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
+    }
+  }
+
+  test("cannot set/unset static SQL conf") {
+    val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    assert(e1.message.contains("Cannot modify the value of a static config"))
+    val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
+    assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 }

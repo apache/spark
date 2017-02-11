@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
@@ -30,6 +28,10 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 class TaskInfo(
     val taskId: Long,
+    /**
+     * The index of this task within its task set. Not necessarily the same as the ID of the RDD
+     * partition that the task is computing.
+     */
     val index: Int,
     val attemptNumber: Int,
     val launchTime: Long,
@@ -50,7 +52,13 @@ class TaskInfo(
    * accumulable to be updated multiple times in a single task or for two accumulables with the
    * same name but different IDs to exist in a task.
    */
-  val accumulables = ListBuffer[AccumulableInfo]()
+  def accumulables: Seq[AccumulableInfo] = _accumulables
+
+  private[this] var _accumulables: Seq[AccumulableInfo] = Nil
+
+  private[spark] def setAccumulables(newAccumulables: Seq[AccumulableInfo]): Unit = {
+    _accumulables = newAccumulables
+  }
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch

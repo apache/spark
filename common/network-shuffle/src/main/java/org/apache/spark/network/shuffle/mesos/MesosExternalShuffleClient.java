@@ -44,7 +44,7 @@ import org.apache.spark.network.util.TransportConf;
  * has to detect this itself.
  */
 public class MesosExternalShuffleClient extends ExternalShuffleClient {
-  private final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
 
   private final ScheduledExecutorService heartbeaterThread =
       Executors.newSingleThreadScheduledExecutor(
@@ -60,9 +60,8 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
   public MesosExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean saslEnabled,
-      boolean saslEncryptionEnabled) {
-    super(conf, secretKeyHolder, saslEnabled, saslEncryptionEnabled);
+      boolean authEnabled) {
+    super(conf, secretKeyHolder, authEnabled);
   }
 
   public void registerDriverWithShuffleService(

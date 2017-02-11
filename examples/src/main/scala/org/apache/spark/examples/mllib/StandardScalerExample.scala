@@ -44,8 +44,6 @@ object StandardScalerExample {
     // data1 will be unit variance.
     val data1 = data.map(x => (x.label, scaler1.transform(x.features)))
 
-    // Without converting the features into dense vectors, transformation with zero mean will raise
-    // exception on sparse vector.
     // data2 will be unit variance and zero mean.
     val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.toArray))))
     // $example off$

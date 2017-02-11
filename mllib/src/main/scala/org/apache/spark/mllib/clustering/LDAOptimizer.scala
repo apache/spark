@@ -28,6 +28,7 @@ import org.apache.spark.graphx._
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -37,7 +38,7 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.4.0")
 @DeveloperApi
-sealed trait LDAOptimizer {
+trait LDAOptimizer {
 
   /*
     DEVELOPERS NOTE:
@@ -92,9 +93,11 @@ final class EMLDAOptimizer extends LDAOptimizer {
   /**
    * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
-   * care.  Note that checkpoints will be cleaned up via reference counting, regardless.
+   * care.
    *
    * Default: true
+   *
+   * @note Checkpoints will be cleaned up via reference counting, regardless.
    */
   @Since("2.0.0")
   def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {
@@ -347,9 +350,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Mini-batch fraction in (0, 1], which sets the fraction of document sampled and used in
    * each iteration.
    *
-   * Note that this should be adjusted in synch with [[LDA.setMaxIterations()]]
+   * @note This should be adjusted in synch with `LDA.setMaxIterations()`
    * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction >= 1.
+   * maxIterations * miniBatchFraction is at least 1.
    *
    * Default: 0.05, i.e., 5% of total documents.
    */
@@ -472,12 +475,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
         gammaPart = gammad :: gammaPart
       }
       Iterator((stat, gammaPart))
-    }
+    }.persist(StorageLevel.MEMORY_AND_DISK)
     val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
       _ += _, _ += _)
-    expElogbetaBc.unpersist()
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
       stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
+    stats.unpersist()
+    expElogbetaBc.destroy(false)
     val batchResult = statsSum :* expElogbeta.t
 
     // Note that this is an optimization to avoid batch.count
@@ -508,8 +512,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val weight = rho()
     val N = gammat.rows.toDouble
     val alpha = this.alpha.asBreeze.toDenseVector
-    val logphat: BDM[Double] = sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)) / N
-    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat.toDenseVector)
+    val logphat: BDV[Double] =
+      sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)).t / N
+    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
     val c = N * trigamma(sum(alpha))
     val q = -N * trigamma(alpha)
@@ -558,7 +563,7 @@ private[clustering] object OnlineLDAOptimizer {
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
-   * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
+   * @see <a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566">here</a>
    *
    * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
    *         statistics for updating lambda and `ids` - list of termCounts vector indices.

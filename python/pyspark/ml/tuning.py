@@ -25,7 +25,7 @@ from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
-from pyspark.mllib.common import inherit_doc, _py2java
+from pyspark.ml.common import inherit_doc, _py2java
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -33,8 +33,6 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
 
 class ParamGridBuilder(object):
     r"""
-    .. note:: Experimental
-
     Builder for a param grid used in grid search-based model selection.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -145,9 +143,13 @@ class ValidatorParams(HasSeed):
 
 class CrossValidator(Estimator, ValidatorParams):
     """
-    .. note:: Experimental
 
-    K-fold cross validation.
+    K-fold cross validation performs model selection by splitting the dataset into a set of
+    non-overlapping randomly partitioned folds which are used as separate training and test datasets
+    e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
+    each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
+    test set exactly once.
+
 
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
@@ -164,6 +166,8 @@ class CrossValidator(Estimator, ValidatorParams):
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> cvModel = cv.fit(dataset)
+    >>> cvModel.avgMetrics[0]
+    0.5
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
 
@@ -232,7 +236,7 @@ class CrossValidator(Estimator, ValidatorParams):
                 model = est.fit(train, epm[j])
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
-                metrics[j] += metric
+                metrics[j] += metric/nFolds
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
@@ -264,9 +268,10 @@ class CrossValidator(Estimator, ValidatorParams):
 
 class CrossValidatorModel(Model, ValidatorParams):
     """
-    .. note:: Experimental
 
-    Model from k-fold cross validation.
+    CrossValidatorModel contains the model with the highest average cross-validation
+    metric across folds and uses this model to transform input data. CrossValidatorModel
+    also tracks the metrics for each param map evaluated.
 
     .. versionadded:: 1.4.0
     """

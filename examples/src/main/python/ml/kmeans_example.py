@@ -31,12 +31,10 @@ Run with:
 This example requires NumPy (http://www.numpy.org/).
 """
 
-
 if __name__ == "__main__":
-
     spark = SparkSession\
         .builder\
-        .appName("PythonKMeansExample")\
+        .appName("KMeansExample")\
         .getOrCreate()
 
     # $example on$

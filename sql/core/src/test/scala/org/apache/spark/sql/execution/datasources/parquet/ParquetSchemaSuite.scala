@@ -54,7 +54,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -78,7 +78,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -451,31 +451,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   }
 
   test("schema merging failure error message") {
+    import testImplicits._
+
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
+      spark.range(3).select('id cast IntegerType as 'id).write.parquet(s"$path/p=2")
 
       val message = intercept[SparkException] {
         spark.read.option("mergeSchema", "true").parquet(path).schema
       }.getMessage
 
-      assert(message.contains("Failed merging schema of file"))
-    }
-
-    // test for second merging (after read Parquet schema in parallel done)
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
-
-      spark.sparkContext.conf.set("spark.default.parallelism", "20")
-
-      val message = intercept[SparkException] {
-        spark.read.option("mergeSchema", "true").parquet(path).schema
-      }.getMessage
-
-      assert(message.contains("Failed merging schema:"))
+      assert(message.contains("Failed merging schema"))
     }
   }
 
@@ -1075,7 +1062,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: MessageType): Unit = {
     test(s"Clipping - $testName") {
-      val actual = CatalystReadSupport.clipParquetSchema(
+      val actual = ParquetReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
 
       try {
@@ -1437,7 +1424,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = CatalystSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
 
   testSchemaClipping(
     "disjoint field sets",

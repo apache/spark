@@ -88,14 +88,14 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
       sqlContext.tables().filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("listtablessuitetable", true) :: Nil)
+      Row("", "listtablessuitetable", true) :: Nil)
 
     assert(
       sqlContext.sql("SHOW tables").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("listtablessuitetable", true) :: Nil)
+      Row("", "listtablessuitetable", true) :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
@@ -105,14 +105,14 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
       sqlContext.tables("default").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("listtablessuitetable", true) :: Nil)
+      Row("", "listtablessuitetable", true) :: Nil)
 
     assert(
       sqlContext.sql("show TABLES in default").filter("tableName = 'listtablessuitetable'")
-        .collect().toSeq == Row("listtablessuitetable", true) :: Nil)
+        .collect().toSeq == Row("", "listtablessuitetable", true) :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
     assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
@@ -122,7 +122,8 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
 
     val expectedSchema = StructType(
-      StructField("tableName", StringType, false) ::
+      StructField("database", StringType, false) ::
+        StructField("tableName", StringType, false) ::
         StructField("isTemporary", BooleanType, false) :: Nil)
 
     Seq(sqlContext.tables(), sqlContext.sql("SHOW TABLes")).foreach {

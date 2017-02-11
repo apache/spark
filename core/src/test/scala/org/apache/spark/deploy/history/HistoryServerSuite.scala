@@ -29,6 +29,8 @@ import com.codahale.metrics.Counter
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.eclipse.jetty.proxy.ProxyServlet
+import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -59,8 +61,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
 
-  private val logDir = new File("src/test/resources/spark-events")
-  private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
+  private val logDir = getTestResourcePath("spark-events")
+  private val expRoot = getTestResourceFile("HistoryServerExpectations")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
@@ -68,12 +70,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   def init(): Unit = {
     val conf = new SparkConf()
-      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
@@ -100,6 +102,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
     "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
+    "minEndDate app list json" -> "applications?minEndDate=2015-05-06T13:03:00.950GMT",
+    "maxEndDate app list json" -> "applications?maxEndDate=2015-05-06T13:03:00.950GMT",
+    "minEndDate and maxEndDate app list json" ->
+      "applications?minEndDate=2015-03-16&maxEndDate=2015-05-06T13:03:00.950GMT",
+    "minDate and maxEndDate app list json" ->
+      "applications?minDate=2015-03-16&maxEndDate=2015-05-06T13:03:00.950GMT",
+    "limit app list json" -> "applications?limit=3",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
@@ -140,7 +149,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
+    "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
+    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
@@ -257,8 +268,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
-  test("relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
-    val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
+  test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
     val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
@@ -266,12 +276,96 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // when
     System.setProperty("spark.ui.proxyBase", uiRoot)
     val response = page.render(request)
-    System.setProperty("spark.ui.proxyBase", Option(proxyBaseBeforeTest).getOrElse(""))
 
     // then
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  test("ajax rendered relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+    val uiRoot = "/testwebproxybase"
+    System.setProperty("spark.ui.proxyBase", uiRoot)
+
+    server.stop()
+
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", logDir)
+      .set("spark.history.fs.update.interval", "0")
+      .set("spark.testing", "true")
+
+    provider = new FsHistoryProvider(conf)
+    provider.checkForLogs()
+    val securityManager = HistoryServer.createSecurityManager(conf)
+
+    server = new HistoryServer(conf, provider, securityManager, 18080)
+    server.initialize()
+    server.bind()
+
+    val port = server.boundPort
+
+    val servlet = new ProxyServlet {
+      override def rewriteTarget(request: HttpServletRequest): String = {
+        // servlet acts like a proxy that redirects calls made on
+        // spark.ui.proxyBase context path to the normal servlet handlers operating off "/"
+        val sb = request.getRequestURL()
+
+        if (request.getQueryString() != null) {
+          sb.append(s"?${request.getQueryString()}")
+        }
+
+        val proxyidx = sb.indexOf(uiRoot)
+        sb.delete(proxyidx, proxyidx + uiRoot.length).toString
+      }
+    }
+
+    val contextHandler = new ServletContextHandler
+    val holder = new ServletHolder(servlet)
+    contextHandler.setContextPath(uiRoot)
+    contextHandler.addServlet(holder, "/")
+    server.attachHandler(contextHandler)
+
+    implicit val webDriver: WebDriver = new HtmlUnitDriver(true) {
+      getWebClient.getOptions.setThrowExceptionOnScriptError(false)
+    }
+
+    try {
+      val url = s"http://localhost:$port"
+
+      go to s"$url$uiRoot"
+
+      // expect the ajax call to finish in 5 seconds
+      implicitlyWait(org.scalatest.time.Span(5, org.scalatest.time.Seconds))
+
+      // once this findAll call returns, we know the ajax load of the table completed
+      findAll(ClassNameQuery("odd"))
+
+      val links = findAll(TagNameQuery("a"))
+        .map(_.attribute("href"))
+        .filter(_.isDefined)
+        .map(_.get)
+        .filter(_.startsWith(url)).toList
+
+      // there are atleast some URL links that were generated via javascript,
+      // and they all contain the spark.ui.proxyBase (uiRoot)
+      links.length should be > 4
+      all(links) should startWith(url + uiRoot)
+    } finally {
+      contextHandler.stop()
+      quit()
+    }
+
+  }
+
+  /**
+   * Verify that the security manager needed for the history server can be instantiated
+   * when `spark.authenticate` is `true`, rather than raise an `IllegalArgumentException`.
+   */
+  test("security manager starts with spark.authenticate set") {
+    val conf = new SparkConf()
+      .set("spark.testing", "true")
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    HistoryServer.createSecurityManager(conf)
   }
 
   test("incomplete apps get refreshed") {
@@ -293,7 +387,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.cache.window", "250ms")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
-    val securityManager = new SecurityManager(myConf)
+    val securityManager = HistoryServer.createSecurityManager(myConf)
 
     sc = new SparkContext("local", "test", myConf)
     val logDirUri = logDir.toURI
@@ -446,7 +540,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!provider.getListing().head.completed)
+    assert(!provider.getListing().next.completed)
 
     listApplications(false) should contain(appId)
 
@@ -454,7 +548,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(provider.getListing().head.completed,
+      assert(provider.getListing().next.completed,
         s"application never completed, server=$server\n")
     }
 

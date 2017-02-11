@@ -17,11 +17,14 @@
 .idea/
 .idea_modules/
 .project
+.pydevproject
 .scala_dependencies
 .settings
 /lib/
 R-unit-tests.log
 R/unit-tests.out
+R/cran-check.out
+R/pkg/vignettes/sparkr-vignettes.html
 build/*.jar
 build/apache-maven*
 build/scala*
@@ -54,6 +57,8 @@ project/plugins/project/build.properties
 project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
+python/deps
+python/pyspark/python
 reports/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml
@@ -77,3 +82,8 @@ spark-warehouse/
 # For R session data
 .RData
 .RHistory
+.Rhistory
+*.Rproj
+*.Rproj.*
+
+.Rproj.user

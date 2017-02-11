@@ -36,7 +36,7 @@ import org.apache.spark.network.client.TransportClient;
  * individually fetched as chunks by the client. Each registered buffer is one chunk.
  */
 public class OneForOneStreamManager extends StreamManager {
-  private final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(OneForOneStreamManager.class);
 
   private final AtomicLong nextStreamId;
   private final ConcurrentHashMap<Long, StreamState> streams;

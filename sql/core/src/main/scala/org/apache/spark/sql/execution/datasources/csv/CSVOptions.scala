@@ -18,13 +18,18 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
-import java.text.SimpleDateFormat
+import java.util.Locale
+
+import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
+import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
+private[csv] class CSVOptions(@transient private val parameters: CaseInsensitiveMap)
   extends Logging with Serializable {
+
+  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -64,7 +69,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(
+  val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
@@ -101,28 +106,65 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  // Share date format object as it is expensive to parse date pattern.
-  val dateFormat: SimpleDateFormat = {
-    val dateFormat = parameters.get("dateFormat")
-    dateFormat.map(new SimpleDateFormat(_)).orNull
-  }
+  // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
+  val dateFormat: FastDateFormat =
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
+
+  val timestampFormat: FastDateFormat =
+    FastDateFormat.getInstance(
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
 
   val maxColumns = getInt("maxColumns", 20480)
 
-  val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
+  val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
 
   val escapeQuotes = getBool("escapeQuotes", true)
+
+  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
+
+  val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
 
-  val rowSeparator = "\n"
+  def asWriterSettings: CsvWriterSettings = {
+    val writerSettings = new CsvWriterSettings()
+    val format = writerSettings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    writerSettings.setNullValue(nullValue)
+    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setSkipEmptyLines(true)
+    writerSettings.setQuoteAllFields(quoteAll)
+    writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings
+  }
+
+  def asParserSettings: CsvParserSettings = {
+    val settings = new CsvParserSettings()
+    val format = settings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
+    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
+    settings.setReadInputOnSeparateThread(false)
+    settings.setInputBufferSize(inputBufferSize)
+    settings.setMaxColumns(maxColumns)
+    settings.setNullValue(nullValue)
+    settings.setMaxCharsPerColumn(maxCharsPerColumn)
+    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings
+  }
 }
 
 object CSVOptions {
 
-  def apply(): CSVOptions = new CSVOptions(Map.empty)
+  def apply(): CSVOptions = new CSVOptions(new CaseInsensitiveMap(Map.empty))
 
   def apply(paramName: String, paramValue: String): CSVOptions = {
     new CSVOptions(Map(paramName -> paramValue))

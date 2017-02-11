@@ -46,10 +46,8 @@ if __name__ == "__main__":
         .appName("PythonTransitiveClosure")\
         .getOrCreate()
 
-    sc = spark.sparkContext
-
     partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
-    tc = sc.parallelize(generateGraph(), partitions).cache()
+    tc = spark.sparkContext.parallelize(generateGraph(), partitions).cache()
 
     # Linear transitive closure: each round grows paths by one edge,
     # by joining the graph's edges with the already-discovered paths.

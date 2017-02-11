@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
@@ -60,20 +61,29 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
         classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
   }
 
+  test("csv") {
+    assert(
+      getProvidingClass("csv") ===
+        classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
+    assert(
+      getProvidingClass("com.databricks.spark.csv") ===
+        classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
+  }
+
   test("error message for unknown data sources") {
-    val error1 = intercept[ClassNotFoundException] {
+    val error1 = intercept[AnalysisException] {
       getProvidingClass("avro")
     }
-    assert(error1.getMessage.contains("spark-packages"))
+    assert(error1.getMessage.contains("Failed to find data source: avro."))
 
-    val error2 = intercept[ClassNotFoundException] {
+    val error2 = intercept[AnalysisException] {
       getProvidingClass("com.databricks.spark.avro")
     }
-    assert(error2.getMessage.contains("spark-packages"))
+    assert(error2.getMessage.contains("Failed to find data source: com.databricks.spark.avro."))
 
     val error3 = intercept[ClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error3.getMessage.contains("spark-packages"))
+    assert(error3.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
 }

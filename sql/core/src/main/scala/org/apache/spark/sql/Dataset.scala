@@ -18,40 +18,42 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.sql.{Date, Timestamp}
+import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.core.JsonFactory
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.json.JacksonGenerator
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.streaming.ContinuousQuery
+import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -62,14 +64,14 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sparkSession.sessionState.executePlan(logicalPlan)
     qe.assertAnalyzed()
-    new Dataset[Row](sparkSession, logicalPlan, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
 }
 
 /**
- * A [[Dataset]] is a strongly typed collection of domain-specific objects that can be transformed
+ * A Dataset is a strongly typed collection of domain-specific objects that can be transformed
  * in parallel using functional or relational operations. Each Dataset also has an untyped view
- * called a [[DataFrame]], which is a Dataset of [[Row]].
+ * called a `DataFrame`, which is a Dataset of [[Row]].
  *
  * Operations available on Datasets are divided into transformations and actions. Transformations
  * are the ones that produce new Datasets, and actions are the ones that trigger computation and
@@ -105,7 +107,7 @@ private[sql] object Dataset {
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
- * functions defined in: [[Dataset]] (this class), [[Column]], and [[functions]]. These operations
+ * functions defined in: Dataset (this class), [[Column]], and [[functions]]. These operations
  * are very similar to the operations available in the data frame abstraction in R or Python.
  *
  * To select a column from the Dataset, use `apply` method in Scala and `col` in Java.
@@ -152,9 +154,10 @@ private[sql] object Dataset {
  *
  * @since 1.6.0
  */
+@InterfaceStability.Stable
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
-    @DeveloperApi @transient val queryExecution: QueryExecution,
+    @DeveloperApi @InterfaceStability.Unstable @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
   extends Serializable {
 
@@ -174,12 +177,11 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
       case _: Command |
-           _: InsertIntoTable |
-           _: CreateTableUsingAsSelect => true
+           _: InsertIntoTable => true
       case _ => false
     }
 
-    queryExecution.logical match {
+    queryExecution.analyzed match {
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) =>
@@ -192,24 +194,24 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * An unresolved version of the internal encoder for the type of this [[Dataset]]. This one is
-   * marked implicit so that we can use it when constructing new [[Dataset]] objects that have the
-   * same object type (that will be possibly resolved to a different schema).
+   * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
+   * passed in encoder to [[ExpressionEncoder]] explicitly, and mark it implicit so that we can use
+   * it when constructing new Dataset objects that have the same object type (that will be
+   * possibly resolved to a different schema).
    */
-  private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(encoder)
-  unresolvedTEncoder.validate(logicalPlan.output)
-
-  /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
-  private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
-    unresolvedTEncoder.resolve(logicalPlan.output, OuterScopes.outerScopes)
+  private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
   /**
-   * The encoder where the expressions used to construct an object from an input row have been
-   * bound to the ordinals of this [[Dataset]]'s output schema.
+   * Encoder is used mostly as a container of serde expressions in Dataset.  We build logical
+   * plans by these serde expressions and execute it within the query framework.  However, for
+   * performance reasons we may want to use encoder as a function to deserialize internal rows to
+   * custom objects, e.g. collect.  Here we resolve and bind the encoder so that we can call its
+   * `fromRow` method later.
    */
-  private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
+  private val boundEnc =
+    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
 
-  private implicit def classTag = unresolvedTEncoder.clsTag
+  private implicit def classTag = exprEnc.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
@@ -228,20 +230,33 @@ class Dataset[T] private[sql](
     }
   }
 
+  private def aggregatableColumns: Seq[Expression] = {
+    schema.fields
+      .filter(f => f.dataType.isInstanceOf[NumericType] || f.dataType.isInstanceOf[StringType])
+      .map { n =>
+        queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver)
+          .get
+      }
+  }
+
   /**
    * Compose the string representing rows for output
    *
    * @param _numRows Number of rows to show
-   * @param truncate Whether truncate long strings and align cells right
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
    */
-  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  private[sql] def showString(_numRows: Int, truncate: Int = 20): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
+    lazy val timeZone = TimeZone.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
+
     // For array values, replace Seq and Array with square brackets
-    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    // For cells that are beyond `truncate` characters, replace it with the
+    // first `truncate-3` and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
@@ -249,9 +264,19 @@ class Dataset[T] private[sql](
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case array: Array[_] => array.mkString("[", ", ", "]")
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case d: Date =>
+            DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
+          case ts: Timestamp =>
+            DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(ts), timeZone)
           case _ => cell.toString
         }
-        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
+        if (truncate > 0 && str.length > truncate) {
+          // do not show ellipses for strings shorter than 4 characters.
+          if (truncate < 4) str.substring(0, truncate)
+          else str.substring(0, truncate - 3) + "..."
+        } else {
+          str
+        }
       }: Seq[String]
     }
 
@@ -273,7 +298,7 @@ class Dataset[T] private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      if (truncate) {
+      if (truncate > 0) {
         StringUtils.leftPad(cell, colWidths(i))
       } else {
         StringUtils.rightPad(cell, colWidths(i))
@@ -285,7 +310,7 @@ class Dataset[T] private[sql](
     // data
     rows.tail.map {
       _.zipWithIndex.map { case (cell, i) =>
-        if (truncate) {
+        if (truncate > 0) {
           StringUtils.leftPad(cell.toString, colWidths(i))
         } else {
           StringUtils.rightPad(cell.toString, colWidths(i))
@@ -340,27 +365,28 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] where each record has been mapped on to the specified type. The
+   * Returns a new Dataset where each record has been mapped on to the specified type. The
    * method used to map columns depend on the type of `U`:
    *  - When `U` is a class, fields for the class will be mapped to columns of the same name
    *    (case sensitivity is determined by `spark.sql.caseSensitive`).
-   *  - When `U` is a tuple, the columns will be be mapped by ordinal (i.e. the first column will
+   *  - When `U` is a tuple, the columns will be mapped by ordinal (i.e. the first column will
    *    be assigned to `_1`).
    *  - When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
-   *    [[DataFrame]] will be used.
+   *    `DataFrame` will be used.
    *
-   * If the schema of the [[Dataset]] does not match the desired `U` type, you can use `select`
+   * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
    *
    * @group basic
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
-   * This can be quite convenient in conversion from a RDD of tuples into a [[DataFrame]] with
+   * This can be quite convenient in conversion from an RDD of tuples into a `DataFrame` with
    * meaningful names. For example:
    * {{{
    *   val rdd: RDD[(Int, String)] = ...
@@ -385,7 +411,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns the schema of this [[Dataset]].
+   * Returns the schema of this Dataset.
    *
    * @group basic
    * @since 1.6.0
@@ -453,21 +479,113 @@ class Dataset[T] private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
-   * Returns true if this [[Dataset]] contains one or more sources that continuously
-   * return data as it arrives. A [[Dataset]] that reads data from a streaming source
-   * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
-   * [[DataFrameWriter]]. Methods that return a single answer, e.g. `count()` or
+   * Returns true if this Dataset contains one or more sources that continuously
+   * return data as it arrives. A Dataset that reads data from a streaming source
+   * must be executed as a `StreamingQuery` using the `start()` method in
+   * `DataStreamWriter`. Methods that return a single answer, e.g. `count()` or
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
-   * @group basic
+   * @group streaming
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
-   * Displays the [[Dataset]] in a tabular form. Strings more than 20 characters will be truncated,
+   * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
+   * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def checkpoint(): Dataset[T] = checkpoint(eager = true)
+
+  /**
+   * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
+   * logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. It will be saved to files inside the checkpoint
+   * directory set with `SparkContext#setCheckpointDir`.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def checkpoint(eager: Boolean): Dataset[T] = {
+    val internalRdd = queryExecution.toRdd.map(_.copy())
+    internalRdd.checkpoint()
+
+    if (eager) {
+      internalRdd.count()
+    }
+
+    val physicalPlan = queryExecution.executedPlan
+
+    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
+    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
+    // joins.
+    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+      partitioning match {
+        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+        case p => p
+      }
+    }
+
+    val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
+
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRDD(
+        logicalPlan.output,
+        internalRdd,
+        outputPartitioning,
+        physicalPlan.outputOrdering
+      )(sparkSession)).as[T]
+  }
+
+  /**
+   * :: Experimental ::
+   * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
+   * before which we assume no more late data is going to arrive.
+   *
+   * Spark will use this watermark for several purposes:
+   *  - To know when a given time window aggregation can be finalized and thus can be emitted when
+   *    using output modes that do not allow updates.
+   *  - To minimize the amount of state that we need to keep for on-going aggregations.
+   *
+   *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
+   *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
+   *  of coordinating this value across partitions, the actual watermark used is only guaranteed
+   *  to be at least `delayThreshold` behind the actual event time.  In some cases we may still
+   *  process records that arrive more than `delayThreshold` late.
+   *
+   * @param eventTime the name of the column that contains the event time of the row.
+   * @param delayThreshold the minimum delay to wait to data to arrive late, relative to the latest
+   *                       record that has been processed in the form of an interval
+   *                       (e.g. "1 minute" or "5 hours").
+   *
+   * @group streaming
+   * @since 2.1.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  // We only accept an existing column name, not a derived column here as a watermark that is
+  // defined on a derived column cannot referenced elsewhere in the plan.
+  def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
+    val parsedDelay =
+      Option(CalendarInterval.fromString("interval " + delayThreshold))
+        .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+    EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
+  }
+
+  /**
+   * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,
    * and all cells will be aligned right. For example:
    * {{{
    *   year  month AVG('Adj Close) MAX('Adj Close)
@@ -486,7 +604,7 @@ class Dataset[T] private[sql](
   def show(numRows: Int): Unit = show(numRows, truncate = true)
 
   /**
-   * Displays the top 20 rows of [[Dataset]] in a tabular form. Strings more than 20 characters
+   * Displays the top 20 rows of Dataset in a tabular form. Strings more than 20 characters
    * will be truncated, and all cells will be aligned right.
    *
    * @group action
@@ -495,7 +613,7 @@ class Dataset[T] private[sql](
   def show(): Unit = show(20)
 
   /**
-   * Displays the top 20 rows of [[Dataset]] in a tabular form.
+   * Displays the top 20 rows of Dataset in a tabular form.
    *
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *                 be truncated and all cells will be aligned right
@@ -506,7 +624,7 @@ class Dataset[T] private[sql](
   def show(truncate: Boolean): Unit = show(20, truncate)
 
   /**
-   * Displays the [[Dataset]] in a tabular form. For example:
+   * Displays the Dataset in a tabular form. For example:
    * {{{
    *   year  month AVG('Adj Close) MAX('Adj Close)
    *   1980  12    0.503218        0.595103
@@ -523,7 +641,32 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   // scalastyle:off println
-  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  def show(numRows: Int, truncate: Boolean): Unit = if (truncate) {
+    println(showString(numRows, truncate = 20))
+  } else {
+    println(showString(numRows, truncate = 0))
+  }
+  // scalastyle:on println
+
+  /**
+   * Displays the Dataset in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   *
+   * @param numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                    all cells will be aligned right.
+   * @group action
+   * @since 1.6.0
+   */
+  // scalastyle:off println
+  def show(numRows: Int, truncate: Int): Unit = println(showString(numRows, truncate))
   // scalastyle:on println
 
   /**
@@ -551,9 +694,9 @@ class Dataset[T] private[sql](
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /**
-   * Cartesian join with another [[DataFrame]].
+   * Join with another `DataFrame`.
    *
-   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   * Behaves as an INNER JOIN and requires a subsequent join predicate.
    *
    * @param right Right side of the join operation.
    *
@@ -565,7 +708,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Inner equi-join with another [[DataFrame]] using the given column.
+   * Inner equi-join with another `DataFrame` using the given column.
    *
    * Different from other join functions, the join column will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -575,12 +718,12 @@ class Dataset[T] private[sql](
    *   df1.join(df2, "user_id")
    * }}}
    *
-   * Note that if you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -590,7 +733,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Inner equi-join with another [[DataFrame]] using the given columns.
+   * Inner equi-join with another `DataFrame` using the given columns.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
@@ -600,12 +743,12 @@ class Dataset[T] private[sql](
    *   df1.join(df2, Seq("user_id", "user_name"))
    * }}}
    *
-   * Note that if you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -615,18 +758,22 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Equi-join with another [[DataFrame]] using the given columns.
+   * Equi-join with another `DataFrame` using the given columns. A cross join with a predicate
+   * is specified as an inner join. If you would explicitly like to perform a cross join use the
+   * `crossJoin` method.
    *
    * Different from other join functions, the join columns will only appear once in the output,
    * i.e. similar to SQL's `JOIN USING` syntax.
    *
-   * Note that if you perform a self-join using this function without aliasing the input
-   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
-   * there is no way to disambiguate which side of the join you would like to reference.
-   *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
+   *
+   * @note If you perform a self-join using this function without aliasing the input
+   * `DataFrame`s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -642,13 +789,13 @@ class Dataset[T] private[sql](
       Join(
         joined.left,
         joined.right,
-        UsingJoin(JoinType(joinType), usingColumns.map(UnresolvedAttribute(_))),
+        UsingJoin(JoinType(joinType), usingColumns),
         None)
     }
   }
 
   /**
-   * Inner join with another [[DataFrame]], using the given join expression.
+   * Inner join with another `DataFrame`, using the given join expression.
    *
    * {{{
    *   // The following two are equivalent:
@@ -662,7 +809,7 @@ class Dataset[T] private[sql](
   def join(right: Dataset[_], joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
-   * Join with another [[DataFrame]], using the given join expression. The following performs
+   * Join with another `DataFrame`, using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
    * {{{
@@ -677,7 +824,9 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join.
    * @param joinExprs Join expression.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -726,8 +875,22 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Explicit cartesian join with another `DataFrame`.
+   *
+   * @param right Right side of the join operation.
+   *
+   * @note Cartesian joins are very expensive without an extra filter that can be pushed down.
+   *
+   * @group untypedrel
+   * @since 2.1.0
+   */
+  def crossJoin(right: Dataset[_]): DataFrame = withPlan {
+    Join(logicalPlan, right.logicalPlan, joinType = Cross, None)
+  }
+
+  /**
    * :: Experimental ::
-   * Joins this [[Dataset]] returning a [[Tuple2]] for each pair where `condition` evaluates to
+   * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to
    * true.
    *
    * This is similar to the relation `join` function with one important difference in the
@@ -740,12 +903,15 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `inner`, `cross`, `outer`, `full`, `full_outer`, `left`, `left_outer`,
+   *                 `right`, `right_outer`, `left_semi`, `left_anti`.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
@@ -761,7 +927,7 @@ class Dataset[T] private[sql](
     // Note that we do this before joining them, to enable the join operator to return null for one
     // side, in cases like outer-join.
     val left = {
-      val combined = if (this.unresolvedTEncoder.flat) {
+      val combined = if (this.exprEnc.flat) {
         assert(joined.left.output.length == 1)
         Alias(joined.left.output.head, "_1")()
       } else {
@@ -771,7 +937,7 @@ class Dataset[T] private[sql](
     }
 
     val right = {
-      val combined = if (other.unresolvedTEncoder.flat) {
+      val combined = if (other.exprEnc.flat) {
         assert(joined.right.output.length == 1)
         Alias(joined.right.output.head, "_2")()
       } else {
@@ -784,14 +950,14 @@ class Dataset[T] private[sql](
     // combine the outputs of each join side.
     val conditionExpr = joined.condition.get transformUp {
       case a: Attribute if joined.left.outputSet.contains(a) =>
-        if (this.unresolvedTEncoder.flat) {
+        if (this.exprEnc.flat) {
           left.output.head
         } else {
           val index = joined.left.output.indexWhere(_.exprId == a.exprId)
           GetStructField(left.output.head, index)
         }
       case a: Attribute if joined.right.outputSet.contains(a) =>
-        if (other.unresolvedTEncoder.flat) {
+        if (other.exprEnc.flat) {
           right.output.head
         } else {
           val index = joined.right.output.indexWhere(_.exprId == a.exprId)
@@ -800,14 +966,14 @@ class Dataset[T] private[sql](
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
+      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
 
     withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr)))
   }
 
   /**
    * :: Experimental ::
-   * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
+   * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair
    * where `condition` evaluates to true.
    *
    * @param other Right side of the join.
@@ -817,12 +983,13 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
   }
 
   /**
-   * Returns a new [[Dataset]] with each partition sorted by the given expressions.
+   * Returns a new Dataset with each partition sorted by the given expressions.
    *
    * This is the same operation as "SORT BY" in SQL (Hive QL).
    *
@@ -835,7 +1002,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with each partition sorted by the given expressions.
+   * Returns a new Dataset with each partition sorted by the given expressions.
    *
    * This is the same operation as "SORT BY" in SQL (Hive QL).
    *
@@ -848,7 +1015,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] sorted by the specified column, all in ascending order.
+   * Returns a new Dataset sorted by the specified column, all in ascending order.
    * {{{
    *   // The following 3 are equivalent
    *   ds.sort("sortcol")
@@ -865,7 +1032,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] sorted by the given expressions. For example:
+   * Returns a new Dataset sorted by the given expressions. For example:
    * {{{
    *   ds.sort($"col1", $"col2".desc)
    * }}}
@@ -879,7 +1046,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] sorted by the given expressions.
+   * Returns a new Dataset sorted by the given expressions.
    * This is an alias of the `sort` function.
    *
    * @group typedrel
@@ -889,7 +1056,7 @@ class Dataset[T] private[sql](
   def orderBy(sortCol: String, sortCols: String*): Dataset[T] = sort(sortCol, sortCols : _*)
 
   /**
-   * Returns a new [[Dataset]] sorted by the given expressions.
+   * Returns a new Dataset sorted by the given expressions.
    * This is an alias of the `sort` function.
    *
    * @group typedrel
@@ -900,7 +1067,8 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
-   * Note that the column name can also reference to a nested column like `a.b`.
+   *
+   * @note The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -909,7 +1077,8 @@ class Dataset[T] private[sql](
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
-   * Note that the column name can also reference to a nested column like `a.b`.
+   *
+   * @note The column name can also reference to a nested column like `a.b`.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -923,17 +1092,17 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with an alias set.
+   * Returns a new Dataset with an alias set.
    *
    * @group typedrel
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan, None)
   }
 
   /**
-   * (Scala-specific) Returns a new [[Dataset]] with an alias set.
+   * (Scala-specific) Returns a new Dataset with an alias set.
    *
    * @group typedrel
    * @since 2.0.0
@@ -941,7 +1110,7 @@ class Dataset[T] private[sql](
   def as(alias: Symbol): Dataset[T] = as(alias.name)
 
   /**
-   * Returns a new [[Dataset]] with an alias set. Same as `as`.
+   * Returns a new Dataset with an alias set. Same as `as`.
    *
    * @group typedrel
    * @since 2.0.0
@@ -949,7 +1118,7 @@ class Dataset[T] private[sql](
   def alias(alias: String): Dataset[T] = as(alias)
 
   /**
-   * (Scala-specific) Returns a new [[Dataset]] with an alias set. Same as `as`.
+   * (Scala-specific) Returns a new Dataset with an alias set. Same as `as`.
    *
    * @group typedrel
    * @since 2.0.0
@@ -1008,7 +1177,7 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
+   * Returns a new Dataset by computing the given [[Column]] expression for each element.
    *
    * {{{
    *   val ds = Seq(1, 2, 3).toDS()
@@ -1019,15 +1188,18 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    new Dataset[U1](
-      sparkSession,
-      Project(
-        c1.withInputType(
-          unresolvedTEncoder.deserializer,
-          logicalPlan.output).named :: Nil,
-        logicalPlan),
-      implicitly[Encoder[U1]])
+  @InterfaceStability.Evolving
+  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
+    implicit val encoder = c1.encoder
+    val project = Project(c1.withInputType(exprEnc, logicalPlan.output).named :: Nil,
+      logicalPlan)
+
+    if (encoder.flat) {
+      new Dataset[U1](sparkSession, project, encoder)
+    } else {
+      // Flattens inner fields of U1
+      new Dataset[Tuple1[U1]](sparkSession, project, ExpressionEncoder.tuple(encoder)).map(_._1)
+    }
   }
 
   /**
@@ -1038,30 +1210,32 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
+      columns.map(_.withInputType(exprEnc, logicalPlan.output).named)
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders))
   }
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
     selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2, U3](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1070,12 +1244,13 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2, U3, U4](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1085,12 +1260,13 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def select[U1, U2, U3, U4, U5](
       c1: TypedColumn[T, U1],
       c2: TypedColumn[T, U2],
@@ -1154,7 +1330,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Groups the [[Dataset]] using the specified columns, so we can run aggregation on them. See
+   * Groups the Dataset using the specified columns, so we can run aggregation on them. See
    * [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
@@ -1177,7 +1353,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Create a multi-dimensional rollup for the current [[Dataset]] using the specified columns,
+   * Create a multi-dimensional rollup for the current Dataset using the specified columns,
    * so we can run aggregation on them.
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
@@ -1201,7 +1377,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Create a multi-dimensional cube for the current [[Dataset]] using the specified columns,
+   * Create a multi-dimensional cube for the current Dataset using the specified columns,
    * so we can run aggregation on them.
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
@@ -1225,7 +1401,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Groups the [[Dataset]] using the specified columns, so that we can run aggregation on them.
+   * Groups the Dataset using the specified columns, so that we can run aggregation on them.
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * This is a variant of groupBy that can only group by existing columns using column names
@@ -1254,13 +1430,14 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Reduces the elements of this [[Dataset]] using the specified binary function. The given `func`
+   * Reduces the elements of this Dataset using the specified binary function. The given `func`
    * must be commutative and associative or the result may be non-deterministic.
    *
    * @group action
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def reduce(func: (T, T) => T): T = rdd.reduce(func)
 
   /**
@@ -1273,6 +1450,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def reduce(func: ReduceFunction[T]): T = reduce(func.call(_, _))
 
   /**
@@ -1284,6 +1462,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
@@ -1306,11 +1485,12 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     groupByKey(func.call(_))(encoder)
 
   /**
-   * Create a multi-dimensional rollup for the current [[Dataset]] using the specified columns,
+   * Create a multi-dimensional rollup for the current Dataset using the specified columns,
    * so we can run aggregation on them.
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
@@ -1339,7 +1519,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Create a multi-dimensional cube for the current [[Dataset]] using the specified columns,
+   * Create a multi-dimensional cube for the current Dataset using the specified columns,
    * so we can run aggregation on them.
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
@@ -1367,7 +1547,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * (Scala-specific) Aggregates on the entire [[Dataset]] without groups.
+   * (Scala-specific) Aggregates on the entire Dataset without groups.
    * {{{
    *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg("age" -> "max", "salary" -> "avg")
@@ -1382,7 +1562,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * (Scala-specific) Aggregates on the entire [[Dataset]] without groups.
+   * (Scala-specific) Aggregates on the entire Dataset without groups.
    * {{{
    *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
@@ -1395,7 +1575,7 @@ class Dataset[T] private[sql](
   def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
-   * (Java-specific) Aggregates on the entire [[Dataset]] without groups.
+   * (Java-specific) Aggregates on the entire Dataset without groups.
    * {{{
    *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg(Map("age" -> "max", "salary" -> "avg"))
@@ -1408,7 +1588,7 @@ class Dataset[T] private[sql](
   def agg(exprs: java.util.Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
-   * Aggregates on the entire [[Dataset]] without groups.
+   * Aggregates on the entire Dataset without groups.
    * {{{
    *   // ds.agg(...) is a shorthand for ds.groupBy().agg(...)
    *   ds.agg(max($"age"), avg($"salary"))
@@ -1422,9 +1602,9 @@ class Dataset[T] private[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs : _*)
 
   /**
-   * Returns a new [[Dataset]] by taking the first `n` rows. The difference between this function
+   * Returns a new Dataset by taking the first `n` rows. The difference between this function
    * and `head` is that `head` is an action and returns an array (by triggering query execution)
-   * while `limit` returns a new [[Dataset]].
+   * while `limit` returns a new Dataset.
    *
    * @group typedrel
    * @since 2.0.0
@@ -1434,7 +1614,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] containing union of rows in this Dataset and another Dataset.
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    * This is equivalent to `UNION ALL` in SQL.
    *
    * To do a SQL-style set union (that does deduplication of elements), use this function followed
@@ -1447,7 +1627,7 @@ class Dataset[T] private[sql](
   def unionAll(other: Dataset[T]): Dataset[T] = union(other)
 
   /**
-   * Returns a new [[Dataset]] containing union of rows in this Dataset and another Dataset.
+   * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    * This is equivalent to `UNION ALL` in SQL.
    *
    * To do a SQL-style set union (that does deduplication of elements), use this function followed
@@ -1456,52 +1636,60 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.0.0
    */
-  def union(other: Dataset[T]): Dataset[T] = withTypedPlan {
+  def union(other: Dataset[T]): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /**
-   * Returns a new [[Dataset]] containing rows only in both this Dataset and another Dataset.
+   * Returns a new Dataset containing rows only in both this Dataset and another Dataset.
    * This is equivalent to `INTERSECT` in SQL.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
    * @since 1.6.0
    */
-  def intersect(other: Dataset[T]): Dataset[T] = withTypedPlan {
+  def intersect(other: Dataset[T]): Dataset[T] = withSetOperator {
     Intersect(logicalPlan, other.logicalPlan)
   }
 
   /**
-   * Returns a new [[Dataset]] containing rows in this Dataset but not in another Dataset.
+   * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
    * This is equivalent to `EXCEPT` in SQL.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
    * @since 2.0.0
    */
-  def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
+  def except(other: Dataset[T]): Dataset[T] = withSetOperator {
     Except(logicalPlan, other.logicalPlan)
   }
 
   /**
-   * Returns a new [[Dataset]] by sampling a fraction of rows.
+   * Returns a new [[Dataset]] by sampling a fraction of rows, using a user-supplied seed.
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    * @param seed Seed for sampling.
    *
+   * @note This is NOT guaranteed to provide exactly the fraction of the count
+   * of the given [[Dataset]].
+   *
    * @group typedrel
    * @since 1.6.0
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = withTypedPlan {
-    Sample(0.0, fraction, withReplacement, seed, logicalPlan)()
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = {
+    require(fraction >= 0,
+      s"Fraction must be nonnegative, but got ${fraction}")
+
+    withTypedPlan {
+      Sample(0.0, fraction, withReplacement, seed, logicalPlan)()
+    }
   }
 
   /**
@@ -1509,6 +1697,9 @@ class Dataset[T] private[sql](
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
+   *
+   * @note This is NOT guaranteed to provide exactly the fraction of the total count
+   * of the given [[Dataset]].
    *
    * @group typedrel
    * @since 1.6.0
@@ -1518,7 +1709,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Randomly splits this [[Dataset]] with the provided weights.
+   * Randomly splits this Dataset with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
@@ -1529,6 +1720,11 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
+    require(weights.forall(_ >= 0),
+      s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
+    require(weights.sum > 0,
+      s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
+
     // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
@@ -1545,7 +1741,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a Java list that contains randomly split [[Dataset]] with the provided weights.
+   * Returns a Java list that contains randomly split Dataset with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
@@ -1559,7 +1755,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Randomly splits this [[Dataset]] with the provided weights.
+   * Randomly splits this Dataset with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @group typedrel
@@ -1570,7 +1766,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Randomly splits this [[Dataset]] with the provided weights. Provided for the Python Api.
+   * Randomly splits this Dataset with the provided weights. Provided for the Python Api.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
@@ -1580,7 +1776,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * (Scala-specific) Returns a new [[Dataset]] where each row has been expanded to zero or more
+   * (Scala-specific) Returns a new Dataset where each row has been expanded to zero or more
    * rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
    *
@@ -1623,7 +1819,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * (Scala-specific) Returns a new [[Dataset]] where a single column has been expanded to zero
+   * (Scala-specific) Returns a new Dataset where a single column has been expanded to zero
    * or more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
@@ -1664,7 +1860,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] by adding a column or replacing the existing column that has
+   * Returns a new Dataset by adding a column or replacing the existing column that has
    * the same name.
    *
    * @group untypedrel
@@ -1689,28 +1885,14 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] by adding a column with metadata.
+   * Returns a new Dataset by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName, metadata)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
-      select(Column("*"), col.as(colName, metadata))
-    }
+    withColumn(colName, col.as(colName, metadata))
   }
 
   /**
-   * Returns a new [[Dataset]] with a column renamed.
+   * Returns a new Dataset with a column renamed.
    * This is a no-op if schema doesn't contain existingName.
    *
    * @group untypedrel
@@ -1735,7 +1917,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with a column dropped. This is a no-op if schema doesn't contain
+   * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
    * column name.
    *
    * This method can only be used to drop top level columns. the colName string is treated
@@ -1749,7 +1931,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with columns dropped.
+   * Returns a new Dataset with columns dropped.
    * This is a no-op if schema doesn't contain column name(s).
    *
    * This method can only be used to drop top level columns. the colName string is treated literally
@@ -1773,8 +1955,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with a column dropped.
-   * This version of drop accepts a Column rather than a name.
+   * Returns a new Dataset with a column dropped.
+   * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
    *
@@ -1796,7 +1978,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] that contains only the unique rows from this [[Dataset]].
+   * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `distinct`.
    *
    * @group typedrel
@@ -1805,14 +1987,25 @@ class Dataset[T] private[sql](
   def dropDuplicates(): Dataset[T] = dropDuplicates(this.columns)
 
   /**
-   * (Scala-specific) Returns a new [[Dataset]] with duplicate rows removed, considering only
+   * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
    *
    * @group typedrel
    * @since 2.0.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
-    val groupCols = colNames.map(resolve)
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    val groupCols = colNames.flatMap { colName =>
+      // It is possibly there are more than one columns with the same name,
+      // so we call filter instead of find.
+      val cols = allColumns.filter(col => resolver(col.name, colName))
+      if (cols.isEmpty) {
+        throw new AnalysisException(
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+      }
+      cols
+    }
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
       if (groupColExprIds.contains(attr.exprId)) {
@@ -1825,7 +2018,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with duplicate rows removed, considering only
+   * Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
    *
    * @group typedrel
@@ -1834,11 +2027,25 @@ class Dataset[T] private[sql](
   def dropDuplicates(colNames: Array[String]): Dataset[T] = dropDuplicates(colNames.toSeq)
 
   /**
-   * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
-   * If no columns are given, this function computes statistics for all numerical columns.
+   * Returns a new [[Dataset]] with duplicate rows removed, considering only
+   * the subset of columns.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def dropDuplicates(col1: String, cols: String*): Dataset[T] = {
+    val colNames: Seq[String] = col1 +: cols
+    dropDuplicates(colNames)
+  }
+
+  /**
+   * Computes statistics for numeric and string columns, including count, mean, stddev, min, and
+   * max. If no columns are given, this function computes statistics for all numerical or string
+   * columns.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
-   * backward compatibility of the schema of the resulting [[Dataset]]. If you want to
+   * backward compatibility of the schema of the resulting Dataset. If you want to
    * programmatically compute summary statistics, use the `agg` function instead.
    *
    * {{{
@@ -1868,7 +2075,7 @@ class Dataset[T] private[sql](
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols =
-      (if (cols.isEmpty) numericColumns.map(usePrettyExpression(_).sql) else cols).toList
+      (if (cols.isEmpty) aggregatableColumns.map(usePrettyExpression(_).sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
@@ -1889,7 +2096,8 @@ class Dataset[T] private[sql](
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    LocalRelation.fromExternalRows(schema, ret)
+    // `toArray` forces materialization to make the seq serializable
+    LocalRelation.fromExternalRows(schema, ret.toArray.toSeq)
   }
 
   /**
@@ -1901,9 +2109,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def head(n: Int): Array[T] = withTypedCallback("head", limit(n)) { df =>
-    df.collect(needCallback = false)
-  }
+  def head(n: Int): Array[T] = withAction("head", limit(n).queryExecution)(collectFromPlan)
 
   /**
    * Returns the first row.
@@ -1937,46 +2143,41 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
+   * Returns a new Dataset that only contains elements where `func` returns `true`.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def filter(func: T => Boolean): Dataset[T] = {
-    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
-    val condition = Invoke(function, "apply", BooleanType, deserialized.output)
-    val filter = Filter(condition, deserialized)
-    withTypedPlan(CatalystSerde.serialize[T](filter))
+    withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
+   * Returns a new Dataset that only contains elements where `func` returns `true`.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def filter(func: FilterFunction[T]): Dataset[T] = {
-    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    val function = Literal.create(func, ObjectType(classOf[FilterFunction[T]]))
-    val condition = Invoke(function, "call", BooleanType, deserialized.output)
-    val filter = Filter(condition, deserialized)
-    withTypedPlan(CatalystSerde.serialize[T](filter))
+    withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
+   * Returns a new Dataset that contains the result of applying `func` to each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def map[U : Encoder](func: T => U): Dataset[U] = withTypedPlan {
     MapElements[T, U](func, logicalPlan)
   }
@@ -1984,12 +2185,13 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
+   * Returns a new Dataset that contains the result of applying `func` to each element.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     implicit val uEnc = encoder
     withTypedPlan(MapElements[T, U](func, logicalPlan))
@@ -1998,12 +2200,13 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
+   * Returns a new Dataset that contains the result of applying `func` to each partition.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sparkSession,
@@ -2014,19 +2217,20 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Returns a new [[Dataset]] that contains the result of applying `f` to each partition.
+   * Returns a new Dataset that contains the result of applying `f` to each partition.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
   }
 
   /**
-   * Returns a new [[DataFrame]] that contains the result of applying a serialized R function
+   * Returns a new `DataFrame` that contains the result of applying a serialized R function
    * `func` to each partition.
    */
   private[sql] def mapPartitionsInR(
@@ -2043,26 +2247,28 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
+   * Returns a new Dataset by first applying a function to all elements of this Dataset,
    * and then flattening the results.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(_.flatMap(func))
 
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
+   * Returns a new Dataset by first applying a function to all elements of this Dataset,
    * and then flattening the results.
    *
    * @group typedrel
    * @since 1.6.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (T) => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
@@ -2080,7 +2286,7 @@ class Dataset[T] private[sql](
 
   /**
    * (Java-specific)
-   * Runs `func` on each element of this [[Dataset]].
+   * Runs `func` on each element of this Dataset.
    *
    * @group action
    * @since 1.6.0
@@ -2088,7 +2294,7 @@ class Dataset[T] private[sql](
   def foreach(func: ForeachFunction[T]): Unit = foreach(func.call(_))
 
   /**
-   * Applies a function `f` to each partition of this [[Dataset]].
+   * Applies a function `f` to each partition of this Dataset.
    *
    * @group action
    * @since 1.6.0
@@ -2099,7 +2305,7 @@ class Dataset[T] private[sql](
 
   /**
    * (Java-specific)
-   * Runs `func` on each partition of this [[Dataset]].
+   * Runs `func` on each partition of this Dataset.
    *
    * @group action
    * @since 1.6.0
@@ -2108,7 +2314,7 @@ class Dataset[T] private[sql](
     foreachPartition(it => func.call(it.asJava))
 
   /**
-   * Returns the first `n` rows in the [[Dataset]].
+   * Returns the first `n` rows in the Dataset.
    *
    * Running take requires moving data into the application's driver process, and doing so with
    * a very large `n` can crash the driver process with OutOfMemoryError.
@@ -2119,7 +2325,7 @@ class Dataset[T] private[sql](
   def take(n: Int): Array[T] = head(n)
 
   /**
-   * Returns the first `n` rows in the [[Dataset]] as a list.
+   * Returns the first `n` rows in the Dataset as a list.
    *
    * Running take requires moving data into the application's driver process, and doing so with
    * a very large `n` can crash the driver process with OutOfMemoryError.
@@ -2130,7 +2336,7 @@ class Dataset[T] private[sql](
   def takeAsList(n: Int): java.util.List[T] = java.util.Arrays.asList(take(n) : _*)
 
   /**
-   * Returns an array that contains all of [[Row]]s in this [[Dataset]].
+   * Returns an array that contains all rows in this Dataset.
    *
    * Running collect requires moving all the data into the application's driver process, and
    * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
@@ -2140,10 +2346,10 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def collect(): Array[T] = collect(needCallback = true)
+  def collect(): Array[T] = withAction("collect", queryExecution)(collectFromPlan)
 
   /**
-   * Returns a Java list that contains all of [[Row]]s in this [[Dataset]].
+   * Returns a Java list that contains all rows in this Dataset.
    *
    * Running collect requires moving all the data into the application's driver process, and
    * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
@@ -2151,54 +2357,40 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def collectAsList(): java.util.List[T] = withCallback("collectAsList", toDF()) { _ =>
-    withNewExecutionId {
-      val values = queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
-      java.util.Arrays.asList(values : _*)
-    }
-  }
-
-  private def collect(needCallback: Boolean): Array[T] = {
-    def execute(): Array[T] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
-    }
-
-    if (needCallback) {
-      withCallback("collect", toDF())(_ => execute())
-    } else {
-      execute()
-    }
+  def collectAsList(): java.util.List[T] = withAction("collectAsList", queryExecution) { plan =>
+    val values = collectFromPlan(plan)
+    java.util.Arrays.asList(values : _*)
   }
 
   /**
-   * Return an iterator that contains all of [[Row]]s in this [[Dataset]].
+   * Return an iterator that contains all rows in this Dataset.
    *
-   * The iterator will consume as much memory as the largest partition in this [[Dataset]].
+   * The iterator will consume as much memory as the largest partition in this Dataset.
    *
-   * Note: this results in multiple Spark jobs, and if the input Dataset is the result
+   * @note this results in multiple Spark jobs, and if the input Dataset is the result
    * of a wide transformation (e.g. join with different partitioners), to avoid
    * recomputing the input Dataset should be cached first.
    *
    * @group action
    * @since 2.0.0
    */
-  def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
-    withNewExecutionId {
-      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow).asJava
+  def toLocalIterator(): java.util.Iterator[T] = {
+    withAction("toLocalIterator", queryExecution) { plan =>
+      plan.executeToIterator().map(boundEnc.fromRow).asJava
     }
   }
 
   /**
-   * Returns the number of rows in the [[Dataset]].
+   * Returns the number of rows in the Dataset.
    * @group action
    * @since 1.6.0
    */
-  def count(): Long = withCallback("count", groupBy().count()) { df =>
-    df.collect(needCallback = false).head.getLong(0)
+  def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
+    plan.executeCollect().head.getLong(0)
   }
 
   /**
-   * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+   * Returns a new Dataset that has exactly `numPartitions` partitions.
    *
    * @group typedrel
    * @since 1.6.0
@@ -2208,7 +2400,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] partitioned by the given partitioning expressions into
+   * Returns a new Dataset partitioned by the given partitioning expressions into
    * `numPartitions`. The resulting Dataset is hash partitioned.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
@@ -2222,7 +2414,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] partitioned by the given partitioning expressions, using
+   * Returns a new Dataset partitioned by the given partitioning expressions, using
    * `spark.sql.shuffle.partitions` as number of partitions.
    * The resulting Dataset is hash partitioned.
    *
@@ -2237,8 +2429,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
-   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * Returns a new Dataset that has exactly `numPartitions` partitions.
+   * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
    * the 100 new partitions will claim 10 of the current partitions.
    *
@@ -2250,10 +2442,10 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] that contains only the unique rows from this [[Dataset]].
+   * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `dropDuplicates`.
    *
-   * Note that, equality checking is performed directly on the encoded representation of the data
+   * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
    *
    * @group typedrel
@@ -2262,7 +2454,7 @@ class Dataset[T] private[sql](
   def distinct(): Dataset[T] = dropDuplicates()
 
   /**
-   * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic
    * @since 1.6.0
@@ -2273,7 +2465,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic
    * @since 1.6.0
@@ -2281,7 +2473,7 @@ class Dataset[T] private[sql](
   def cache(): this.type = persist()
 
   /**
-   * Persist this [[Dataset]] with the given storage level.
+   * Persist this Dataset with the given storage level.
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
    *                 `MEMORY_AND_DISK_2`, etc.
@@ -2295,7 +2487,19 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  def storageLevel: StorageLevel = {
+    sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
+      cachedData.cachedRepresentation.storageLevel
+    }.getOrElse(StorageLevel.NONE)
+  }
+
+  /**
+   * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @param blocking Whether to block until all blocks are deleted.
    *
@@ -2303,12 +2507,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.tryUncacheQuery(this, blocking)
+    sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
     this
   }
 
   /**
-   * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+   * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @group basic
    * @since 1.6.0
@@ -2316,13 +2520,13 @@ class Dataset[T] private[sql](
   def unpersist(): this.type = unpersist(blocking = false)
 
   /**
-   * Represents the content of the [[Dataset]] as an [[RDD]] of [[T]].
+   * Represents the content of the Dataset as an `RDD` of `T`.
    *
    * @group basic
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    val objectType = unresolvedTEncoder.deserializer.dataType
+    val objectType = exprEnc.deserializer.dataType
     val deserialized = CatalystSerde.deserialize[T](logicalPlan)
     sparkSession.sessionState.executePlan(deserialized).toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
@@ -2330,21 +2534,21 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
-   * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    * @group basic
    * @since 1.6.0
    */
   def javaRDD: JavaRDD[T] = toJavaRDD
 
   /**
-   * Registers this [[Dataset]] as a temporary table using the given name. The lifetime of this
+   * Registers this Dataset as a temporary table using the given name. The lifetime of this
    * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
    *
    * @group basic
@@ -2356,54 +2560,112 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Creates a temporary view using the given name. The lifetime of this
+   * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
    *
-   * @throws AnalysisException if the view name already exists
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+   *
+   * @throws AnalysisException if the view name is invalid or already exists
    *
    * @group basic
    * @since 2.0.0
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    val tableDesc = CatalogTable(
-      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      tableType = CatalogTableType.VIEW,
-      schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.empty)
-    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
-      isTemporary = true)
+    createTempViewCommand(viewName, replace = false, global = false)
   }
 
+
+
   /**
-   * Creates a temporary view using the given name. The lifetime of this
+   * Creates a local temporary view using the given name. The lifetime of this
    * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
    *
    * @group basic
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    val tableDesc = CatalogTable(
-      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      tableType = CatalogTableType.VIEW,
-      schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.empty)
-    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
-      isTemporary = true)
+    createTempViewCommand(viewName, replace = true, global = false)
   }
 
   /**
-   * :: Experimental ::
-   * Interface for saving the content of the [[Dataset]] out into external storage or streams.
+   * Creates a global temporary view using the given name. The lifetime of this
+   * temporary view is tied to this Spark application.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
+   *
+   * @throws AnalysisException if the view name is invalid or already exists
+   *
+   * @group basic
+   * @since 2.1.0
+   */
+  @throws[AnalysisException]
+  def createGlobalTempView(viewName: String): Unit = withPlan {
+    createTempViewCommand(viewName, replace = false, global = true)
+  }
+
+  private def createTempViewCommand(
+      viewName: String,
+      replace: Boolean,
+      global: Boolean): CreateViewCommand = {
+    val viewType = if (global) GlobalTempView else LocalTempView
+
+    val tableIdentifier = try {
+      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
+    } catch {
+      case _: ParseException => throw new AnalysisException(s"Invalid view name: $viewName")
+    }
+    CreateViewCommand(
+      name = tableIdentifier,
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = None,
+      child = logicalPlan,
+      allowExisting = false,
+      replace = replace,
+      viewType = viewType)
+  }
+
+  /**
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
    *
    * @group basic
    * @since 1.6.0
    */
-  @Experimental
-  def write: DataFrameWriter = new DataFrameWriter(toDF())
+  def write: DataFrameWriter[T] = {
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        "'write' can not be called on streaming Dataset/DataFrame")
+    }
+    new DataFrameWriter[T](this)
+  }
 
   /**
-   * Returns the content of the [[Dataset]] as a Dataset of JSON strings.
+   * :: Experimental ::
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def writeStream: DataStreamWriter[T] = {
+    if (!isStreaming) {
+      logicalPlan.failAnalysis(
+        "'writeStream' can be called only on streaming Dataset/DataFrame")
+    }
+    new DataStreamWriter[T](this)
+  }
+
+
+  /**
+   * Returns the content of the Dataset as a Dataset of JSON strings.
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
@@ -2411,12 +2673,12 @@ class Dataset[T] private[sql](
     val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
-      val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+      val gen = new JacksonGenerator(rowSchema, writer)
 
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          JacksonGenerator(rowSchema, gen)(iter.next())
+          gen.write(iter.next())
           gen.flush()
 
           val json = writer.toString
@@ -2443,7 +2705,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def inputFiles: Array[String] = {
-    val files: Seq[String] = logicalPlan.collect {
+    val files: Seq[String] = queryExecution.optimizedPlan.collect {
       case LogicalRelation(fsBasedRelation: FileRelation, _, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
@@ -2466,8 +2728,12 @@ class Dataset[T] private[sql](
   }
 
   private[sql] def collectToPython(): Int = {
+    EvaluatePython.registerPicklers()
     withNewExecutionId {
-      PythonRDD.collectAndServe(javaToPython.rdd)
+      val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
+      val iter = new SerDeUtil.AutoBatchedPickler(
+        queryExecution.executedPlan.executeCollect().iterator.map(toJava))
+      PythonRDD.serveIterator(iter, "serve-DataFrame")
     }
   }
 
@@ -2493,38 +2759,30 @@ class Dataset[T] private[sql](
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def withCallback[U](name: String, df: DataFrame)(action: DataFrame => U) = {
+  private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     try {
-      df.queryExecution.executedPlan.foreach { plan =>
+      qe.executedPlan.foreach { plan =>
         plan.resetMetrics()
       }
       val start = System.nanoTime()
-      val result = action(df)
+      val result = SQLExecution.withNewExecutionId(sparkSession, qe) {
+        action(qe.executedPlan)
+      }
       val end = System.nanoTime()
-      sparkSession.listenerManager.onSuccess(name, df.queryExecution, end - start)
+      sparkSession.listenerManager.onSuccess(name, qe, end - start)
       result
     } catch {
       case e: Exception =>
-        sparkSession.listenerManager.onFailure(name, df.queryExecution, e)
+        sparkSession.listenerManager.onFailure(name, qe, e)
         throw e
     }
   }
 
-  private def withTypedCallback[A, B](name: String, ds: Dataset[A])(action: Dataset[A] => B) = {
-    try {
-      ds.queryExecution.executedPlan.foreach { plan =>
-        plan.resetMetrics()
-      }
-      val start = System.nanoTime()
-      val result = action(ds)
-      val end = System.nanoTime()
-      sparkSession.listenerManager.onSuccess(name, ds.queryExecution, end - start)
-      result
-    } catch {
-      case e: Exception =>
-        sparkSession.listenerManager.onFailure(name, ds.queryExecution, e)
-        throw e
-    }
+  /**
+   * Collect all elements from a spark plan.
+   */
+  private def collectFromPlan(plan: SparkPlan): Array[T] = {
+    plan.executeCollect().map(boundEnc.fromRow)
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
@@ -2549,5 +2807,15 @@ class Dataset[T] private[sql](
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
     Dataset(sparkSession, logicalPlan)
+  }
+
+  /** A convenient function to wrap a set based logical plan and produce a Dataset. */
+  @inline private def withSetOperator[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
+    if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
+      // Set operators widen types (change the schema), so we cannot reuse the row encoder.
+      Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
+    } else {
+      Dataset(sparkSession, logicalPlan)
+    }
   }
 }

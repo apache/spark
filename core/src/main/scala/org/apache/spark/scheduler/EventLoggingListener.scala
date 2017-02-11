@@ -91,7 +91,7 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
-      throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
+      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
 
     val workingPath = logPath + IN_PROGRESS
@@ -100,11 +100,8 @@ private[spark] class EventLoggingListener(
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
-    if (shouldOverwrite && fileSystem.exists(path)) {
+    if (shouldOverwrite && fileSystem.delete(path, true)) {
       logWarning(s"Event log $path already exists. Overwriting...")
-      if (!fileSystem.delete(path, true)) {
-        logWarning(s"Error deleting $path")
-      }
     }
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -156,7 +153,9 @@ private[spark] class EventLoggingListener(
 
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = logEvent(event)
 
-  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = logEvent(event)
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
+    logEvent(redactEvent(event))
+  }
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
@@ -191,6 +190,22 @@ private[spark] class EventLoggingListener(
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit = {
     logEvent(event, flushLogger = true)
   }
 
@@ -232,6 +247,15 @@ private[spark] class EventLoggingListener(
     } catch {
       case e: Exception => logDebug(s"failed to set time of $target", e)
     }
+  }
+
+  private[spark] def redactEvent(
+      event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
+    // "Spark Properties" entry will always exist because the map is always populated with it.
+    val redactedProps = Utils.redact(sparkConf, event.environmentDetails("Spark Properties"))
+    val redactedEnvironmentDetails = event.environmentDetails +
+      ("Spark Properties" -> redactedProps)
+    SparkListenerEnvironmentUpdate(redactedEnvironmentDetails)
   }
 
 }
@@ -301,12 +325,6 @@ private[spark] object EventLoggingListener extends Logging {
    * @return input stream that holds one JSON record per line.
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
-    // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
-    // IOException when a file does not exist, so try our best to throw a proper exception.
-    if (!fs.exists(log)) {
-      throw new FileNotFoundException(s"File $log does not exist.")
-    }
-
     val in = new BufferedInputStream(fs.open(log))
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf

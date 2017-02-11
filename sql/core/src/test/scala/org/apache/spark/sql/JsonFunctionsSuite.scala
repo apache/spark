@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType, TimestampType}
 
 class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -28,7 +30,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("get_json_object(a, '$.name')", "get_json_object(a, '$.age')"),
       Row("alice", "5"))
   }
-
 
   val tuples: Seq[(String, String)] =
     ("1", """{"f1": "value1", "f2": "value2", "f3": 3, "f5": 5.23}""") ::
@@ -93,5 +94,84 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Nil
 
     checkAnswer(expr, expected)
+  }
+
+  test("from_json") {
+    val df = Seq("""{"a": 1}""").toDS()
+    val schema = new StructType().add("a", IntegerType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Row(1)) :: Nil)
+  }
+
+  test("from_json with option") {
+    val df = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
+    val schema = new StructType().add("time", TimestampType)
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+  }
+
+  test("from_json missing columns") {
+    val df = Seq("""{"a": 1}""").toDS()
+    val schema = new StructType().add("b", IntegerType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Row(null)) :: Nil)
+  }
+
+  test("from_json invalid json") {
+    val df = Seq("""{"a" 1}""").toDS()
+    val schema = new StructType().add("a", IntegerType)
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(null) :: Nil)
+  }
+
+  test("to_json") {
+    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
+
+    checkAnswer(
+      df.select(to_json($"a")),
+      Row("""{"_1":1}""") :: Nil)
+  }
+
+  test("to_json with option") {
+    val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+
+    checkAnswer(
+      df.select(to_json($"a", options)),
+      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+  }
+
+  test("to_json unsupported type") {
+    val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+      .select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
+    val e = intercept[AnalysisException]{
+      // Unsupported type throws an exception
+      df.select(to_json($"c")).collect()
+    }
+    assert(e.getMessage.contains(
+      "Unable to convert column a of type calendarinterval to JSON."))
+  }
+
+  test("roundtrip in to_json and from_json") {
+    val dfOne = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
+    val schemaOne = dfOne.schema(0).dataType.asInstanceOf[StructType]
+    val readBackOne = dfOne.select(to_json($"struct").as("json"))
+      .select(from_json($"json", schemaOne).as("struct"))
+    checkAnswer(dfOne, readBackOne)
+
+    val dfTwo = Seq(Some("""{"a":1}"""), None).toDF("json")
+    val schemaTwo = new StructType().add("a", IntegerType)
+    val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("struct"))
+      .select(to_json($"struct").as("json"))
+    checkAnswer(dfTwo, readBackTwo)
   }
 }

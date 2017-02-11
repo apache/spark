@@ -19,7 +19,7 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml.feature import DCT
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -39,8 +39,7 @@ if __name__ == "__main__":
 
     dctDf = dct.transform(df)
 
-    for dcts in dctDf.select("featuresDCT").take(3):
-        print(dcts)
+    dctDf.select("featuresDCT").show(truncate=False)
     # $example off$
 
     spark.stop()

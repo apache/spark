@@ -22,6 +22,7 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -95,6 +96,25 @@ class DecisionTreeRegressorSuite
       val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
+    }
+
+    val varianceData: RDD[LabeledPoint] = TreeTests.varianceData(sc)
+    val varianceDF = TreeTests.setMetadata(varianceData, Map.empty[Int, Int], 0)
+    dt.setMaxDepth(1)
+      .setMaxBins(6)
+      .setSeed(0)
+    val transformVarDF = dt.fit(varianceDF).transform(varianceDF)
+    val calculatedVariances = transformVarDF.select(dt.getVarianceCol).collect().map {
+      case Row(variance: Double) => variance
+    }
+
+    // Since max depth is set to 1, the best split point is that which splits the data
+    // into (0.0, 1.0, 2.0) and (10.0, 12.0, 14.0). The predicted variance for each
+    // data point in the left node is 0.667 and for each data point in the right node
+    // is 2.667
+    val expectedVariances = Array(0.667, 0.667, 0.667, 2.667, 2.667, 2.667)
+    calculatedVariances.zip(expectedVariances).foreach { case (actual, expected) =>
+      assert(actual ~== expected absTol 1e-3)
     }
   }
 

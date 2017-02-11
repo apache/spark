@@ -23,15 +23,16 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, _}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreInsertCastAndRename, ResolveDataSource}
-import org.apache.spark.sql.streaming.{ContinuousQuery, ContinuousQueryManager}
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -94,10 +95,12 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    */
   lazy val catalog = new SessionCatalog(
     sparkSession.sharedState.externalCatalog,
+    sparkSession.sharedState.globalTempViewManager,
     functionResourceLoader,
     functionRegistry,
     conf,
-    newHadoopConf())
+    newHadoopConf(),
+    sqlParser)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -111,12 +114,15 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        PreInsertCastAndRename ::
         new FindDataSourceTable(sparkSession) ::
-        DataSourceAnalysis ::
-        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
+        new ResolveSQLOnFile(sparkSession) :: Nil
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
+      override val postHocResolutionRules =
+        PreprocessTableCreation(sparkSession) ::
+        PreprocessTableInsertion(conf) ::
+        DataSourceAnalysis(conf) :: Nil
+
+      override val extendedCheckRules = Seq(PreWriteCheck, HiveOnlyCheck)
     }
   }
 
@@ -143,10 +149,10 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
-   * Interface to start and stop [[ContinuousQuery]]s.
+   * Interface to start and stop [[StreamingQuery]]s.
    */
-  lazy val continuousQueryManager: ContinuousQueryManager = {
-    new ContinuousQueryManager(sparkSession)
+  lazy val streamingQueryManager: StreamingQueryManager = {
+    new StreamingQueryManager(sparkSession)
   }
 
   private val jarClassLoader: NonClosableMutableURLClassLoader =
@@ -162,12 +168,10 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executeSql(sql: String): QueryExecution = executePlan(sqlParser.parsePlan(sql))
-
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
-  def invalidateTable(tableName: String): Unit = {
-    catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
+  def refreshTable(tableName: String): Unit = {
+    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
 
   def addJar(path: String): Unit = {
@@ -188,11 +192,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
-   *
-   * Right now, it only supports catalog tables and it only updates the size of a catalog table
-   * in the external catalog.
    */
-  def analyze(tableName: String): Unit = {
-    AnalyzeTableCommand(tableName).run(sparkSession)
+  def analyze(tableIdent: TableIdentifier, noscan: Boolean = true): Unit = {
+    AnalyzeTableCommand(tableIdent, noscan).run(sparkSession)
   }
 }

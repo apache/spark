@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.ParseModes
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -39,6 +41,30 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       GetJsonObject(Literal(json), Literal("$.store.bicycle")),
       """{"price":19.95,"color":"red"}""")
+  }
+
+  test("$['store'].bicycle") {
+    checkEvaluation(
+      GetJsonObject(Literal(json), Literal("$['store'].bicycle")),
+      """{"price":19.95,"color":"red"}""")
+  }
+
+  test("$.store['bicycle']") {
+    checkEvaluation(
+      GetJsonObject(Literal(json), Literal("$.store['bicycle']")),
+      """{"price":19.95,"color":"red"}""")
+  }
+
+  test("$['store']['bicycle']") {
+    checkEvaluation(
+      GetJsonObject(Literal(json), Literal("$['store']['bicycle']")),
+      """{"price":19.95,"color":"red"}""")
+  }
+
+  test("$['key with spaces']") {
+    checkEvaluation(GetJsonObject(
+      Literal("""{ "key with spaces": "it works" }"""), Literal("$['key with spaces']")),
+      "it works")
   }
 
   test("$.store.book") {
@@ -316,5 +342,63 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkJsonTuple(
       JsonTuple(Literal("{\"a\":\"b\nc\"}") :: Literal("a") :: Nil),
       InternalRow.fromSeq(Seq(UTF8String.fromString("b\nc"))))
+  }
+
+  test("from_json") {
+    val jsonData = """{"a": 1}"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData)),
+      InternalRow.fromSeq(1 :: Nil)
+    )
+  }
+
+  test("from_json - invalid data") {
+    val jsonData = """{"a" 1}"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData)),
+      null
+    )
+
+    // Other modes should still return `null`.
+    checkEvaluation(
+      JsonToStruct(schema, Map("mode" -> ParseModes.PERMISSIVE_MODE), Literal(jsonData)),
+      null
+    )
+  }
+
+  test("from_json null input column") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal.create(null, StringType)),
+      null
+    )
+  }
+
+  test("SPARK-19543: from_json empty input column") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal.create(" ", StringType)),
+      null
+    )
+  }
+
+  test("to_json") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(1), schema)
+    checkEvaluation(
+      StructToJson(Map.empty, struct),
+      """{"a":1}"""
+    )
+  }
+
+  test("to_json null input column") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(null, schema)
+    checkEvaluation(
+      StructToJson(Map.empty, struct),
+      null
+    )
   }
 }

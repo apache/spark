@@ -159,7 +159,7 @@ private[streaming] class ReceiverSupervisorImpl(
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
     val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
-    trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))
+    trackerEndpoint.askSync[Boolean](AddBlock(blockInfo))
     logDebug(s"Reported block $blockId")
   }
 
@@ -175,6 +175,12 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onStop(message: String, error: Option[Throwable]) {
+    receivedBlockHandler match {
+      case handler: WriteAheadLogBasedBlockHandler =>
+        // Write ahead log should be closed.
+        handler.stop()
+      case _ =>
+    }
     registeredBlockGenerators.asScala.foreach { _.stop() }
     env.rpcEnv.stop(endpoint)
   }

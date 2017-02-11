@@ -19,22 +19,19 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{MapGroupsWithState, _}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /** A dummy command for testing unsupported operations. */
-case class DummyCommand() extends LogicalPlan with Command {
-  override def output: Seq[Attribute] = Nil
-  override def children: Seq[LogicalPlan] = Nil
-}
+case class DummyCommand() extends Command
 
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
@@ -53,12 +50,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInBatchPlan(
     "streaming source",
     streamRelation,
-    Seq("with streaming source", "startStream"))
+    Seq("with streaming source", "start"))
 
   assertNotSupportedInBatchPlan(
     "select on streaming source",
     streamRelation.select($"count(*)"),
-    Seq("with streaming source", "startStream"))
+    Seq("with streaming source", "start"))
 
 
   /*
@@ -70,7 +67,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Batch plan in streaming query
   testError(
     "streaming plan - no streaming source",
-    Seq("without streaming source", "startStream")) {
+    Seq("without streaming source", "start")) {
     UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"count(*)"), Append)
   }
 
@@ -81,7 +78,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = "commands" :: Nil)
 
-  // Multiple streaming aggregations not supported
+  // Aggregation: Multiple streaming aggregations not supported
   def aggExprs(name: String): Seq[NamedExpression] = Seq(Count("*").as(name))
 
   assertSupportedInStreamingPlan(
@@ -100,6 +97,37 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
     outputMode = Update,
     expectedMsgs = Seq("multiple streaming aggregations"))
+
+  // Aggregation: Distinct aggregates not supported on streaming relation
+  val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
+  assertSupportedInStreamingPlan(
+    "distinct aggregate - aggregate on batch relation",
+    Aggregate(Nil, distinctAggExprs, batchRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "distinct aggregate - aggregate on streaming relation",
+    Aggregate(Nil, distinctAggExprs, streamRelation),
+    outputMode = Complete,
+    expectedMsgs = Seq("distinct aggregation"))
+
+  // MapGroupsWithState: Not supported after a streaming aggregation
+  val att = new AttributeReference(name = "a", dataType = LongType)()
+  assertSupportedInBatchPlan(
+    "mapGroupsWithState - mapGroupsWithState on batch relation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), batchRelation))
+
+  assertSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState on streaming relation before aggregation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), streamRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState on streaming relation after aggregation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att),
+      Aggregate(Nil, aggExprs("c"), streamRelation)),
+    outputMode = Complete,
+    expectedMsgs = Seq("(map/flatMap)GroupsWithState"))
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(
@@ -189,18 +217,34 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.intersect(_),
     streamStreamSupported = false)
 
-  // Unary operations
+  // Sort: supported only on batch subplans and after aggregation on streaming plan + complete mode
   testUnaryOperatorInStreamingPlan("sort", Sort(Nil, true, _))
-  testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
+  assertSupportedInStreamingPlan(
+    "sort - sort after aggregation in Complete output mode",
+    streamRelation.groupBy()(Count("*")).sortBy(),
+    Complete)
+  assertNotSupportedInStreamingPlan(
+    "sort - sort before aggregation in Complete output mode",
+    streamRelation.sortBy().groupBy()(Count("*")),
+    Complete,
+    Seq("sort", "aggregat", "complete"))
+  assertNotSupportedInStreamingPlan(
+    "sort - sort over aggregated data in Update output mode",
+    streamRelation.groupBy()(Count("*")).sortBy(),
+    Update,
+    Seq("sort", "aggregat", "complete")) // sort on aggregations is supported on Complete mode only
+
+
+  // Other unary operations
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
     "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
 
   // Output modes with aggregation and non-aggregation plans
-  testOutputMode(Append, shouldSupportAggregation = false)
-  testOutputMode(Update, shouldSupportAggregation = true)
-  testOutputMode(Complete, shouldSupportAggregation = true)
+  testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
+  testOutputMode(Update, shouldSupportAggregation = true, shouldSupportNonAggregation = true)
+  testOutputMode(Complete, shouldSupportAggregation = true, shouldSupportNonAggregation = false)
 
   /*
     =======================================================================================
@@ -299,32 +343,36 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       outputMode)
   }
 
+  /** Test output mode with and without aggregation in the streaming plan */
   def testOutputMode(
       outputMode: OutputMode,
-      shouldSupportAggregation: Boolean): Unit = {
+      shouldSupportAggregation: Boolean,
+      shouldSupportNonAggregation: Boolean): Unit = {
 
     // aggregation
     if (shouldSupportAggregation) {
+      assertSupportedInStreamingPlan(
+        s"$outputMode output mode - aggregation",
+        streamRelation.groupBy("a")("count(*)"),
+        outputMode = outputMode)
+    } else {
       assertNotSupportedInStreamingPlan(
-        s"$outputMode output mode - no aggregation",
-        streamRelation.where($"a" > 1),
+        s"$outputMode output mode - aggregation",
+        streamRelation.groupBy("a")("count(*)"),
         outputMode = outputMode,
         Seq("aggregation", s"$outputMode output mode"))
+    }
 
-      assertSupportedInStreamingPlan(
-        s"$outputMode output mode - aggregation",
-        streamRelation.groupBy("a")("count(*)"),
-        outputMode = outputMode)
-
-    } else {
+    // non aggregation
+    if (shouldSupportNonAggregation) {
       assertSupportedInStreamingPlan(
         s"$outputMode output mode - no aggregation",
         streamRelation.where($"a" > 1),
         outputMode = outputMode)
-
+    } else {
       assertNotSupportedInStreamingPlan(
-        s"$outputMode output mode - aggregation",
-        streamRelation.groupBy("a")("count(*)"),
+        s"$outputMode output mode - no aggregation",
+        streamRelation.where($"a" > 1),
         outputMode = outputMode,
         Seq("aggregation", s"$outputMode output mode"))
     }

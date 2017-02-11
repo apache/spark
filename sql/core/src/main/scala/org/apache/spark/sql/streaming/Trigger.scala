@@ -23,16 +23,17 @@ import scala.concurrent.duration.Duration
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * :: Experimental ::
- * Used to indicate how often results should be produced by a [[ContinuousQuery]].
+ * Used to indicate how often results should be produced by a [[StreamingQuery]].
  *
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 sealed trait Trigger
 
 /**
@@ -59,17 +60,19 @@ sealed trait Trigger
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 case class ProcessingTime(intervalMs: Long) extends Trigger {
   require(intervalMs >= 0, "the interval of trigger should not be negative")
 }
 
 /**
  * :: Experimental ::
- * Used to create [[ProcessingTime]] triggers for [[ContinuousQuery]]s.
+ * Used to create [[ProcessingTime]] triggers for [[StreamingQuery]]s.
  *
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 object ProcessingTime {
 
   /**

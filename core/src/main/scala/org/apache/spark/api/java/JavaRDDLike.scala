@@ -47,7 +47,8 @@ private[spark] abstract class AbstractJavaRDDLike[T, This <: JavaRDDLike[T, This
 
 /**
  * Defines operations common to several Java RDD implementations.
- * Note that this trait is not intended to be implemented by user code.
+ *
+ * @note This trait is not intended to be implemented by user code.
  */
 trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def wrapRDD(rdd: RDD[T]): This
@@ -285,6 +286,17 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Return an RDD created by piping elements to a forked external process.
+   */
+  def pipe(command: JList[String],
+           env: JMap[String, String],
+           separateWorkingDir: Boolean,
+           bufferSize: Int,
+           encoding: String): JavaRDD[String] = {
+    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize, encoding)
+  }
+
+  /**
    * Zips this RDD with another one, returning key-value pairs with the first element in each RDD,
    * second element in each RDD, etc. Assumes that the two RDDs have the *same number of
    * partitions* and the *same number of elements in each partition* (e.g. one was made through
@@ -381,7 +393,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def treeReduce(f: JFunction2[T, T, T], depth: Int): T = rdd.treeReduce(f, depth)
 
   /**
-   * [[org.apache.spark.api.java.JavaRDDLike#treeReduce]] with suggested depth 2.
+   * `org.apache.spark.api.java.JavaRDDLike.treeReduce` with suggested depth 2.
    */
   def treeReduce(f: JFunction2[T, T, T]): T = treeReduce(f, 2)
 
@@ -428,7 +440,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * [[org.apache.spark.api.java.JavaRDDLike#treeAggregate]] with suggested depth 2.
+   * `org.apache.spark.api.java.JavaRDDLike.treeAggregate` with suggested depth 2.
    */
   def treeAggregate[U](
       zeroValue: U,

@@ -137,8 +137,20 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
+  test("Cache broadcast to disk") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set("spark.memory.useLegacyMode", "true")
+      .set("spark.storage.memoryFraction", "0.0")
+    sc = new SparkContext(conf)
+    val list = List[Int](1, 2, 3, 4)
+    val broadcast = sc.broadcast(list)
+    assert(broadcast.value.sum === 10)
+  }
+
   /**
-   * Verify the persistence of state associated with an TorrentBroadcast in a local-cluster.
+   * Verify the persistence of state associated with a TorrentBroadcast in a local-cluster.
    *
    * This test creates a broadcast variable, uses it on all executors, and then unpersists it.
    * In between each step, this test verifies that the broadcast blocks are present only on the

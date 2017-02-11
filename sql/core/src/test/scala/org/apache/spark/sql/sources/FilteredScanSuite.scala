@@ -139,7 +139,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenFiltered
+        |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
         |  from '1',

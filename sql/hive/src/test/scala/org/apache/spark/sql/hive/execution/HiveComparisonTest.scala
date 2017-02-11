@@ -19,25 +19,25 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util
 
 import scala.util.control.NonFatal
 
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.SQLBuilder
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
 /**
  * Allows the creations of tests that execute the same query against both hive
  * and catalyst, comparing the results.
  *
- * The "golden" results from Hive are cached in an retrieved both from the classpath and
+ * The "golden" results from Hive are cached in and retrieved both from the classpath and
  * [[answerCache]] to speed up testing.
  *
  * See the documentation of public vals in this class for information on how test execution can be
@@ -167,7 +167,7 @@ abstract class HiveComparisonTest
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand | ShowColumnsCommand(_) =>
+      case _: DescribeTableCommand | ShowColumnsCommand(_, _) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -226,7 +226,8 @@ abstract class HiveComparisonTest
       testCaseName: String,
       sql: String,
       reset: Boolean = true,
-      tryWithoutResettingFirst: Boolean = false) {
+      tryWithoutResettingFirst: Boolean = false,
+      skip: Boolean = false) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -255,6 +256,7 @@ abstract class HiveComparisonTest
     }
 
     test(testCaseName) {
+      assume(!skip)
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       val sqlWithoutComment =
@@ -340,57 +342,8 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          var query: TestHiveQueryExecution = null
-          try {
-            query = {
-              val originalQuery = new TestHiveQueryExecution(
-                queryString.replace("../../data", testDataPath))
-              val containsCommands = originalQuery.analyzed.collectFirst {
-                case _: Command => ()
-                case _: LogicalInsertIntoHiveTable => ()
-              }.nonEmpty
-
-              if (containsCommands) {
-                originalQuery
-              } else {
-                val convertedSQL = try {
-                  new SQLBuilder(originalQuery.analyzed).toSQL
-                } catch {
-                  case NonFatal(e) => fail(
-                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
-                        |
-                        |# Original HiveQL query string:
-                        |$queryString
-                        |
-                        |# Resolved query plan:
-                        |${originalQuery.analyzed.treeString}
-                     """.stripMargin, e)
-                }
-
-                try {
-                  val queryExecution = new TestHiveQueryExecution(convertedSQL)
-                  // Trigger the analysis of this converted SQL query.
-                  queryExecution.analyzed
-                  queryExecution
-                } catch {
-                  case NonFatal(e) => fail(
-                    s"""Failed to analyze the converted SQL string:
-                        |
-                        |# Original HiveQL query string:
-                        |$queryString
-                        |
-                        |# Resolved query plan:
-                        |${originalQuery.analyzed.treeString}
-                        |
-                        |# Converted SQL query string:
-                        |$convertedSQL
-                     """.stripMargin, e)
-                }
-              }
-            }
-
-            (query, prepareAnswer(query, query.hiveResultString()))
-          } catch {
+          val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
+          try { (query, prepareAnswer(query, query.hiveResultString())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
@@ -439,23 +392,20 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHiveQueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  // We should take executedPlan instead of sparkPlan, because in following codes we
-                  // will run the collected plans. As we will do extra processing for sparkPlan such
-                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
-                  // will cause some errors when running these plans later.
-                  case (q, e) => e.executedPlan.collect {
+                  case (q, e) => e.analyzed.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }
                 }
 
                 tablesGenerated.map { case (hiveql, execution, insert) =>
+                  val rdd = Dataset.ofRows(TestHive.sparkSession, insert.query).queryExecution.toRdd
                   s"""
                      |=== Generated Table ===
                      |$hiveql
                      |$execution
                      |== Results ==
-                     |${insert.child.execute().collect().mkString("\n")}
+                     |${rdd.collect().mkString("\n")}
                    """.stripMargin
                 }.mkString("\n")
 
@@ -497,6 +447,8 @@ abstract class HiveComparisonTest
         }
       }
 
+      val savedSettings = new util.HashMap[String, String]
+      savedSettings.putAll(TestHive.conf.settings)
       try {
         try {
           if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
@@ -515,6 +467,9 @@ abstract class HiveComparisonTest
         }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
+      } finally {
+        TestHive.conf.settings.clear()
+        TestHive.conf.settings.putAll(savedSettings)
       }
     }
   }
