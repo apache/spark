@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{PhysicalOptimizer, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{PhysicalPlanRewriter, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -112,7 +112,7 @@ class IncrementalExecution(
     }
   }
 
-  private val streamOptimizer = new PhysicalOptimizer(sparkSession) {
+  private val streamOptimizer = new PhysicalPlanRewriter(sparkSession) {
 
     override def batches: Seq[Batch] = Batch("AddState", Once, state) +: super.batches
   }

@@ -108,7 +108,7 @@ private[sql] class SessionState(
   /**
    * Physical query plan optimizer.
    */
-  lazy val physicalOptimizer: RuleExecutor[SparkPlan] = new PhysicalOptimizer(sparkSession)
+  lazy val physicalOptimizer: RuleExecutor[SparkPlan] = new PhysicalPlanRewriter(sparkSession)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.

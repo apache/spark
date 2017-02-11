@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchang
 /**
  * A sequence of rules that will be applied in order to the physical plan before execution.
  */
-class PhysicalOptimizer(sparkSession: SparkSession) extends RuleExecutor[SparkPlan] {
+class PhysicalPlanRewriter(sparkSession: SparkSession) extends RuleExecutor[SparkPlan] {
 
   private val fixedPoint = FixedPoint(sparkSession.sessionState.conf.optimizerMaxIterations)
 
