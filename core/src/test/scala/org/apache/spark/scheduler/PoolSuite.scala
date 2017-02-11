@@ -245,7 +245,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     schedulableBuilder.addTaskSetManager(taskSetManager0, null)
 
     val defaultPool = rootPool.getSchedulableByName(schedulableBuilder.DEFAULT_POOL_NAME)
-    assert(defaultPool != null)
+    assert(defaultPool !== null)
     assert(defaultPool.schedulableQueue.size === 1)
     assert(defaultPool.getSchedulableByName(taskSetManager0.name) === taskSetManager0)
 
@@ -280,21 +280,16 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     // by spark.scheduler.pool).
     schedulableBuilder.addTaskSetManager(taskSetManager, properties)
 
-    val testPool = rootPool.getSchedulableByName(TEST_POOL)
-    assert(testPool != null)
-    assert(testPool.schedulingMode === schedulableBuilder.DEFAULT_SCHEDULING_MODE)
-    assert(testPool.minShare === schedulableBuilder.DEFAULT_MINIMUM_SHARE)
-    assert(testPool.weight === schedulableBuilder.DEFAULT_WEIGHT)
-
     verifyPool(rootPool, TEST_POOL, schedulableBuilder.DEFAULT_MINIMUM_SHARE,
       schedulableBuilder.DEFAULT_WEIGHT, schedulableBuilder.DEFAULT_SCHEDULING_MODE)
+    val testPool = rootPool.getSchedulableByName(TEST_POOL)
     assert(testPool.getSchedulableByName(taskSetManager.name) === taskSetManager)
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,
                          expectedInitWeight: Int, expectedSchedulingMode: SchedulingMode): Unit = {
     val selectedPool = rootPool.getSchedulableByName(poolName)
-    assert(selectedPool != null)
+    assert(selectedPool !== null)
     assert(selectedPool.minShare === expectedInitMinShare)
     assert(selectedPool.weight === expectedInitWeight)
     assert(selectedPool.schedulingMode === expectedSchedulingMode)
