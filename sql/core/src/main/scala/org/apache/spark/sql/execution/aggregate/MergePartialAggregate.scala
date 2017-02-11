@@ -33,7 +33,7 @@ object AggregatePair {
 
       // Check if classes and grouping keys are the same with each other to make sure the two
       // aggregates are for the same group by a GROUP-BY clause.
-      if (outer.getClass.isAssignableFrom(inner.getClass) &&
+      if (outer.getClass == inner.getClass &&
           outer.groupingExpressions.map(_.toAttribute) ==
             inner.groupingExpressions.map(_.toAttribute)) {
         Some(outer, inner)

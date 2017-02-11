@@ -27,7 +27,6 @@ import org.apache.spark.sql.execution.UnaryExecNode
  * A base class for aggregate implementation.
  */
 abstract class AggregateExec extends UnaryExecNode {
-  self: SparkPlan =>
 
   def requiredChildDistributionExpressions: Option[Seq[Expression]]
   def groupingExpressions: Seq[NamedExpression]
