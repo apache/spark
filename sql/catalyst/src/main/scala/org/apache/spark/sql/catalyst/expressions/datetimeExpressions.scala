@@ -473,7 +473,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val tz = ctx.addReferenceMinorObj(timeZone)
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz, false)
+      s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz, true)
           .format(new java.util.Date($timestamp / 1000)))"""
     })
   }
