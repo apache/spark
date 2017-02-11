@@ -1816,10 +1816,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("compression", "GzIp")
         .text(path)
 
-      new File(path).listFiles() match {
-        case compressedFiles =>
-          assert(compressedFiles.exists(_.getName.endsWith(".gz")))
-      }
+      assert(new File(path).listFiles().exists(_.getName.endsWith(".gz")))
 
       val jsonDF = spark.read.option("wholeFile", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
@@ -1828,10 +1825,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("compression", "gZiP")
         .save(jsonDir)
 
-      new File(jsonDir).listFiles() match {
-        case compressedFiles =>
-          assert(compressedFiles.exists(_.getName.endsWith(".json.gz")))
-      }
+      assert(new File(jsonDir).listFiles().exists(_.getName.endsWith(".json.gz")))
 
       val jsonCopy = spark.read
         .format("json")
