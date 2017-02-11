@@ -21,7 +21,7 @@ import java.util.Comparator
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
@@ -37,7 +37,7 @@ private[sql] object JsonInferSchema {
    *   3. Replace any remaining null fields with string, the top type
    */
   def infer(
-      json: RDD[String],
+      json: Dataset[String],
       columnNameOfCorruptRecord: String,
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
@@ -50,7 +50,7 @@ private[sql] object JsonInferSchema {
     }
 
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
+    val rootType = schemaData.rdd.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>

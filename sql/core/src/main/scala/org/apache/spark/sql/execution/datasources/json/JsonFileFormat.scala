@@ -26,8 +26,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
@@ -52,7 +51,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
       val jsonSchema = JsonInferSchema.infer(
-        createBaseRdd(sparkSession, files),
+        createBaseDataset(sparkSession, files),
         columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
@@ -110,9 +109,9 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
   }
 
-  private def createBaseRdd(
+  private def createBaseDataset(
       sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus]): RDD[String] = {
+      inputPaths: Seq[FileStatus]): Dataset[String] = {
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
     val conf = job.getConfiguration
 
@@ -122,11 +121,13 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       FileInputFormat.setInputPaths(job, paths: _*)
     }
 
-    sparkSession.sparkContext.hadoopRDD(
+    val rdd = sparkSession.sparkContext.hadoopRDD(
       conf.asInstanceOf[JobConf],
       classOf[TextInputFormat],
       classOf[LongWritable],
       classOf[Text]).map(_._2.toString) // get the text line
+    import sparkSession.sqlContext.implicits._
+    sparkSession.createDataset(rdd)
   }
 
   /** Constraints to be imposed on schema to be stored. */

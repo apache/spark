@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Dataset, SparkSession}
 
 private[json] trait TestJsonData {
   protected def spark: SparkSession
@@ -231,4 +231,10 @@ private[json] trait TestJsonData {
   lazy val singleRow: RDD[String] = spark.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
   def empty: RDD[String] = spark.sparkContext.parallelize(Seq[String]())
+  
+  def dataset(rdd: RDD[String]): Dataset[String] = {
+    val sqlContext = spark.sqlContext
+    import sqlContext.implicits._
+    spark.createDataset(rdd)
+  }
 }
