@@ -182,6 +182,10 @@ public abstract class BloomFilter {
    * n(A* ∩ B*) = n(A*) + n(B*) - n(A* ∪ B*)
    * The approx. of the intersection is the approx. of A plus B minus the approx. of their union
    *
+   * Running approxItems() directly on A ∩ B leads to overestimation because "some bits in A ∩ B are
+   * set to 1 by chance and do not correspond to a compression of bits present in the uncompressed intersection vector
+   * (A->)* ∩ (B->)*"
+   *
    * @param other The bloom filter to intersect this bloom filter with.
    * @throws IncompatibleUnionException if {@code isCompatible(other) == false}
    * @see #approxItems()
