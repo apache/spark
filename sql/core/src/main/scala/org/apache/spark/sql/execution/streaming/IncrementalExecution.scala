@@ -23,8 +23,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{PhysicalPlanRewriter, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.aggregate.MergePartialAggregate
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.python.ExtractPythonUDFs
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -61,7 +64,7 @@ class IncrementalExecution(
    * with the desired literal
    */
   override lazy val optimizedPlan: LogicalPlan = {
-    sparkSession.sessionState.logicalOptimizer.execute(withCachedData) transformAllExpressions {
+    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
@@ -112,12 +115,28 @@ class IncrementalExecution(
     }
   }
 
-  private val streamOptimizer = new PhysicalPlanRewriter(sparkSession) {
+  override lazy val executedPlan: SparkPlan = new RuleExecutor[SparkPlan] {
 
-    override def batches: Seq[Batch] = Batch("AddState", Once, state) +: super.batches
-  }
+    private val fixedPoint = FixedPoint(sparkSession.sessionState.conf.optimizerMaxIterations)
 
-  override lazy val executedPlan: SparkPlan = streamOptimizer.execute(sparkPlan)
+    override def batches: Seq[Batch] = Seq(
+      Batch("AddState", Once, state),
+      Batch("ExtractPythonUDFs", Once,
+        ExtractPythonUDFs),
+      Batch("PlanSubqueries", Once,
+        PlanSubqueries(sparkSession)),
+      Batch("EnsureRequirements", Once,
+        EnsureRequirements(sparkSession.sessionState.conf)),
+      Batch("MergePartialAggregate", fixedPoint,
+        MergePartialAggregate),
+      Batch("CollapseCodegenStages", Once,
+        CollapseCodegenStages(sparkSession.sessionState.conf)),
+      Batch("ReuseResources", Once,
+        ReuseExchange(sparkSession.sessionState.conf),
+        ReuseSubquery(sparkSession.sessionState.conf)
+      )
+    )
+  }.execute(sparkPlan)
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }

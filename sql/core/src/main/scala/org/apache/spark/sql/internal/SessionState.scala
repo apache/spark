@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.streaming.StreamingQueryManager
@@ -103,17 +103,7 @@ private[sql] class SessionState(
   /**
    * Logical query plan optimizer.
    */
-  lazy val logicalOptimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
-
-  /**
-   * Physical query plan optimizer.
-   */
-  lazy val physicalOptimizer: RuleExecutor[SparkPlan] = new PhysicalPlanRewriter(sparkSession)
-
-  /**
-   * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
-   */
-  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
+  val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
 
   /**
    * Planner that converts optimized logical plans to physical plans.
