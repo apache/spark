@@ -17,31 +17,37 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.lang.StringBuilder
 import java.util.regex.{Pattern, PatternSyntaxException}
 
 import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils {
 
-  // replace the _ with .{1} exactly match 1 time of any character
-  // replace the % with .*, match 0 or more times with any character
   def escapeLikeRegex(v: String): String = {
     if (!v.isEmpty) {
-      "(?s)" + (' ' +: v.init).zip(v).flatMap {
-        case (prev, '\\') => ""
-        case ('\\', c) =>
-          c match {
-            case '_' => "_"
-            case '%' => "%"
-            case _ => Pattern.quote("\\" + c)
-          }
-        case (prev, c) =>
-          c match {
-            case '_' => "."
-            case '%' => ".*"
-            case _ => Pattern.quote(Character.toString(c))
-          }
-      }.mkString
+      val sb = new StringBuilder("(?s)")
+      var prev = ' '
+      for (c <- v) {
+        val out = (prev, c) match {
+          case (prev, '\\') => ""
+          case ('\\', c) =>
+            c match {
+              case '_' => "_"
+              case '%' => "%"
+              case _ => Pattern.quote("\\" + c)
+            }
+          case (prev, c) =>
+            c match {
+              case '_' => "."
+              case '%' => ".*"
+              case _ => Pattern.quote(Character.toString(c))
+            }
+        }
+        prev = c
+        sb.append(out)
+      }
+      sb.toString()
     } else {
       v
     }
