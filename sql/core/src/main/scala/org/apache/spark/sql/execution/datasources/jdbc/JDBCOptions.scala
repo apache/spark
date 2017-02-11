@@ -63,7 +63,7 @@ class JDBCOptions(
     val properties = new Properties()
     parameters.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
       .foreach { case (k, v) => properties.setProperty(parameters
-        .getCaseSensitiveKey(k).getOrElse(k), v) }
+        .getCaseSensitiveKey(k).get, v) }
     properties
   }
 
