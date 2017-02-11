@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.SQLBuilder
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -342,57 +342,8 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          var query: TestHiveQueryExecution = null
-          try {
-            query = {
-              val originalQuery = new TestHiveQueryExecution(
-                queryString.replace("../../data", testDataPath))
-              val containsCommands = originalQuery.analyzed.collectFirst {
-                case _: Command => ()
-                case _: InsertIntoTable => ()
-              }.nonEmpty
-
-              if (containsCommands) {
-                originalQuery
-              } else {
-                val convertedSQL = try {
-                  new SQLBuilder(originalQuery.analyzed).toSQL
-                } catch {
-                  case NonFatal(e) => fail(
-                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
-                        |
-                        |# Original HiveQL query string:
-                        |$queryString
-                        |
-                        |# Resolved query plan:
-                        |${originalQuery.analyzed.treeString}
-                     """.stripMargin, e)
-                }
-
-                try {
-                  val queryExecution = new TestHiveQueryExecution(convertedSQL)
-                  // Trigger the analysis of this converted SQL query.
-                  queryExecution.analyzed
-                  queryExecution
-                } catch {
-                  case NonFatal(e) => fail(
-                    s"""Failed to analyze the converted SQL string:
-                        |
-                        |# Original HiveQL query string:
-                        |$queryString
-                        |
-                        |# Resolved query plan:
-                        |${originalQuery.analyzed.treeString}
-                        |
-                        |# Converted SQL query string:
-                        |$convertedSQL
-                     """.stripMargin, e)
-                }
-              }
-            }
-
-            (query, prepareAnswer(query, query.hiveResultString()))
-          } catch {
+          val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
+          try { (query, prepareAnswer(query, query.hiveResultString())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
@@ -441,23 +392,20 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHiveQueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  // We should take executedPlan instead of sparkPlan, because in following codes we
-                  // will run the collected plans. As we will do extra processing for sparkPlan such
-                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
-                  // will cause some errors when running these plans later.
-                  case (q, e) => e.executedPlan.collect {
+                  case (q, e) => e.analyzed.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }
                 }
 
                 tablesGenerated.map { case (hiveql, execution, insert) =>
+                  val rdd = Dataset.ofRows(TestHive.sparkSession, insert.query).queryExecution.toRdd
                   s"""
                      |=== Generated Table ===
                      |$hiveql
                      |$execution
                      |== Results ==
-                     |${insert.child.execute().collect().mkString("\n")}
+                     |${rdd.collect().mkString("\n")}
                    """.stripMargin
                 }.mkString("\n")
 

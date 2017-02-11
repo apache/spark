@@ -278,7 +278,9 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  * While this process is generally guaranteed to converge, it is not guaranteed
  * to find a global optimum.
  *
- * @note For high-dimensional data (with many features), this algorithm may perform poorly.
+ * @note This algorithm is limited in its number of features since it requires storing a covariance
+ * matrix which has size quadratic in the number of features. Even when the number of features does
+ * not exceed this limit, this algorithm may perform poorly on high-dimensional data.
  * This is due to high-dimensional data (a) making it difficult to cluster at all (based
  * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
@@ -344,6 +346,9 @@ class GaussianMixture @Since("2.0.0") (
 
     // Extract the number of features.
     val numFeatures = instances.first().size
+    require(numFeatures < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
+      s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
+      s" matrix is quadratic in the number of features.")
 
     val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, probabilityCol, k, maxIter, seed, tol)
@@ -391,8 +396,8 @@ class GaussianMixture @Since("2.0.0") (
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, cov, weight) =>
           GaussianMixture.updateWeightsAndGaussians(mean, cov, weight, sumWeights)
         }.collect().unzip
-        Array.copy(ws.toArray, 0, weights, 0, ws.length)
-        Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
+        Array.copy(ws, 0, weights, 0, ws.length)
+        Array.copy(gs, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
         while (i < numClusters) {
@@ -416,7 +421,7 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
@@ -485,6 +490,9 @@ class GaussianMixture @Since("2.0.0") (
 
 @Since("2.0.0")
 object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
+
+  /** Limit number of features such that numFeatures^2^ < Int.MaxValue */
+  private[clustering] val MAX_NUM_FEATURES = math.sqrt(Int.MaxValue).toInt
 
   @Since("2.0.0")
   override def load(path: String): GaussianMixture = super.load(path)
@@ -674,6 +682,7 @@ private class ExpectationAggregator(
  *                        in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param logLikelihood  Total log-likelihood for this model on the given data.
  */
 @Since("2.0.0")
 @Experimental
@@ -682,7 +691,9 @@ class GaussianMixtureSummary private[clustering] (
     predictionCol: String,
     @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
+    k: Int,
+    @Since("2.2.0") val logLikelihood: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
 
   /**
    * Probability of each cluster.

@@ -309,11 +309,11 @@ class TypeCoercionSuite extends PlanTest {
 
   test("tightest common bound for types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = TypeCoercion.findTightestCommonTypeOfTwo(t1, t2)
+      var found = TypeCoercion.findTightestCommonType(t1, t2)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
       // Test both directions to make sure the widening is symmetric.
-      found = TypeCoercion.findTightestCommonTypeOfTwo(t2, t1)
+      found = TypeCoercion.findTightestCommonType(t2, t1)
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
     }
@@ -915,6 +915,18 @@ class TypeCoercionSuite extends PlanTest {
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("binary comparison with string promotion") {
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(1)),
+      GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
+    ruleTest(PromoteStrings,
+      LessThan(Literal(true), Literal("123")),
+      LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
+    ruleTest(PromoteStrings,
+      EqualTo(Literal(Array(1, 2)), Literal("123")),
+      EqualTo(Literal(Array(1, 2)), Literal("123")))
   }
 }
 

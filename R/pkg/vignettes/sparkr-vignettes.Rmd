@@ -10,6 +10,23 @@ vignette: >
   \usepackage[utf8]{inputenc}
 ---
 
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
 ## Overview
 
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
@@ -471,6 +488,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Clustering
 
+* Bisecting $k$-means
+
 * Gaussian Mixture Model (GMM)
 
 * $k$-means Clustering
@@ -721,6 +740,18 @@ summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
 
+#### Bisecting k-Means
+
+`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+summary(model)
+fitted <- predict(model, df)
+head(select(fitted, "Sepal_Length", "prediction"))
+```
+
 #### Gaussian Mixture Model
 
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
@@ -906,9 +937,9 @@ The main method calls of actual computation happen in the Spark JVM of the drive
 
 Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and creating new objects. Method invocation can be done in two ways.
 
-* `sparkR.invokeJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
+* `sparkR.callJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
 
-* `sparkR.invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
+* `sparkR.callJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
 
 The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method.
 

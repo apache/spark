@@ -75,7 +75,6 @@ import org.apache.spark.util.PeriodicCheckpointer
  * @tparam VD  Vertex descriptor type
  * @tparam ED  Edge descriptor type
  *
- * TODO: Move this out of MLlib?
  */
 private[spark] class PeriodicGraphCheckpointer[VD, ED](
     checkpointInterval: Int,
@@ -88,7 +87,10 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
 
   override protected def persist(data: Graph[VD, ED]): Unit = {
     if (data.vertices.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      data.vertices.cache()
+    }
+    if (data.edges.getStorageLevel == StorageLevel.NONE) {
+      data.edges.cache()
     }
   }
 

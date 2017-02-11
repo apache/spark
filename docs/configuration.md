@@ -435,7 +435,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jars.packages</code></td>
   <td></td>
   <td>
-    Comma-separated list of maven coordinates of jars to include on the driver and executor
+    Comma-separated list of Maven coordinates of jars to include on the driver and executor
     classpaths. The coordinates should be groupId:artifactId:version. If <code>spark.jars.ivySettings</code>
     is given artifacts will be resolved according to the configuration in the file, otherwise artifacts
     will be searched for in the local maven repo, then maven central and finally any additional remote
@@ -684,24 +684,24 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedJobs</code></td>
   <td>1000</td>
   <td>
-    How many jobs the Spark UI and status APIs remember before garbage
-    collecting.
+    How many jobs the Spark UI and status APIs remember before garbage collecting. 
+    This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI and status APIs remember before garbage
-    collecting.
+    How many stages the Spark UI and status APIs remember before garbage collecting. 
+    This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage
-    collecting.
+    How many tasks the Spark UI and status APIs remember before garbage collecting. 
+    This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
 <tr>
@@ -1402,6 +1402,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,
+    executors when they are blacklisted.  Note that, when an entire node is added to the blacklist,
+    all of the executors on that node will be killed.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
@@ -1639,6 +1648,48 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.network.crypto.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable encryption using the commons-crypto library for RPC and block transfer service.
+    Requires <code>spark.authenticate</code> to be enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.keyLength</code></td>
+  <td>128</td>
+  <td>
+    The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
+  <td>PBKDF2WithHmacSHA1</td>
+  <td>
+    The key factory algorithm to use when generating encryption keys. Should be one of the
+    algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.saslFallback</code></td>
+  <td>true</td>
+  <td>
+    Whether to fall back to SASL authentication if authentication fails using Spark's internal
+    mechanism. This is useful when the application is connecting to old shuffle services that
+    do not support the internal Spark authentication protocol. On the server side, this can be
+    used to block older clients from authenticating against a new shuffle service.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.config.*</code></td>
+  <td>None</td>
+  <td>
+    Configuration values for the commons-crypto library, such as which cipher implementations to
+    use. The config name should be the name of commons-crypto configuration without the
+    "commons.crypto" prefix.
+  </td>
+</tr>
+<tr>
   <td><code>spark.authenticate.enableSaslEncryption</code></td>
   <td>false</td>
   <td>
@@ -1651,33 +1702,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.network.sasl.serverAlwaysEncrypt</code></td>
   <td>false</td>
   <td>
-    Disable unencrypted connections for services that support SASL authentication. This is
-    currently supported by the external shuffle service.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.network.aes.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enable AES for over-the-wire encryption. This is supported for RPC and the block transfer service.
-    This option has precedence over SASL-based encryption if both are enabled.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.network.aes.keySize</code></td>
-  <td>16</td>
-  <td>
-    The bytes of AES cipher key which is effective when AES cipher is enabled. AES
-    works with 16, 24 and 32 bytes keys.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.network.aes.config.*</code></td>
-  <td>None</td>
-  <td>
-    Configuration values for the commons-crypto library, such as which cipher implementations to
-    use. The config name should be the name of commons-crypto configuration without the
-    "commons.crypto" prefix.
+    Disable unencrypted connections for services that support SASL authentication.
   </td>
 </tr>
 <tr>
@@ -1778,6 +1803,20 @@ Apart from these, the following properties are also available, and may be useful
             include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
             <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
             Configuration</a> for details on hierarchical SSL configuration for services.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.[namespace].port</code></td>
+        <td>None</td>
+        <td>
+            The port where the SSL service will listen on.
+
+            <br />The port must be defined within a namespace configuration; see
+            <a href="security.html#ssl-configuration">SSL Configuration</a> for the available
+            namespaces.
+
+            <br />When not set, the SSL port will be derived from the non-SSL port for the
+            same service. A value of "0" will make the service bind to an ephemeral port.
         </td>
     </tr>
     <tr>

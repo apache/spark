@@ -191,6 +191,8 @@ class GeneralizedLinearRegressionSuite
     assert(!glr.isDefined(glr.weightCol))
     assert(glr.getRegParam === 0.0)
     assert(glr.getSolver == "irls")
+    assert(glr.getVariancePower === 0.0)
+
     // TODO: Construct model directly instead of via fitting.
     val model = glr.setFamily("gaussian").setLink("identity")
       .fit(datasetGaussianIdentity)
@@ -266,7 +268,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Gaussian, Link.fromName(link))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -382,7 +384,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with binomial family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Binomial, Link.fromName(link))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -454,7 +456,7 @@ class GeneralizedLinearRegressionSuite
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Poisson, Link.fromName(link))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -553,14 +555,14 @@ class GeneralizedLinearRegressionSuite
     for ((link, dataset) <- Seq(("inverse", datasetGammaInverse),
       ("identity", datasetGammaIdentity), ("log", datasetGammaLog))) {
       for (fitIntercept <- Seq(false, true)) {
-        val trainer = new GeneralizedLinearRegression().setFamily("gamma").setLink(link)
+        val trainer = new GeneralizedLinearRegression().setFamily("Gamma").setLink(link)
           .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gamma family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
-        val familyLink = new FamilyAndLink(Gamma, Link.fromName(link))
+        val familyLink = FamilyAndLink(trainer)
         model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
           .foreach {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
@@ -574,6 +576,224 @@ class GeneralizedLinearRegressionSuite
           }
 
         idx += 1
+      }
+    }
+  }
+
+  test("generalized linear regression: tweedie family against glm") {
+    /*
+      R code:
+      library(statmod)
+      df <- as.data.frame(matrix(c(
+        1.0, 1.0, 0.0, 5.0,
+        0.5, 1.0, 1.0, 2.0,
+        1.0, 1.0, 2.0, 1.0,
+        2.0, 1.0, 3.0, 3.0), 4, 4, byrow = TRUE))
+
+      f1 <- V1 ~ -1 + V3 + V4
+      f2 <- V1 ~ V3 + V4
+
+      for (f in c(f1, f2)) {
+        for (lp in c(0, 1, -1))
+          for (vp in c(1.6, 2.5)) {
+            model <- glm(f, df, family = tweedie(var.power = vp, link.power = lp))
+            print(as.vector(coef(model)))
+          }
+      }
+      [1] 0.1496480 -0.0122283
+      [1] 0.1373567 -0.0120673
+      [1] 0.3919109 0.1846094
+      [1] 0.3684426 0.1810662
+      [1] 0.1759887 0.2195818
+      [1] 0.1108561 0.2059430
+      [1] -1.3163732  0.4378139  0.2464114
+      [1] -1.4396020  0.4817364  0.2680088
+      [1] -0.7090230  0.6256309  0.3294324
+      [1] -0.9524928  0.7304267  0.3792687
+      [1] 2.1188978 -0.3360519 -0.2067023
+      [1] 2.1659028 -0.3499170 -0.2128286
+    */
+    val datasetTweedie = Seq(
+      Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
+      Instance(0.5, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 1.0, Vectors.dense(2.0, 1.0)),
+      Instance(2.0, 1.0, Vectors.dense(3.0, 3.0))
+    ).toDF()
+
+    val expected = Seq(
+      Vectors.dense(0, 0.149648, -0.0122283),
+      Vectors.dense(0, 0.1373567, -0.0120673),
+      Vectors.dense(0, 0.3919109, 0.1846094),
+      Vectors.dense(0, 0.3684426, 0.1810662),
+      Vectors.dense(0, 0.1759887, 0.2195818),
+      Vectors.dense(0, 0.1108561, 0.205943),
+      Vectors.dense(-1.3163732, 0.4378139, 0.2464114),
+      Vectors.dense(-1.439602, 0.4817364, 0.2680088),
+      Vectors.dense(-0.709023, 0.6256309, 0.3294324),
+      Vectors.dense(-0.9524928, 0.7304267, 0.3792687),
+      Vectors.dense(2.1188978, -0.3360519, -0.2067023),
+      Vectors.dense(2.1659028, -0.349917, -0.2128286))
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true);
+         linkPower <- Seq(0.0, 1.0, -1.0);
+         variancePower <- Seq(1.6, 2.5)) {
+      val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
+        .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+        .setVariancePower(variancePower).setLinkPower(linkPower)
+      val model = trainer.fit(datasetTweedie)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
+        s"linkPower = $linkPower, fitIntercept = $fitIntercept " +
+        s"and variancePower = $variancePower.")
+
+      val familyLink = FamilyAndLink(trainer)
+      model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
+        .foreach {
+          case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+            val eta = BLAS.dot(features, model.coefficients) + model.intercept
+            val prediction2 = familyLink.fitted(eta)
+            val linkPrediction2 = eta
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
+              s"and variancePower = $variancePower.")
+            assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+              s"GLM with tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
+              s"and variancePower = $variancePower.")
+        }
+      idx += 1
+    }
+  }
+
+  test("generalized linear regression: tweedie family against glm (default power link)") {
+    /*
+      R code:
+      library(statmod)
+      df <- as.data.frame(matrix(c(
+        1.0, 1.0, 0.0, 5.0,
+        0.5, 1.0, 1.0, 2.0,
+        1.0, 1.0, 2.0, 1.0,
+        2.0, 1.0, 3.0, 3.0), 4, 4, byrow = TRUE))
+      var.power <- c(0, 1, 2, 1.5)
+      f1 <- V1 ~ -1 + V3 + V4
+      f2 <- V1 ~ V3 + V4
+      for (f in c(f1, f2)) {
+        for (vp in var.power) {
+          model <- glm(f, df, family = tweedie(var.power = vp))
+          print(as.vector(coef(model)))
+        }
+      }
+      [1] 0.4310345 0.1896552
+      [1] 0.15776482 -0.01189032
+      [1] 0.1468853 0.2116519
+      [1] 0.2282601 0.2132775
+      [1] -0.5158730  0.5555556  0.2936508
+      [1] -1.2689559  0.4230934  0.2388465
+      [1] 2.137852 -0.341431 -0.209090
+      [1] 1.5953393 -0.1884985 -0.1106335
+    */
+    val datasetTweedie = Seq(
+      Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
+      Instance(0.5, 1.0, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 1.0, Vectors.dense(2.0, 1.0)),
+      Instance(2.0, 1.0, Vectors.dense(3.0, 3.0))
+    ).toDF()
+
+    val expected = Seq(
+      Vectors.dense(0, 0.4310345, 0.1896552),
+      Vectors.dense(0, 0.15776482, -0.01189032),
+      Vectors.dense(0, 0.1468853, 0.2116519),
+      Vectors.dense(0, 0.2282601, 0.2132775),
+      Vectors.dense(-0.515873, 0.5555556, 0.2936508),
+      Vectors.dense(-1.2689559, 0.4230934, 0.2388465),
+      Vectors.dense(2.137852, -0.341431, -0.20909),
+      Vectors.dense(1.5953393, -0.1884985, -0.1106335))
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      for (variancePower <- Seq(0.0, 1.0, 2.0, 1.5)) {
+        val trainer = new GeneralizedLinearRegression().setFamily("tweedie")
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
+          .setVariancePower(variancePower)
+        val model = trainer.fit(datasetTweedie)
+        val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+        assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with tweedie family, " +
+          s"fitIntercept = $fitIntercept and variancePower = $variancePower.")
+
+        val familyLink = FamilyAndLink(trainer)
+        model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
+          .foreach {
+            case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+              val eta = BLAS.dot(features, model.coefficients) + model.intercept
+              val prediction2 = familyLink.fitted(eta)
+              val linkPrediction2 = eta
+              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+                s"tweedie family, fitIntercept = $fitIntercept " +
+                s"and variancePower = $variancePower.")
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+                s"GLM with tweedie family, fitIntercept = $fitIntercept " +
+                s"and variancePower = $variancePower.")
+          }
+        idx += 1
+      }
+    }
+  }
+
+  test("generalized linear regression: intercept only") {
+    /*
+      R code:
+
+      library(statmod)
+      y <- c(1.0, 0.5, 0.7, 0.3)
+      w <- c(1, 2, 3, 4)
+      for (fam in list(gaussian(), poisson(), binomial(), Gamma(), tweedie(1.6))) {
+        model1 <- glm(y ~ 1, family = fam)
+        model2 <- glm(y ~ 1, family = fam, weights = w)
+        print(as.vector(c(coef(model1), coef(model2))))
+      }
+      [1] 0.625 0.530
+      [1] -0.4700036 -0.6348783
+      [1] 0.5108256 0.1201443
+      [1] 1.600000 1.886792
+      [1] 1.325782 1.463641
+     */
+
+    val dataset = Seq(
+      Instance(1.0, 1.0, Vectors.zeros(0)),
+      Instance(0.5, 2.0, Vectors.zeros(0)),
+      Instance(0.7, 3.0, Vectors.zeros(0)),
+      Instance(0.3, 4.0, Vectors.zeros(0))
+    ).toDF()
+
+    val expected = Seq(0.625, 0.530, -0.4700036, -0.6348783, 0.5108256, 0.1201443,
+      1.600000, 1.886792, 1.325782, 1.463641)
+
+    import GeneralizedLinearRegression._
+
+    var idx = 0
+    for (family <- Seq("gaussian", "poisson", "binomial", "gamma", "tweedie")) {
+      for (useWeight <- Seq(false, true)) {
+        val trainer = new GeneralizedLinearRegression().setFamily(family)
+        if (useWeight) trainer.setWeightCol("weight")
+        if (family == "tweedie") trainer.setVariancePower(1.6)
+        val model = trainer.fit(dataset)
+        val actual = model.intercept
+        assert(actual ~== expected(idx) absTol 1E-3, "Model mismatch: intercept only GLM with " +
+          s"useWeight = $useWeight and family = $family.")
+        assert(model.coefficients === new DenseVector(Array.empty[Double]))
+        idx += 1
+      }
+    }
+
+    // throw exception for empty model
+    val trainer = new GeneralizedLinearRegression().setFitIntercept(false)
+    withClue("Specified model is empty with neither intercept nor feature") {
+      intercept[IllegalArgumentException] {
+        trainer.fit(dataset)
       }
     }
   }
@@ -758,7 +978,7 @@ class GeneralizedLinearRegressionSuite
        0.028480  0.069123  0.935495 -0.049613
     */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("binomial")
+      .setFamily("Binomial")
       .setWeightCol("weight")
       .setFitIntercept(false)
 
@@ -875,7 +1095,7 @@ class GeneralizedLinearRegressionSuite
        -0.4378554  0.2189277  0.1459518 -0.1094638
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("poisson")
+      .setFamily("Poisson")
       .setWeightCol("weight")
       .setFitIntercept(true)
 
@@ -990,7 +1210,7 @@ class GeneralizedLinearRegressionSuite
        -0.6344390  0.3172195  0.2114797 -0.1586097
      */
     val trainer = new GeneralizedLinearRegression()
-      .setFamily("gamma")
+      .setFamily("Gamma")
       .setWeightCol("weight")
 
     val model = trainer.fit(datasetWithWeight)
@@ -1052,6 +1272,121 @@ class GeneralizedLinearRegressionSuite
     assert(summary.solver === "irls")
   }
 
+  test("glm summary: tweedie family with weight") {
+    /*
+      R code:
+
+      library(statmod)
+      df <- as.data.frame(matrix(c(
+        1.0, 1.0, 0.0, 5.0,
+        0.5, 2.0, 1.0, 2.0,
+        1.0, 3.0, 2.0, 1.0,
+        0.0, 4.0, 3.0, 3.0), 4, 4, byrow = TRUE))
+
+      model <- glm(V1 ~ -1 + V3 + V4, data = df, weights = V2,
+          family = tweedie(var.power = 1.6, link.power = 0))
+      summary(model)
+
+      Deviance Residuals:
+            1        2        3        4
+       0.6210  -0.0515   1.6935  -3.2539
+
+      Coefficients:
+         Estimate Std. Error t value Pr(>|t|)
+      V3  -0.4087     0.5205  -0.785    0.515
+      V4  -0.1212     0.4082  -0.297    0.794
+
+      (Dispersion parameter for Tweedie family taken to be 3.830036)
+
+          Null deviance: 20.702  on 4  degrees of freedom
+      Residual deviance: 13.844  on 2  degrees of freedom
+      AIC: NA
+
+      Number of Fisher Scoring iterations: 11
+
+      residuals(model, type="pearson")
+           1           2           3           4
+      0.7383616 -0.0509458  2.2348337 -1.4552090
+      residuals(model, type="working")
+           1            2            3            4
+      0.83354150 -0.04103552  1.55676369 -1.00000000
+      residuals(model, type="response")
+           1            2            3            4
+      0.45460738 -0.02139574  0.60888055 -0.20392801
+     */
+    val datasetWithWeight = Seq(
+      Instance(1.0, 1.0, Vectors.dense(0.0, 5.0)),
+      Instance(0.5, 2.0, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
+      Instance(0.0, 4.0, Vectors.dense(3.0, 3.0))
+    ).toDF()
+
+    val trainer = new GeneralizedLinearRegression()
+      .setFamily("tweedie")
+      .setVariancePower(1.6)
+      .setLinkPower(0.0)
+      .setWeightCol("weight")
+      .setFitIntercept(false)
+
+    val model = trainer.fit(datasetWithWeight)
+    val coefficientsR = Vectors.dense(Array(-0.408746, -0.12125))
+    val interceptR = 0.0
+    val devianceResidualsR = Array(0.621047, -0.051515, 1.693473, -3.253946)
+    val pearsonResidualsR = Array(0.738362, -0.050946, 2.234834, -1.455209)
+    val workingResidualsR = Array(0.833541, -0.041036, 1.556764, -1.0)
+    val responseResidualsR = Array(0.454607, -0.021396, 0.608881, -0.203928)
+    val seCoefR = Array(0.520519, 0.408215)
+    val tValsR = Array(-0.785267, -0.297024)
+    val pValsR = Array(0.514549, 0.794457)
+    val dispersionR = 3.830036
+    val nullDevianceR = 20.702
+    val residualDevianceR = 13.844
+    val residualDegreeOfFreedomNullR = 4
+    val residualDegreeOfFreedomR = 2
+
+    val summary = model.summary
+
+    val devianceResiduals = summary.residuals()
+      .select(col("devianceResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getDouble(0))
+
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
+    assert(model.intercept ~== interceptR absTol 1E-3)
+    devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+
+    summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+    summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
+
+    assert(summary.dispersion ~== dispersionR absTol 1E-3)
+    assert(summary.nullDeviance ~== nullDevianceR absTol 1E-3)
+    assert(summary.deviance ~== residualDevianceR absTol 1E-3)
+    assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
+    assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
+    assert(summary.solver === "irls")
+  }
+
   test("glm handle collinear features") {
     val collinearInstances = Seq(
       Instance(1.0, 1.0, Vectors.dense(1.0, 2.0)),
@@ -1086,7 +1421,7 @@ class GeneralizedLinearRegressionSuite
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val glr = new GeneralizedLinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
@@ -1183,7 +1518,8 @@ object GeneralizedLinearRegressionSuite {
     "maxIter" -> 2,  // intentionally small
     "tol" -> 0.8,
     "regParam" -> 0.01,
-    "predictionCol" -> "myPrediction")
+    "predictionCol" -> "myPrediction",
+    "variancePower" -> 1.0)
 
   def generateGeneralizedLinearRegressionInput(
       intercept: Double,

@@ -97,7 +97,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
       tracksPartitionsInCatalog = true)
@@ -759,7 +759,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testUnsetProperties(isDatasourceTable = true)
   }
 
-  test("alter table: set serde") {
+  // TODO: move this test to HiveDDLSuite.scala
+  ignore("alter table: set serde") {
     testSetSerde(isDatasourceTable = false)
   }
 
@@ -767,7 +768,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testSetSerde(isDatasourceTable = true)
   }
 
-  test("alter table: set serde partition") {
+  // TODO: move this test to HiveDDLSuite.scala
+  ignore("alter table: set serde partition") {
     testSetSerdePartition(isDatasourceTable = false)
   }
 
@@ -1480,49 +1482,46 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     )
   }
 
-  test("select/insert into the managed table") {
+  test("create a managed Hive source table") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
     val tabName = "tbl"
     withTable(tabName) {
-      sql(s"CREATE TABLE $tabName (i INT, j STRING)")
-      val catalogTable =
-        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-      assert(catalogTable.tableType == CatalogTableType.MANAGED)
-
-      var message = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (i INT, j STRING)")
       }.getMessage
-      assert(message.contains("Hive support is required to insert into the following tables"))
-      message = intercept[AnalysisException] {
-        sql(s"SELECT * FROM $tabName")
-      }.getMessage
-      assert(message.contains("Hive support is required to select over the following tables"))
+      assert(e.contains("Hive support is required to CREATE Hive TABLE"))
     }
   }
 
-  test("select/insert into external table") {
+  test("create an external Hive source table") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
     withTempDir { tempDir =>
       val tabName = "tbl"
       withTable(tabName) {
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |LOCATION '$tempDir'
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+               |LOCATION '${tempDir.toURI}'
            """.stripMargin)
-        val catalogTable =
-          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-        assert(catalogTable.tableType == CatalogTableType.EXTERNAL)
+        }.getMessage
+        assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+      }
+    }
+  }
 
-        var message = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
-        }.getMessage
-        assert(message.contains("Hive support is required to insert into the following tables"))
-        message = intercept[AnalysisException] {
-          sql(s"SELECT * FROM $tabName")
-        }.getMessage
-        assert(message.contains("Hive support is required to select over the following tables"))
+  test("create a data source table without schema") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withTable("tab1", "tab2") {
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
+
+        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
+        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
+
+        sql(s"CREATE TABLE tab2 using json location '${tempDir.getCanonicalPath}'")
+        checkAnswer(spark.table("tab2"), Row("a", "b"))
       }
     }
   }
@@ -1556,13 +1555,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var e = intercept[AnalysisException] {
         sql("CREATE TABLE t SELECT 1 as a, 1 as b")
       }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
         sql("CREATE TABLE t SELECT a, b from t1")
       }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
   }
 
@@ -1583,7 +1582,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("USE temp")
     sql("DROP DATABASE temp")
     val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t (a INT, b INT)")
+        sql("CREATE TABLE t (a INT, b INT) USING parquet")
       }.getMessage
     assert(e.contains("Database 'temp' not found"))
   }
@@ -1693,20 +1692,27 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
-    val path = Utils.createTempDir().getAbsolutePath
-    (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-    sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
-    sql(s"CREATE VIEW my_view AS SELECT 1")
-    intercept[NoSuchTableException] {
-      sql("TRUNCATE TABLE my_temp_tab")
+    withTempPath { tempDir =>
+      withTable("my_ext_tab") {
+        (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
+        (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
+        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
+        sql(s"CREATE VIEW my_view AS SELECT 1")
+        intercept[NoSuchTableException] {
+          sql("TRUNCATE TABLE my_temp_tab")
+        }
+        assertUnsupported("TRUNCATE TABLE my_ext_tab")
+        assertUnsupported("TRUNCATE TABLE my_view")
+      }
     }
-    assertUnsupported("TRUNCATE TABLE my_ext_tab")
-    assertUnsupported("TRUNCATE TABLE my_view")
   }
 
   test("truncate table - non-partitioned table (not allowed)") {
-    sql("CREATE TABLE my_tab (age INT, name STRING)")
-    assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+    withTable("my_tab") {
+      sql("CREATE TABLE my_tab (age INT, name STRING) using parquet")
+      sql("INSERT INTO my_tab values (10, 'a')")
+      assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+    }
   }
 
   test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
@@ -1790,7 +1796,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("SET LOCATION for managed table") {
-    withTable("src") {
+    withTable("tbl") {
       withTempDir { dir =>
         sql("CREATE TABLE tbl(i INT) USING parquet")
         sql("INSERT INTO tbl SELECT 1")
@@ -1799,6 +1805,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
 
         sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        spark.catalog.refreshTable("tbl")
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
         // the previous table path should be still there.
