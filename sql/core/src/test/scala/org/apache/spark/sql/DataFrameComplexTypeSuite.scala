@@ -68,6 +68,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
       StructType(Seq(StructField("struct", StructType(
         Seq(StructField("str", StringType, false, metadata)))))))
     assert(df.select(df("struct")("str")).schema.fields(0).metadata === metadata)
+  }
 
   test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
     val ds100_5 = Seq(S100_5()).toDS()
