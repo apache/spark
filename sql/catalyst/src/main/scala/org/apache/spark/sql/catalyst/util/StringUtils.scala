@@ -24,6 +24,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 object StringUtils {
 
+  // replace the _ with .{1} exactly match 1 time of any character
+  // replace the % with .*, match 0 or more times with any character
   def escapeLikeRegex(v: String): String = {
     if (!v.isEmpty) {
       val sb = new StringBuilder("(?s)")
