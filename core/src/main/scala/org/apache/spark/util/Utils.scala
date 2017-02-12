@@ -2203,6 +2203,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns the user port to try when trying to bind a service. Handles wrapping and skipping
+   * privileged ports.
+   */
+  def userPort(base: Int, offset: Int): Int = {
+    (base + offset - 1024) % (65536 - 1024) + 1024
+  }
+
+  /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
@@ -2229,8 +2237,7 @@ private[spark] object Utils extends Logging {
       val tryPort = if (startPort == 0) {
         startPort
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        userPort(startPort, offset)
       }
       try {
         val (service, port) = startService(tryPort)

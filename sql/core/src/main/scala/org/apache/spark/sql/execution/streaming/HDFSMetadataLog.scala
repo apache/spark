@@ -151,7 +151,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           IOUtils.closeQuietly(output)
         }
       } catch {
-        case e: IOException if isFileAlreadyExistsException(e) =>
+        case e: FileAlreadyExistsException =>
           // Failed to create "tempPath". There are two cases:
           // 1. Someone is creating "tempPath" too.
           // 2. This is a restart. "tempPath" has already been created but not moved to the final
@@ -190,7 +190,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       val crcPath = new Path(tempPath.getParent(), s".${tempPath.getName()}.crc")
       if (fileManager.exists(crcPath)) fileManager.delete(crcPath)
     } catch {
-      case e: IOException if isFileAlreadyExistsException(e) =>
+      case e: FileAlreadyExistsException =>
         // If "rename" fails, it means some other "HDFSMetadataLog" has committed the batch.
         // So throw an exception to tell the user this is not a valid behavior.
         throw new ConcurrentModificationException(
@@ -204,13 +204,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     } finally {
       fileManager.delete(tempPath)
     }
-  }
-
-  private def isFileAlreadyExistsException(e: IOException): Boolean = {
-    e.isInstanceOf[FileAlreadyExistsException] ||
-      // Old Hadoop versions don't throw FileAlreadyExistsException. Although it's fixed in
-      // HADOOP-9361 in Hadoop 2.5, we still need to support old Hadoop versions.
-      (e.getMessage != null && e.getMessage.startsWith("File already exists: "))
   }
 
   /**
