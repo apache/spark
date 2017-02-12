@@ -1438,8 +1438,6 @@ class HiveDDLSuite
       test(s"insert data to a $source table which has an not existed location should succeed") {
         withTable("t") {
           withTempDir { dir =>
-            val x = dir.getAbsolutePath
-            val y = dir.getCanonicalPath
             spark.sql(
               s"""CREATE TABLE t(a string, b int)
                   |USING $source
