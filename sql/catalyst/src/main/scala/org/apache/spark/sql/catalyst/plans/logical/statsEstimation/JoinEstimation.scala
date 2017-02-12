@@ -78,12 +78,8 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
           // All rows from right side should be in the result.
           rightRows.max(innerRows)
         case FullOuter =>
-          // Simulate full outer join as obtaining the number of elements in the union of two
-          // finite sets: A \cup B = A + B - A \cap B => A FOJ B = A + B - A IJ B.
-          // But the "inner join" part can be much larger than A \cap B, making the simulated
-          // result much smaller. To prevent this, we choose the larger one between the simulated
-          // part and the inner part.
-          (leftRows + rightRows - innerRows).max(innerRows)
+          // T(A FOJ B) = T(A LOJ B) + T(A ROJ B) - T(A IJ B)
+          leftRows.max(innerRows) + rightRows.max(innerRows) - innerRows
         case _ =>
           // Don't change for inner or cross join
           innerRows
