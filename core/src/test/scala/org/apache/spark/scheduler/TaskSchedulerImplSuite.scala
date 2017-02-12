@@ -31,7 +31,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ManualClock
 
-class FakeSchedulerBackend extends SchedulerBackend {
+private class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
   def stop() {}
   def reviveOffers() {}
@@ -40,6 +40,8 @@ class FakeSchedulerBackend extends SchedulerBackend {
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
     with Logging with MockitoSugar {
+
+  val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -73,17 +75,15 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
+  private def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
-    confs.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
+    confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
     taskScheduler = new TaskSchedulerImpl(sc)
     setupHelper()
   }
 
-  def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
+  private def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
@@ -104,7 +104,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupHelper()
   }
 
-  def setupHelper(): TaskSchedulerImpl = {
+  private def setupHelper(): TaskSchedulerImpl = {
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     dagScheduler = new DAGScheduler(sc, taskScheduler) {
@@ -903,5 +903,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1))).flatten
     assert(taskDescs.size === 1)
     assert(taskDescs.head.executorId === "exec2")
+  }
+
+  test("TaskScheduler should throw IllegalArgumentException when schedulingMode is not supported") {
+    intercept[IllegalArgumentException] {
+      val taskScheduler = setupScheduler(SCHEDULER_MODE_PROPERTY -> SchedulingMode.NONE.toString)
+      taskScheduler.initialize(new FakeSchedulerBackend)
+    }
   }
 }

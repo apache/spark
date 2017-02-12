@@ -130,15 +130,17 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
-  var schedulableBuilder: SchedulableBuilder = null
+  private val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
+  private var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
   // default scheduler is FIFO
-  private val schedulingModeConf = conf.get("spark.scheduler.mode", "FIFO")
+  private val schedulingModeConf = conf.get(SCHEDULER_MODE_PROPERTY, SchedulingMode.FIFO.toString)
   val schedulingMode: SchedulingMode = try {
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
   } catch {
     case e: java.util.NoSuchElementException =>
-      throw new SparkException(s"Unrecognized spark.scheduler.mode: $schedulingModeConf")
+      throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf. " +
+        s"Supported modes: ${SchedulingMode.FAIR} or ${SchedulingMode.FIFO}.")
   }
 
   // This is a var so that we can reset it for testing purposes.
@@ -154,12 +156,10 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
-        case SchedulingMode.FIFO =>
-          new FIFOSchedulableBuilder(rootPool)
-        case SchedulingMode.FAIR =>
-          new FairSchedulableBuilder(rootPool, conf)
-        case _ =>
-          throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
+        case SchedulingMode.FIFO => new FIFOSchedulableBuilder(rootPool)
+        case SchedulingMode.FAIR => new FairSchedulableBuilder(rootPool, conf)
+        case _ => throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
+          s"$schedulingMode. Supported modes: ${SchedulingMode.FAIR} or ${SchedulingMode.FIFO}.")
       }
     }
     schedulableBuilder.buildPools()
