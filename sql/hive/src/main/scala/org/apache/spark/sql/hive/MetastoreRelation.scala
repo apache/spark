@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types.StructField
 
 
@@ -56,7 +57,7 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  @transient val hiveQlTable: HiveTable = HiveUtils.toHiveTable(catalogTable)
+  @transient val hiveQlTable: HiveTable = HiveClientImpl.toHiveTable(catalogTable)
 
   @transient override def computeStats(conf: CatalystConf): Statistics = {
     catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
@@ -111,7 +112,8 @@ private[hive] case class MetastoreRelation(
     } else {
       allPartitions
     }
-    rawPartitions.map(HiveUtils.toHivePartition(catalogTable, hiveQlTable, _))
+
+    rawPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
   /** Only compare database and tablename, not alias. */
@@ -146,18 +148,17 @@ private[hive] case class MetastoreRelation(
   val partitionKeys = catalogTable.partitionSchema.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  // TODO: just make this hold the schema itself, not just non-partition columns
-  val attributes = catalogTable.schema
+  val dataColKeys = catalogTable.schema
     .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
     .map(_.toAttribute)
 
-  val output = attributes ++ partitionKeys
+  val output = dataColKeys ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
   val attributeMap = AttributeMap(output.map(o => (o, o)))
 
   /** An attribute map for determining the ordinal for non-partition columns. */
-  val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+  val columnOrdinals = AttributeMap(dataColKeys.zipWithIndex)
 
   override def inputFiles: Array[String] = {
     val partLocations = allPartitions
