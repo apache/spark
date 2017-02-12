@@ -311,8 +311,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
     }
   }
 
-  for (idx <- 1 to 100)
-  test(s"subscribing topic by pattern with topic deletions $idx") {
+  test("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
