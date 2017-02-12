@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -570,7 +571,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       }
     }
 
-
     test(s"$version: SPARK-13709: reading partitioned Avro table with nested schema") {
       withTempDir { dir =>
         val path = dir.toURI.toString
@@ -649,6 +649,29 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       }
     }
 
+    test(s"$version: CTAS for managed data source tables") {
+      withTable("t", "t1") {
+        import spark.implicits._
+
+        val tPath = new Path(spark.sessionState.conf.warehousePath, "t")
+        Seq("1").toDF("a").write.saveAsTable("t")
+        val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+
+        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
+        checkAnswer(spark.table("t"), Row("1") :: Nil)
+
+        val t1Path = new Path(spark.sessionState.conf.warehousePath, "t1")
+        spark.sql("create table t1 using parquet as select 2 as a")
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
+
+        assert(table1.location.stripSuffix("/") == expectedPath1)
+        assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
+        checkAnswer(spark.table("t1"), Row(2) :: Nil)
+      }
+    }
     // TODO: add more tests.
   }
 }
