@@ -404,6 +404,14 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-MM")),
       Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
+
+    // invalid format
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-hh-MM")),
+      Seq(Row(null), Row(null), Row(null)))
+    checkAnswer(
+      df.select(to_date(col("s"), "yyyy-dd-aa")),
+      Seq(Row(null), Row(null), Row(null)))
   }
 
   test("function trunc") {
@@ -492,6 +500,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
       Row(ts4.getTime / 1000L), Row(null), Row(ts3.getTime / 1000L), Row(null)))
 
+    // invalid format
+    checkAnswer(df1.selectExpr(s"unix_timestamp(x, 'yyyy-MM-dd aa:HH:ss')"), Seq(
+      Row(null), Row(null), Row(null), Row(null)))
+
     val now = sql("select unix_timestamp()").collect().head.getLong(0)
     checkAnswer(sql(s"select cast ($now as timestamp)"), Row(new java.util.Date(now * 1000)))
   }
@@ -528,6 +540,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(ts1.getTime / 1000L), Row(null), Row(null), Row(null)))
     checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
       Row(ts4.getTime / 1000L), Row(null), Row(ts3.getTime / 1000L), Row(null)))
+
+    // invalid format
+    checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')"), Seq(
+      Row(null), Row(null), Row(null), Row(null)))
   }
 
 
