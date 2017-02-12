@@ -331,8 +331,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
-    import sparkSession.sqlContext.implicits._
-    json(sparkSession.createDataset(jsonRDD))
+    json(sparkSession.createDataset(jsonRDD)(Encoders.STRING))
   }
 
   /**

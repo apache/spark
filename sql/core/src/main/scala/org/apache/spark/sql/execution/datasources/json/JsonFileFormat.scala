@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
@@ -126,8 +126,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       classOf[TextInputFormat],
       classOf[LongWritable],
       classOf[Text]).map(_._2.toString) // get the text line
-    import sparkSession.sqlContext.implicits._
-    sparkSession.createDataset(rdd)
+    sparkSession.createDataset(rdd)(Encoders.STRING)
   }
 
   /** Constraints to be imposed on schema to be stored. */
