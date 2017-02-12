@@ -151,7 +151,10 @@ object FileFormatWriter extends Logging {
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val requiredOrdering = (partitionColumns ++ bucketIdExpression ++ sortColumns)
         .map(SortOrder(_, Ascending))
-      val rdd = if (requiredOrdering == queryExecution.executedPlan.outputOrdering) {
+      val actualOrdering = queryExecution.executedPlan.outputOrdering
+      // We can still avoid the sort if the required ordering is [partCol] and the actual ordering
+      // is [partCol, anotherCol].
+      val rdd = if (requiredOrdering == actualOrdering.take(requiredOrdering.length)) {
         queryExecution.toRdd
       } else {
         SortExec(requiredOrdering, global = false, queryExecution.executedPlan).execute()
