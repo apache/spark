@@ -432,7 +432,7 @@ class TypeCoercionSuite extends PlanTest {
     widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
 
     // String promotion
-    widenTestWithStringPromotion(LongType, StringType, Some(StringType))
+    widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
     widenTestWithStringPromotion(StringType, TimestampType, Some(StringType))
     widenTestWithStringPromotion(
       ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
