@@ -2161,6 +2161,48 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
   }
 
+  test("After fetching failed, success of old attempt of stage should be taken as valid.") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val shuffleIdA = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 2, List(shuffleDepA))
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(2))
+
+    val rddC = new MyRDD(sc, 2, List(shuffleDepB))
+
+    submit(rddC, Array(0, 1))
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2))))
+
+    // Fetch failed on hostA for task(partitionId=0) and success on hostB for task(partitionId=1)
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0,
+        "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"), null),
+      (Success, makeMapStatus("hostB", 2))))
+
+    scheduler.resubmitFailedStages()
+    assert(taskSets(2).stageId === 0 && taskSets(2).stageAttemptId === 1)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    assert(taskSets(3).stageId === 1 && taskSets(2).stageAttemptId === 1)
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0), Success, makeMapStatus("hostB", 2)))
+
+    // Thanks to the success from old attempt of stage(stageId=1), there's no pending
+    // partitions for stage(stageId=1) now, thus downstream stage should be submitted,
+    // though there's still a running task in the active stage attempt.
+    assert(taskSets.size === 5 && taskSets(4).tasks(0).isInstanceOf[ResultTask[_, _]])
+    complete(taskSets(4), Seq(
+      (Success, 1),
+      (Success, 1)))
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
