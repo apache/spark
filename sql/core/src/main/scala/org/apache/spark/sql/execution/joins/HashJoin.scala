@@ -72,8 +72,6 @@ trait HashJoin {
     }
   }
 
-
-
   protected def buildSideKeyGenerator(): Projection =
     UnsafeProjection.create(buildKeys)
 
