@@ -143,7 +143,7 @@ case class HiveTableScanExec(
     val locationPath = new Path(relation.catalogTable.location)
     val fs = locationPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
-    // if the table location is not exists, return an empty RDD
+    // if the table location does not exists, return an empty RDD
     if (!fs.exists(locationPath)) {
       return new EmptyRDD[InternalRow](sparkSession.sparkContext)
     }
