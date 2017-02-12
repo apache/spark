@@ -186,7 +186,13 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
     }
   }
 
-  /** Update column stats for output attributes. */
+  /**
+   * Update column stats for output attributes.
+   * 1. For empty output, update all column stats to be empty.
+   * 2. For cartesian product, all values are preserved, so there's no need to change column stats.
+   * 3. For other cases, a) update max/min of join keys based on their intersected range. b) update
+   * distinct count of other attributes based on output rows after join.
+   */
   private def updateAttrStats(
       outputRows: BigInt,
       attributes: Seq[Attribute],
@@ -199,7 +205,7 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       // empty output
       attributes.foreach(a => outputAttrStats.put(a, emptyColumnStat(a.dataType)))
     } else if (outputRows == leftRows * rightRows) {
-      // We do estimation like cartesian product and propagate the original column stats
+      // Cartesian product, just propagate the original column stats
       attributes.foreach(a => outputAttrStats.put(a, oldAttrStats(a)))
     } else {
       val leftRatio =

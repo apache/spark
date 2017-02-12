@@ -56,7 +56,10 @@ object Range {
       n1.min.compareTo(n2.max) <= 0 && n1.max.compareTo(n2.min) >= 0
   }
 
-  /** This is only for two overlapped ranges. */
+  /**
+   * Intersected results of two ranges. This is only for two overlapped ranges.
+   * The outputs are the intersected min/max values of the two columns based on their data types.
+   */
   def intersect(
       r1: Range,
       r2: Range,
