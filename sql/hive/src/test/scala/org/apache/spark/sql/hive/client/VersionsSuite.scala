@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{File, ByteArrayOutputStream, PrintStream}
+import java.io.{ByteArrayOutputStream, File, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -26,11 +26,11 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{QueryTest, Row, AnalysisException}
-import org.apache.spark.sql.catalyst.{TableIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Literal, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -38,7 +38,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.ExtendedHiveTest
-import org.apache.spark.util.{Utils, MutableURLClassLoader}
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
  * A simple set of tests that call the methods of a [[HiveClient]], loading different version
