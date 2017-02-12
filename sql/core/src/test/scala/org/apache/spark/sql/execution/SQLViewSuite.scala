@@ -23,20 +23,6 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext {
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Create a simple table with two columns: id and id1
-    spark.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      spark.sql(s"DROP TABLE IF EXISTS jt")
-    } finally {
-      super.afterAll()
-    }
-  }
 }
 
 /**
@@ -44,6 +30,20 @@ class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext {
  */
 abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    // Create a simple table with two columns: id and id1
+    spark.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
+  }
+
+  protected override def afterAll(): Unit = {
+    try {
+      spark.sql(s"DROP TABLE IF EXISTS jt")
+    } finally {
+      super.afterAll()
+    }
+  }
 
   test("create a permanent view on a permanent view") {
     withView("jtv1", "jtv2") {
@@ -267,21 +267,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           checkAnswer(sql("SELECT * FROM view3 ORDER BY id"), (1 to 9).map(i => Row(i, i)))
         }
       }
-    }
-  }
-
-  test("correctly parse a view with custom column names") {
-    withView("testView1", "testView2") {
-      // Correctly create a view with custom column names
-      sql("CREATE VIEW testView1(x, y) AS SELECT id, id1 + 1 FROM jt")
-      checkAnswer(sql("SELECT * FROM testView1 ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
-
-      // Throw an AnalysisException if the number of columns don't match up.
-      val e = intercept[AnalysisException] {
-        sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM jt")
-      }.getMessage
-      assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
-        "not match the number of column names specified by CREATE VIEW (num: `3`)."))
     }
   }
 
@@ -572,14 +557,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("resolve a view with custom column names") {
+  test("correctly handle a view with custom column names") {
     withTable("tab1") {
       spark.range(1, 10).selectExpr("id", "id + 1 id1").write.saveAsTable("tab1")
-      withView("testView") {
+      withView("testView", "testView2") {
         sql("CREATE VIEW testView(x, y) AS SELECT * FROM tab1")
 
         // Correctly resolve a view with custom column names.
         checkAnswer(sql("SELECT * FROM testView ORDER BY x"), (1 to 9).map(i => Row(i, i + 1)))
+
+        // Throw an AnalysisException if the number of columns don't match up.
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW testView2(x, y, z) AS SELECT * FROM tab1")
+        }.getMessage
+        assert(e.contains("The number of columns produced by the SELECT clause (num: `2`) does " +
+          "not match the number of column names specified by CREATE VIEW (num: `3`)."))
 
         // Correctly resolve a view when the referenced table schema changes.
         spark.range(1, 10).selectExpr("id", "id + id dummy", "id + 1 id1")

@@ -30,20 +30,6 @@ import org.apache.spark.sql.types.StructType
 class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
   protected override val spark: SparkSession = TestHive.sparkSession
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // Create a simple table with two columns: id and id1
-    spark.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      spark.sql(s"DROP TABLE IF EXISTS jt")
-    } finally {
-      super.afterAll()
-    }
-  }
-
   import testImplicits._
 
   test("create a permanent/temp view using a hive, built-in, and permanent user function") {
