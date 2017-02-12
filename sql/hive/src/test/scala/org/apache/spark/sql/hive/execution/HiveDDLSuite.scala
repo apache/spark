@@ -1446,8 +1446,11 @@ class HiveDDLSuite
 
         var newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
         spark.sql(s"alter table t set location '$newDir'")
+
         table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == newDir)
+        assert(!new File(newDir).exists())
+        checkAnswer(spark.table("t"), Nil)
 
         spark.sql("insert into table t select 'c', 1")
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
