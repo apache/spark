@@ -417,7 +417,7 @@ setMethod("coltypes",
                   type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
-              type
+              type[[1]]
             })
 
             # Find which types don't have mapping to R
@@ -1132,6 +1132,7 @@ setMethod("collect",
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
+                    class(vec) <- PRIMITIVE_TYPES[[colType]]
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
