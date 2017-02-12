@@ -132,7 +132,7 @@ class MultiExecutorMockBackend(
   val nExecutorsPerHost = conf.getInt("spark.testing.nExecutorsPerHost", 4)
   val nCoresPerExecutor = conf.getInt("spark.testing.nCoresPerExecutor", 2)
 
-  executorIdToExecutor = {
+  override val executorIdToExecutor: Map[String, ExecutorTaskStatus] = {
     (0 until nHosts).flatMap { hostIdx =>
       val hostName = "host-" + hostIdx
       (0 until nExecutorsPerHost).map { subIdx =>

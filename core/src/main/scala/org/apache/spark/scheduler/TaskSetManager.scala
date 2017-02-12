@@ -697,20 +697,6 @@ private[spark] class TaskSetManager(
     val index = info.index
     info.markFinished(TaskState.FINISHED)
     removeRunningTask(tid)
-    if (!successful(index)) {
-      tasksSuccessful += 1
-      logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
-        s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
-        s" ($tasksSuccessful/$numTasks)")
-      // Mark successful and stop if all the tasks have succeeded.
-      successful(index) = true
-      if (tasksSuccessful == numTasks) {
-        isZombie = true
-      }
-    } else {
-      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
-        " because task " + index + " has already completed successfully")
-    }
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -725,6 +711,20 @@ private[spark] class TaskSetManager(
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
       sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
+    }
+    if (!successful(index)) {
+      tasksSuccessful += 1
+      logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}) in" +
+        s" ${info.duration} ms on ${info.host} (executor ${info.executorId})" +
+        s" ($tasksSuccessful/$numTasks)")
+      // Mark successful and stop if all the tasks have succeeded.
+      successful(index) = true
+      if (tasksSuccessful == numTasks) {
+        isZombie = true
+      }
+    } else {
+      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
+        " because task " + index + " has already completed successfully")
     }
     maybeFinishTaskSet()
   }

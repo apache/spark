@@ -67,16 +67,6 @@ private[scheduler] abstract class Stage(
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
 
-  /**
-   * Partitions the [[DAGScheduler]] is waiting on before it tries to mark the stage / job as
-   * completed and continue. Tasks' successes in both the active taskset or earlier attempts
-   * for this stage can cause partition ids get removed from pendingPartitions. Finally, note
-   * that when this is empty, it does not necessarily mean that stage is completed -- Some of
-   * the map output from that stage may have been lost. But the [[DAGScheduler]] will check for
-   * this condition and resubmit the stage if necessary.
-   */
-  val pendingPartitions = new HashSet[Int]
-
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 

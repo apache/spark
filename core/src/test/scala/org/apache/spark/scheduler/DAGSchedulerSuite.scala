@@ -2161,6 +2161,58 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
   }
 
+  test("[SPARK-19263] DAGScheduler should not submit multiple active tasksets," +
+    " even with late completions from earlier stage attempts") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val shuffleIdA = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 2, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(2))
+
+    val rddC = new MyRDD(sc, 2, List(shuffleDepB), tracker = mapOutputTracker)
+
+    submit(rddC, Array(0, 1))
+
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2))))
+
+    // Fetch failed on hostA.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0,
+        "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"),
+      null))
+
+    scheduler.resubmitFailedStages()
+
+    assert(taskSets(2).stageId === 0 && taskSets(2).stageAttemptId === 1)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // Task succeeds on a failed executor. The success is bogus.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostA", 2)))
+
+    assert(taskSets(3).stageId === 1 && taskSets(2).stageAttemptId === 1)
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0), Success, makeMapStatus("hostB", 2)))
+
+    // There should be no new attempt of stage submitted.
+    assert(taskSets.size === 4)
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(1), Success, makeMapStatus("hostB", 2)))
+
+    // ResultStage submitted.
+    assert(taskSets.size === 5 && taskSets(4).tasks(0).isInstanceOf[ResultTask[_, _]])
+    complete(taskSets(4), Seq(
+      (Success, 1),
+      (Success, 1)))
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.

@@ -1181,33 +1181,33 @@ class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            shuffleStage.pendingPartitions -= task.partitionId
             updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
-            logDebug("ShuffleMapTask finished on " + execId)
+            if (stageIdToStage(task.stageId).latestInfo.attemptId == task.stageAttemptId) {
+              // This task was for the currently running attempt of the stage. Since the task
+              // completed successfully from the perspective of the TaskSetManager, mark it as
+              // no longer pending (the TaskSetManager may consider the task complete even
+              // when the output needs to be ignored because the task's epoch is too small below).
+              shuffleStage.pendingPartitions -= task.partitionId
+            }
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
+              // The epoch of the task is acceptable (i.e., the task was launched after the most
+              // recent failure we're aware of for the executor), so mark the task's output as
+              // available.
               shuffleStage.addOutputLoc(smt.partitionId, status)
+              // Remove the task's partition from pending partitions. This may have already been
+              // done above, but will not have been done yet in cases where the task attempt was
+              // from an earlier attempt of the stage (i.e., not the attempt that's currently
+              // running).  This allows the DAGScheduler to mark the stage as complete when one
+              // copy of each task has finished successfully, even if the currently active stage
+              // still has tasks running.
+              shuffleStage.pendingPartitions -= task.partitionId
             }
+
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
-              // Check if there is active TaskSetManager.
-              val activeTaskSetManagerOpt = Option(taskScheduler.rootPool).flatMap { rootPool =>
-                rootPool.getSortedTaskSetQueue.find { tsm =>
-                  tsm.stageId == stageId && !tsm.isZombie
-                }
-              }
-              activeTaskSetManagerOpt.foreach { activeTsm =>
-                // We need a lock on the taskScheduler because tsm is not thread-safe,
-                // it assumes that all interactions have a lock on the taskScheduler,
-                // even just setting isZombie.
-                // TODO yet another instance we should probably kill all running tasks when we abort
-                // the taskset
-                logInfo(s"Marking ${activeTsm.name} as zombie, as all map output may already be " +
-                  s"available for this stage (from previous attempts)")
-                taskScheduler.synchronized { activeTsm.isZombie = true }
-              }
               markStageAsFinished(shuffleStage)
               logInfo("looking for newly runnable stages")
               logInfo("running: " + runningStages)
