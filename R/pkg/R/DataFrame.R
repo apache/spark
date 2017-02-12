@@ -686,6 +686,13 @@ setMethod("storageLevel",
 #' the current partitions. If a larger number of partitions is requested, it will stay at the
 #' current number of partitions.
 #'
+#' However, if you're doing a drastic coalesce on a SparkDataFrame, e.g. to numPartitions = 1,
+#' this may result in your computation taking place on fewer nodes than
+#' you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+#' call \code{repartition}. This will add a shuffle step, but means the
+#' current upstream partitions will be executed in parallel (per whatever
+#' the current partitioning is).
+#'
 #' @param numPartitions the number of partitions to use.
 #'
 #' @family SparkDataFrame functions
