@@ -505,7 +505,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val df = newSpark.range(100)
         .select($"id", explode(array(col("id") + 1, col("id") + 2, col("id") + 3)).as("value"))
         .repartition($"id")
-        .sortWithinPartitions($"value".desc).toDF()
+        .sortWithinPartitions($"id", $"value".desc).toDF()
 
       df.write
         .partitionBy("id")

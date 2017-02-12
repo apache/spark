@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -36,7 +35,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution, UnsafeKVExternalSorter}
@@ -71,7 +70,7 @@ object FileFormatWriter extends Logging {
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
       val maxRecordsPerFile: Long,
-      val orderingInPartition: Seq[SortOrder])
+      val outputOrdering: Seq[SortOrder])
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),
@@ -129,7 +128,7 @@ object FileFormatWriter extends Logging {
       customPartitionLocations = outputSpec.customPartitionLocations,
       maxRecordsPerFile = options.get("maxRecordsPerFile").map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
-      orderingInPartition = queryExecution.executedPlan.outputOrdering
+      outputOrdering = queryExecution.executedPlan.outputOrdering
     )
 
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
@@ -372,66 +371,88 @@ object FileFormatWriter extends Logging {
         context = taskAttemptContext)
     }
 
-    override def execute(iter: Iterator[InternalRow]): Set[String] = {
-      // If there is sort ordering in the data, we need to keep the ordering.
-      val orderingExpressions: Seq[Expression] = if (description.orderingInPartition.isEmpty) {
-        Nil
-      } else {
-        description.orderingInPartition.map(_.child)
-      }
+    // Returns the partition path given a partition key.
+    private val getPartitionStringFunc = UnsafeProjection.create(
+      Seq(Concat(partitionStringExpression)), description.partitionColumns)
 
-      // We should first sort by partition columns, then bucket id, then sort ordering in the data,
-      // and finally sorting columns.
+    // Returns the data columns to be written given an input row
+    private val getOutputRow = UnsafeProjection.create(
+      description.dataColumns, description.allColumns)
+
+    override def execute(iter: Iterator[InternalRow]): Set[String] = {
+      val outputOrderingExprs = description.outputOrdering.map(_.child)
+      val sortedByPartitionCols =
+        if (description.partitionColumns.length > outputOrderingExprs.length) {
+          false
+        } else {
+          description.partitionColumns.zip(outputOrderingExprs).forall {
+            case (partitionCol, outputOrderExpr) => partitionCol.semanticEquals(outputOrderExpr)
+          }
+        }
+
+      if (sortedByPartitionCols && bucketIdExpression.isEmpty) {
+        // If the input data is sorted by partition columns and no bucketing is specified,
+        // we don't need to sort the data by partition columns anymore.
+
+        val getPartitioningKey = UnsafeProjection.create(
+            description.partitionColumns, description.allColumns)
+
+        // If anything below fails, we should abort the task.
+        var recordsInFile: Long = 0L
+        var fileCounter = 0
+        var currentKey: UnsafeRow = null
+        val updatedPartitions = mutable.Set[String]()
+        while (iter.hasNext) {
+          val currentRow = iter.next()
+          val nextKey = getPartitioningKey(currentRow).asInstanceOf[UnsafeRow]
+          if (currentKey != nextKey) {
+            // See a new key - write to a new partition (new file).
+            currentKey = nextKey.copy()
+            logDebug(s"Writing partition: $currentKey")
+
+            recordsInFile = 0
+            fileCounter = 0
+
+            releaseResources()
+            newOutputWriter(currentKey, getPartitionStringFunc, fileCounter)
+            val partitionPath = getPartitionStringFunc(currentKey).getString(0)
+            if (partitionPath.nonEmpty) {
+              updatedPartitions.add(partitionPath)
+            }
+          } else if (description.maxRecordsPerFile > 0 &&
+              recordsInFile >= description.maxRecordsPerFile) {
+            // Exceeded the threshold in terms of the number of records per file.
+            // Create a new file by increasing the file counter.
+            recordsInFile = 0
+            fileCounter += 1
+            assert(fileCounter < MAX_FILE_COUNTER,
+              s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
+
+            releaseResources()
+            newOutputWriter(currentKey, getPartitionStringFunc, fileCounter)
+          }
+
+          currentWriter.write(getOutputRow(currentRow))
+          recordsInFile += 1
+        }
+        releaseResources()
+        updatedPartitions.toSet
+      } else {
+        executeWithSort(iter)
+      }
+    }
+
+    private def executeWithSort(iter: Iterator[InternalRow]): Set[String] = {
+      // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
-        description.partitionColumns ++ bucketIdExpression ++ orderingExpressions ++ sortColumns
+        description.partitionColumns ++ bucketIdExpression ++ sortColumns
       val getSortingKey = UnsafeProjection.create(sortingExpressions, description.allColumns)
 
-      val bucketIdExprIndex =
-        sortingExpressions.length - sortColumns.length - orderingExpressions.length - 1
-
-      val sortingKeySchema = StructType(sortingExpressions.zipWithIndex.map { case (e, index) =>
-        e match {
-          case a: Attribute => StructField(a.name, a.dataType, a.nullable)
-          // The sorting expressions are all `Attribute` except bucket id and
-          // sorting order's children expressions.
-          case _ if index == bucketIdExprIndex =>
-            StructField("bucketId", IntegerType, nullable = false)
-          case _ if index > bucketIdExprIndex =>
-            StructField(s"_sortOrder_$index", e.dataType, e.nullable)
-        }
+      val sortingKeySchema = StructType(sortingExpressions.map {
+        case a: Attribute => StructField(a.name, a.dataType, a.nullable)
+        // The sorting expressions are all `Attribute` except bucket id.
+        case _ => StructField("bucketId", IntegerType, nullable = false)
       })
-
-      val beginSortingExpr =
-        sortingExpressions.length - sortColumns.length - orderingExpressions.length
-      val recordSortingOrder =
-        if (description.orderingInPartition.isEmpty) {
-          null
-        } else {
-          sortingExpressions.zipWithIndex.map { case (field, ordinal) =>
-            if (ordinal < beginSortingExpr ||
-                ordinal > beginSortingExpr + orderingExpressions.length) {
-              // For partition column, bucket id and sort by columns, we sort by ascending.
-              SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
-            } else {
-              // For the sort ordering of data, we need to keep its sort direction and
-              // null ordering.
-              val direction =
-                description.orderingInPartition(ordinal - beginSortingExpr).direction
-              val nullOrdering =
-                description.orderingInPartition(ordinal - beginSortingExpr).nullOrdering
-              SortOrder(BoundReference(ordinal, field.dataType, nullable = true),
-                direction, nullOrdering)
-            }
-          }.asJava
-        }
-
-      // Returns the data columns to be written given an input row
-      val getOutputRow = UnsafeProjection.create(
-        description.dataColumns, description.allColumns)
-
-      // Returns the partition path given a partition key.
-      val getPartitionStringFunc = UnsafeProjection.create(
-        Seq(Concat(partitionStringExpression)), description.partitionColumns)
 
       // Sorts the data before write, so that we only need one writer at the same time.
       val sorter = new UnsafeKVExternalSorter(
@@ -441,27 +462,22 @@ object FileFormatWriter extends Logging {
         SparkEnv.get.serializerManager,
         TaskContext.get().taskMemoryManager().pageSizeBytes,
         SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-          UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
-        null,
-        recordSortingOrder)
+          UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD))
 
       while (iter.hasNext) {
         val currentRow = iter.next()
         sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
       }
 
-      val getBucketingKey: InternalRow => InternalRow =
-        if (sortColumns.isEmpty && orderingExpressions.isEmpty) {
-          identity
-        } else {
-          val bucketingKeyExprs =
-            sortingExpressions.dropRight(sortColumns.length + orderingExpressions.length)
-          UnsafeProjection.create(bucketingKeyExprs.zipWithIndex.map {
-            case (expr, ordinal) => BoundReference(ordinal, expr.dataType, expr.nullable)
-          })
-        }
-
       val sortedIterator = sorter.sortedIterator()
+
+      val getBucketingKey: InternalRow => InternalRow = if (sortColumns.isEmpty) {
+        identity
+      } else {
+        UnsafeProjection.create(sortingExpressions.dropRight(sortColumns.length).zipWithIndex.map {
+          case (expr, ordinal) => BoundReference(ordinal, expr.dataType, expr.nullable)
+        })
+      }
 
       // If anything below fails, we should abort the task.
       var recordsInFile: Long = 0L
