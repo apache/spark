@@ -465,7 +465,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = DateTimeUtils.newDateFormat(format.toString, timeZone, isLenient = true)
+    val df = DateTimeUtils.newDateFormat(format.toString, timeZone)
     UTF8String.fromString(df.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
@@ -473,7 +473,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val tz = ctx.addReferenceMinorObj(timeZone)
     defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz, true)
+      s"""UTF8String.fromString($dtu.newDateFormat($format.toString(), $tz)
           .format(new java.util.Date($timestamp / 1000)))"""
     })
   }
@@ -566,7 +566,7 @@ abstract class UnixTime
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: DateFormat =
     try {
-      DateTimeUtils.newDateFormat(constFormat.toString, timeZone, isLenient = false)
+      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -599,7 +599,7 @@ abstract class UnixTime
           } else {
             val formatString = f.asInstanceOf[UTF8String].toString
             try {
-              DateTimeUtils.newDateFormat(formatString, timeZone, isLenient = false).parse(
+              DateTimeUtils.newDateFormat(formatString, timeZone).parse(
                 t.asInstanceOf[UTF8String].toString).getTime / 1000L
             } catch {
               case NonFatal(_) => null
@@ -707,7 +707,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
   private lazy val formatter: DateFormat =
     try {
-      DateTimeUtils.newDateFormat(constFormat.toString, timeZone, isLenient = true)
+      DateTimeUtils.newDateFormat(constFormat.toString, timeZone)
     } catch {
       case NonFatal(_) => null
     }
@@ -734,8 +734,8 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
           null
         } else {
           try {
-            UTF8String.fromString(DateTimeUtils.newDateFormat(f.toString, timeZone,
-              isLenient = true).format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
+            UTF8String.fromString(DateTimeUtils.newDateFormat(f.toString, timeZone)
+              .format(new java.util.Date(time.asInstanceOf[Long] * 1000L)))
           } catch {
             case NonFatal(_) => null
           }
