@@ -140,8 +140,6 @@ case class HiveTableScanExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Using dummyCallSite, as getCallSite can turn out to be expensive with
-    // with multiple partitions.
     val locationPath = new Path(relation.catalogTable.location)
     val fs = locationPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
@@ -150,6 +148,8 @@ case class HiveTableScanExec(
       return new EmptyRDD[InternalRow](sparkSession.sparkContext)
     }
 
+    // Using dummyCallSite, as getCallSite can turn out to be expensive with
+    // with multiple partitions.
     val rdd = if (!relation.hiveQlTable.isPartitioned) {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForTable(relation.hiveQlTable)
