@@ -23,9 +23,11 @@ from pyspark.sql import SparkSession
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: sort <file>", file=sys.stderr)
-        exit(-1)
+    """
+    Usage: sort <file>
+    """
+
+    filename = "../resources/people.txt" if len(sys.argv) != 2 else sys.args[1]
 
     spark = SparkSession\
         .builder\
