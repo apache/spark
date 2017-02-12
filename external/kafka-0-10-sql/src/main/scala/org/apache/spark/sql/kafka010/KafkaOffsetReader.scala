@@ -64,6 +64,10 @@ private[kafka010] class KafkaOffsetReader(
   })
   val execContext = ExecutionContext.fromExecutorService(kafkaReaderThread)
 
+  /** Causion: place these prior to the creation of consumer! see SPARK-xxx */
+  private var groupId: String = null
+  private var nextId = 0
+
   /**
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
@@ -75,10 +79,6 @@ private[kafka010] class KafkaOffsetReader(
 
   private val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse("fetchOffset.retryIntervalMs", "1000").toLong
-
-  private var groupId: String = null
-
-  private var nextId = 0
 
   private def nextGroupId(): String = {
     groupId = driverGroupIdPrefix + "-" + nextId
