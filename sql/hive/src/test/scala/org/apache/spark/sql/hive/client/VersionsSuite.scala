@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.io.{File, ByteArrayOutputStream, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.{QueryTest, Row, AnalysisException}
+import org.apache.spark.sql.catalyst.{TableIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Literal, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -37,7 +38,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.ExtendedHiveTest
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
+import org.apache.spark.util.{Utils, MutableURLClassLoader}
 
 /**
  * A simple set of tests that call the methods of a [[HiveClient]], loading different version
@@ -648,13 +649,26 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       }
     }
 
-    test(s"$version: create table should success to test HiveClientImpl.toHiveTable compatible") {
+    test(s"$version: CTAS for managed data source tables") {
       withTable("t", "t1") {
         import spark.implicits._
+
+        val tPath = new Path(spark.sessionState.conf.warehousePath, "t")
         Seq("1").toDF("a").write.saveAsTable("t")
+        val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+
+        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
         checkAnswer(spark.table("t"), Row("1") :: Nil)
 
-        spark.sql("create table t1 as select 2 as a")
+        val t1Path = new Path(spark.sessionState.conf.warehousePath, "t1")
+        spark.sql("create table t1 using parquet as select 2 as a")
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
+
+        assert(table1.location.stripSuffix("/") == expectedPath1)
+        assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
         checkAnswer(spark.table("t1"), Row(2) :: Nil)
       }
     }
