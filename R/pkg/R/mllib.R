@@ -599,6 +599,10 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
 #' @param initMode the initialization algorithm choosen to fit the model.
+#' @param seed the random seed for cluster initialization
+#' @param initSteps the number of steps for the k-means|| initialization mode.
+#'                  This is an advanced setting, the default of 2 is almost always enough. Must be > 0.
+#' @param tol convergence tolerance of iterations.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.kmeans} returns a fitted k-means model.
 #' @rdname spark.kmeans
@@ -628,11 +632,16 @@ setMethod("summary", signature(object = "IsotonicRegressionModel"),
 #' @note spark.kmeans since 2.0.0
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
+          function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random"),
+                   seed = NULL, initSteps = 2, tol = 1E-4) {
             formula <- paste(deparse(formula), collapse = "")
             initMode <- match.arg(initMode)
+            if (!is.null(seed)) {
+              seed <- as.character(as.integer(seed))
+            }
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
-                                as.integer(k), as.integer(maxIter), initMode)
+                                as.integer(k), as.integer(maxIter), initMode, seed,
+                                as.integer(initSteps), as.numeric(tol))
             new("KMeansModel", jobj = jobj)
           })
 
@@ -671,10 +680,13 @@ setMethod("fitted", signature(object = "KMeansModel"),
 
 #' @param object a fitted k-means model.
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
-#'         The list includes the model's \code{k} (number of cluster centers),
+#'         The list includes the model's \code{k} (the configured number of cluster centers),
 #'         \code{coefficients} (model cluster centers),
-#'         \code{size} (number of data points in each cluster), and \code{cluster}
-#'         (cluster centers of the transformed data).
+#'         \code{size} (number of data points in each cluster), \code{cluster}
+#'         (cluster centers of the transformed data), {is.loaded} (whether the model is loaded
+#'         from a saved file), and \code{clusterSize}
+#'         (the actual number of cluster centers. When using initMode = "random",
+#'         \code{clusterSize} may not equal to \code{k}).
 #' @rdname spark.kmeans
 #' @export
 #' @note summary(KMeansModel) since 2.0.0
@@ -686,16 +698,17 @@ setMethod("summary", signature(object = "KMeansModel"),
             coefficients <- callJMethod(jobj, "coefficients")
             k <- callJMethod(jobj, "k")
             size <- callJMethod(jobj, "size")
-            coefficients <- t(matrix(coefficients, ncol = k))
+            clusterSize <- callJMethod(jobj, "clusterSize")
+            coefficients <- t(matrix(coefficients, ncol = clusterSize))
             colnames(coefficients) <- unlist(features)
-            rownames(coefficients) <- 1:k
+            rownames(coefficients) <- 1:clusterSize
             cluster <- if (is.loaded) {
               NULL
             } else {
               dataFrame(callJMethod(jobj, "cluster"))
             }
             list(k = k, coefficients = coefficients, size = size,
-                 cluster = cluster, is.loaded = is.loaded)
+                 cluster = cluster, is.loaded = is.loaded, clusterSize = clusterSize)
           })
 
 #  Predicted values based on a k-means model
