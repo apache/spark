@@ -649,6 +649,255 @@ case class MapObjects private(
   }
 }
 
+object CollectObjectsToMap {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  /**
+   * Construct an instance of CollectObjects case class.
+   *
+   * @param keyFunction The function applied on the key collection elements.
+   * @param keyInputData An expression that when evaluated returns a key collection object.
+   * @param keyElementType The data type of key elements in the collection.
+   * @param valueFunction The function applied on the value collection elements.
+   * @param valueInputData An expression that when evaluated returns a value collection object.
+   * @param valueElementType The data type of value elements in the collection.
+   * @param collClass The type of the resulting collection.
+   */
+  def apply(
+             keyFunction: Expression => Expression,
+             keyInputData: Expression,
+             keyElementType: DataType,
+             valueFunction: Expression => Expression,
+             valueInputData: Expression,
+             valueElementType: DataType,
+             collClass: Class[_]): CollectObjectsToMap = {
+    val keyLoopValue = "CollectObjectsToMap_loopValue" + curId.getAndIncrement()
+    val keyLoopIsNull = "CollectObjectsToMap_loopIsNull" + curId.getAndIncrement()
+    val keyLoopVar = LambdaVariable(keyLoopValue, keyLoopIsNull, keyElementType)
+    val valueLoopValue = "CollectObjectsToMap_loopValue" + curId.getAndIncrement()
+    val valueLoopIsNull = "CollectObjectsToMap_loopIsNull" + curId.getAndIncrement()
+    val valueLoopVar = LambdaVariable(valueLoopValue, valueLoopIsNull, valueElementType)
+    val tupleLoopVar = "CollectObjectsToMap_loopValue" + curId.getAndIncrement()
+    val builderValue = "CollectObjectsToMap_builderValue" + curId.getAndIncrement()
+    CollectObjectsToMap(
+      keyLoopValue, keyLoopIsNull, keyElementType, keyFunction(keyLoopVar), keyInputData,
+      valueLoopValue, valueLoopIsNull, valueElementType, valueFunction(valueLoopVar),
+      valueInputData,
+      tupleLoopVar, collClass, builderValue)
+  }
+}
+
+/**
+ * An equivalent to the [[MapObjects]] case class but returning an ObjectType containing
+ * a Scala collection constructed using the associated builder, obtained by calling `newBuilder`
+ * on the collection's companion object.
+ *
+ * @param keyLoopValue the name of the loop variable that is used when iterating over the key
+ *                     collection, and which is used as input for the `keyLambdaFunction`
+ * @param keyLoopIsNull the nullability of the loop variable that is used when iterating over
+ *                      the key collection, and which is used as input for the `keyLambdaFunction`
+ * @param keyLoopVarDataType the data type of the loop variable that is used when iterating over
+ *                           the key collection, and which is used as input for the
+ *                           `keyLambdaFunction`
+ * @param keyLambdaFunction A function that takes the `keyLoopVar` as input, and is used as
+ *                          a lambda function to handle collection elements.
+ * @param keyInputData An expression that when evaluated returns a collection object.
+ * @param valueLoopValue the name of the loop variable that is used when iterating over the value
+ *                       collection, and which is used as input for the `valueLambdaFunction`
+ * @param valueLoopIsNull the nullability of the loop variable that is used when iterating over
+ *                        the value collection, and which is used as input for the
+ *                        `valueLambdaFunction`
+ * @param valueLoopVarDataType the data type of the loop variable that is used when iterating over
+ *                             the value collection, and which is used as input for the
+ *                             `valueLambdaFunction`
+ * @param valueLambdaFunction A function that takes the `valueLoopVar` as input, and is used as
+ *                            a lambda function to handle collection elements.
+ * @param valueInputData An expression that when evaluated returns a collection object.
+ * @param tupleLoopValue the name of the loop variable that holds the tuple to be added to the
+  *                      resulting map
+ * @param collClass The type of the resulting collection.
+ * @param builderValue The name of the builder variable used to construct the resulting collection.
+ */
+case class CollectObjectsToMap private(
+                                   keyLoopValue: String,
+                                   keyLoopIsNull: String,
+                                   keyLoopVarDataType: DataType,
+                                   keyLambdaFunction: Expression,
+                                   keyInputData: Expression,
+                                   valueLoopValue: String,
+                                   valueLoopIsNull: String,
+                                   valueLoopVarDataType: DataType,
+                                   valueLambdaFunction: Expression,
+                                   valueInputData: Expression,
+                                   tupleLoopValue: String,
+                                   collClass: Class[_],
+                                   builderValue: String) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = keyInputData.nullable
+
+  override def children: Seq[Expression] =
+    keyLambdaFunction :: keyInputData :: valueLambdaFunction :: valueInputData :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def dataType: DataType = ObjectType(collClass)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val collObjectName = s"${collClass.getName}$$.MODULE$$"
+    val getBuilderVar = s"$collObjectName.newBuilder()"
+    val keyElementJavaType = ctx.javaType(keyLoopVarDataType)
+    ctx.addMutableState("boolean", keyLoopIsNull, "")
+    ctx.addMutableState(keyElementJavaType, keyLoopValue, "")
+    val genKeyInputData = keyInputData.genCode(ctx)
+    val genKeyFunction = keyLambdaFunction.genCode(ctx)
+    val valueElementJavaType = ctx.javaType(valueLoopVarDataType)
+    ctx.addMutableState("boolean", valueLoopIsNull, "")
+    ctx.addMutableState(valueElementJavaType, valueLoopValue, "")
+    val genValueInputData = valueInputData.genCode(ctx)
+    val genValueFunction = valueLambdaFunction.genCode(ctx)
+    val dataLength = ctx.freshName("dataLength")
+    val loopIndex = ctx.freshName("loopIndex")
+
+    // In RowEncoder, we use `Object` to represent Array or Seq, so we need to determine the type
+    // of input collection at runtime for this case.
+    val keySeq = ctx.freshName("keySeq")
+    val keyArray = ctx.freshName("keyArray")
+    val valueSeq = ctx.freshName("valueSeq")
+    val valueArray = ctx.freshName("valueArray")
+    def determineCollectionType(inputData: Expression, genInputData: ExprCode,
+                                elementJavaType: String, seq: String, array: String) =
+      inputData.dataType match {
+        case ObjectType(cls) if cls == classOf[Object] =>
+          val seqClass = classOf[Seq[_]].getName
+          s"""
+            $seqClass $seq = null;
+            $elementJavaType[] $array = null;
+            if (${genInputData.value}.getClass().isArray()) {
+              $array = ($elementJavaType[]) ${genInputData.value};
+            } else {
+              $seq = ($seqClass) ${genInputData.value};
+            }
+           """
+        case _ => ""
+      }
+    val determineKeyCollectionType = determineCollectionType(
+      keyInputData, genKeyInputData, keyElementJavaType, keySeq, keyArray)
+    val determineValueCollectionType = determineCollectionType(
+      valueInputData, genValueInputData, valueElementJavaType, valueSeq, valueArray)
+
+    // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
+    // When we want to apply MapObjects on it, we have to use it.
+    def inputDataType(inputData: Expression) = inputData.dataType match {
+      case p: PythonUserDefinedType => p.sqlType
+      case _ => inputData.dataType
+    }
+    val keyInputDataType = inputDataType(keyInputData)
+    val valueInputDataType = inputDataType(valueInputData)
+
+    def lengthAndLoopVar(inputDataType: DataType, genInputData: ExprCode,
+                         seq: String, array: String) =
+      inputDataType match {
+        case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+          s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
+        case ObjectType(cls) if cls.isArray =>
+          s"${genInputData.value}.length" -> s"${genInputData.value}[$loopIndex]"
+        case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+          s"${genInputData.value}.size()" -> s"${genInputData.value}.get($loopIndex)"
+        case ArrayType(et, _) =>
+          s"${genInputData.value}.numElements()" -> ctx.getValue(genInputData.value, et, loopIndex)
+        case ObjectType(cls) if cls == classOf[Object] =>
+          s"$seq == null ? $array.length : $seq.size()" ->
+            s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
+      }
+    val ((getKeyLength, getKeyLoopVar), (getValueLength, getValueLoopVar)) = (
+      lengthAndLoopVar(inputDataType(keyInputData), genKeyInputData, keySeq, keyArray),
+      lengthAndLoopVar(inputDataType(valueInputData), genValueInputData, valueSeq, valueArray)
+    )
+
+    // Make a copy of the data if it's unsafe-backed
+    def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
+      s"$value instanceof ${clazz.getSimpleName}? $value.copy() : $value"
+    def genFunctionValue(lambdaFunction: Expression, genFunction: ExprCode) =
+      lambdaFunction.dataType match {
+        case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
+        case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
+        case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
+        case _ => genFunction.value
+      }
+    val genKeyFunctionValue = genFunctionValue(keyLambdaFunction, genKeyFunction)
+    val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
+
+    def loopNullCheck(genInputData: ExprCode, inputDataType: DataType,
+                      loopIsNull: String, loopValue: String) =
+      inputDataType match {
+        case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
+        // The element of primitive array will never be null.
+        case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
+          s"$loopIsNull = false"
+        case _ => s"$loopIsNull = $loopValue == null;"
+      }
+    val keyLoopNullCheck =
+      loopNullCheck(genKeyInputData, keyInputDataType, keyLoopIsNull, keyLoopValue)
+    val valueLoopNullCheck =
+      loopNullCheck(genValueInputData, valueInputDataType, valueLoopIsNull, valueLoopValue)
+
+    val tupleClass = classOf[(_, _)].getName
+
+    val code = s"""
+      ${genKeyInputData.code}
+      ${genValueInputData.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+
+      if ((${genKeyInputData.isNull} && !${genValueInputData.isNull}) ||
+        (!${genKeyInputData.isNull} && ${genValueInputData.isNull})) {
+        throw new RuntimeException("Invalid state: Inconsistent nullability of key-value");
+      }
+
+      if (!${genKeyInputData.isNull}) {
+        $determineKeyCollectionType
+        $determineValueCollectionType
+        if ($getKeyLength != $getValueLength) {
+          throw new RuntimeException("Invalid state: Inconsistent lengths of key-value arrays");
+        }
+        int $dataLength = $getKeyLength;
+        ${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
+        $builderValue.sizeHint($dataLength);
+
+        int $loopIndex = 0;
+        while ($loopIndex < $dataLength) {
+          $keyLoopValue = ($keyElementJavaType) ($getKeyLoopVar);
+          $valueLoopValue = ($valueElementJavaType) ($getValueLoopVar);
+          $keyLoopNullCheck
+          $valueLoopNullCheck
+
+          ${genKeyFunction.code}
+          ${genValueFunction.code}
+
+          $tupleClass $tupleLoopValue;
+
+          if (${genKeyFunction.isNull}) {
+            throw new RuntimeException("Found null in map key!");
+          }
+
+          if (${genValueFunction.isNull}) {
+            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
+          } else {
+            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, $genValueFunctionValue);
+          }
+
+          $builderValue.$$plus$$eq($tupleLoopValue);
+
+          $loopIndex += 1;
+        }
+
+        ${ev.value} = (${collClass.getName}) $builderValue.result();
+      }
+    """
+    ev.copy(code = code, isNull = genKeyInputData.isNull)
+  }
+}
+
 object ExternalMapToCatalyst {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 

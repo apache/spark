@@ -333,31 +333,20 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
-        val keyData =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(keyType, Some(p), walkedTypePath),
-              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType),
-                returnNullable = false),
-              schemaFor(keyType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]), returnNullable = false)
+        val cls = t.companion.member(TermName("newBuilder")) match {
+          case NoSymbol => classOf[Map[_, _]]
+          case _ => mirror.runtimeClass(t.typeSymbol.asClass)
+        }
 
-        val valueData =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(valueType, Some(p), walkedTypePath),
-              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType),
-                returnNullable = false),
-              schemaFor(valueType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]), returnNullable = false)
-
-        StaticInvoke(
-          ArrayBasedMapData.getClass,
-          ObjectType(classOf[scala.collection.immutable.Map[_, _]]),
-          "toScalaMap",
-          keyData :: valueData :: Nil)
+        CollectObjectsToMap(
+          p => deserializerFor(keyType, Some(p), walkedTypePath),
+          Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
+          schemaFor(keyType).dataType,
+          p => deserializerFor(valueType, Some(p), walkedTypePath),
+          Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
+          schemaFor(valueType).dataType,
+          cls
+        )
 
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
