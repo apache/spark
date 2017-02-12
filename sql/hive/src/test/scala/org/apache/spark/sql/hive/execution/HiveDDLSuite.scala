@@ -35,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
@@ -1432,29 +1433,69 @@ class HiveDDLSuite
     }
   }
 
-  test("insert data to a table which has altered the table location " +
-    "to an not exist location should success") {
-    withTable("t") {
-      withTempDir { dir =>
-        spark.sql(
-          s"""create table t(a string, b int)
-            |using parquet
-            |options(path "${dir.getAbsolutePath}")
+  Seq("parquet", "hive").foreach {
+    source =>
+      test(s"insert data to a $source table which has an not existed location should succeed") {
+        withTable("t") {
+          withTempDir { dir =>
+            val x = dir.getAbsolutePath
+            val y = dir.getCanonicalPath
+            spark.sql(
+              s"""CREATE TABLE t(a string, b int)
+                  |USING $source
+                  |OPTIONS(path "file:${dir.getCanonicalPath}")
            """.stripMargin)
-        var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+            var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+            assert(table.location.stripSuffix("/") == expectedPath)
 
-        var newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
-        spark.sql(s"alter table t set location '$newDir'")
+            dir.delete
+            assert(!new File(table.location).exists())
+            spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+            checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
-        table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == newDir)
-        assert(!new File(newDir).exists())
-        checkAnswer(spark.table("t"), Nil)
+            Utils.deleteRecursively(dir)
+            assert(!new File(table.location).exists())
+            spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
+            checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
-        spark.sql("insert into table t select 'c', 1")
-        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+            var newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+            spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+            table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == newDir)
+            assert(!new File(newDir).exists())
+
+            spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+            checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+          }
+        }
       }
-    }
+
+      test(s"read data from a $source table which has an not existed location should succeed") {
+        withTable("t") {
+          withTempDir { dir =>
+            spark.sql(
+              s"""CREATE TABLE t(a string, b int)
+                  |USING $source
+                  |OPTIONS(path "file:${dir.getAbsolutePath}")
+           """.stripMargin)
+            var table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+            assert(table.location.stripSuffix("/") == expectedPath)
+
+            dir.delete()
+            checkAnswer(spark.table("t"), Nil)
+
+            var newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+            spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+            table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == newDir)
+            assert(!new File(newDir).exists())
+            checkAnswer(spark.table("t"), Nil)
+          }
+        }
+      }
   }
 }
