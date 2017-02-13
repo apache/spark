@@ -20,13 +20,14 @@ package org.apache.spark.sql.hive.execution
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -139,6 +140,15 @@ case class HiveTableScanExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    // Using dummyCallSite, as getCallSite can turn out to be expensive with
+    // with multiple partitions.
+    val locationPath = new Path(relation.catalogTable.location)
+    val fs = locationPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+
+    // if the table location is not exists, return an empty RDD
+    if (!fs.exists(locationPath)) {
+      return new EmptyRDD[InternalRow](sparkSession.sparkContext)
+    }
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // with multiple partitions.
     val rdd = if (!relation.hiveQlTable.isPartitioned) {

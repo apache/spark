@@ -35,6 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
@@ -1491,6 +1492,151 @@ class HiveDDLSuite
         Seq((1, 1, 1, 1)).toDF("a", "b", "c", "d").write.format("hive")
           .partitionBy("d", "b").saveAsTable("t6")
         assert(getTableColumns("t6") == Seq("a", "c", "d", "b"))
+      }
+    }
+  }
+
+  test("insert data to a hive serde table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+              |CREATE TABLE t(a string, b int)
+              |USING hive
+              |OPTIONS(path "file:${dir.getCanonicalPath}")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+        assert(table.location.stripSuffix("/") == expectedPath)
+
+        val tableLocFile = new File(table.location.stripPrefix("file:"))
+        tableLocFile.delete()
+        assert(!tableLocFile.exists())
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists())
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        Utils.deleteRecursively(dir)
+        assert(!tableLocFile.exists())
+        spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists())
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        val newDirFile = new File(newDir)
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists())
+
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+        assert(newDirFile.exists())
+      }
+    }
+  }
+
+  test("insert into a hive serde table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+              |CREATE TABLE t(a int, b int, c int, d int)
+              |USING hive
+              |PARTITIONED BY(a, b)
+              |LOCATION "file:${dir.getCanonicalPath}"
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+        assert(table.location.stripSuffix("/") == expectedPath)
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        val partLoc = new File(s"${dir.getAbsolutePath}/a=1")
+        Utils.deleteRecursively(partLoc)
+        assert(!partLoc.exists())
+        // insert overwrite into a partition which location has been deleted.
+        spark.sql("INSERT OVERWRITE TABLE t PARTITION(a=1, b=2) SELECT 7, 8")
+        assert(partLoc.exists())
+        checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
+
+        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        val newDirFile = new File(newDir)
+        spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION '$newDir'")
+        assert(!newDirFile.exists())
+
+        // insert into a partition which location does not exists.
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 9, 10")
+        assert(newDirFile.exists())
+        checkAnswer(spark.table("t"), Row(9, 10, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("read data from a hive serde table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+              |CREATE TABLE t(a string, b int)
+              |USING hive
+              |OPTIONS(path "file:${dir.getAbsolutePath}")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+        assert(table.location.stripSuffix("/") == expectedPath)
+
+        dir.delete()
+        checkAnswer(spark.table("t"), Nil)
+
+        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!new File(newDir).exists())
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("read data from a hive serde table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+              |CREATE TABLE t(a int, b int, c int, d int)
+              |USING hive
+              |PARTITIONED BY(a, b)
+              |LOCATION "file:${dir.getCanonicalPath}"
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        val newDirFile = new File(newDir)
+        spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION '$newDir'")
+        assert(!newDirFile.exists())
+        // select from a partition which location has changed to a not existed location
+        withSQLConf(SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "true") {
+          checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+        }
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 5, 6")
+        checkAnswer(spark.table("t"), Row(5, 6, 1, 2) :: Nil)
+        assert(newDirFile.exists())
+
+        // select from a partition which location has been deleted.
+        Utils.deleteRecursively(newDirFile)
+        assert(!newDirFile.exists())
+        withSQLConf(SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "true") {
+          checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+        }
       }
     }
   }
