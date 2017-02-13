@@ -55,7 +55,7 @@ class RowDataSourceStrategySuite extends SparkFunSuite with BeforeAndAfter with 
         |CREATE OR REPLACE TEMPORARY VIEW inttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   after {

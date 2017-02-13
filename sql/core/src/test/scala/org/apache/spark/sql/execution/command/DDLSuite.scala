@@ -903,24 +903,24 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempView("show1a", "show2b") {
       sql(
         """
-          |CREATE TEMPORARY VIEW show1a
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |
-          |)
+         |CREATE TEMPORARY VIEW show1a
+         |USING org.apache.spark.sql.sources.DDLScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10',
+         |  Table 'test1'
+         |
+         |)
         """.stripMargin)
       sql(
         """
-          |CREATE TEMPORARY VIEW show2b
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
+         |CREATE TEMPORARY VIEW show2b
+         |USING org.apache.spark.sql.sources.DDLScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10',
+         |  Table 'test1'
+         |)
         """.stripMargin)
       assert(
         sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
@@ -962,13 +962,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY VIEW tab1
-        |USING org.apache.spark.sql.sources.DDLScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10',
-        |  Table 'test1'
-        |)
+       |CREATE TEMPORARY VIEW tab1
+       |USING org.apache.spark.sql.sources.DDLScanSource
+       |OPTIONS (
+       |  From '1',
+       |  To '10',
+       |  Table 'test1'
+       |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     sql("DROP VIEW tab1")

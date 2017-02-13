@@ -1585,12 +1585,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       intercept[AnalysisException] {
         spark.sql(
           s"""
-          |CREATE TEMPORARY VIEW db.t
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
+            |CREATE TEMPORARY VIEW db.t
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+           """.stripMargin)
       }.getMessage
 
       // If you use backticks to quote the name then it's OK.
@@ -1601,7 +1601,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |OPTIONS (
           |  path '$path'
           |)
-        """.stripMargin)
+         """.stripMargin)
       checkAnswer(spark.table("`db.t`"), df)
     }
   }

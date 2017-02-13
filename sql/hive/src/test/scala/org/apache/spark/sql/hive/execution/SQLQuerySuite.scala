@@ -1303,12 +1303,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       intercept[AnalysisException] {
         spark.sql(
           s"""
-          |CREATE TEMPORARY VIEW db.t
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
+            |CREATE TEMPORARY VIEW db.t
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+           """.stripMargin)
       }
 
       // If you use backticks to quote the name then it's OK.
@@ -1319,7 +1319,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |OPTIONS (
           |  path '$path'
           |)
-        """.stripMargin)
+         """.stripMargin)
       checkAnswer(spark.table("`db.t`"), df)
     }
   }
