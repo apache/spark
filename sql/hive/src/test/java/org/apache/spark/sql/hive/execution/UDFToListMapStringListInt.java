@@ -14,31 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.hive.execution;
 
-package org.apache.spark.sql.catalyst
+import org.apache.hadoop.hive.ql.exec.UDF;
 
-import scala.util.control.NonFatal
+import java.util.*;
 
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-
-
-abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
-  protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
-    val actualSQL = e.sql
-    try {
-      assert(actualSQL === expectedSQL)
-    } catch {
-      case cause: Throwable =>
-        fail(
-          s"""Wrong SQL generated for the following expression:
-             |
-             |${e.prettyName}
-             |
-             |$cause
-           """.stripMargin)
-    }
+/**
+ * UDF that returns a nested list of maps that uses a string as its key and a list of ints as its
+ * values.
+ */
+public class UDFToListMapStringListInt extends UDF {
+  public List<Map<String, List<Integer>>> evaluate(Object o) {
+    final Map<String, List<Integer>> map = new HashMap<>();
+    map.put("a", Arrays.asList(1, 2));
+    map.put("b", Arrays.asList(3, 4));
+    return Collections.singletonList(map);
   }
 }

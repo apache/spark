@@ -14,31 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.hive.execution;
 
-package org.apache.spark.sql.catalyst
+import org.apache.hadoop.hive.ql.exec.UDF;
 
-import scala.util.control.NonFatal
+import java.util.Collections;
+import java.util.Map;
 
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-
-
-abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
-  protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
-    val actualSQL = e.sql
-    try {
-      assert(actualSQL === expectedSQL)
-    } catch {
-      case cause: Throwable =>
-        fail(
-          s"""Wrong SQL generated for the following expression:
-             |
-             |${e.prettyName}
-             |
-             |$cause
-           """.stripMargin)
-    }
+/**
+ * UDF that returns a raw (non-parameterized) java Map.
+ */
+public class UDFRawMap extends UDF {
+  public Map evaluate(Object o) {
+    return Collections.singletonMap("a", "1");
   }
 }

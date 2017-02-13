@@ -786,6 +786,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
+  def tableRelationCacheSize: Int =
+    getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
+
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
@@ -1033,6 +1036,14 @@ object StaticSQLConf {
       .internal()
       .intConf
       .createWithDefault(4000)
+
+  val FILESOURCE_TABLE_RELATION_CACHE_SIZE =
+    buildStaticConf("spark.sql.filesourceTableRelationCacheSize")
+      .internal()
+      .doc("The maximum size of the cache that maps qualified table names to table relation plans.")
+      .intConf
+      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
+      .createWithDefault(1000)
 
   // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
   // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.

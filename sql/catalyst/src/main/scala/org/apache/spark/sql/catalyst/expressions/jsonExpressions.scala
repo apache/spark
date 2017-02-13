@@ -506,7 +506,7 @@ case class JsonToStruct(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    try parser.parse(json.toString).head catch {
+    try parser.parse(json.toString).headOption.orNull catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
