@@ -17,9 +17,6 @@
 
 context("include R packages")
 
-# Ensure Spark is installed
-sparkCheckInstall()
-
 # JavaSparkContext handle
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)

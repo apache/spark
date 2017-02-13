@@ -19,9 +19,6 @@ library(testthat)
 
 context("SparkSQL functions")
 
-# Ensure Spark is installed
-sparkCheckInstall()
-
 # Utility function for easily checking the values of a StructField
 checkStructField <- function(actual, expectedName, expectedType, expectedNullable) {
   expect_equal(class(actual), "structField")

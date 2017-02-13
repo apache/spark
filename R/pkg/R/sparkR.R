@@ -585,10 +585,7 @@ processSparkPackages <- function(packages) {
 # @param deployMode whether to deploy your driver on the worker nodes (cluster)
 #        or locally as an external client (client).
 # @return NULL if no need to update sparkHome, and new sparkHome otherwise.
-sparkCheckInstall <- function(
-  sparkHome = Sys.getenv("SPARK_HOME"),
-  master = "local",
-  deployMode = "") {
+sparkCheckInstall <- function(sparkHome, master, deployMode) {
   if (!isSparkRShell()) {
     if (!is.na(file.info(sparkHome)$isdir)) {
       message("Spark package found in SPARK_HOME: ", sparkHome)

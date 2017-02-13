@@ -19,9 +19,6 @@ library(testthat)
 
 context("MLlib regression algorithms, except for tree-based algorithms")
 
-# Ensure Spark is installed
-sparkCheckInstall()
-
 # Tests for MLlib regression algorithms in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 

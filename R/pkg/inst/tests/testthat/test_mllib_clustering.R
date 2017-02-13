@@ -19,9 +19,6 @@ library(testthat)
 
 context("MLlib clustering algorithms")
 
-# Ensure Spark is installed
-sparkCheckInstall()
-
 # Tests for MLlib clustering algorithms in SparkR
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 

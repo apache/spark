@@ -17,9 +17,6 @@
 
 context("test functions in sparkR.R")
 
-# Ensure Spark is installed
-sparkCheckInstall()
-
 test_that("Check masked functions", {
   # Check that we are not masking any new function from base, stats, testthat unexpectedly
   # NOTE: We should avoid adding entries to *namesOfMaskedCompletely* as masked functions make it

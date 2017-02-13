@@ -17,9 +17,6 @@
 
 context("tests RDD function take()")
 
-# Ensure Spark is installed
-sparkCheckInstall()
-
 # Mock data
 numVector <- c(-10:97)
 numList <- list(sqrt(1), sqrt(2), sqrt(3), 4 ** 10)
