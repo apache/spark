@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
@@ -45,6 +46,7 @@ class WriteAheadLogBackedBlockRDDSuite
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    initSparkContext()
     dir = Utils.createTempDir()
   }
 
@@ -56,22 +58,33 @@ class WriteAheadLogBackedBlockRDDSuite
     }
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sparkContext = new SparkContext(conf)
-    blockManager = sparkContext.env.blockManager
-    serializerManager = sparkContext.env.serializerManager
+  override def afterAll(): Unit = {
+    try {
+      stopSparkContext()
+    } finally {
+      super.afterAll()
+    }
   }
 
-  override def afterAll(): Unit = {
+  private def initSparkContext(_conf: Option[SparkConf] = None): Unit = {
+    if (sparkContext == null) {
+      sparkContext = new SparkContext(_conf.getOrElse(conf))
+      blockManager = sparkContext.env.blockManager
+      serializerManager = sparkContext.env.serializerManager
+    }
+  }
+
+  private def stopSparkContext(): Unit = {
     // Copied from LocalSparkContext, simpler than to introduced test dependencies to core tests.
     try {
-      sparkContext.stop()
+      if (sparkContext != null) {
+        sparkContext.stop()
+      }
       System.clearProperty("spark.driver.port")
       blockManager = null
       serializerManager = null
     } finally {
-      super.afterAll()
+      sparkContext = null
     }
   }
 
@@ -104,6 +117,17 @@ class WriteAheadLogBackedBlockRDDSuite
   test("Test storing of blocks recovered from write ahead log back into block manager") {
     testRDD(
       numPartitions = 5, numPartitionsInBM = 0, numPartitionsInWAL = 5, testStoreInBM = true)
+  }
+
+  test("read data in block manager and WAL with encryption on") {
+    stopSparkContext()
+    try {
+      val testConf = conf.clone().set(IO_ENCRYPTION_ENABLED, true)
+      initSparkContext(Some(testConf))
+      testRDD(numPartitions = 5, numPartitionsInBM = 3, numPartitionsInWAL = 2)
+    } finally {
+      stopSparkContext()
+    }
   }
 
   /**
@@ -226,7 +250,8 @@ class WriteAheadLogBackedBlockRDDSuite
     require(blockData.size === blockIds.size)
     val writer = new FileBasedWriteAheadLogWriter(new File(dir, "logFile").toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
-      writer.write(serializerManager.dataSerialize(id, data.iterator).toByteBuffer)
+      writer.write(serializerManager.dataSerialize(id, data.iterator, allowEncryption = false)
+        .toByteBuffer)
     }
     writer.close()
     segments
