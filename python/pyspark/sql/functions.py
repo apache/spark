@@ -27,7 +27,7 @@ if sys.version < "3":
 from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql.types import StringType
+from pyspark.sql.types import StringType, DataType, _parse_datatype_string
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 
@@ -1865,7 +1865,9 @@ class UserDefinedFunction(object):
     """
     def __init__(self, func, returnType, name=None):
         self.func = func
-        self.returnType = returnType
+        self.returnType = (
+            returnType if isinstance(returnType, DataType)
+            else _parse_datatype_string(returnType))
         # Stores UserDefinedPythonFunctions jobj, once initialized
         self._judf_placeholder = None
         self._name = name or (
@@ -1909,7 +1911,7 @@ def udf(f, returnType=StringType()):
         it is present in the query.
 
     :param f: python function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: a :class:`pyspark.sql.types.DataType` object or data type string.
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
