@@ -540,23 +540,32 @@ class SQLTests(ReusedPySparkTestCase):
             if x is not None:
                 return x[start:end]
 
+        @udf("long")
+        def trunc(x):
+            return int(x)
+
+        @udf(returnType="double")
+        def as_double(x):
+            return float(x)
+
         df = (
             self.spark
                 .createDataFrame(
-                    [(1, "Foo", "foobar")], ("one", "Foo", "foobar"))
+                    [(1, "Foo", "foobar", 3.0)], ("one", "Foo", "foobar", "float"))
                 .select(
                     add_one("one"), add_two("one"),
                     to_upper("Foo"), to_lower("Foo"),
-                    substr("foobar", lit(0), lit(3))))
+                    substr("foobar", lit(0), lit(3)),
+                    trunc("float"), as_double("one")))
 
         self.assertListEqual(
             [tpe for _, tpe in df.dtypes],
-            ["int", "double", "string", "string", "string"]
+            ["int", "double", "string", "string", "string", "bigint", "double"]
         )
 
         self.assertListEqual(
             list(df.first()),
-            [2, 3.0, "FOO", "foo", "foo"]
+            [2, 3.0, "FOO", "foo", "foo", 3, 1.0]
         )
 
     def test_basic_functions(self):
