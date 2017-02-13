@@ -137,7 +137,9 @@ object TypeCoercion {
    * string. If the wider decimal type exceeds system limitation, this rule will truncate
    * the decimal type before return it.
    */
-  def findWiderTypeWithoutStringPromotionForTwo(t1: DataType, t2: DataType): Option[DataType] = {
+  private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
+      t1: DataType,
+      t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
       .orElse((t1, t2) match {
