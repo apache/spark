@@ -50,7 +50,7 @@ case class ProjectionOverSchema(schema: StructType) {
           case projection =>
             GetMapValue(projection, key)
         }
-      case GetStructField2(child, StructField(name, _, _, _)) =>
+      case GetStructFieldObject(child, StructField(name, _, _, _)) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema @ StructType(_)) =>
             GetStructField(projection, projSchema.fieldIndex(name))

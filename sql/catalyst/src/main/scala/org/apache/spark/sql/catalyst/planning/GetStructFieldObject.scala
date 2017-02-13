@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructField
  * This is in contrast to the [[GetStructField]] case class extractor which returns the field
  * ordinal instead of the field itself.
  */
-private[planning] object GetStructField2 {
+private[planning] object GetStructFieldObject {
   def unapply(getStructField: GetStructField): Option[(Expression, StructField)] =
     Some((
       getStructField.child,
