@@ -49,8 +49,7 @@ class JDBCOptions(
    */
   val asProperties: Properties = {
     val properties = new Properties()
-    parameters.foreach { case (k, v) => properties
-      .setProperty(parameters.getCaseSensitiveKey(k).get, v) }
+    parameters.caseSensitiveMap.foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
 
@@ -61,9 +60,8 @@ class JDBCOptions(
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    parameters.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
-      .foreach { case (k, v) => properties.setProperty(parameters
-        .getCaseSensitiveKey(k).get, v) }
+    parameters.caseSensitiveMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
+      .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
 

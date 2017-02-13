@@ -18,35 +18,25 @@
 package org.apache.spark.sql.catalyst.util
 
 /**
- * Builds a map in which keys are case insensitive
+ * Builds a map in which keys are case insensitive. Input map can be accessed for cases where
+ * case-sensitive information is also required.
  */
-class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
+class CaseInsensitiveMap(val caseSensitiveMap: Map[String, String]) extends Map[String, String]
   with Serializable {
 
-  private val caseSensitiveKeyMap = map.map { kv => kv._1.toLowerCase -> kv._1 }
-
-  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+  val baseMap = caseSensitiveMap.map(kv => kv.copy(_1 = kv._1.toLowerCase))
 
   override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
 
   override def contains(k: String): Boolean = baseMap.contains(k.toLowerCase)
 
   override def +[B1 >: String](kv: (String, B1)): Map[String, B1] = {
-    new CaseInsensitiveMap(baseMap.map(bkv => bkv.copy(_1 = caseSensitiveKeyMap.get(bkv._1).get))
-      + kv.copy(_2 = kv._2.asInstanceOf[String]))
+    new CaseInsensitiveMap(caseSensitiveMap + kv.copy(_2 = kv._2.asInstanceOf[String]))
   }
 
   override def iterator: Iterator[(String, String)] = baseMap.iterator
 
   override def -(key: String): Map[String, String] = {
-    new CaseInsensitiveMap((baseMap - key.toLowerCase)
-      .map(kv => kv.copy(_1 = caseSensitiveKeyMap.get(kv._1).get)))
+    new CaseInsensitiveMap(caseSensitiveMap.filterKeys(k => k.toLowerCase != key.toLowerCase))
   }
-
-  /**
-   * Returns the case-sensitive key that the case-insensitive maps was based on.
-   * Used in cases where original user input key is required to pass it to external
-   * data sources that may be case-sensitive like some JDBC data sources.
-   */
-  def getCaseSensitiveKey(k : String) : Option[String] = caseSensitiveKeyMap.get(k.toLowerCase())
 }
