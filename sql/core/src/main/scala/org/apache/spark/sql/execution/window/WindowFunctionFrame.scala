@@ -22,6 +22,7 @@ import java.util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 
 
 /**
@@ -35,7 +36,7 @@ private[window] abstract class WindowFunctionFrame {
    *
    * @param rows to calculate the frame results for.
    */
-  def prepare(rows: RowBuffer): Unit
+  def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit
 
   /**
    * Write the current results to the target row.
@@ -65,7 +66,12 @@ private[window] final class OffsetWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: RowBuffer = null
+  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
+
+  /**
+   * An iterator over the [[input]]
+   */
+  private[this] var inputIterator: Iterator[UnsafeRow] = _
 
   /** Index of the input row currently used for output. */
   private[this] var inputIndex = 0
@@ -103,20 +109,21 @@ private[window] final class OffsetWindowFunctionFrame(
     newMutableProjection(boundExpressions, Nil).target(target)
   }
 
-  override def prepare(rows: RowBuffer): Unit = {
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
+    inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
     while (inputIndex < offset) {
-      input.next()
+      if (inputIterator.hasNext) inputIterator.next()
       inputIndex += 1
     }
     inputIndex = offset
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (inputIndex >= 0 && inputIndex < input.size) {
-      val r = input.next()
+    if (inputIndex >= 0 && inputIndex < input.length) {
+      val r = if (inputIterator.hasNext) inputIterator.next() else null
       projection(r)
     } else {
       // Use default values since the offset row does not exist.
@@ -143,7 +150,12 @@ private[window] final class SlidingWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: RowBuffer = null
+  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
+
+  /**
+   * An iterator over the [[input]]
+   */
+  private[this] var inputIterator: Iterator[UnsafeRow] = _
 
   /** The next row from `input`. */
   private[this] var nextRow: InternalRow = null
@@ -164,9 +176,12 @@ private[window] final class SlidingWindowFunctionFrame(
   private[this] var inputLowIndex = 0
 
   /** Prepare the frame for calculating a new partition. Reset all variables. */
-  override def prepare(rows: RowBuffer): Unit = {
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
-    nextRow = rows.next()
+    inputIterator = input.generateIterator()
+    if (inputIterator.hasNext) {
+      nextRow = inputIterator.next()
+    }
     inputHighIndex = 0
     inputLowIndex = 0
     buffer.clear()
@@ -180,7 +195,7 @@ private[window] final class SlidingWindowFunctionFrame(
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputHighIndex, current, index) <= 0) {
       buffer.add(nextRow.copy())
-      nextRow = input.next()
+      nextRow = if (inputIterator.hasNext) inputIterator.next() else null
       inputHighIndex += 1
       bufferUpdated = true
     }
@@ -195,7 +210,7 @@ private[window] final class SlidingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      processor.initialize(input.size)
+      processor.initialize(input.length)
       val iter = buffer.iterator()
       while (iter.hasNext) {
         processor.update(iter.next())
@@ -222,13 +237,12 @@ private[window] final class UnboundedWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
-  override def prepare(rows: RowBuffer): Unit = {
-    val size = rows.size
-    processor.initialize(size)
-    var i = 0
-    while (i < size) {
-      processor.update(rows.next())
-      i += 1
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    processor.initialize(rows.length)
+
+    val iterator = rows.generateIterator()
+    while (iterator.hasNext) {
+      processor.update(iterator.next())
     }
   }
 
@@ -261,7 +275,12 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: RowBuffer = null
+  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
+
+  /**
+   * An iterator over the [[input]]
+   */
+  private[this] var inputIterator: Iterator[UnsafeRow] = _
 
   /** The next row from `input`. */
   private[this] var nextRow: InternalRow = null
@@ -273,11 +292,15 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
   private[this] var inputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
-  override def prepare(rows: RowBuffer): Unit = {
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
-    nextRow = rows.next()
     inputIndex = 0
-    processor.initialize(input.size)
+    inputIterator = input.generateIterator()
+    if (inputIterator.hasNext) {
+      nextRow = inputIterator.next()
+    }
+
+    processor.initialize(input.length)
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -288,7 +311,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
       processor.update(nextRow)
-      nextRow = input.next()
+      nextRow = if (inputIterator.hasNext) inputIterator.next() else null
       inputIndex += 1
       bufferUpdated = true
     }
@@ -323,7 +346,7 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: RowBuffer = null
+  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
 
   /**
    * Index of the first input row with a value equal to or greater than the lower bound of the
@@ -332,7 +355,7 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
   private[this] var inputIndex = 0
 
   /** Prepare the frame for calculating a new partition. */
-  override def prepare(rows: RowBuffer): Unit = {
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIndex = 0
   }
@@ -341,25 +364,27 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
   override def write(index: Int, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
 
-    // Duplicate the input to have a new iterator
-    val tmp = input.copy()
-
-    // Drop all rows from the buffer for which the input row value is smaller than
+    // Ignore all the rows from the buffer for which the input row value is smaller than
     // the output row lower bound.
-    tmp.skip(inputIndex)
-    var nextRow = tmp.next()
+    val iterator = input.generateIterator(startIndex = inputIndex)
+
+    def getNextOrNull(iterator: Iterator[UnsafeRow]): UnsafeRow = {
+      if (iterator.hasNext) iterator.next() else null
+    }
+
+    var nextRow = getNextOrNull(iterator)
     while (nextRow != null && lbound.compare(nextRow, inputIndex, current, index) < 0) {
-      nextRow = tmp.next()
       inputIndex += 1
       bufferUpdated = true
+      nextRow = getNextOrNull(iterator)
     }
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      processor.initialize(input.size)
+      processor.initialize(input.length)
       while (nextRow != null) {
         processor.update(nextRow)
-        nextRow = tmp.next()
+        nextRow = getNextOrNull(iterator)
       }
       processor.evaluate(target)
     }

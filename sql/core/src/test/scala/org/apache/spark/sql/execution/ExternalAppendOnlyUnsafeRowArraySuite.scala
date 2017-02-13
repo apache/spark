@@ -60,11 +60,52 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
     valueInserted
   }
 
-  private def checkIfValueExits(iterator: Iterator[UnsafeRow], expectedValue: Long): Unit = {
+  private def checkIfValueExists(iterator: Iterator[UnsafeRow], expectedValue: Long): Unit = {
     assert(iterator.hasNext)
     val actualRow = iterator.next()
     assert(actualRow.getLong(0) == expectedValue)
     assert(actualRow.getSizeInBytes == 16)
+  }
+
+  private def validateData(
+      array: ExternalAppendOnlyUnsafeRowArray,
+      expectedValues: ArrayBuffer[Long]): Iterator[UnsafeRow] = {
+    val iterator = array.generateIterator()
+    for (value <- expectedValues) {
+      checkIfValueExists(iterator, value)
+    }
+
+    assert(!iterator.hasNext)
+    iterator
+  }
+
+  private def populateRows(
+      array: ExternalAppendOnlyUnsafeRowArray,
+      numRowsToBePopulated: Int): ArrayBuffer[Long] = {
+    val populatedValues = new ArrayBuffer[Long]
+    populateRows(array, numRowsToBePopulated, populatedValues)
+  }
+
+  private def populateRows(
+      array: ExternalAppendOnlyUnsafeRowArray,
+      numRowsToBePopulated: Int,
+      populatedValues: ArrayBuffer[Long]): ArrayBuffer[Long] = {
+    for (_ <- 0 until numRowsToBePopulated) {
+      populatedValues.append(insertRow(array))
+    }
+    populatedValues
+  }
+
+  private def getNumBytesSpilled: Long = {
+    TaskContext.get().taskMetrics().memoryBytesSpilled
+  }
+
+  private def assertNoSpill(): Unit = {
+    assert(getNumBytesSpilled == 0)
+  }
+
+  private def assertSpill(): Unit = {
+    assert(getNumBytesSpilled > 0)
   }
 
   test("insert rows less than the spillThreshold") {
@@ -72,29 +113,19 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
     withExternalArray(spillThreshold) { array =>
       assert(array.isEmpty)
 
-      val expectedValues = new ArrayBuffer[Long]
-      expectedValues.append(insertRow(array))
+      val expectedValues = populateRows(array, 1)
       assert(!array.isEmpty)
       assert(array.length == 1)
 
-      val iterator1 = array.generateIterator()
-      checkIfValueExits(iterator1, expectedValues.head)
-      assert(array.length == 1)
-      assert(!iterator1.hasNext)
+      val iterator1 = validateData(array, expectedValues)
 
       // Add more rows (but not too many to trigger switch to [[UnsafeExternalSorter]])
-      while (expectedValues.length < spillThreshold) {
-        expectedValues.append(insertRow(array))
-      }
-      assert(array.length == spillThreshold)
-
       // Verify that NO spill has happened
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled == 0)
+      populateRows(array, spillThreshold - 1, expectedValues)
+      assert(array.length == spillThreshold)
+      assertNoSpill()
 
-      val iterator2 = array.generateIterator()
-      for (expectedValue <- expectedValues) {
-        checkIfValueExits(iterator2, expectedValue)
-      }
+      val iterator2 = validateData(array, expectedValues)
 
       intercept[ConcurrentModificationException](iterator1.hasNext)
       assert(!iterator2.hasNext)
@@ -104,34 +135,22 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   test("insert rows more than the spillThreshold to force spill") {
     val spillThreshold = 100
     withExternalArray(spillThreshold) { array =>
-      assert(array.isEmpty)
-
       val numValuesInserted = 20 * spillThreshold
-      val expectedValues = new ArrayBuffer[Long]
 
-      expectedValues.append(insertRow(array))
-      assert(!array.isEmpty)
+      assert(array.isEmpty)
+      val expectedValues = populateRows(array, 1)
       assert(array.length == 1)
 
-      val iterator1 = array.generateIterator()
-      assert(iterator1.hasNext)
-      checkIfValueExits(iterator1, expectedValues.head)
-      assert(!iterator1.hasNext)
+      val iterator1 = validateData(array, expectedValues)
 
-      while (expectedValues.length < numValuesInserted) {
-        expectedValues.append(insertRow(array))
-      }
+      // Populate more rows to trigger spill. Verify that spill has happened
+      populateRows(array, numValuesInserted - 1, expectedValues)
       assert(array.length == numValuesInserted)
+      assertSpill()
 
-      // Verify that spill has happened
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled > 0)
-
-      val iterator2 = array.generateIterator()
-      for (value <- expectedValues) {
-        checkIfValueExits(iterator2, value)
-      }
-
+      val iterator2 = validateData(array, expectedValues)
       assert(!iterator2.hasNext)
+
       intercept[ConcurrentModificationException](iterator1.hasNext)
       intercept[ConcurrentModificationException](iterator1.next())
     }
@@ -146,18 +165,79 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
     }
   }
 
+  test("generate iterator with negative start index") {
+    withExternalArray(spillThreshold = 2) { array =>
+      val exception =
+        intercept[ArrayIndexOutOfBoundsException](array.generateIterator(startIndex = -10))
+
+      assert(exception.getMessage.contains(
+        "Invalid `startIndex` provided for generating iterator over the array")
+      )
+    }
+  }
+
+  test("generate iterator with start index exceeding array's size (without spill)") {
+    val spillThreshold = 2
+    withExternalArray(spillThreshold) { array =>
+      populateRows(array, spillThreshold / 2)
+
+      val exception =
+        intercept[ArrayIndexOutOfBoundsException](
+          array.generateIterator(startIndex = spillThreshold * 10))
+      assert(exception.getMessage.contains(
+        "Invalid `startIndex` provided for generating iterator over the array"))
+    }
+  }
+
+  test("generate iterator with start index exceeding array's size (with spill)") {
+    val spillThreshold = 2
+    withExternalArray(spillThreshold) { array =>
+      populateRows(array, spillThreshold * 2)
+
+      val exception =
+        intercept[ArrayIndexOutOfBoundsException](
+          array.generateIterator(startIndex = spillThreshold * 10))
+
+      assert(exception.getMessage.contains(
+        "Invalid `startIndex` provided for generating iterator over the array"))
+    }
+  }
+
+  test("generate iterator with custom start index (without spill)") {
+    val spillThreshold = 10
+    withExternalArray(spillThreshold) { array =>
+      val expectedValues = populateRows(array, spillThreshold)
+      val startIndex = spillThreshold / 2
+      val iterator = array.generateIterator(startIndex = startIndex)
+      for (i <- startIndex until expectedValues.length) {
+        checkIfValueExists(iterator, expectedValues(i))
+      }
+    }
+  }
+
+  test("generate iterator with custom start index (with spill)") {
+    val spillThreshold = 10
+    withExternalArray(spillThreshold) { array =>
+      val expectedValues = populateRows(array, spillThreshold * 10)
+      val startIndex = spillThreshold * 2
+      val iterator = array.generateIterator(startIndex = startIndex)
+      for (i <- startIndex until expectedValues.length) {
+        checkIfValueExists(iterator, expectedValues(i))
+      }
+    }
+  }
+
   test("test iterator invalidation (without spill)") {
     withExternalArray(spillThreshold = 10) { array =>
       // insert 2 rows, iterate until the first row
-      insertRow(array)
-      insertRow(array)
+      populateRows(array, 2)
 
       var iterator = array.generateIterator()
       assert(iterator.hasNext)
       iterator.next()
 
       // Adding more row(s) should invalidate any old iterators
-      insertRow(array)
+      populateRows(array, 1)
       intercept[ConcurrentModificationException](iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
 
@@ -175,18 +255,16 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   test("test iterator invalidation (with spill)") {
     val spillThreshold = 10
     withExternalArray(spillThreshold) { array =>
-      for (_ <- 0 until (spillThreshold * 2)) {
-        insertRow(array)
-      }
-      // Verify that spill has happened
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled > 0)
+      // Populate enough rows so that spill has happens
+      populateRows(array, spillThreshold * 2)
+      assertSpill()
 
       var iterator = array.generateIterator()
       assert(iterator.hasNext)
       iterator.next()
 
       // Adding more row(s) should invalidate any old iterators
-      insertRow(array)
+      populateRows(array, 1)
       intercept[ConcurrentModificationException](iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
 
@@ -222,79 +300,51 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   test("clear array (without spill)") {
     val spillThreshold = 10
     withExternalArray(spillThreshold) { array =>
-      for (_ <- 0 until (spillThreshold / 2)) {
-        insertRow(array)
-      }
-      // Verify that NO spill has happened
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled == 0)
+      // Populate rows ... but not enough to trigger spill
+      populateRows(array, spillThreshold / 2)
+      assertNoSpill()
 
       // Clear the array
       array.clear()
       assert(array.isEmpty)
-      assert(array.length == 0)
 
       // Re-populate few rows so that there is no spill
-      val expectedValues = new ArrayBuffer[Long]
-      for (_ <- 0 until (spillThreshold / 3)) {
-        expectedValues.append(insertRow(array))
-      }
       // Verify the data. Verify that there was no spill
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled == 0)
-      var iterator = array.generateIterator()
-      for (value <- expectedValues) {
-        checkIfValueExits(iterator, value)
-      }
+      val expectedValues = populateRows(array, spillThreshold / 3)
+      validateData(array, expectedValues)
+      assertNoSpill()
 
-      // Populate more rows .. enough to not trigger a spill
-      for (_ <- 0 until (spillThreshold / 3)) {
-        expectedValues.append(insertRow(array))
-      }
+      // Populate more rows .. enough to not trigger a spill.
       // Verify the data. Verify that there was no spill
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled == 0)
-      iterator = array.generateIterator()
-      for (value <- expectedValues) {
-        checkIfValueExits(iterator, value)
-      }
+      populateRows(array, spillThreshold / 3, expectedValues)
+      validateData(array, expectedValues)
+      assertNoSpill()
     }
   }
 
   test("clear array (with spill)") {
     val spillThreshold = 10
     withExternalArray(spillThreshold) { array =>
-      for (_ <- 0 until (spillThreshold * 2)) {
-        insertRow(array)
-      }
-      // Verify that spill has happened
-      val bytesSpilled = TaskContext.get().taskMetrics().memoryBytesSpilled
+      // Populate enough rows to trigger spill
+      populateRows(array, spillThreshold * 2)
+      val bytesSpilled = getNumBytesSpilled
       assert(bytesSpilled > 0)
 
       // Clear the array
       array.clear()
       assert(array.isEmpty)
-      assert(array.length == 0)
 
-      // Re-populate the array ... but not upto the point that there is spill
-      val expectedValues = new ArrayBuffer[Long]
-      for (_ <- 0 until (spillThreshold / 2)) {
-        expectedValues.append(insertRow(array))
-      }
-      // Verify the data. Verify that there was no "extra" spill
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled == bytesSpilled)
-      var iterator = array.generateIterator()
-      for (value <- expectedValues) {
-        checkIfValueExits(iterator, value)
-      }
+      // Re-populate the array ... but NOT upto the point that there is spill.
+      // Verify data. Verify that there was NO "extra" spill
+      val expectedValues = populateRows(array, spillThreshold / 2)
+      validateData(array, expectedValues)
+      assert(getNumBytesSpilled == bytesSpilled)
 
       // Populate more rows to trigger spill
-      for (_ <- 0 until (spillThreshold * 2)) {
-        expectedValues.append(insertRow(array))
-      }
       // Verify the data. Verify that there was "extra" spill
-      assert(TaskContext.get().taskMetrics().memoryBytesSpilled > bytesSpilled)
-      iterator = array.generateIterator()
-      for (value <- expectedValues) {
-        checkIfValueExits(iterator, value)
-      }
+      populateRows(array, spillThreshold * 2, expectedValues)
+      validateData(array, expectedValues)
+      assert(getNumBytesSpilled > bytesSpilled)
     }
   }
 }

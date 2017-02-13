@@ -23,13 +23,13 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
 /**
- * An append-only array for [[UnsafeRow]]s that spills content to disk when there is insufficient
- * space for it to grow.
+ * An append-only array for [[UnsafeRow]]s that spills content to disk when there a predefined
+ * threshold of rows is reached.
  *
  * Setting spill threshold faces following trade-off:
  *
@@ -40,20 +40,23 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  *   [[ArrayBuffer]] or [[Array]].
  */
 private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) extends Logging {
-  private val inMemoryBuffer: ArrayBuffer[UnsafeRow] = ArrayBuffer.empty[UnsafeRow]
+  private val initialSizeOfInMemoryBuffer =
+    Math.min(DefaultInitialSizeOfInMemoryBuffer, numRowsSpillThreshold)
 
-  private var spillableArray: UnsafeExternalSorter = null
-  private var numElements = 0
+  private val inMemoryBuffer = new ArrayBuffer[UnsafeRow](initialSizeOfInMemoryBuffer)
 
-  // A counter to keep track of total additions made to this array since its creation.
+  private var spillableArray: UnsafeExternalSorter = _
+  private var numRows = 0
+
+  // A counter to keep track of total modifications done to this array since its creation.
   // This helps to invalidate iterators when there are changes done to the backing array.
-  private var modCount: Long = 0
+  private var modificationsCount: Long = 0
 
-  private var numFieldPerRow = 0
+  private var numFieldsPerRow = 0
 
-  def length: Int = numElements
+  def length: Int = numRows
 
-  def isEmpty: Boolean = numElements == 0
+  def isEmpty: Boolean = numRows == 0
 
   /**
    * Clears up resources (eg. memory) held by the backing storage
@@ -67,20 +70,18 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
     } else {
       inMemoryBuffer.clear()
     }
-    numFieldPerRow = 0
-    numElements = 0
-    modCount += 1
+    numFieldsPerRow = 0
+    numRows = 0
+    modificationsCount += 1
   }
 
-  def add(entry: InternalRow): Unit = {
-    val unsafeRow = entry.asInstanceOf[UnsafeRow]
-
-    if (numElements < numRowsSpillThreshold) {
+  def add(unsafeRow: UnsafeRow): Unit = {
+    if (numRows < numRowsSpillThreshold) {
       inMemoryBuffer += unsafeRow.copy()
     } else {
       if (spillableArray == null) {
         logInfo(s"Reached spill threshold of $numRowsSpillThreshold rows, switching to " +
-          s"${classOf[org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray].getName}")
+          s"${classOf[UnsafeExternalSorter].getName}")
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
         spillableArray = UnsafeExternalSorter.create(
@@ -104,7 +105,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
             false)
         )
         inMemoryBuffer.clear()
-        numFieldPerRow = unsafeRow.numFields()
+        numFieldsPerRow = unsafeRow.numFields()
       }
 
       spillableArray.insertRecord(
@@ -115,29 +116,39 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
         false)
     }
 
-    numElements += 1
-    modCount += 1
+    numRows += 1
+    modificationsCount += 1
   }
 
   /**
-   * Creates an [[Iterator]] with the current rows in the array. If there are subsequent
-   * [[add()]] or [[clear()]] calls made on this array after creation of the iterator,
-   * then the iterator is invalidated thus saving clients from getting inconsistent data.
+   * Creates an [[Iterator]] for the current rows in the array starting from a user provided index
+   *
+   * If there are subsequent [[add()]] or [[clear()]] calls made on this array after creation of
+   * the iterator, then the iterator is invalidated thus saving clients from thinking that they
+   * have read all the data while there were new rows added to this array.
    */
-  def generateIterator(): Iterator[UnsafeRow] = {
+  def generateIterator(startIndex: Int): Iterator[UnsafeRow] = {
+    if (startIndex < 0 || (numRows > 0 && startIndex > numRows)) {
+      throw new ArrayIndexOutOfBoundsException(
+        "Invalid `startIndex` provided for generating iterator over the array. " +
+          s"Total elements: $numRows, requested `startIndex`: $startIndex")
+    }
+
     if (spillableArray == null) {
-      new InMemoryBufferIterator(inMemoryBuffer.iterator)
+      new InMemoryBufferIterator(startIndex)
     } else {
-      new SpillableArrayIterator(spillableArray.getIterator, numFieldPerRow)
+      new SpillableArrayIterator(spillableArray.getIterator, numFieldsPerRow, startIndex)
     }
   }
 
+  def generateIterator(): Iterator[UnsafeRow] = generateIterator(startIndex = 0)
+
   private[this]
   abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {
-    private val expectedModCount = modCount
+    private val expectedModificationsCount = modificationsCount
 
     protected def checkForModification(): Unit = {
-      if (expectedModCount != modCount) {
+      if (expectedModificationsCount != modificationsCount) {
         throw new ConcurrentModificationException(
           s"The backing ${classOf[ExternalAppendOnlyUnsafeRowArray].getName} has been modified " +
             s"since the creation of this Iterator")
@@ -145,24 +156,48 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
     }
   }
 
-  private[this] class InMemoryBufferIterator(iterator: Iterator[UnsafeRow])
+  private[this] class InMemoryBufferIterator(startIndex: Int)
     extends ExternalAppendOnlyUnsafeRowArrayIterator {
+
+    private var currentIndex = startIndex
 
     override def hasNext(): Boolean = {
       checkForModification()
-      iterator.hasNext
+      currentIndex < numRows
     }
 
     override def next(): UnsafeRow = {
       checkForModification()
-      iterator.next()
+      val result = inMemoryBuffer(currentIndex)
+      currentIndex += 1
+      result
     }
   }
 
-  private[this] class SpillableArrayIterator(iterator: UnsafeSorterIterator, numFieldPerRow: Int)
+  private[this] class SpillableArrayIterator(
+      iterator: UnsafeSorterIterator,
+      numFieldPerRow: Int,
+      startIndex: Int)
     extends ExternalAppendOnlyUnsafeRowArrayIterator {
 
     private val currentRow = new UnsafeRow(numFieldPerRow)
+
+    def init(): Unit = {
+      var i = 0
+      while (i < startIndex) {
+        if (iterator.hasNext) {
+          iterator.loadNext()
+        } else {
+          throw new ArrayIndexOutOfBoundsException(
+            "Invalid `startIndex` provided for generating iterator over the array. " +
+              s"Total elements: $numRows, requested `startIndex`: $startIndex")
+        }
+        i += 1
+      }
+    }
+
+    // Traverse upto the given [[startIndex]]
+    init()
 
     override def hasNext(): Boolean = {
       checkForModification()
@@ -176,4 +211,8 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
       currentRow
     }
   }
+}
+
+private[sql] object ExternalAppendOnlyUnsafeRowArray {
+  private val DefaultInitialSizeOfInMemoryBuffer = 128
 }

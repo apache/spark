@@ -282,9 +282,7 @@ case class WindowExec(
     // Unwrap the expressions and factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
-
-    var spillThreshold =
-      sqlContext.conf.getConfString("spark.sql.windowExec.buffer.spill.threshold", "4096").toInt
+    val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
     // Start processing.
     child.execute().mapPartitions { stream =>
@@ -312,13 +310,10 @@ case class WindowExec(
 
         // Manage the current partition.
         val inputFields = child.output.length
-        var rowBuffer: RowBuffer = null
-        if (sqlContext == null) {
-
-        }
 
         val buffer: ExternalAppendOnlyUnsafeRowArray =
           new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+        var bufferIterator: Iterator[UnsafeRow] = _
 
         val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))
         val frames = factories.map(_(windowFunctionResult))
@@ -336,37 +331,36 @@ case class WindowExec(
             fetchNextRow()
           }
 
-          rowBuffer = new RowBuffer(buffer)
-
           // Setup the frames.
           var i = 0
           while (i < numFrames) {
-            frames(i).prepare(rowBuffer.copy())
+            frames(i).prepare(buffer)
             i += 1
           }
 
           // Setup iteration
           rowIndex = 0
-          rowsSize = rowBuffer.size
+          bufferIterator = buffer.generateIterator()
         }
 
         // Iteration
         var rowIndex = 0
-        var rowsSize = 0L
 
-        override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable
+        override final def hasNext: Boolean =
+          (bufferIterator != null && bufferIterator.hasNext) || nextRowAvailable
 
         val join = new JoinedRow
         override final def next(): InternalRow = {
           // Load the next partition if we need to.
-          if (rowIndex >= rowsSize && nextRowAvailable) {
+          if ((bufferIterator == null || !bufferIterator.hasNext) && nextRowAvailable) {
             fetchNextPartition()
           }
 
-          if (rowIndex < rowsSize) {
+          if (bufferIterator.hasNext) {
+            val current = bufferIterator.next()
+
             // Get the results for the window frames.
             var i = 0
-            val current = rowBuffer.next()
             while (i < numFrames) {
               frames(i).write(rowIndex, current)
               i += 1
@@ -378,7 +372,9 @@ case class WindowExec(
 
             // Return the projection.
             result(join)
-          } else throw new NoSuchElementException
+          } else {
+            throw new NoSuchElementException
+          }
         }
       }
     }

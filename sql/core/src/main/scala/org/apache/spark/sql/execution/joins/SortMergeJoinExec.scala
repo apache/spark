@@ -96,14 +96,13 @@ case class SortMergeJoinExec(
   private def createRightKeyGenerator(): Projection =
     UnsafeProjection.create(rightKeys, right.output)
 
+  private def getSpillThreshold: Int = {
+    sqlContext.conf.sortMergeJoinExecBufferSpillThreshold
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val spillThreshold =
-      sqlContext.conf.getConfString(
-        "spark.sql.sortMergeJoinExec.buffer.spill.threshold",
-        Int.MaxValue.toString
-      ).toInt
-
+    val spillThreshold = getSpillThreshold
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
@@ -388,11 +387,7 @@ case class SortMergeJoinExec(
     val matches = ctx.freshName("matches")
     val clsName = classOf[ExternalAppendOnlyUnsafeRowArray].getName
 
-    val spillThreshold =
-      sqlContext.conf.getConfString(
-        "spark.sql.sortMergeJoinExec.buffer.spill.threshold",
-        Int.MaxValue.toString
-      ).toInt
+    val spillThreshold = getSpillThreshold
 
     ctx.addMutableState(clsName, matches, s"$matches = new $clsName($spillThreshold);")
     // Copy the left keys as class members so they could be used in next function call.
@@ -445,7 +440,7 @@ case class SortMergeJoinExec(
          |        }
          |        $leftRow = null;
          |      } else {
-         |        $matches.add($rightRow.copy());
+         |        $matches.add((UnsafeRow) $rightRow);
          |        $rightRow = null;;
          |      }
          |    } while ($leftRow != null);
@@ -772,7 +767,7 @@ private[joins] class SortMergeJoinScanner(
     matchJoinKey = streamedRowKey.copy()
     bufferedMatches.clear()
     do {
-      bufferedMatches.add(bufferedRow)
+      bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
       advancedBufferedToRowWithNullFreeJoinKey()
     } while (bufferedRow != null && keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0)
   }
