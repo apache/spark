@@ -140,8 +140,6 @@ case class HiveTableScanExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Using dummyCallSite, as getCallSite can turn out to be expensive with
-    // with multiple partitions.
     val locationPath = new Path(relation.catalogTable.location)
     val fs = locationPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
