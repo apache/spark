@@ -874,6 +874,14 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
 
+    def test_column_getitem(self):
+        from pyspark.sql.functions import col
+
+        self.assertIsInstance(col("foo")[1:3], Column)
+        self.assertIsInstance(col("foo")[0], Column)
+        self.assertIsInstance(col("foo")["bar"], Column)
+        self.assertRaises(ValueError, lambda: col("foo")[0:10:2])
+
     def test_column_select(self):
         df = self.df
         self.assertEqual(self.testData, df.select("*").collect())

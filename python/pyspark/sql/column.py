@@ -180,7 +180,6 @@ class Column(object):
 
     # container operators
     __contains__ = _bin_op("contains")
-    __getitem__ = _bin_op("apply")
 
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR")
@@ -236,6 +235,14 @@ class Column(object):
             raise AttributeError(item)
         return self.getField(item)
 
+    def __getitem__(self, k):
+        if isinstance(k, slice):
+            if k.step is not None:
+                raise ValueError("slice with step is not supported.")
+            return self.substr(k.start, k.stop)
+        else:
+            return _bin_op("apply")(self, k)
+
     def __iter__(self):
         raise TypeError("Column is not iterable")
 
@@ -266,8 +273,6 @@ class Column(object):
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)
-
-    __getslice__ = substr
 
     @ignore_unicode_prefix
     @since(1.5)
