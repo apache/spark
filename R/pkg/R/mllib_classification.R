@@ -63,6 +63,9 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
 #' @param threshold The threshold in binary classification, in range [0, 1].
 #' @param weightCol The weight column name.
+#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
+#'                         or the number of partitions are large, this param could be adjusted to a larger size.
+#'                         This is an expert parameter. Default value should be good for most cases.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.svmLinear} returns a fitted linear SVM model.
 #' @rdname spark.svmLinear
@@ -92,17 +95,17 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @note spark.svmLinear since 2.2.0
 setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, maxIter = 100, tol = 1E-6, standardization = TRUE,
-                   threshold = 0.5, weightCol = NULL) {
+                   threshold = 0.5, weightCol = NULL, aggregationDepth = 2) {
             formula <- paste(deparse(formula), collapse = "")
 
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (weightCol == "") {
+              weightCol <- NULL
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LinearSVCWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam), as.integer(maxIter),
                                 as.numeric(tol), as.logical(standardization), as.numeric(threshold),
-                                as.character(weightCol))
+                                as.character(weightCol), as.integer(aggregationDepth))
             new("LinearSVCModel", jobj = jobj)
           })
 

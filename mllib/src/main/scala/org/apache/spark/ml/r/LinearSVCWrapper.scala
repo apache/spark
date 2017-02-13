@@ -70,7 +70,8 @@ private[r] object LinearSVCWrapper
       tol: Double,
       standardization: Boolean,
       threshold: Double,
-      weightCol: String
+      weightCol: String,
+      aggregationDepth: Int
       ): LinearSVCWrapper = {
 
     val rFormula = new RFormula()
@@ -91,11 +92,13 @@ private[r] object LinearSVCWrapper
       .setTol(tol)
       .setFitIntercept(fitIntercept)
       .setStandardization(standardization)
-      .setWeightCol(weightCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
       .setThreshold(threshold)
+      .setAggregationDepth(aggregationDepth)
+
+    if (weightCol != null) svc.setWeightCol(weightCol)
 
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)

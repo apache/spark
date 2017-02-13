@@ -35,9 +35,9 @@
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.svmLinear},
+#' @seealso \link{spark.lda}, \link{spark.logit},
 #' @seealso \link{spark.mlp}, \link{spark.naiveBayes},
-#' @seealso \link{spark.randomForest}, \link{spark.survreg},
+#' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear},
 #' @seealso \link{read.ml}
 NULL
 
@@ -51,8 +51,8 @@ NULL
 #' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
 #' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.logit}, \link{spark.svmLinear}, \link{spark.mlp}, \link{spark.naiveBayes},
-#' @seealso \link{spark.randomForest}, \link{spark.survreg}
+#' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
