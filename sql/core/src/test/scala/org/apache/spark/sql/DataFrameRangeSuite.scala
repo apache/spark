@@ -23,8 +23,8 @@ import scala.util.Random
 
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.SparkException
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerTaskStart}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -137,23 +137,23 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 
   test("Cancelling stage in a query with Range.") {
     val listener = new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
         eventually(timeout(10.seconds)) {
-          assert(DataFrameRangeSuite.isTaskStarted)
+          assert(DataFrameRangeSuite.stageToKill > 0)
         }
-        sparkContext.cancelStage(taskStart.stageId)
+        sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
       }
     }
 
     sparkContext.addSparkListener(listener)
     for (codegen <- Seq(true, false)) {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
-        DataFrameRangeSuite.isTaskStarted = false
+        DataFrameRangeSuite.stageToKill = -1
         val ex = intercept[SparkException] {
-          spark.range(100000L).mapPartitions { x =>
-            DataFrameRangeSuite.isTaskStarted = true
+          spark.range(1000000000L).map { x =>
+            DataFrameRangeSuite.stageToKill = TaskContext.get().stageId()
             x
-          }.crossJoin(spark.range(100L)).toDF("a", "b").agg(sum("a"), sum("b")).collect()
+          }.toDF("id").agg(sum("id")).collect()
         }
         ex.getCause() match {
           case null =>
@@ -172,6 +172,5 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 }
 
 object DataFrameRangeSuite {
-  @volatile var isTaskStarted = false
+  @volatile var stageToKill = -1
 }
-
