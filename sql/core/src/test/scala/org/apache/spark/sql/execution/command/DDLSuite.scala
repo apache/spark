@@ -971,7 +971,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
-    sql("DROP view tab1")
+    sql("DROP VIEW tab1")
     assert(catalog.listTables("default") == Nil)
   }
 
