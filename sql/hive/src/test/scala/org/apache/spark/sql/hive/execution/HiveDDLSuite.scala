@@ -834,10 +834,10 @@ class HiveDDLSuite
 
   test("CREATE TABLE LIKE a temporary view") {
     // CREATE TABLE LIKE a temporary view.
-    withCreateTableLikeTempView(None)
+    withCreateTableLikeTempView(location = None)
 
     // CREATE TABLE LIKE a temporary view location ...
-    withTempDir {tmpDir =>
+    withTempDir { tmpDir =>
       withCreateTableLikeTempView(Some(tmpDir.toURI.toString))
     }
   }
@@ -866,7 +866,7 @@ class HiveDDLSuite
 
   test("CREATE TABLE LIKE a data source table") {
     // CREATE TABLE LIKE a data source table.
-    withCreateTableLikeDSTable(None)
+    withCreateTableLikeDSTable(location = None)
 
     // CREATE TABLE LIKE a data source table location ...
     withTempDir { tmpDir =>
@@ -939,7 +939,7 @@ class HiveDDLSuite
 
   test("CREATE TABLE LIKE a managed Hive serde table") {
     // CREATE TABLE LIKE a managed Hive serde table.
-    withCreateTableLikeManagedHiveTable(None)
+    withCreateTableLikeManagedHiveTable(location = None)
 
     // CREATE TABLE LIKE a managed Hive serde table location ...
     withTempDir { tmpDir =>
@@ -971,7 +971,7 @@ class HiveDDLSuite
 
   test("CREATE TABLE LIKE an external Hive serde table") {
     // CREATE TABLE LIKE an external Hive serde table.
-    withCreateTableLikeExtHiveTable(None)
+    withCreateTableLikeExtHiveTable(location = None)
 
     // CREATE TABLE LIKE an external Hive serde table location ...
     withTempDir { tmpDir =>
@@ -983,7 +983,7 @@ class HiveDDLSuite
     val catalog = spark.sessionState.catalog
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTempDir { tmpDir =>
-      val basePath1 = tmpDir.toURI
+      val basePath = tmpDir.toURI
       val sourceTabName = "tab1"
       val targetTabName = "tab2"
       withTable(sourceTabName, targetTabName) {
@@ -993,15 +993,15 @@ class HiveDDLSuite
              |CREATE EXTERNAL TABLE $sourceTabName (key INT comment 'test', value STRING)
              |COMMENT 'Apache Spark'
              |PARTITIONED BY (ds STRING, hr STRING)
-             |LOCATION '$basePath1'
-             """.stripMargin)
+             |LOCATION '$basePath'
+           """.stripMargin)
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
           sql(
             s"""
                |INSERT OVERWRITE TABLE $sourceTabName
                |partition (ds='$ds',hr='$hr')
                |SELECT 1, 'a'
-               """.stripMargin)
+             """.stripMargin)
         }
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
@@ -1021,7 +1021,7 @@ class HiveDDLSuite
 
   test("CREATE TABLE LIKE a view") {
     // CREATE TABLE LIKE a view.
-    withCreateTableLikeView(None)
+    withCreateTableLikeView(location = None)
 
     // CREATE TABLE LIKE a view location ...
     withTempDir { tmpDir =>
@@ -1065,7 +1065,7 @@ class HiveDDLSuite
     // The created table should be a MANAGED table or EXTERNAL table with empty view text
     // and original text.
     assert(targetTable.tableType == tableType,
-      s"the created table must be a Hive ${tableType.name} table")
+      s"the created table must be a/an ${tableType.name} table")
     assert(targetTable.viewText.isEmpty,
       "the view text in the created table must be empty")
     assert(targetTable.viewDefaultDatabase.isEmpty,
@@ -1115,8 +1115,13 @@ class HiveDDLSuite
     }
 
     assert(targetTable.storage.locationUri.nonEmpty, "target table path should not be empty")
-    assert(sourceTable.storage.locationUri != targetTable.storage.locationUri,
-      "source table/view path should be different from target table path")
+
+    // User-specified location and sourceTable's location can be same or different,
+    // when we creating an external table. So we don't need to do this check
+    if (tableType != CatalogTableType.EXTERNAL) {
+      assert(sourceTable.storage.locationUri != targetTable.storage.locationUri,
+        "source table/view path should be different from target table path")
+    }
 
     // The source table contents should not been seen in the target table.
     assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")

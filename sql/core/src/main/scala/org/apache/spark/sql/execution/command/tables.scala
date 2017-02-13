@@ -71,13 +71,9 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
-    // If location is specified, we create an external table internally.
-    // Else create managed table.
-    val tblType = if (location.isEmpty) {
-      CatalogTableType.MANAGED
-    } else {
-      CatalogTableType.EXTERNAL
-    }
+    // If the location is specified, we create an external table internally.
+    // Otherwise create a managed table.
+    val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
 
     val newTableDesc =
       CatalogTable(
