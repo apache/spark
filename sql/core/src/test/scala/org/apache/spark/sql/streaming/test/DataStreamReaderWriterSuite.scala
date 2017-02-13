@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
+import org.apache.hadoop.fs.Path
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.PrivateMethodTester.PrivateMethod
