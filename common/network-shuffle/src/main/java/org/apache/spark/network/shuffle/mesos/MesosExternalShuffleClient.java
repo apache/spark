@@ -69,7 +69,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
       String host,
       int port,
       long heartbeatTimeoutMs,
-      long heartbeatIntervalMs) throws IOException {
+      long heartbeatIntervalMs) throws IOException, InterruptedException {
 
     checkInit();
     ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();
