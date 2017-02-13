@@ -47,10 +47,12 @@ private[sql] object SQLUtils extends Logging {
       jsc: JavaSparkContext,
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
-    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
+    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport
+        && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
       SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
     } else {
-      if (enableHiveSupport) {
+      if (enableHiveSupport
+        && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive") {
         logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
           "Spark is not built with Hive; falling back to without Hive support.")
       }
