@@ -53,7 +53,8 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     super(conf, secretKeyHolder, saslEnabled, saslEncryptionEnabled);
   }
 
-  public void registerDriverWithShuffleService(String host, int port) throws IOException {
+  public void registerDriverWithShuffleService(String host, int port)
+      throws IOException, InterruptedException {
     checkInit();
     ByteBuffer registerDriver = new RegisterDriver(appId).toByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);
