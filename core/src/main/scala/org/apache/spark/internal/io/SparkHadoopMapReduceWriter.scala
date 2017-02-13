@@ -83,17 +83,6 @@ object SparkHadoopMapReduceWriter extends Logging {
       isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
     committer.setupJob(jobContext)
 
-    // When speculation is on and output committer class name contains "Direct", we should warn
-    // users that they may loss data if they are using a direct output committer.
-    if (SparkHadoopWriterUtils.isSpeculationEnabled(sparkConf) && committer.isDirectOutput) {
-      val warningMessage =
-        s"$committer may be an output committer that writes data directly to " +
-          "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
-          "committer that does not have this behavior (e.g. FileOutputCommitter)."
-      logWarning(warningMessage)
-    }
-
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
@@ -136,8 +125,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     val taskContext = new TaskAttemptContextImpl(hadoopConf, attemptId)
     committer.setupTask(taskContext)
 
-    val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
-      SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
+    val (outputMetrics, callback) = SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
     // Initiate the writer.
     val taskFormat = outputFormat.newInstance()
@@ -160,8 +148,7 @@ object SparkHadoopMapReduceWriter extends Logging {
           writer.write(pair._1, pair._2)
 
           // Update bytes written metric every few records
-          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
-            outputMetricsAndBytesWrittenCallback, recordsWritten)
+          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(outputMetrics, callback, recordsWritten)
           recordsWritten += 1
         }
         if (writer != null) {
@@ -182,11 +169,8 @@ object SparkHadoopMapReduceWriter extends Logging {
         }
       })
 
-      outputMetricsAndBytesWrittenCallback.foreach {
-        case (om, callback) =>
-          om.setBytesWritten(callback())
-          om.setRecordsWritten(recordsWritten)
-      }
+      outputMetrics.setBytesWritten(callback())
+      outputMetrics.setRecordsWritten(recordsWritten)
 
       ret
     } catch {
@@ -230,31 +214,21 @@ object SparkHadoopWriterUtils {
     enabledInConf && !validationDisabled
   }
 
-  def isSpeculationEnabled(conf: SparkConf): Boolean = {
-    conf.getBoolean("spark.speculation", false)
-  }
-
   // TODO: these don't seem like the right abstractions.
   // We should abstract the duplicate code in a less awkward way.
 
-  // return type: (output metrics, bytes written callback), defined only if the latter is defined
-  def initHadoopOutputMetrics(
-      context: TaskContext): Option[(OutputMetrics, () => Long)] = {
+  def initHadoopOutputMetrics(context: TaskContext): (OutputMetrics, () => Long) = {
     val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
-    bytesWrittenCallback.map { b =>
-      (context.taskMetrics().outputMetrics, b)
-    }
+    (context.taskMetrics().outputMetrics, bytesWrittenCallback)
   }
 
   def maybeUpdateOutputMetrics(
-      outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)],
+      outputMetrics: OutputMetrics,
+      callback: () => Long,
       recordsWritten: Long): Unit = {
     if (recordsWritten % RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
-      outputMetricsAndBytesWrittenCallback.foreach {
-        case (om, callback) =>
-          om.setBytesWritten(callback())
-          om.setRecordsWritten(recordsWritten)
-      }
+      outputMetrics.setBytesWritten(callback())
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
   }
 

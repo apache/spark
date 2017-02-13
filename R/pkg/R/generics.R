@@ -1256,7 +1256,11 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname to_date
 #' @export
-setGeneric("to_date", function(x) { standardGeneric("to_date") })
+setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
+
+#' @rdname to_timestamp
+#' @export
+setGeneric("to_timestamp", function(x, format) { standardGeneric("to_timestamp") })
 
 #' @rdname to_utc_timestamp
 #' @export
