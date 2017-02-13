@@ -901,7 +901,7 @@ class HiveDDLSuite
 
   test("CREATE TABLE LIKE an external data source table") {
     // CREATE TABLE LIKE an external data source table.
-    withCreateTableLikeExtDSTable(None)
+    withCreateTableLikeExtDSTable(location = None)
 
     // CREATE TABLE LIKE an external data source table location ...
     withTempDir { tmpDir =>
