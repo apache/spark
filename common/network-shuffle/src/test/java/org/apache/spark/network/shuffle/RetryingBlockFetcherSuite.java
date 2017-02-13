@@ -52,7 +52,7 @@ public class RetryingBlockFetcherSuite {
   ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
 
   @Test
-  public void testNoFailures() throws IOException {
+  public void testNoFailures() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -71,7 +71,7 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
-  public void testUnrecoverableFailure() throws IOException {
+  public void testUnrecoverableFailure() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -90,7 +90,7 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
-  public void testSingleIOExceptionOnFirst() throws IOException {
+  public void testSingleIOExceptionOnFirst() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -113,7 +113,7 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
-  public void testSingleIOExceptionOnSecond() throws IOException {
+  public void testSingleIOExceptionOnSecond() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -135,7 +135,7 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
-  public void testTwoIOExceptions() throws IOException {
+  public void testTwoIOExceptions() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -163,7 +163,7 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
-  public void testThreeIOExceptions() throws IOException {
+  public void testThreeIOExceptions() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -195,7 +195,7 @@ public class RetryingBlockFetcherSuite {
   }
 
   @Test
-  public void testRetryAndUnrecoverable() throws IOException {
+  public void testRetryAndUnrecoverable() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
@@ -238,7 +238,7 @@ public class RetryingBlockFetcherSuite {
   @SuppressWarnings("unchecked")
   private static void performInteractions(List<? extends Map<String, Object>> interactions,
                                           BlockFetchingListener listener)
-    throws IOException {
+    throws IOException, InterruptedException {
 
     MapConfigProvider provider = new MapConfigProvider(ImmutableMap.of(
       "spark.shuffle.io.maxRetries", "2",
