@@ -190,11 +190,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withView("carsTable") {
       spark.sql(
         s"""
-         |CREATE TEMPORARY TABLE carsTable USING csv
+         |CREATE TEMPORARY VIEW carsTable USING csv
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
          |charset "iso-8859-1", delimiter "þ")
-      """.stripMargin.
-          replaceAll("\n", " "))
+      """.stripMargin.replaceAll("\n", " "))
     // scalastyle:on
 
       verifyCars(spark.table("carsTable"), withHeader = true)
@@ -219,11 +218,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withView("carsTable") {
       spark.sql(
         s"""
-         |CREATE TEMPORARY TABLE carsTable USING csv
+         |CREATE TEMPORARY VIEW carsTable USING csv
          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
-      """.stripMargin.replaceAll("\n", " "
-
-        ))
+      """.stripMargin.replaceAll("\n", " "))
 
       verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
     }
@@ -233,7 +230,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withView("carsTable") {
       spark.sql(
         s"""
-         |CREATE TEMPORARY TABLE carsTable
+         |CREATE TEMPORARY VIEW carsTable
          |(yearMade double, makeName string, modelName string, priceTag decimal,
          | comments string, grp string)
          |USING csv
@@ -312,7 +309,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withView("carsTable") {
       spark.sql(
         s"""
-           |CREATE TEMPORARY TABLE carsTable
+           |CREATE TEMPORARY VIEW carsTable
            |(yearMade double, makeName string, modelName string, comments string, grp string)
            |USING csv
            |OPTIONS (path "${testFile(emptyFile)}", header "false")
@@ -326,7 +323,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withView("carsTable") {
       spark.sql(
         s"""
-           |CREATE TEMPORARY TABLE carsTable
+           |CREATE TEMPORARY VIEW carsTable
            |(yearMade double, makeName string, modelName string, comments string, blank string)
            |USING csv
            |OPTIONS (path "${testFile(carsFile)}", header "true")

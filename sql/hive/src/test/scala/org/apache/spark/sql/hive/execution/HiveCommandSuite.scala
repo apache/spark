@@ -148,7 +148,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempView("parquet_temp") {
       sql(
         """
-          |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
+          |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
 
@@ -401,7 +401,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempView("parquet_temp") {
       sql(
         """
-          |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
+          |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
       // An empty sequence of row is returned for session temporary table.

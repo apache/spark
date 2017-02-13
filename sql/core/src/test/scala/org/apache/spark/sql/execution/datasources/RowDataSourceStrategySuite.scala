@@ -52,7 +52,7 @@ class RowDataSourceStrategySuite extends SparkFunSuite with BeforeAndAfter with 
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE inttypes
+        |CREATE OR REPLACE TEMPORARY VIEW inttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))

@@ -903,7 +903,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempView("show1a", "show2b") {
       sql(
         """
-          |CREATE TEMPORARY TABLE show1a
+          |CREATE TEMPORARY VIEW show1a
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -914,7 +914,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         """.stripMargin)
       sql(
         """
-          |CREATE TEMPORARY TABLE show2b
+          |CREATE TEMPORARY VIEW show2b
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
           |  From '1',
@@ -958,11 +958,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
-  test("drop table - temporary table") {
+  test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY TABLE tab1
+        |CREATE TEMPORARY VIEW tab1
         |USING org.apache.spark.sql.sources.DDLScanSource
         |OPTIONS (
         |  From '1',
@@ -971,7 +971,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
-    sql("DROP TABLE tab1")
+    sql("DROP view tab1")
     assert(catalog.listTables("default") == Nil)
   }
 
@@ -1696,7 +1696,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val e = intercept[TempTableAlreadyExistsException] {
         sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
       }.getMessage
-      assert(e.contains("already exists"))
+      assert(e.contains("Temporary table 't_temp' already exists"))
     }
   }
 
