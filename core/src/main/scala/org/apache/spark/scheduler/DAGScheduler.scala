@@ -1184,6 +1184,7 @@ class DAGScheduler(
             updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
+            logDebug("ShuffleMapTask finished on " + execId)
             if (stageIdToStage(task.stageId).latestInfo.attemptId == task.stageAttemptId) {
               // This task was for the currently running attempt of the stage. Since the task
               // completed successfully from the perspective of the TaskSetManager, mark it as
