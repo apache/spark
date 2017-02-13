@@ -68,6 +68,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    Batch("Pullup Correlated Expressions", Once,
+      PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
@@ -885,7 +887,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
   private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
     val matched = condition.find {
-      case PredicateSubquery(p, _, _, _) => p.outputSet.intersect(attributes).nonEmpty
+      case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
     matched.isEmpty

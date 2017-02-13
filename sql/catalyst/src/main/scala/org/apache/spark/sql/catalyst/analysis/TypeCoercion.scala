@@ -109,6 +109,26 @@ object TypeCoercion {
   }
 
   /**
+   * This function determines the target type of a comparison operator when one operand
+   * is a String and the other is not. It also handles when one op is a Date and the
+   * other is a Timestamp by making the target type to be String. Currently this is used
+   * to coerce types between LHS and RHS of the IN expression.
+   */
+  val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
+    case (StringType, DateType) => Some(StringType)
+    case (DateType, StringType) => Some(StringType)
+    case (StringType, TimestampType) => Some(StringType)
+    case (TimestampType, StringType) => Some(StringType)
+    case (TimestampType, DateType) => Some(StringType)
+    case (DateType, TimestampType) => Some(StringType)
+    case (StringType, NullType) => Some(StringType)
+    case (NullType, StringType) => Some(StringType)
+    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
+    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
+    case (l, r) => findTightestCommonType(l, r)
+  }
+
+  /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
@@ -365,16 +385,65 @@ object TypeCoercion {
   }
 
   /**
-   * Convert the value and in list expressions to the common operator type
-   * by looking at all the argument types and finding the closest one that
-   * all the arguments can be cast to. When no common operator type is found
-   * the original expression will be returned and an Analysis Exception will
-   * be raised at type checking phase.
+   * Handles type coercion for both IN expression with subquery and IN
+   * expressions without subquery.
+   * 1. In the first case, find the common type by comparing the left hand side
+   *    expression types against corresponding right hand side expression derived
+   *    from the subquery expression's plan output. Inject appropriate casts in the
+   *    LHS and RHS side of IN expression.
+   *
+   * 2. In the second case, convert the value and in list expressions to the
+   *    common operator type by looking at all the argument types and finding
+   *    the closest one that all the arguments can be cast to. When no common
+   *    operator type is found the original expression will be returned and an
+   *    Analysis Exception will be raised at the type checking phase.
    */
   object InConversion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
+
+      // Handle type casting required between value expression and subquery output
+      // in IN subquery.
+      case i @ In(a, Seq(ListQuery(sub, children, exprId))) if !i.resolved =>
+        // lhs is the value expression of IN subquery.
+        val lhs = a match {
+          // Multi columns in IN clause is represented as a CreateNamedStruct.
+          // flatten the named struct to get the list of expressions.
+          case cns: CreateNamedStruct => cns.valExprs
+          case expr => Seq(expr)
+        }
+
+        // rhs is the subquery output.
+        val rhs = sub.output
+        require(lhs.length == rhs.length)
+
+        val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
+        }
+
+        if (commonTypes.length == lhs.length) {
+          val castedRhs = rhs.zip(commonTypes).map {
+            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+            case (e, _) => e
+          }
+          val castedLhs = lhs.zip(commonTypes).map {
+            case (e, dt) if e.dataType != dt => Cast(e, dt)
+            case (e, _) => e
+          }
+
+          // Before constructing the In expression, wrap the multi values in lhs
+          // in a CreatedNamedStruct.
+          val newLhs = a match {
+            case cns: CreateNamedStruct =>
+              val nameValue = cns.nameExprs.zip(castedLhs).flatMap(pair => Seq(pair._1, pair._2))
+              CreateNamedStruct(nameValue)
+            case _ => castedLhs.head
+          }
+          In(newLhs, Seq(ListQuery(Project(castedRhs, sub), children, exprId)))
+        } else {
+          i
+        }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         findWiderCommonType(i.children.map(_.dataType)) match {
