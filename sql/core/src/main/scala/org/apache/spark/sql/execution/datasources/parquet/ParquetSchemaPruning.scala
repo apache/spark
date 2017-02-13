@@ -44,23 +44,19 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
         // return [[op]]
         if (requestedFields.exists { case (_, optAtt) => optAtt.isEmpty }) {
           val prunedSchema = requestedFields
-            .map { case (field, _) => field }
-            .map(field => StructType(Array(field)))
+            .map { case (field, _) => StructType(Array(field)) }
             .reduceLeft(_ merge _)
-          val parquetDataColumnNames = dataSchema.fieldNames
+          val dataSchemaFieldNames = dataSchema.fieldNames
           val prunedDataSchema =
-            StructType(prunedSchema.filter(f => parquetDataColumnNames.contains(f.name)))
+            StructType(prunedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
           val parquetDataFields = dataSchema.fields.toSet
           val prunedDataFields = prunedDataSchema.fields.toSet
 
           // If the original Parquet relation data fields are different from the
           // pruned data fields, continue. Otherwise, return [[op]]
           if (parquetDataFields != prunedDataFields) {
-            val dataSchemaFieldNames = hadoopFsRelation.dataSchema.fieldNames
-            val newDataSchema =
-              StructType(prunedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
             val prunedParquetRelation =
-              hadoopFsRelation.copy(dataSchema = newDataSchema)(hadoopFsRelation.sparkSession)
+              hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
 
             // We need to replace the expression ids of the pruned relation output attributes
             // with the expression ids of the original relation output attributes so that
@@ -107,15 +103,6 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
             }
 
             logDebug("New projects:\n" + newProjects.map(_.treeString).mkString("\n"))
-
-            require(prunedDataSchema == prunedParquetRelation.dataSchema,
-              s"""Pruned data schema != pruned parquet relation schema
-                 |Pruned data schema:
-                 |${prunedDataSchema.treeString}
-                 |
-                 |Pruned parquet relation schema:
-                 |${prunedParquetRelation.schema.treeString}""".stripMargin)
-
             logDebug(s"Pruned data schema:\n${prunedDataSchema.treeString}")
 
             Project(newProjects, projectionChild)
