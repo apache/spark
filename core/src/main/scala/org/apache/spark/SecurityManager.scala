@@ -185,7 +185,7 @@ import org.apache.spark.util.Utils
 
 private[spark] class SecurityManager(
     sparkConf: SparkConf,
-    ioEncryptionKey: Option[Array[Byte]] = None)
+    val ioEncryptionKey: Option[Array[Byte]] = None)
   extends Logging with SecretKeyHolder {
 
   import SecurityManager._
