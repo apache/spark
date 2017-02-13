@@ -73,16 +73,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
     val res = approxQuantile(Array(col), probabilities, relativeError)
-    if (res != null) {
-      res.head
-    } else {
-      null
-    }
+    Option(res).map(_.head).orNull
   }
 
   /**
    * Calculates the approximate quantiles of numerical columns of a DataFrame.
-   * @see `DataFrameStatsFunctions.approxQuantile` for detailed description.
+   * @see `[[DataFrameStatsFunctions.approxQuantile(col:Str* approxQuantile]]` for detailed
+   *   description.
    *
    * @param cols the names of the numerical columns
    * @param probabilities a list of quantile probabilities
@@ -102,6 +99,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
+    // TODO: Update NaN/null handling to keep consistent with the single-column version
     try {
       StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
         probabilities, relativeError).map(_.toArray).toArray
