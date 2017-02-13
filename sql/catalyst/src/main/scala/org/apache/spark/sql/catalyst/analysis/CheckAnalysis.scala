@@ -325,7 +325,7 @@ trait CheckAnalysis extends PredicateHelper {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. ${dt1.simpleString} <> ${dt2.simpleString} at the
+                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
                       |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
                     """.stripMargin.replace("\n", " ").trim())
                 }
