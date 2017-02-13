@@ -101,13 +101,11 @@ object TypeCoercion {
     case _ => None
   }
 
-  /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
-  def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
-    findTightestCommonType(left, right).orElse((left, right) match {
-      case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-      case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
-      case _ => None
-    })
+  /** Promotes all the way to StringType. */
+  private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
+    case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
+    case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
+    case _ => None
   }
 
   /**
@@ -117,7 +115,55 @@ object TypeCoercion {
    * loss of precision when widening decimal and double, and promotion to string.
    */
   private[analysis] def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
+    findTightestCommonType(t1, t2)
+      .orElse(findWiderTypeForDecimal(t1, t2))
+      .orElse(stringPromotion(t1, t2))
+      .orElse((t1, t2) match {
+        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
+          findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+        case _ => None
+      })
+  }
+
+  private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case Some(d) => findWiderTypeForTwo(d, c)
+      case None => None
+    })
+  }
+
+  /**
+   * Similar to [[findWiderTypeForTwo]] that can handle decimal types, but can't promote to
+   * string. If the wider decimal type exceeds system limitation, this rule will truncate
+   * the decimal type before return it.
+   */
+  private[analysis] def findWiderTypeWithoutStringPromotionForTwo(
+      t1: DataType,
+      t2: DataType): Option[DataType] = {
+    findTightestCommonType(t1, t2)
+      .orElse(findWiderTypeForDecimal(t1, t2))
+      .orElse((t1, t2) match {
+        case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
+          findWiderTypeWithoutStringPromotionForTwo(et1, et2)
+            .map(ArrayType(_, containsNull1 || containsNull2))
+        case _ => None
+      })
+  }
+
+  def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case Some(d) => findWiderTypeWithoutStringPromotionForTwo(d, c)
+      case None => None
+    })
+  }
+
+  /**
+   * Finds a wider type when one or both types are decimals. If the wider decimal type exceeds
+   * system limitation, this rule will truncate the decimal type. If a decimal and other fractional
+   * types are compared, returns a double type.
+   */
+  private def findWiderTypeForDecimal(dt1: DataType, dt2: DataType): Option[DataType] = {
+    (dt1, dt2) match {
       case (t1: DecimalType, t2: DecimalType) =>
         Some(DecimalPrecision.widerDecimalType(t1, t2))
       case (t: IntegralType, d: DecimalType) =>
@@ -126,38 +172,8 @@ object TypeCoercion {
         Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
       case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
         Some(DoubleType)
-      case _ =>
-        findTightestCommonTypeToString(t1, t2)
+      case _ => None
     }
-  }
-
-  private def findWiderCommonType(types: Seq[DataType]) = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findWiderTypeForTwo(d, c)
-      case None => None
-    })
-  }
-
-  /**
-   * Similar to [[findWiderCommonType]] that can handle decimal types, but can't promote to
-   * string. If the wider decimal type exceeds system limitation, this rule will truncate
-   * the decimal type before return it.
-   */
-  def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findTightestCommonType(d, c).orElse((d, c) match {
-        case (t1: DecimalType, t2: DecimalType) =>
-          Some(DecimalPrecision.widerDecimalType(t1, t2))
-        case (t: IntegralType, d: DecimalType) =>
-          Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
-        case (d: DecimalType, t: IntegralType) =>
-          Some(DecimalPrecision.widerDecimalType(DecimalType.forType(t), d))
-        case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
-          Some(DoubleType)
-        case _ => None
-      })
-      case None => None
-    })
   }
 
   private def haveSameType(exprs: Seq[Expression]): Boolean =
