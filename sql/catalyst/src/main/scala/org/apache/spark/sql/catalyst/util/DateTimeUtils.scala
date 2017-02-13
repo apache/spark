@@ -98,6 +98,10 @@ object DateTimeUtils {
   def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
     val sdf = new SimpleDateFormat(formatString, Locale.US)
     sdf.setTimeZone(timeZone)
+    // Enable strict parsing, if the input date/format is invalid, it will throw an exception.
+    // e.g. to parse invalid date '2016-13-12', or '2016-01-12' with  invalid format 'yyyy-aa-dd',
+    // an exception will be throwed.
+    sdf.setLenient(false)
     sdf
   }
 
