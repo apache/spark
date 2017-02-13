@@ -54,7 +54,28 @@ $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
 
+function findKubernetesServiceBaseURI() {
+    var k8sProxyPattern = '/api/v1/proxy/namespaces/';
+    var k8sProxyPatternPos = document.baseURI.indexOf(k8sProxyPattern);
+    if (k8sProxyPatternPos > 0) {
+        // Spark is running in a kubernetes cluster, and the web ui is served
+        // through the kubectl proxy.
+        var remaining = document.baseURI.substr(k8sProxyPatternPos + k8sProxyPattern.length);
+        var urlSlashesCount = remaining.split('/').length - 3;
+        var words = document.baseURI.split('/');
+        var baseURI = words.slice(0, words.length - urlSlashesCount).join('/');
+        return baseURI;
+    }
+
+    return null;
+}
+
 function createTemplateURI(appId) {
+    var kubernetesBaseURI = findKubernetesServiceBaseURI();
+    if (kubernetesBaseURI) {
+        return kubernetesBaseURI + '/static/executorspage-template.html';
+    }
+
     var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
     if (ind > 0) {
@@ -70,6 +91,14 @@ function createTemplateURI(appId) {
 }
 
 function getStandAloneppId(cb) {
+    var kubernetesBaseURI = findKubernetesServiceBaseURI();
+    if (kubernetesBaseURI) {
+        var appIdAndPort = kubernetesBaseURI.split('/').slice(-1)[0];
+        var appId = appIdAndPort.split(':')[0];
+        cb(appId);
+        return;
+    }
+
     var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
     if (ind > 0) {
@@ -95,6 +124,11 @@ function getStandAloneppId(cb) {
 }
 
 function createRESTEndPoint(appId) {
+    var kubernetesBaseURI = findKubernetesServiceBaseURI();
+    if (kubernetesBaseURI) {
+        return kubernetesBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
+    }
+
     var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
     if (ind > 0) {
