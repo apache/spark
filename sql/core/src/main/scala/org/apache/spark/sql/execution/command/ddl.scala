@@ -755,7 +755,6 @@ case class AlterTableSetLocationCommand(
         catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
     }
 
-    catalog.refreshTable(table.identifier)
     Seq.empty[Row]
   }
 }
