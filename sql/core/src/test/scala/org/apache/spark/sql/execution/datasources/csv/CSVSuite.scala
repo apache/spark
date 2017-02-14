@@ -53,6 +53,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
+  private val valueMalformedFile = "test-data/value-malformed.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -957,5 +958,27 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       checkAnswer(df, Row(1, null))
     }
+  }
+
+  test("SPARK-18699 fill null when parsing non-string types malformed") {
+    val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+    val df = spark
+      .read
+      .format("csv")
+      .option("mode", "PERMISSIVE")
+      .schema(schema)
+      .load(testFile(valueMalformedFile))
+    checkAnswer(df, Row(0, null) :: Row(1, java.sql.Date.valueOf("1983-08-04")) :: Nil)
+
+    val errMsg = intercept[SparkException] {
+      spark
+        .read
+        .format("csv")
+        .option("mode", "FAILFAST")
+        .schema(schema)
+        .load(testFile(valueMalformedFile))
+        .collect
+    }.getCause.getMessage
+    assert(errMsg.contains("Timestamp format must be"))
   }
 }

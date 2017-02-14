@@ -175,14 +175,26 @@ private[csv] class UnivocityParser(
     convertWithParseMode(parser.parseLine(input)) { tokens =>
       var i: Int = 0
       while (i < indexArr.length) {
-        val pos = indexArr(i)
-        // It anyway needs to try to parse since it decides if this row is malformed
-        // or not after trying to cast in `DROPMALFORMED` mode even if the casted
-        // value is not stored in the row.
-        val value = valueConverters(pos).apply(tokens(pos))
-        if (i < requiredSchema.length) {
-          row(i) = value
+        try {
+          val pos = indexArr(i)
+          // It anyway needs to try to parse since it decides if this row is malformed
+          // or not after trying to cast in `DROPMALFORMED` mode even if the casted
+          // value is not stored in the row.
+          val value = valueConverters(pos).apply(tokens(pos))
+          if (i < requiredSchema.length) {
+            row(i) = value
+          }
+        } catch {
+          case _: NumberFormatException | _: IllegalArgumentException if options.permissive =>
+            logWarning("Fill NULL in a field because a malformed token detected: " +
+              tokens(indexArr(i)))
+            if (i < requiredSchema.length) {
+              row.setNullAt(i)
+            }
+          case e: Throwable =>
+            throw e
         }
+
         i += 1
       }
       row
