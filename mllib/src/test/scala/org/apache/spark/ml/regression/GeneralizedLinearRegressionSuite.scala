@@ -1567,7 +1567,7 @@ class GeneralizedLinearRegressionSuite
     ).toDF()
 
     val expectedFeature = Seq(Array("features_0", "features_1"),
-      Array("Intercept", "features_0", "features_1"))
+      Array("(Intercept)", "features_0", "features_1"))
     val expectedEstimate = Seq(Vectors.dense(0.2884, 0.538),
       Vectors.dense(0.7903, 0.2258, 0.4677))
     val expectedStdError = Seq(Vectors.dense(1.724, 0.3787),
