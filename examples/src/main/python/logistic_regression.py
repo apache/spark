@@ -29,8 +29,8 @@ import sys
 import numpy as np
 from pyspark.sql import SparkSession
 
-D = 10  # Number of dimensions
 
+D = 10  # Number of dimensions
 
 # Read a batch of points from the input file into a NumPy matrix object. We operate on batches to
 # make further computations faster.
