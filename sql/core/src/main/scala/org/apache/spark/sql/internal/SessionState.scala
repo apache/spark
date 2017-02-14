@@ -48,13 +48,14 @@ private[sql] class SessionState(
     this(sparkSession, None)
   }
 
-  // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
-  // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
+  // Note: Many of these vals depend on each other (e.g. conf) and should be initialized
+  // with an early initializer if we want subclasses to override some of the fields.
+  // Otherwise, we would get a lot of NPEs.
 
   /**
    * SQL-specific key-value configurations.
    */
-  lazy val conf: SQLConf = {
+  val conf: SQLConf = {
     parentSessionState.map(_.conf.copy).getOrElse(new SQLConf)
   }
 
@@ -74,7 +75,7 @@ private[sql] class SessionState(
     hadoopConf
   }
 
-  lazy val experimentalMethods: ExperimentalMethods = {
+  val experimentalMethods: ExperimentalMethods = {
     parentSessionState
       .map(_.experimentalMethods.copy)
       .getOrElse(new ExperimentalMethods)
@@ -83,14 +84,14 @@ private[sql] class SessionState(
   /**
    * Internal catalog for managing functions registered by the user.
    */
-  lazy val functionRegistry: FunctionRegistry = {
+  val functionRegistry: FunctionRegistry = {
     parentSessionState.map(_.functionRegistry.copy).getOrElse(FunctionRegistry.builtin.copy)
   }
 
   /**
    * A class for loading resources specified by a function.
    */
-  lazy val functionResourceLoader: FunctionResourceLoader = {
+  val functionResourceLoader: FunctionResourceLoader = {
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
         resource.resourceType match {
@@ -108,7 +109,7 @@ private[sql] class SessionState(
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog: SessionCatalog = {
+  val catalog: SessionCatalog = {
     parentSessionState
       .map(_.catalog.copy)
       .getOrElse(new SessionCatalog(
@@ -125,12 +126,12 @@ private[sql] class SessionState(
    * Interface exposed to the user for registering user-defined functions.
    * Note that the user-defined functions must be deterministic.
    */
-  lazy val udf: UDFRegistration = new UDFRegistration(functionRegistry)
+  val udf: UDFRegistration = new UDFRegistration(functionRegistry)
 
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
-  lazy val analyzer: Analyzer = {
+  val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         new FindDataSourceTable(sparkSession) ::
@@ -149,12 +150,12 @@ private[sql] class SessionState(
   /**
    * Logical query plan optimizer.
    */
-  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
+  val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
+  val sqlParser: ParserInterface = new SparkSqlParser(conf)
 
   /**
    * Planner that converts optimized logical plans to physical plans.
@@ -166,12 +167,12 @@ private[sql] class SessionState(
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    */
-  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
+  val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
    * Interface to start and stop [[StreamingQuery]]s.
    */
-  lazy val streamingQueryManager: StreamingQueryManager = {
+  val streamingQueryManager: StreamingQueryManager = {
     new StreamingQueryManager(sparkSession)
   }
 
@@ -187,8 +188,8 @@ private[sql] class SessionState(
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  def copy(sc: SparkSession): SessionState = {
-    new SessionState(sc, Some(this))
+  def copy(associatedSparkSession: SparkSession): SessionState = {
+    new SessionState(associatedSparkSession, Some(this))
   }
 
   // ------------------------------------------------------

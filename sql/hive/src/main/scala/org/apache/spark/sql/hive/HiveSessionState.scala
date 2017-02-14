@@ -28,21 +28,29 @@ import org.apache.spark.sql.internal.SessionState
 /**
  * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
-private[hive] class HiveSessionState(sparkSession: SparkSession)
-  extends SessionState(sparkSession) {
+private[hive] class HiveSessionState(
+    sparkSession: SparkSession,
+    parentHiveSessionState: Option[HiveSessionState])
+  extends SessionState(sparkSession, parentHiveSessionState) {
 
   self =>
+
+  private[hive] def this(associatedSparkSession: SparkSession) = {
+    this(associatedSparkSession, None)
+  }
 
   /**
    * A Hive client used for interacting with the metastore.
    */
-  lazy val metadataHive: HiveClient =
-    sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.newSession()
+  val metadataHive: HiveClient =
+    parentHiveSessionState.map(_.metadataHive).getOrElse(
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+        .newSession())
 
   /**
    * Internal catalog for managing table and database states.
    */
-  override lazy val catalog = {
+  override val catalog = {
     new HiveSessionCatalog(
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
       sparkSession.sharedState.globalTempViewManager,
@@ -57,7 +65,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   /**
    * An analyzer that uses the Hive metastore.
    */
-  override lazy val analyzer: Analyzer = {
+  override val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
@@ -145,6 +153,10 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   def hiveThriftServerAsync: Boolean = {
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
+  }
+
+  override def copy(associatedSparkSession: SparkSession): HiveSessionState = {
+    new HiveSessionState(associatedSparkSession, Some(this.asInstanceOf[HiveSessionState]))
   }
 
 }
