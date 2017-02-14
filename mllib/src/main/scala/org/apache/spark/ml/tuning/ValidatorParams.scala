@@ -24,7 +24,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamPair, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
@@ -74,7 +74,8 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
    * @group param
    */
   val numParallelEval: IntParam = new IntParam(this, "numParallelEval",
-    "max number of models to evaluate in parallel, 1 for serial evaluation")
+    "max number of models to evaluate in parallel, 1 for serial evaluation",
+    ParamValidators.gtEq(1))
 
   /** @group getParam */
   def getNumParallelEval: Int = $(numParallelEval)
