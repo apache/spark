@@ -524,24 +524,48 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target, source, location, exists) = parser.parsePlan(v1).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists == false)
     assert(target.database.isEmpty)
     assert(target.table == "table1")
     assert(source.database.isEmpty)
     assert(source.table == "table2")
+    assert(location.isEmpty)
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target2, source2, location2, exists2) = parser.parsePlan(v2).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists2)
     assert(target2.database.isEmpty)
     assert(target2.table == "table1")
     assert(source2.database.isEmpty)
     assert(source2.table == "table2")
+    assert(location2.isEmpty)
+
+    val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
+    val (target3, source3, location3, exists3) = parser.parsePlan(v3).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    }.head
+    assert(!exists3)
+    assert(target3.database.isEmpty)
+    assert(target3.table == "table1")
+    assert(source3.database.isEmpty)
+    assert(source3.table == "table2")
+    assert(location3 == Some("/spark/warehouse"))
+
+    val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2  LOCATION '/spark/warehouse'"
+    val (target4, source4, location4, exists4) = parser.parsePlan(v4).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    }.head
+    assert(exists4)
+    assert(target4.database.isEmpty)
+    assert(target4.table == "table1")
+    assert(source4.database.isEmpty)
+    assert(source4.table == "table2")
+    assert(location4 == Some("/spark/warehouse"))
   }
 
   test("load data") {
