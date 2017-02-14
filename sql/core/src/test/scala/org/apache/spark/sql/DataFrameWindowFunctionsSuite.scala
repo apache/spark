@@ -516,5 +516,25 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(
         Row(1, "b", 3), Row(2, "b", null), Row(3, "b", null),
         Row(1, "a", 2), Row(1, "a", null), Row(2, "a", null)))
+    try {
+      checkAnswer(
+        df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+          .rowsBetween(-3160000000L, -2160000000L))),
+        Seq())
+      assert(false, "Boundary end should not be smaller than Int.MinValue(-2147483648).")
+    } catch {
+      case e: IllegalArgumentException =>
+        // expected
+    }
+    try {
+      checkAnswer(
+        df.select('id, 'category, sum("id").over(Window.partitionBy('category).orderBy('id)
+          .rowsBetween(2160000000L, 3160000000L))),
+        Seq())
+      assert(false, "Boundary start should not be larger than Int.MaxValue(2147483647).")
+    } catch {
+      case e: IllegalArgumentException =>
+      // expected
+    }
   }
 }

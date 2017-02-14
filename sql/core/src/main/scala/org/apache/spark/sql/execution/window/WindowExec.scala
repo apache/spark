@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
@@ -115,7 +115,7 @@ case class WindowExec(
    * @param offset with respect to the row.
    * @return a bound ordering object.
    */
-  private[this] def createBoundOrdering(frameType: FrameType, offset: Long): BoundOrdering = {
+  private[this] def createBoundOrdering(frameType: FrameType, offset: Int): BoundOrdering = {
     frameType match {
       case RangeFrame =>
         val (exprs, current, bound) = if (offset == 0) {
@@ -135,7 +135,7 @@ case class WindowExec(
             case Ascending => offset
           }
           // Create the projection which returns the current 'value' modified by adding the offset.
-          val boundExpr = Add(expr, Cast(Literal.create(boundOffset, LongType), expr.dataType))
+          val boundExpr = Add(expr, Cast(Literal.create(boundOffset, IntegerType), expr.dataType))
           val bound = newMutableProjection(boundExpr :: Nil, child.output)
           (sortExpr :: Nil, current, bound)
         } else {
@@ -159,7 +159,7 @@ case class WindowExec(
    * WindowExpressions and factory function for the WindowFrameFunction.
    */
   private[this] lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Option[Long], Option[Long])
+    type FrameKey = (String, FrameType, Option[Int], Option[Int])
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
@@ -379,7 +379,7 @@ case class WindowExec(
         }
 
         // Iteration
-        var rowIndex = 0L
+        var rowIndex = 0
         var rowsSize = 0L
 
         override final def hasNext: Boolean = rowIndex < rowsSize || nextRowAvailable

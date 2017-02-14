@@ -25,22 +25,18 @@ import org.apache.spark.sql.catalyst.expressions.Projection
  * Function for comparing boundary values.
  */
 private[window] abstract class BoundOrdering {
-  def compare(
-      inputRow: InternalRow,
-      inputIndex: Long,
-      outputRow: InternalRow,
-      outputIndex: Long): Long
+  def compare(inputRow: InternalRow, inputIndex: Int, outputRow: InternalRow, outputIndex: Int): Int
 }
 
 /**
  * Compare the input index to the bound of the output index.
  */
-private[window] final case class RowBoundOrdering(offset: Long) extends BoundOrdering {
+private[window] final case class RowBoundOrdering(offset: Int) extends BoundOrdering {
   override def compare(
       inputRow: InternalRow,
-      inputIndex: Long,
+      inputIndex: Int,
       outputRow: InternalRow,
-      outputIndex: Long): Long =
+      outputIndex: Int): Int =
     inputIndex - (outputIndex + offset)
 }
 
@@ -55,8 +51,8 @@ private[window] final case class RangeBoundOrdering(
 
   override def compare(
       inputRow: InternalRow,
-      inputIndex: Long,
+      inputIndex: Int,
       outputRow: InternalRow,
-      outputIndex: Long): Long =
+      outputIndex: Int): Int =
     ordering.compare(current(inputRow), bound(outputRow))
 }
