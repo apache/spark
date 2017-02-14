@@ -157,23 +157,6 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     assert(failReason.isInstanceOf[FetchFailed])
   }
 
-  test("Gracefully handle error in task deserialization") {
-    val conf = new SparkConf
-    val serializer = new JavaSerializer(conf)
-    val env = createMockEnv(conf, serializer)
-    val serializedTask = serializer.newInstance().serialize(new NonDeserializableTask)
-    val taskDescription = createFakeTaskDescription(serializedTask)
-
-    val failReason = runTaskAndGetFailReason(taskDescription)
-    failReason match {
-      case ef: ExceptionFailure =>
-        assert(ef.exception.isDefined)
-        assert(ef.exception.get.getMessage() === "failure in deserialization")
-      case _ =>
-        fail(s"unexpected failure type: $failReason")
-    }
-  }
-
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
