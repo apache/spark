@@ -82,7 +82,7 @@ statement
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier                                    #createTableLike
+        LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq)?                      #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -530,8 +530,8 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
-    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star

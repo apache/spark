@@ -102,6 +102,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
     "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
+    "minEndDate app list json" -> "applications?minEndDate=2015-05-06T13:03:00.950GMT",
+    "maxEndDate app list json" -> "applications?maxEndDate=2015-05-06T13:03:00.950GMT",
+    "minEndDate and maxEndDate app list json" ->
+      "applications?minEndDate=2015-03-16&maxEndDate=2015-05-06T13:03:00.950GMT",
+    "minDate and maxEndDate app list json" ->
+      "applications?minDate=2015-03-16&maxEndDate=2015-05-06T13:03:00.950GMT",
     "limit app list json" -> "applications?limit=3",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
@@ -143,7 +149,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
+    "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
+    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )

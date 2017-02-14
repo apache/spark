@@ -169,7 +169,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def numInactiveReceivers: Int = {
-    ssc.graph.getReceiverInputStreams().length - numActiveReceivers
+    ssc.graph.getNumReceivers - numActiveReceivers
   }
 
   def numTotalCompletedBatches: Long = synchronized {
@@ -197,17 +197,17 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def retainedCompletedBatches: Seq[BatchUIData] = synchronized {
-    completedBatchUIData.toSeq
+    completedBatchUIData.toIndexedSeq
   }
 
   def streamName(streamId: Int): Option[String] = {
-    ssc.graph.getInputStreamName(streamId)
+    ssc.graph.getInputStreamNameAndID.find(_._2 == streamId).map(_._1)
   }
 
   /**
    * Return all InputDStream Ids
    */
-  def streamIds: Seq[Int] = ssc.graph.getInputStreams().map(_.id)
+  def streamIds: Seq[Int] = ssc.graph.getInputStreamNameAndID.map(_._2)
 
   /**
    * Return all of the record rates for each InputDStream in each batch. The key of the return value

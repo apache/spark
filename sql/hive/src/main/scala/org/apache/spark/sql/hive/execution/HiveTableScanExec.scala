@@ -113,7 +113,7 @@ case class HiveTableScanExec(
       .mkString(",")
 
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
-    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
+    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.dataColKeys.map(_.name).mkString(","))
   }
 
   /**
@@ -146,9 +146,19 @@ case class HiveTableScanExec(
         hadoopReader.makeRDDForTable(relation.hiveQlTable)
       }
     } else {
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we do not need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = partitionPruningPred.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(
-          prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+          prunePartitions(relation.getHiveQlPartitions(normalizedFilters)))
       }
     }
     val numOutputRows = longMetric("numOutputRows")

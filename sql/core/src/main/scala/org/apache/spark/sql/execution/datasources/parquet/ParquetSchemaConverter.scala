@@ -546,21 +546,8 @@ private[parquet] class ParquetSchemaConverter(
 private[parquet] object ParquetSchemaConverter {
   val SPARK_PARQUET_SCHEMA_NAME = "spark_schema"
 
-  // !! HACK ALERT !!
-  //
-  // PARQUET-363 & PARQUET-278: parquet-mr 1.8.1 doesn't allow constructing empty GroupType,
-  // which prevents us to avoid selecting any columns for queries like `SELECT COUNT(*) FROM t`.
-  // This issue has been fixed in parquet-mr 1.8.2-SNAPSHOT.
-  //
-  // To workaround this problem, here we first construct a `MessageType` with a single dummy
-  // field, and then remove the field to obtain an empty `MessageType`.
-  //
-  // TODO Reverts this change after upgrading parquet-mr to 1.8.2+
-  val EMPTY_MESSAGE = Types
-      .buildMessage()
-      .required(PrimitiveType.PrimitiveTypeName.INT32).named("dummy")
-      .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
-  EMPTY_MESSAGE.getFields.clear()
+  val EMPTY_MESSAGE: MessageType =
+    Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
 
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema

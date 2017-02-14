@@ -88,11 +88,20 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     val pathExists = fs.exists(qualifiedOutputPath)
+    // If we are appending data to an existing dir.
+    val isAppend = pathExists && (mode == SaveMode.Append)
+
+    val committer = FileCommitProtocol.instantiate(
+      sparkSession.sessionState.conf.fileCommitProtocolClass,
+      jobId = java.util.UUID.randomUUID().toString,
+      outputPath = outputPath.toString,
+      isAppend = isAppend)
+
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations)
+        deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
         true
@@ -101,15 +110,8 @@ case class InsertIntoHadoopFsRelationCommand(
       case (s, exists) =>
         throw new IllegalStateException(s"unsupported save mode $s ($exists)")
     }
-    // If we are appending data to an existing dir.
-    val isAppend = pathExists && (mode == SaveMode.Append)
 
     if (doInsertion) {
-      val committer = FileCommitProtocol.instantiate(
-        sparkSession.sessionState.conf.fileCommitProtocolClass,
-        jobId = java.util.UUID.randomUUID().toString,
-        outputPath = outputPath.toString,
-        isAppend = isAppend)
 
       // Callback for updating metastore partition metadata after the insertion job completes.
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
@@ -160,7 +162,8 @@ case class InsertIntoHadoopFsRelationCommand(
   private def deleteMatchingPartitions(
       fs: FileSystem,
       qualifiedOutputPath: Path,
-      customPartitionLocations: Map[TablePartitionSpec, String]): Unit = {
+      customPartitionLocations: Map[TablePartitionSpec, String],
+      committer: FileCommitProtocol): Unit = {
     val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
         staticPartitions.get(p.name) match {
@@ -175,7 +178,7 @@ case class InsertIntoHadoopFsRelationCommand(
     }
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
-    if (fs.exists(staticPrefixPath) && !fs.delete(staticPrefixPath, true /* recursively */)) {
+    if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
       throw new IOException(s"Unable to clear output " +
         s"directory $staticPrefixPath prior to writing to it")
     }
@@ -185,7 +188,7 @@ case class InsertIntoHadoopFsRelationCommand(
         (staticPartitions.toSet -- spec).isEmpty,
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
-      if (fs.exists(path) && !fs.delete(path, true)) {
+      if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
         throw new IOException(s"Unable to clear partition " +
           s"directory $path prior to writing to it")
       }

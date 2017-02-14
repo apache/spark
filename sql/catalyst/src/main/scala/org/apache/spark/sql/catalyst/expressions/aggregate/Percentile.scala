@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
+import org.apache.spark.SparkException
 
 /**
  * The Percentile aggregate function returns the exact percentile(s) of numeric column `expr` at
@@ -45,22 +45,30 @@ import org.apache.spark.util.collection.OpenHashMap
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage) - Returns the exact percentile value of numeric column `col` at the
-      given percentage. The value of percentage must be between 0.0 and 1.0.
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric column
+       `col` at the given percentage. The value of percentage must be between 0.0 and 1.0. The
+       value of frequency should be positive integral
 
-      _FUNC_(col, array(percentage1 [, percentage2]...)) - Returns the exact percentile value array
-      of numeric column `col` at the given percentage(s). Each value of the percentage array must
-      be between 0.0 and 1.0.
-    """)
+      _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
+      percentile value array of numeric column `col` at the given percentage(s). Each value
+      of the percentage array must be between 0.0 and 1.0. The value of frequency should be
+      positive integral
+
+      """)
 case class Percentile(
     child: Expression,
     percentageExpression: Expression,
+    frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[OpenHashMap[Number, Long]] with ImplicitCastInputTypes {
 
   def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, 0, 0)
+    this(child, percentageExpression, Literal(1L), 0, 0)
+  }
+
+  def this(child: Expression, percentageExpression: Expression, frequency: Expression) = {
+    this(child, percentageExpression, frequency, 0, 0)
   }
 
   override def prettyName: String = "percentile"
@@ -81,7 +89,9 @@ case class Percentile(
       case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
   }
 
-  override def children: Seq[Expression] = child :: percentageExpression :: Nil
+  override def children: Seq[Expression] = {
+    child  :: percentageExpression ::frequencyExpression :: Nil
+  }
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -91,9 +101,12 @@ case class Percentile(
     case _ => DoubleType
   }
 
-  override def inputTypes: Seq[AbstractDataType] = percentageExpression.dataType match {
-    case _: ArrayType => Seq(NumericType, ArrayType(DoubleType))
-    case _ => Seq(NumericType, DoubleType)
+  override def inputTypes: Seq[AbstractDataType] = {
+    val percentageExpType = percentageExpression.dataType match {
+      case _: ArrayType => ArrayType(DoubleType)
+      case _ => DoubleType
+    }
+    Seq(NumericType, percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -126,10 +139,17 @@ case class Percentile(
       buffer: OpenHashMap[Number, Long],
       input: InternalRow): OpenHashMap[Number, Long] = {
     val key = child.eval(input).asInstanceOf[Number]
+    val frqValue = frequencyExpression.eval(input)
 
     // Null values are ignored in counts map.
-    if (key != null) {
-      buffer.changeValue(key, 1L, _ + 1L)
+    if (key != null && frqValue != null) {
+      val frqLong = frqValue.asInstanceOf[Number].longValue()
+      // add only when frequency is positive
+      if (frqLong > 0) {
+        buffer.changeValue(key, frqLong, _ + frqLong)
+      } else if (frqLong < 0) {
+        throw new SparkException(s"Negative values found in ${frequencyExpression.sql}")
+      }
     }
     buffer
   }

@@ -41,7 +41,8 @@ case class AnalyzeTableCommand(
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdentWithDB))
+    val relation =
+      EliminateSubqueryAliases(sparkSession.table(tableIdentWithDB).queryExecution.analyzed)
 
     relation match {
       case relation: CatalogRelation =>

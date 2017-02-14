@@ -1488,10 +1488,11 @@ private[spark] object Utils extends Logging {
 
   /** Return uncompressed file length of a compressed file. */
   private def getCompressedFileLength(file: File): Long = {
+    var gzInputStream: GZIPInputStream = null
     try {
       // Uncompress .gz file to determine file size.
       var fileSize = 0L
-      val gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      gzInputStream = new GZIPInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
       var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
@@ -1504,6 +1505,10 @@ private[spark] object Utils extends Logging {
       case e: Throwable =>
         logError(s"Cannot get file length of ${file}", e)
         throw e
+    } finally {
+      if (gzInputStream != null) {
+        gzInputStream.close()
+      }
     }
   }
 
@@ -2198,6 +2203,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns the user port to try when trying to bind a service. Handles wrapping and skipping
+   * privileged ports.
+   */
+  def userPort(base: Int, offset: Int): Int = {
+    (base + offset - 1024) % (65536 - 1024) + 1024
+  }
+
+  /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
@@ -2224,8 +2237,7 @@ private[spark] object Utils extends Logging {
       val tryPort = if (startPort == 0) {
         startPort
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        userPort(startPort, offset)
       }
       try {
         val (service, port) = startService(tryPort)
@@ -2596,12 +2608,8 @@ private[util] object CallerContext extends Logging {
   val callerContextSupported: Boolean = {
     SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
       try {
-        // `Utils.classForName` will make `ReplSuite` fail with `ClassCircularityError` in
-        // master Maven build, so do not use it before resolving SPARK-17714.
-        // scalastyle:off classforname
-        Class.forName("org.apache.hadoop.ipc.CallerContext")
-        Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
-        // scalastyle:on classforname
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         true
       } catch {
         case _: ClassNotFoundException =>
@@ -2676,12 +2684,8 @@ private[spark] class CallerContext(
   def setCurrentContext(): Unit = {
     if (CallerContext.callerContextSupported) {
       try {
-        // `Utils.classForName` will make `ReplSuite` fail with `ClassCircularityError` in
-        // master Maven build, so do not use it before resolving SPARK-17714.
-        // scalastyle:off classforname
-        val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
-        val builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
-        // scalastyle:on classforname
+        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)

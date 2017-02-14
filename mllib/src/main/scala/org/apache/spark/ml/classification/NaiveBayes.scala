@@ -147,7 +147,12 @@ class NaiveBayes @Since("1.5.0") (
       }
     }
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
+      probabilityCol, modelType, smoothing, thresholds)
+
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
+    instr.logNumFeatures(numFeatures)
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     // Aggregates term frequencies per label.
@@ -169,6 +174,7 @@ class NaiveBayes @Since("1.5.0") (
       }).collect().sortBy(_._1)
 
     val numLabels = aggregated.length
+    instr.logNumClasses(numLabels)
     val numDocuments = aggregated.map(_._2._1).sum
 
     val labelArray = new Array[Double](numLabels)
@@ -198,7 +204,9 @@ class NaiveBayes @Since("1.5.0") (
 
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(numLabels, numFeatures, thetaArray, true)
-    new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
+    val model = new NaiveBayesModel(uid, pi, theta).setOldLabels(labelArray)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.5.0")

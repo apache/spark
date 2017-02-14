@@ -93,7 +93,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB.
-      val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
+      val maybeOrcFile = new File(path).listFiles().find { f =>
+        !f.getName.startsWith("_") && f.getName.endsWith(".zlib.orc")
+      }
       assert(maybeOrcFile.isDefined)
       val orcFilePath = maybeOrcFile.get.toPath.toString
       val expectedCompressionKind =

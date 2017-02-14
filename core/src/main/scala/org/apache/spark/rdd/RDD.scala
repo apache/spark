@@ -1610,14 +1610,15 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD is checkpointed and materialized, either reliably or locally.
    */
-  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
+  def isCheckpointed: Boolean = isCheckpointedAndMaterialized
 
   /**
    * Return whether this RDD is checkpointed and materialized, either reliably or locally.
    * This is introduced as an alias for `isCheckpointed` to clarify the semantics of the
    * return value. Exposed for testing.
    */
-  private[spark] def isCheckpointedAndMaterialized: Boolean = isCheckpointed
+  private[spark] def isCheckpointedAndMaterialized: Boolean =
+    checkpointData.exists(_.isCheckpointed)
 
   /**
    * Return whether this RDD is marked for local checkpointing.
@@ -1841,7 +1842,7 @@ abstract class RDD[T: ClassTag](
  * Defines implicit functions that provide extra functionalities on RDDs of specific types.
  *
  * For example, [[RDD.rddToPairRDDFunctions]] converts an RDD into a [[PairRDDFunctions]] for
- * key-value-pair RDDs, and enabling extra functionalities such as [[PairRDDFunctions.reduceByKey]].
+ * key-value-pair RDDs, and enabling extra functionalities such as `PairRDDFunctions.reduceByKey`.
  */
 object RDD {
 

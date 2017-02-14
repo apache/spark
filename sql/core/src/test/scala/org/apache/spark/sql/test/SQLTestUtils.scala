@@ -94,7 +94,13 @@ private[sql] trait SQLTestUtils
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
+    val currentValues = keys.map { key =>
+      if (spark.conf.contains(key)) {
+        Some(spark.conf.get(key))
+      } else {
+        None
+      }
+    }
     (keys, values).zipped.foreach(spark.conf.set)
     try f finally {
       keys.zip(currentValues).foreach {

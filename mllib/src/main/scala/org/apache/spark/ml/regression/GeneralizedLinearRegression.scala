@@ -48,7 +48,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /**
    * Param for the name of family which is a description of the error distribution
    * to be used in the model.
-   * Supported options: "gaussian", "binomial", "poisson" and "gamma".
+   * Supported options: "gaussian", "binomial", "poisson", "gamma" and "tweedie".
    * Default is "gaussian".
    *
    * @group param
@@ -57,16 +57,41 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
-    ParamValidators.inArray[String](supportedFamilyNames.toArray))
+    (value: String) => supportedFamilyNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
   def getFamily: String = $(family)
 
   /**
+   * Param for the power in the variance function of the Tweedie distribution which provides
+   * the relationship between the variance and mean of the distribution.
+   * Only applicable for the Tweedie family.
+   * (see <a href="https://en.wikipedia.org/wiki/Tweedie_distribution">
+   * Tweedie Distribution (Wikipedia)</a>)
+   * Supported values: 0 and [1, Inf).
+   * Note that variance power 0, 1, or 2 corresponds to the Gaussian, Poisson or Gamma
+   * family, respectively.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  final val variancePower: DoubleParam = new DoubleParam(this, "variancePower",
+    "The power in the variance function of the Tweedie distribution which characterizes " +
+    "the relationship between the variance and mean of the distribution. " +
+    "Only applicable for the Tweedie family. Supported values: 0 and [1, Inf).",
+    (x: Double) => x >= 1.0 || x == 0.0)
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getVariancePower: Double = $(variancePower)
+
+  /**
    * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
+   * This is used only when family is not "tweedie". The link function for the "tweedie" family
+   * must be specified through [[linkPower]].
    *
    * @group param
    */
@@ -74,11 +99,26 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
     s"distribution function. Supported options: ${supportedLinkNames.mkString(", ")}",
-    ParamValidators.inArray[String](supportedLinkNames.toArray))
+    (value: String) => supportedLinkNames.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.0.0")
   def getLink: String = $(link)
+
+  /**
+   * Param for the index in the power link function. Only applicable for the Tweedie family.
+   * Note that link power 0, 1, -1 or 0.5 corresponds to the Log, Identity, Inverse or Sqrt
+   * link, respectively.
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  final val linkPower: DoubleParam = new DoubleParam(this, "linkPower",
+    "The index in the power link function. Only applicable for the Tweedie family.")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getLinkPower: Double = $(linkPower)
 
   /**
    * Param for link prediction (linear predictor) column name.
@@ -106,11 +146,27 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if (isDefined(link)) {
-      require(supportedFamilyAndLinkPairs.contains(
-        Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
-        s"with ${$(family)} family does not support ${$(link)} link function.")
+    if ($(family).toLowerCase == "tweedie") {
+      if (isSet(link)) {
+        logWarning("When family is tweedie, use param linkPower to specify link function. " +
+          "Setting param link will take no effect.")
+      }
+    } else {
+      if (isSet(variancePower)) {
+        logWarning("When family is not tweedie, setting param variancePower will take no effect.")
+      }
+      if (isSet(linkPower)) {
+        logWarning("When family is not tweedie, use param link to specify link function. " +
+          "Setting param linkPower will take no effect.")
+      }
+      if (isSet(link)) {
+        require(supportedFamilyAndLinkPairs.contains(
+          Family.fromParams(this) -> Link.fromParams(this)),
+          s"Generalized Linear Regression with ${$(family)} family " +
+            s"does not support ${$(link)} link function.")
+      }
     }
+
     val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if (hasLinkPredictionCol) {
       SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
@@ -128,13 +184,15 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  * Generalized linear model (Wikipedia)</a>)
  * specified by giving a symbolic description of the linear
  * predictor (link function) and a description of the error distribution (family).
- * It supports "gaussian", "binomial", "poisson" and "gamma" as family.
+ * It supports "gaussian", "binomial", "poisson", "gamma" and "tweedie" as family.
  * Valid link functions for each family is listed below. The first link function of each family
  * is the default one.
  *  - "gaussian" : "identity", "log", "inverse"
  *  - "binomial" : "logit", "probit", "cloglog"
  *  - "poisson"  : "log", "identity", "sqrt"
  *  - "gamma"    : "inverse", "identity", "log"
+ *  - "tweedie"  : power link function specified through "linkPower". The default link power in
+ *  the tweedie family is 1 - variancePower.
  */
 @Experimental
 @Since("2.0.0")
@@ -158,7 +216,28 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(family -> Gaussian.name)
 
   /**
+   * Sets the value of param [[variancePower]].
+   * Used only when family is "tweedie".
+   * Default is 0.0, which corresponds to the "gaussian" family.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setVariancePower(value: Double): this.type = set(variancePower, value)
+  setDefault(variancePower -> 0.0)
+
+  /**
+   * Sets the value of param [[linkPower]].
+   * Used only when family is "tweedie".
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setLinkPower(value: Double): this.type = set(linkPower, value)
+
+  /**
    * Sets the value of param [[link]].
+   * Used only when family is not "tweedie".
    *
    * @group setParam
    */
@@ -242,20 +321,23 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
 
   override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
-    val familyObj = Family.fromName($(family))
-    val linkObj = if (isDefined(link)) {
-      Link.fromName($(link))
-    } else {
-      familyObj.defaultLink
-    }
-    val familyAndLink = new FamilyAndLink(familyObj, linkObj)
+    val familyAndLink = FamilyAndLink(this)
 
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, linkPredictionCol,
+      family, solver, fitIntercept, link, maxIter, regParam, tol)
+    instr.logNumFeatures(numFeatures)
+
     if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
         s" <= ${WeightedLeastSquares.MAX_NUM_FEATURES}. Found $numFeatures in the input dataset."
       throw new SparkException(msg)
     }
+
+    require(numFeatures > 0 || $(fitIntercept),
+      "GeneralizedLinearRegression was given data with 0 features, and with Param fitIntercept " +
+        "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
@@ -264,7 +346,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           Instance(label, weight, features)
       }
 
-    if (familyObj == Gaussian && linkObj == Identity) {
+    val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
@@ -274,21 +356,23 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
           .setParent(this))
       val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
         wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      return model.setSummary(Some(trainingSummary))
+      model.setSummary(Some(trainingSummary))
+    } else {
+      // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
+      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
+      val optimizer = new IterativelyReweightedLeastSquares(initialModel,
+        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
+      val irlsModel = optimizer.fit(instances)
+      val model = copyValues(
+        new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
+          .setParent(this))
+      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
+        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
+      model.setSummary(Some(trainingSummary))
     }
 
-    // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
-    val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
-    val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
-      $(fitIntercept), $(regParam), $(maxIter), $(tol))
-    val irlsModel = optimizer.fit(instances)
-
-    val model = copyValues(
-      new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
-        .setParent(this))
-    val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-      irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-    model.setSummary(Some(trainingSummary))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("2.0.0")
@@ -301,7 +385,10 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   @Since("2.0.0")
   override def load(path: String): GeneralizedLinearRegression = super.load(path)
 
-  /** Set of family and link pairs that GeneralizedLinearRegression supports. */
+  /**
+   * Set of family (except for tweedie) and link pairs that GeneralizedLinearRegression supports.
+   * The link function of the Tweedie family is specified through param linkPower.
+   */
   private[regression] lazy val supportedFamilyAndLinkPairs = Set(
     Gaussian -> Identity, Gaussian -> Log, Gaussian -> Inverse,
     Binomial -> Logit, Binomial -> Probit, Binomial -> CLogLog,
@@ -310,10 +397,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   )
 
   /** Set of family names that GeneralizedLinearRegression supports. */
-  private[regression] lazy val supportedFamilyNames = supportedFamilyAndLinkPairs.map(_._1.name)
+  private[regression] lazy val supportedFamilyNames =
+    supportedFamilyAndLinkPairs.map(_._1.name).toArray :+ "tweedie"
 
   /** Set of link names that GeneralizedLinearRegression supports. */
-  private[regression] lazy val supportedLinkNames = supportedFamilyAndLinkPairs.map(_._2.name)
+  private[regression] lazy val supportedLinkNames =
+    supportedFamilyAndLinkPairs.map(_._2.name).toArray
 
   private[regression] val epsilon: Double = 1E-16
 
@@ -362,6 +451,24 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     }
   }
 
+  private[regression] object FamilyAndLink {
+
+    /**
+     * Constructs the FamilyAndLink object from a parameter map
+     */
+    def apply(params: GeneralizedLinearRegressionBase): FamilyAndLink = {
+      val familyObj = Family.fromParams(params)
+      val linkObj = if ((params.getFamily.toLowerCase != "tweedie" &&
+        params.isSet(params.link)) || (params.getFamily.toLowerCase == "tweedie" &&
+        params.isSet(params.linkPower))) {
+        Link.fromParams(params)
+      } else {
+        familyObj.defaultLink
+      }
+      new FamilyAndLink(familyObj, linkObj)
+    }
+  }
+
   /**
    * A description of the error distribution to be used in the model.
    *
@@ -402,27 +509,109 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   private[regression] object Family {
 
     /**
-     * Gets the [[Family]] object from its name.
+     * Gets the [[Family]] object based on param family and variancePower.
+     * If param family is set with "gaussian", "binomial", "poisson" or "gamma",
+     * return the corresponding object directly; otherwise, construct a Tweedie object
+     * according to variancePower.
      *
-     * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
+     * @param params the parameter map containing family name and variance power
      */
-    def fromName(name: String): Family = {
-      name match {
+    def fromParams(params: GeneralizedLinearRegressionBase): Family = {
+      params.getFamily.toLowerCase match {
         case Gaussian.name => Gaussian
         case Binomial.name => Binomial
         case Poisson.name => Poisson
         case Gamma.name => Gamma
+        case "tweedie" =>
+          params.getVariancePower match {
+            case 0.0 => Gaussian
+            case 1.0 => Poisson
+            case 2.0 => Gamma
+            case others => new Tweedie(others)
+          }
       }
     }
+  }
+
+  /**
+   * Tweedie exponential family distribution.
+   * This includes the special cases of Gaussian, Poisson and Gamma.
+   */
+  private[regression] class Tweedie(val variancePower: Double)
+    extends Family("tweedie") {
+
+    override val defaultLink: Link = new Power(1.0 - variancePower)
+
+    override def initialize(y: Double, weight: Double): Double = {
+      if (variancePower >= 1.0 && variancePower < 2.0) {
+        require(y >= 0.0, s"The response variable of $name($variancePower) family " +
+          s"should be non-negative, but got $y")
+      } else if (variancePower >= 2.0) {
+        require(y > 0.0, s"The response variable of $name($variancePower) family " +
+          s"should be positive, but got $y")
+      }
+      if (y == 0) Tweedie.delta else y
+    }
+
+    override def variance(mu: Double): Double = math.pow(mu, variancePower)
+
+    private def yp(y: Double, mu: Double, p: Double): Double = {
+      if (p == 0) {
+        math.log(y / mu)
+      } else {
+        (math.pow(y, p) - math.pow(mu, p)) / p
+      }
+    }
+
+    override def deviance(y: Double, mu: Double, weight: Double): Double = {
+      // Force y >= delta for Poisson or compound Poisson
+      val y1 = if (variancePower >= 1.0 && variancePower < 2.0) {
+        math.max(y, Tweedie.delta)
+      } else {
+        y
+      }
+      2.0 * weight *
+        (y * yp(y1, mu, 1.0 - variancePower) - yp(y, mu, 2.0 - variancePower))
+    }
+
+    override def aic(
+        predictions: RDD[(Double, Double, Double)],
+        deviance: Double,
+        numInstances: Double,
+        weightSum: Double): Double = {
+      /*
+       This depends on the density of the Tweedie distribution.
+       Only implemented for Gaussian, Poisson and Gamma at this point.
+      */
+      throw new UnsupportedOperationException("No AIC available for the tweedie family")
+    }
+
+    override def project(mu: Double): Double = {
+      if (mu < epsilon) {
+        epsilon
+      } else if (mu.isInfinity) {
+        Double.MaxValue
+      } else {
+        mu
+      }
+    }
+  }
+
+  private[regression] object Tweedie{
+
+    /** Constant used in initialization and deviance to avoid numerical issues. */
+    val delta: Double = 0.1
   }
 
   /**
    * Gaussian exponential family distribution.
    * The default link for the Gaussian family is the identity link.
    */
-  private[regression] object Gaussian extends Family("gaussian") {
+  private[regression] object Gaussian extends Tweedie(0.0) {
 
-    val defaultLink: Link = Identity
+    override val name: String = "gaussian"
+
+    override val defaultLink: Link = Identity
 
     override def initialize(y: Double, weight: Double): Double = y
 
@@ -508,18 +697,20 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * Poisson exponential family distribution.
    * The default link for the Poisson family is the log link.
    */
-  private[regression] object Poisson extends Family("poisson") {
+  private[regression] object Poisson extends Tweedie(1.0) {
 
-    val defaultLink: Link = Log
+    override val name: String = "poisson"
+
+    override val defaultLink: Link = Log
 
     override def initialize(y: Double, weight: Double): Double = {
       require(y >= 0.0, "The response variable of Poisson family " +
         s"should be non-negative, but got $y")
       /*
         Force Poisson mean > 0 to avoid numerical instability in IRLS.
-        R uses y + 0.1 for initialization. See poisson()$initialize.
+        R uses y + delta for initialization. See poisson()$initialize.
        */
-      math.max(y, 0.1)
+      math.max(y, Tweedie.delta)
     }
 
     override def variance(mu: Double): Double = mu
@@ -537,25 +728,17 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         weight * dist.Poisson(mu).logProbabilityOf(y.toInt)
       }.sum()
     }
-
-    override def project(mu: Double): Double = {
-      if (mu < epsilon) {
-        epsilon
-      } else if (mu.isInfinity) {
-        Double.MaxValue
-      } else {
-        mu
-      }
-    }
   }
 
   /**
    * Gamma exponential family distribution.
    * The default link for the Gamma family is the inverse link.
    */
-  private[regression] object Gamma extends Family("gamma") {
+  private[regression] object Gamma extends Tweedie(2.0) {
 
-    val defaultLink: Link = Inverse
+    override val name: String = "gamma"
+
+    override val defaultLink: Link = Inverse
 
     override def initialize(y: Double, weight: Double): Double = {
       require(y > 0.0, "The response variable of Gamma family " +
@@ -578,16 +761,6 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
       -2.0 * predictions.map { case (y: Double, mu: Double, weight: Double) =>
         weight * dist.Gamma(1.0 / disp, mu * disp).logPdf(y)
       }.sum() + 2.0
-    }
-
-    override def project(mu: Double): Double = {
-      if (mu < epsilon) {
-        epsilon
-      } else if (mu.isInfinity) {
-        Double.MaxValue
-      } else {
-        mu
-      }
     }
   }
 
@@ -613,25 +786,67 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
   private[regression] object Link {
 
     /**
-     * Gets the [[Link]] object from its name.
+     * Gets the [[Link]] object based on param family, link and linkPower.
+     * If param family is set with "tweedie", return or construct link function object
+     * according to linkPower; otherwise, return link function object according to link.
      *
-     * @param name link name: "identity", "logit", "log",
-     *             "inverse", "probit", "cloglog" or "sqrt".
+     * @param params the parameter map containing family, link and linkPower
      */
-    def fromName(name: String): Link = {
-      name match {
-        case Identity.name => Identity
-        case Logit.name => Logit
-        case Log.name => Log
-        case Inverse.name => Inverse
-        case Probit.name => Probit
-        case CLogLog.name => CLogLog
-        case Sqrt.name => Sqrt
+    def fromParams(params: GeneralizedLinearRegressionBase): Link = {
+      if (params.getFamily.toLowerCase == "tweedie") {
+        params.getLinkPower match {
+          case 0.0 => Log
+          case 1.0 => Identity
+          case -1.0 => Inverse
+          case 0.5 => Sqrt
+          case others => new Power(others)
+        }
+      } else {
+        params.getLink.toLowerCase match {
+          case Identity.name => Identity
+          case Logit.name => Logit
+          case Log.name => Log
+          case Inverse.name => Inverse
+          case Probit.name => Probit
+          case CLogLog.name => CLogLog
+          case Sqrt.name => Sqrt
+        }
       }
     }
   }
 
-  private[regression] object Identity extends Link("identity") {
+  /** Power link function class */
+  private[regression] class Power(val linkPower: Double)
+    extends Link("power") {
+
+    override def link(mu: Double): Double = {
+      if (linkPower == 0.0) {
+        math.log(mu)
+      } else {
+        math.pow(mu, linkPower)
+      }
+    }
+
+    override def deriv(mu: Double): Double = {
+      if (linkPower == 0.0) {
+        1.0 / mu
+      } else {
+        linkPower * math.pow(mu, linkPower - 1.0)
+      }
+    }
+
+    override def unlink(eta: Double): Double = {
+      if (linkPower == 0.0) {
+        math.exp(eta)
+      } else {
+        math.pow(eta, 1.0 / linkPower)
+      }
+    }
+  }
+
+  private[regression] object Identity extends Power(1.0) {
+
+    override val name: String = "identity"
 
     override def link(mu: Double): Double = mu
 
@@ -649,7 +864,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def unlink(eta: Double): Double = 1.0 / (1.0 + math.exp(-1.0 * eta))
   }
 
-  private[regression] object Log extends Link("log") {
+  private[regression] object Log extends Power(0.0) {
+
+    override val name: String = "log"
 
     override def link(mu: Double): Double = math.log(mu)
 
@@ -658,7 +875,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def unlink(eta: Double): Double = math.exp(eta)
   }
 
-  private[regression] object Inverse extends Link("inverse") {
+  private[regression] object Inverse extends Power(-1.0) {
+
+    override val name: String = "inverse"
 
     override def link(mu: Double): Double = 1.0 / mu
 
@@ -687,7 +906,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
   }
 
-  private[regression] object Sqrt extends Link("sqrt") {
+  private[regression] object Sqrt extends Power(0.5) {
+
+    override val name: String = "sqrt"
 
     override def link(mu: Double): Double = math.sqrt(mu)
 
@@ -720,13 +941,7 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   import GeneralizedLinearRegression._
 
-  private lazy val familyObj = Family.fromName($(family))
-  private lazy val linkObj = if (isDefined(link)) {
-    Link.fromName($(link))
-  } else {
-    familyObj.defaultLink
-  }
-  private lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
+  private lazy val familyAndLink = FamilyAndLink(this)
 
   override protected def predict(features: Vector): Double = {
     val eta = predictLink(features)
@@ -905,12 +1120,11 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0") @transient val predictions: DataFrame = model.transform(dataset)
 
-  private[regression] lazy val family: Family = Family.fromName(model.getFamily)
-  private[regression] lazy val link: Link = if (model.isDefined(model.link)) {
-    Link.fromName(model.getLink)
-  } else {
-    family.defaultLink
-  }
+  private[regression] lazy val familyLink: FamilyAndLink = FamilyAndLink(model)
+
+  private[regression] lazy val family: Family = familyLink.family
+
+  private[regression] lazy val link: Link = familyLink.link
 
   /** Number of instances in DataFrame predictions. */
   private[regression] lazy val numInstances: Long = predictions.count()
@@ -1037,7 +1251,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val dispersion: Double = if (
-    model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+    model.getFamily.toLowerCase == Binomial.name ||
+      model.getFamily.toLowerCase == Poisson.name) {
     1.0
   } else {
     val rss = pearsonResiduals.agg(sum(pow(col("pearsonResiduals"), 2.0))).first().getDouble(0)
@@ -1140,7 +1355,8 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {
     if (isNormalSolver) {
-      if (model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
+      if (model.getFamily.toLowerCase == Binomial.name ||
+        model.getFamily.toLowerCase == Poisson.name) {
         tValues.map { x => 2.0 * (1.0 - dist.Gaussian(0.0, 1.0).cdf(math.abs(x))) }
       } else {
         tValues.map { x =>

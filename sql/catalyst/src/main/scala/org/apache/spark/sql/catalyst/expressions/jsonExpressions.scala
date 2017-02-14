@@ -23,7 +23,6 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
@@ -497,7 +496,7 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
   override def dataType: DataType = schema
 
   override def nullSafeEval(json: Any): Any = {
-    try parser.parse(json.toString).head catch {
+    try parser.parse(json.toString).headOption.orNull catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
@@ -517,7 +516,10 @@ case class StructToJson(options: Map[String, String], child: Expression)
 
   @transient
   lazy val gen =
-    new JacksonGenerator(child.dataType.asInstanceOf[StructType], writer)
+    new JacksonGenerator(
+      child.dataType.asInstanceOf[StructType],
+      writer,
+      new JSONOptions(options))
 
   override def dataType: DataType = StringType
 

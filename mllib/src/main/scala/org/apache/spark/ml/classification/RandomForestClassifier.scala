@@ -131,7 +131,9 @@ class RandomForestClassifier @Since("1.4.0") (
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logParams(labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
+      impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
+      minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))

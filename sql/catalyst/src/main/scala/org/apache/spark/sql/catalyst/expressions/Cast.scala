@@ -21,7 +21,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
@@ -89,6 +89,25 @@ object Cast {
     case _ => false
   }
 
+  /**
+   * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
+   * timestamp -> date.
+   */
+  def mayTruncate(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => true
+    case (from, to) if illegalNumericPrecedence(from, to) => true
+    case (TimestampType, DateType) => true
+    case (StringType, to: NumericType) => true
+    case _ => false
+  }
+
+  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
+    val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+    val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
+    toPrecedence > 0 && fromPrecedence > toPrecedence
+  }
+
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => true
     case (_, _) if from == to => false
@@ -112,7 +131,12 @@ object Cast {
   private def resolvableNullability(from: Boolean, to: Boolean) = !from || to
 }
 
-/** Cast the child expression to the target data type. */
+/**
+ * Cast the child expression to the target data type.
+ *
+ * When cast from/to timezone related types, we need timeZoneId, which will be resolved with
+ * session local timezone by an analyzer [[ResolveTimeZone]].
+ */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
   extended = """
@@ -120,7 +144,10 @@ object Cast {
       > SELECT _FUNC_('10' as int);
        10
   """)
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
+case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
+
+  def this(child: Expression, dataType: DataType) = this(child, dataType, None)
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
@@ -135,6 +162,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   override def nullable: Boolean = Cast.forceNullable(child.dataType, dataType) || child.nullable
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
@@ -143,7 +173,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
     case DateType => buildCast[Int](_, d => UTF8String.fromString(DateTimeUtils.dateToString(d)))
     case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(DateTimeUtils.timestampToString(t)))
+      t => UTF8String.fromString(DateTimeUtils.timestampToString(t, timeZone)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -188,7 +218,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs).orNull)
+      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, timeZone).orNull)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -200,7 +230,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
-      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d) * 1000)
+      buildCast[Int](_, d => DateTimeUtils.daysToMillis(d, timeZone) * 1000)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -235,7 +265,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L))
+      buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L, timeZone))
   }
 
   // IntervalConverter
@@ -247,7 +277,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toLong catch {
+      buildCast[UTF8String](_, s => try s.toLong catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -263,7 +293,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toInt catch {
+      buildCast[UTF8String](_, s => try s.toInt catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -279,7 +309,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toShort catch {
+      buildCast[UTF8String](_, s => try s.toShort catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -295,7 +325,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toByte catch {
+      buildCast[UTF8String](_, s => try s.toByte catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -498,7 +528,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     s"""
       boolean $resultNull = $childNull;
       ${ctx.javaType(resultType)} $resultPrim = ${ctx.defaultValue(resultType)};
-      if (!${childNull}) {
+      if (!$childNull) {
         ${cast(childPrim, resultPrim, resultNull)}
       }
     """
@@ -512,8 +542,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
           org.apache.spark.sql.catalyst.util.DateTimeUtils.dateToString($c));"""
       case TimestampType =>
+        val tz = ctx.addReferenceMinorObj(timeZone)
         (c, evPrim, evNull) => s"""$evPrim = UTF8String.fromString(
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c));"""
+          org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampToString($c, $tz));"""
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -539,8 +570,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
         }
        """
     case TimestampType =>
+      val tz = ctx.addReferenceMinorObj(timeZone)
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L);";
+        s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToDays($c / 1000L, $tz);"
     case _ =>
       (c, evPrim, evNull) => s"$evNull = true;"
   }
@@ -618,11 +650,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
+      val tz = ctx.addReferenceMinorObj(timeZone)
       val longOpt = ctx.freshName("longOpt")
       (c, evPrim, evNull) =>
         s"""
           scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c);
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $tz);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {
@@ -634,8 +667,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case _: IntegralType =>
       (c, evPrim, evNull) => s"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
+      val tz = ctx.addReferenceMinorObj(timeZone)
       (c, evPrim, evNull) =>
-        s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c) * 1000;"
+        s"$evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMillis($c, $tz) * 1000;"
     case DecimalType() =>
       (c, evPrim, evNull) => s"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
@@ -705,7 +739,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Byte.valueOf($c.toString());
+            $evPrim = $c.toByte();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -727,7 +761,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Short.valueOf($c.toString());
+            $evPrim = $c.toShort();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -749,7 +783,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Integer.valueOf($c.toString());
+            $evPrim = $c.toInt();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -771,7 +805,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = Long.valueOf($c.toString());
+            $evPrim = $c.toLong();
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }

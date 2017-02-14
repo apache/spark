@@ -41,7 +41,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
 #' Logistic Regression Model
 #'
-#' Fits an logistic regression model against a Spark DataFrame. It supports "binomial": Binary logistic regression
+#' Fits an logistic regression model against a SparkDataFrame. It supports "binomial": Binary logistic regression
 #' with pivoting; "multinomial": Multinomial logistic (softmax) regression without pivoting, similar to glmnet.
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
@@ -145,7 +145,7 @@ setMethod("summary", signature(object = "LogisticRegressionModel"),
             labels <- callJMethod(jobj, "labels")
             coefficients <- callJMethod(jobj, "rCoefficients")
             nCol <- length(coefficients) / length(features)
-            coefficients <- matrix(coefficients, ncol = nCol)
+            coefficients <- matrix(unlist(coefficients), ncol = nCol)
             # If nCol == 1, means this is a binomial logistic regression model with pivoting.
             # Otherwise, it's a multinomial logistic regression model without pivoting.
             if (nCol == 1) {

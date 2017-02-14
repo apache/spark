@@ -20,13 +20,13 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -47,7 +47,7 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * is not fully tested.
  */
 @ExtendedHiveTest
-class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSingleton with Logging {
+class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton with Logging {
 
   private val clientBuilder = new HiveClientBuilder
   import clientBuilder.buildClient
@@ -565,12 +565,113 @@ class VersionsSuite extends SparkFunSuite with SQLTestUtils with TestHiveSinglet
             val filePaths = dir.map(_.getName).toList
             folders.flatMap(listFiles) ++: filePaths
           }
-          val expectedFiles = ".part-00000.crc" :: "part-00000" :: Nil
-          assert(listFiles(tmpDir).sorted == expectedFiles)
+          // expect 2 files left: `.part-00000-random-uuid.crc` and `part-00000-random-uuid`
+          assert(listFiles(tmpDir).length == 2)
         }
       }
     }
 
+    test(s"$version: SPARK-13709: reading partitioned Avro table with nested schema") {
+      withTempDir { dir =>
+        val path = dir.toURI.toString
+        val tableName = "spark_13709"
+        val tempTableName = "spark_13709_temp"
+
+        new File(dir.getAbsolutePath, tableName).mkdir()
+        new File(dir.getAbsolutePath, tempTableName).mkdir()
+
+        val avroSchema =
+          """{
+            |  "name": "test_record",
+            |  "type": "record",
+            |  "fields": [ {
+            |    "name": "f0",
+            |    "type": "int"
+            |  }, {
+            |    "name": "f1",
+            |    "type": {
+            |      "type": "record",
+            |      "name": "inner",
+            |      "fields": [ {
+            |        "name": "f10",
+            |        "type": "int"
+            |      }, {
+            |        "name": "f11",
+            |        "type": "double"
+            |      } ]
+            |    }
+            |  } ]
+            |}
+          """.stripMargin
+
+        withTable(tableName, tempTableName) {
+          // Creates the external partitioned Avro table to be tested.
+          sql(
+            s"""CREATE EXTERNAL TABLE $tableName
+               |PARTITIONED BY (ds STRING)
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |LOCATION '$path/$tableName'
+               |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+          )
+
+          // Creates an temporary Avro table used to prepare testing Avro file.
+          sql(
+            s"""CREATE EXTERNAL TABLE $tempTableName
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |LOCATION '$path/$tempTableName'
+               |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+          )
+
+          // Generates Avro data.
+          sql(s"INSERT OVERWRITE TABLE $tempTableName SELECT 1, STRUCT(2, 2.5)")
+
+          // Adds generated Avro data as a new partition to the testing table.
+          sql(s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
+
+          // The following query fails before SPARK-13709 is fixed. This is because when reading
+          // data from table partitions, Avro deserializer needs the Avro schema, which is defined
+          // in table property "avro.schema.literal". However, we only initializes the deserializer
+          // using partition properties, which doesn't include the wanted property entry. Merging
+          // two sets of properties solves the problem.
+          checkAnswer(
+            sql(s"SELECT * FROM $tableName"),
+            Row(1, Row(2, 2.5D), "foo")
+          )
+        }
+      }
+    }
+
+    test(s"$version: CTAS for managed data source tables") {
+      withTable("t", "t1") {
+        import spark.implicits._
+
+        val tPath = new Path(spark.sessionState.conf.warehousePath, "t")
+        Seq("1").toDF("a").write.saveAsTable("t")
+        val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+
+        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
+        checkAnswer(spark.table("t"), Row("1") :: Nil)
+
+        val t1Path = new Path(spark.sessionState.conf.warehousePath, "t1")
+        spark.sql("create table t1 using parquet as select 2 as a")
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
+
+        assert(table1.location.stripSuffix("/") == expectedPath1)
+        assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
+        checkAnswer(spark.table("t1"), Row(2) :: Nil)
+      }
+    }
     // TODO: add more tests.
   }
 }

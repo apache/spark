@@ -126,7 +126,6 @@ test_that("spark.randomForest", {
                                          63.53160, 64.05470, 65.12710, 64.30450,
                                          66.70910, 67.86125, 68.08700, 67.21865,
                                          68.89275, 69.53180, 69.39640, 69.68250),
-
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)

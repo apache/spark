@@ -163,7 +163,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      stringToFile(new File(testCase.resultFile), goldenOutput)
+      val resultFile = new File(testCase.resultFile);
+      val parent = resultFile.getParentFile();
+      if (!parent.exists()) {
+        assert(parent.mkdirs(), "Could not create directory: " + parent)
+      }
+      stringToFile(resultFile, goldenOutput)
     }
 
     // Read back the golden file.
@@ -223,7 +228,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     } catch {
       case a: AnalysisException if a.plan.nonEmpty =>
         // Do not output the logical plan tree which contains expression IDs.
-        (StructType(Seq.empty), Seq(a.getClass.getName, a.getSimpleMessage))
+        // Also implement a crude way of masking expression IDs in the error message
+        // with a generic pattern "###".
+        (StructType(Seq.empty),
+          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))

@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -67,8 +66,6 @@ private[scheduler] abstract class Stage(
 
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
-
-  val pendingPartitions = new HashSet[Int]
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0

@@ -238,7 +238,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  testQuietly("fatal errors from a source should be sent to the user") {
+  testQuietly("handle fatal errors thrown from the stream thread") {
     for (e <- Seq(
       new VirtualMachineError {},
       new ThreadDeath,
@@ -259,8 +259,11 @@ class StreamSuite extends StreamTest {
         override def stop(): Unit = {}
       }
       val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
-      // These error are fatal errors and should be ignored in `testStream` to not fail the test.
       testStream(df)(
+        // `ExpectFailure(isFatalError = true)` verifies two things:
+        // - Fatal errors can be propagated to `StreamingQuery.exception` and
+        //   `StreamingQuery.awaitTermination` like non fatal errors.
+        // - Fatal errors can be caught by UncaughtExceptionHandler.
         ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
@@ -299,6 +302,32 @@ class StreamSuite extends StreamTest {
       assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
+    }
+  }
+
+  test("SPARK-19065: dropDuplicates should not create expressions using the same id") {
+    withTempPath { testPath =>
+      val data = Seq((1, 2), (2, 3), (3, 4))
+      data.toDS.write.mode("overwrite").json(testPath.getCanonicalPath)
+      val schema = spark.read.json(testPath.getCanonicalPath).schema
+      val query = spark
+        .readStream
+        .schema(schema)
+        .json(testPath.getCanonicalPath)
+        .dropDuplicates("_1")
+        .writeStream
+        .format("memory")
+        .queryName("testquery")
+        .outputMode("complete")
+        .start()
+      try {
+        query.processAllAvailable()
+        if (query.exception.isDefined) {
+          throw query.exception.get
+        }
+      } finally {
+        query.stop()
+      }
     }
   }
 }

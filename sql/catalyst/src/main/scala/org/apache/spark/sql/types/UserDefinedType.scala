@@ -78,8 +78,12 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
    */
   override private[spark] def asNullable: UserDefinedType[UserType] = this
 
-  override private[sql] def acceptsType(dataType: DataType) =
-    this.getClass == dataType.getClass
+  override private[sql] def acceptsType(dataType: DataType) = dataType match {
+    case other: UserDefinedType[_] =>
+      this.getClass == other.getClass ||
+        this.userClass.isAssignableFrom(other.userClass)
+    case _ => false
+  }
 
   override def sql: String = sqlType.sql
 

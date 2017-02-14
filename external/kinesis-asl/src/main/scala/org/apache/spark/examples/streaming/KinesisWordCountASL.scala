@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.util.Random
 
-import com.amazonaws.auth.{BasicAWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
