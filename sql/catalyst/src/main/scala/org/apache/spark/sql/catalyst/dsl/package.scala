@@ -374,6 +374,9 @@ package object dsl {
         case plan => SubqueryAlias(alias, plan, None)
       }
 
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
+
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 

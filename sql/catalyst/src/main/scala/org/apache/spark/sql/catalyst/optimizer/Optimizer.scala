@@ -563,23 +563,27 @@ object CollapseProject extends Rule[LogicalPlan] {
 /**
  * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
  * by keeping only the one.
- * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
+ * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]] if their shuffle types
+ *    are the same or the parent's shuffle is true.
  * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
- * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
- *    [[RepartitionByExpression]] with the expression and last number of partition.
+ * 3. When a shuffle-enabled [[Repartition]] is above a [[RepartitionByExpression]], collapse as a
+ *    single [[RepartitionByExpression]] with the expression and the last number of partition.
+ * 4. When a [[RepartitionByExpression]] is above a [[Repartition]], collapse as a single
+ *    [[RepartitionByExpression]] with the expression and the last number of partition.
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Case 1
-    case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
+    case Repartition(numPartitions, shuffle, Repartition(_, shuffleChild, child))
+        if shuffle == shuffleChild || shuffle =>
       Repartition(numPartitions, shuffle, child)
     // Case 2
     case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
       RepartitionByExpression(exprs, child, numPartitions)
     // Case 3
-    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
+    case Repartition(numPartitions, shuffle, r: RepartitionByExpression) if shuffle =>
       r.copy(numPartitions = Some(numPartitions))
-    // Case 3
+    // Case 4
     case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
       RepartitionByExpression(exprs, child, numPartitions)
   }
