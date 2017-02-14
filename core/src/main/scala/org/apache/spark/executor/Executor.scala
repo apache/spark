@@ -348,7 +348,7 @@ private[spark] class Executor(
           // unlikely).  So we will log an error and keep going.
           logError(s"TID ${taskId} completed successfully though internally it encountered " +
             s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
-            s"swallowing Spark's internal exceptions", fetchFailure)
+            s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
         }
         val taskFinish = System.currentTimeMillis()
         val taskFinishCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
@@ -410,15 +410,16 @@ private[spark] class Executor(
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {
-        case ffe: FetchFailedException =>
-          val reason = ffe.toTaskFailedReason
-          setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
-
         case t: Throwable if hasFetchFailure =>
-          // tbere was a fetch failure in the task, but some user code wrapped that exception
-          // and threw something else.  Regardless, we treat it as a fetch failure.
           val reason = task.context.fetchFailed.get.toTaskFailedReason
+          if (!t.isInstanceOf[FetchFailedException]) {
+            // there was a fetch failure in the task, but some user code wrapped that exception
+            // and threw something else.  Regardless, we treat it as a fetch failure.
+            logWarning(s"TID ${taskId} encountered a ${classOf[FetchFailedException]} and " +
+              s"failed, but did not directly throw the ${classOf[FetchFailedException]}.  " +
+              s"Spark is still handling the fetch failure, but these exceptions should not be " +
+              s"intercepted by user code.")
+          }
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 

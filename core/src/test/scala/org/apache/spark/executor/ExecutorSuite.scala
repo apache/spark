@@ -23,12 +23,14 @@ import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
+import scala.concurrent.duration._
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.concurrent.Eventually
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark._
@@ -42,15 +44,15 @@ import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
 
-class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
+class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
 
   test("SPARK-15963: Catch `TaskKilledException` correctly in Executor.TaskRunner") {
     // mock some objects to make Executor.launchTask() happy
     val conf = new SparkConf
     val serializer = new JavaSerializer(conf)
-    val env = mockEnv(conf, serializer)
+    val env = createMockEnv(conf, serializer)
     val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
-    val taskDescription = fakeTaskDescription(serializedTask)
+    val taskDescription = createFakeTaskDescription(serializedTask)
 
     // we use latches to force the program to run in this order:
     // +-----------------------------+---------------------------------------+
@@ -124,13 +126,16 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     }
   }
 
-  test("SPARK-19276: Handle Fetch Failed for all intervening user code") {
+  test("SPARK-19276: Handle FetchFailedExceptions that are hidden by user exceptions") {
     val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
     sc = new SparkContext(conf)
-
     val serializer = SparkEnv.get.closureSerializer.newInstance()
     val resultFunc = (context: TaskContext, itr: Iterator[Int]) => itr.size
-    val inputRDD = new FakeShuffleRDD(sc)
+
+    // Submit a job where a fetch failure is thrown, but user code has a try/catch which hides
+    // the fetch failure.  The executor should still tell the driver that the task failed due to a
+    // fetch failure, not a generic exception from user code.
+    val inputRDD = new FetchFailureThrowingRDD(sc)
     val secondRDD = new FetchFailureHidingRDD(sc, inputRDD)
     val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
     val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
@@ -146,8 +151,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     )
 
     val serTask = serializer.serialize(task)
-    val taskDescription = fakeTaskDescription(serTask)
-
+    val taskDescription = createFakeTaskDescription(serTask)
 
     val failReason = runTaskAndGetFailReason(taskDescription)
     assert(failReason.isInstanceOf[FetchFailed])
@@ -156,9 +160,9 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   test("Gracefully handle error in task deserialization") {
     val conf = new SparkConf
     val serializer = new JavaSerializer(conf)
-    val env = mockEnv(conf, serializer)
+    val env = createMockEnv(conf, serializer)
     val serializedTask = serializer.newInstance().serialize(new NonDeserializableTask)
-    val taskDescription = fakeTaskDescription(serializedTask)
+    val taskDescription = createFakeTaskDescription(serializedTask)
 
     val failReason = runTaskAndGetFailReason(taskDescription)
     failReason match {
@@ -166,11 +170,11 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
         assert(ef.exception.isDefined)
         assert(ef.exception.get.getMessage() === "failure in deserialization")
       case _ =>
-        fail("unexpected failure type: $failReason")
+        fail(s"unexpected failure type: $failReason")
     }
   }
 
-  private def mockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
+  private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
     val mockMetricsSystem = mock[MetricsSystem]
@@ -185,7 +189,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     mockEnv
   }
 
-  private def fakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
+  private def createFakeTaskDescription(serializedTask: ByteBuffer): TaskDescription = {
     new TaskDescription(
       taskId = 0,
       attemptNumber = 0,
@@ -205,12 +209,9 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
-      val startTime = System.currentTimeMillis()
-      val maxTime = startTime + 5000
-      while (executor.numRunningTasks > 0 && System.currentTimeMillis() < maxTime) {
-        Thread.sleep(10)
+      eventually(timeout(5 seconds), interval(10 milliseconds)) {
+        assert(executor.numRunningTasks === 0)
       }
-      assert(executor.numRunningTasks === 0)
     } finally {
       if (executor != null) {
         executor.stop()
@@ -230,7 +231,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   }
 }
 
-class FakeShuffleRDD(sc: SparkContext) extends RDD[Int](sc, Nil) {
+class FetchFailureThrowingRDD(sc: SparkContext) extends RDD[Int](sc, Nil) {
   override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
     new Iterator[Int] {
       override def hasNext: Boolean = true
@@ -256,7 +257,7 @@ class SimplePartition extends Partition {
 
 class FetchFailureHidingRDD(
     sc: SparkContext,
-    val input: FakeShuffleRDD) extends RDD[Int](input) {
+    val input: FetchFailureThrowingRDD) extends RDD[Int](input) {
   override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
     val inItr = input.compute(split, context)
     try {

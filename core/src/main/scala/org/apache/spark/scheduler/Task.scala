@@ -132,8 +132,8 @@ private[spark] abstract class Task[T](
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
-        // though we unset the ThreadLocal here, the context itself is still queried directly
-        // in the TaskRunner to check for FetchFailedExceptions
+        // Though we unset the ThreadLocal here, the context member variable itself is still queried
+        // directly in the TaskRunner to check for FetchFailedExceptions.
         TaskContext.unset()
       }
     }
