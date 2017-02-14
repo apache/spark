@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.SparkException
+import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -363,6 +363,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
 
+    val taskContext = ctx.freshName("taskContext")
+    ctx.addMutableState("TaskContext", taskContext, s"$taskContext = TaskContext.get();")
+
     // In order to periodically update the metrics without inflicting performance penalty, this
     // operator produces elements in batches. After a batch is complete, the metrics are updated
     // and a new batch is started.
@@ -443,6 +446,10 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     if (shouldStop()) return;
       |   }
       |
+      |   if ($taskContext.isInterrupted()) {
+      |     throw new TaskKilledException();
+      |   }
+      |
       |   long $nextBatchTodo;
       |   if ($numElementsTodo > ${batchSize}L) {
       |     $nextBatchTodo = ${batchSize}L;
@@ -482,7 +489,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         val rowSize = UnsafeRow.calculateBitSetWidthInBytes(1) + LongType.defaultSize
         val unsafeRow = UnsafeRow.createFromByteArray(rowSize, 1)
 
-        new Iterator[InternalRow] {
+        val iter = new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
           private[this] var overflow: Boolean = false
 
@@ -511,6 +518,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
             unsafeRow
           }
         }
+        new InterruptibleIterator(TaskContext.get(), iter)
       }
   }
 

@@ -1138,7 +1138,10 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def requestExecutors(numAdditionalExecutors: Int): Boolean =
     sc.requestExecutors(numAdditionalExecutors)
 
-  override def killExecutors(executorIds: Seq[String]): Seq[String] = {
+  override def killExecutors(
+      executorIds: Seq[String],
+      replace: Boolean,
+      force: Boolean): Seq[String] = {
     val response = sc.killExecutors(executorIds)
     if (response) {
       executorIds
@@ -1154,4 +1157,8 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def reviveOffers(): Unit = sb.reviveOffers()
 
   override def defaultParallelism(): Int = sb.defaultParallelism()
+
+  override def killExecutorsOnHost(host: String): Boolean = {
+    false
+  }
 }
