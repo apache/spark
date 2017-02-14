@@ -86,15 +86,10 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     val join = Join(table1, table2, Inner, Some(
       And(EqualTo(nameToAttr("key11"), nameToAttr("key21")),
         EqualTo(nameToAttr("key12"), nameToAttr("key22")))))
-    // Empty column stats for all output columns.
-    val emptyColStat = ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 0,
-      avgLen = 4, maxLen = 4)
-
     val expectedStats = Statistics(
       sizeInBytes = 1,
       rowCount = Some(0),
-      attributeStats = AttributeMap(
-        Seq("key11", "key12", "key21", "key22").map(c => (nameToAttr(c), emptyColStat))))
+      attributeStats = AttributeMap(Nil))
     assert(join.stats(conf) == expectedStats)
   }
 
@@ -300,15 +295,11 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       outputList = Seq(nullColumn),
       rowCount = 1,
       attributeStats = AttributeMap(Seq(nullColumn -> nullColStat)))
-    val join = Join(table1, nullTable, Inner,
-      Some(EqualTo(nameToAttr("key11"), nullColumn)))
-    val emptyColStat = ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 0,
-      avgLen = 4, maxLen = 4)
+    val join = Join(table1, nullTable, Inner, Some(EqualTo(nameToAttr("key11"), nullColumn)))
     val expectedStats = Statistics(
       sizeInBytes = 1,
       rowCount = Some(0),
-      attributeStats = AttributeMap(Seq(nameToAttr("key11") -> emptyColStat,
-        nameToAttr("key12") -> emptyColStat, nullColumn -> emptyColStat)))
+      attributeStats = AttributeMap(Nil))
     assert(join.stats(conf) == expectedStats)
   }
 }
