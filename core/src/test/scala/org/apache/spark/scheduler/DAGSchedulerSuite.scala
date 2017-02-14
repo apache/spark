@@ -2162,6 +2162,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("After fetching failed, success of old attempt of stage should be taken as valid.") {
+    // Create 3 RDDs with shuffle dependencies on each other: rddA <--- rddB <--- rddC
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
     val shuffleIdA = shuffleDepA.shuffleId
@@ -2174,29 +2175,43 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     submit(rddC, Array(0, 1))
     assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
 
+    // Complete both tasks in rddA.
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 2)),
       (Success, makeMapStatus("hostA", 2))))
 
-    // Fetch failed on hostA for task(partitionId=0) and success on hostB for task(partitionId=1)
-    complete(taskSets(1), Seq(
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0,
-        "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"), null),
-      (Success, makeMapStatus("hostB", 2))))
+    // Fetch failed on hostA for task(partitionId=0) and task(partitionId=1) is still running.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0,
+        "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"),
+      result = null))
 
+    // Both original tasks in rddA should be marked as failed, because they ran on the
+    // failed hostA, so both should be resubmitted. Complete them successfully.
     scheduler.resubmitFailedStages()
-    assert(taskSets(2).stageId === 0 && taskSets(2).stageAttemptId === 1)
+    assert(taskSets(2).stageId === 0 && taskSets(2).stageAttemptId === 1
+      && taskSets(2).tasks.size === 2)
     complete(taskSets(2), Seq(
       (Success, makeMapStatus("hostB", 2)),
       (Success, makeMapStatus("hostB", 2))))
 
-    assert(taskSets(3).stageId === 1 && taskSets(2).stageAttemptId === 1)
+    // Both tasks in rddB should be resubmitted, because none of them has succeeded.
+    // Complete the task(partitionId=0) successfully. Task(partitionId=1) is still running.
+    assert(taskSets(3).stageId === 1 && taskSets(3).stageAttemptId === 1 &&
+      taskSets(3).tasks.size === 2)
     runEvent(makeCompletionEvent(
       taskSets(3).tasks(0), Success, makeMapStatus("hostB", 2)))
 
-    // Thanks to the success from old attempt of stage(stageId=1), there's no pending
-    // partitions for stage(stageId=1) now, thus downstream stage should be submitted,
-    // though there's still a running task in the active stage attempt.
+    // Complete the task(partition=1) which is from the old attempt(stageId=1, stageAttempt=0)
+    // successfully.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostB", 2)))
+
+    // Thanks to the success from old attempt of stage(stageId=1, stageAttempt=0), there's no
+    // pending partitions for stage(stageId=1) now, thus downstream stage should be submitted,
+    // though there's still a running task(stageId=1, stageAttempt=1, partitionId=1)
+    // in the active stage attempt.
     assert(taskSets.size === 5 && taskSets(4).tasks(0).isInstanceOf[ResultTask[_, _]])
     complete(taskSets(4), Seq(
       (Success, 1),
