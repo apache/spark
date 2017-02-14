@@ -685,7 +685,11 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(url)
     schema.fields foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
-      val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      val typ: String = if (field.metadata.contains("createTableColumnType")) {
+        field.metadata.getString("createTableColumnType")
+      } else {
+        getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      }
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }
