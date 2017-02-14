@@ -44,6 +44,9 @@ library(SparkR)
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
+```{r, include=FALSE}
+install.spark()
+```
 ```{r, message=FALSE, results="hide"}
 sparkR.session()
 ```
