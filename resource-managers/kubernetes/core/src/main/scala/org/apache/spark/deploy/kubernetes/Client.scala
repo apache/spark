@@ -747,9 +747,11 @@ private[spark] class Client(
         node.getSpec.getUnschedulable)
       .flatMap(_.getStatus.getAddresses.asScala)
       // The list contains hostnames, internal and external IP addresses.
-      // we want only external IP addresses in our list
       // (https://kubernetes.io/docs/admin/node/#addresses)
-      .filter(_.getType == "ExternalIP")
+      // we want only external IP addresses and legacyHostIP addresses in our list
+      // legacyHostIPs are deprecated and will be removed in the future.
+      // (https://github.com/kubernetes/kubernetes/issues/9267)
+      .filter(address => address.getType == "ExternalIP" || address.getType == "LegacyHostIP")
       .map(address => {
         s"$urlScheme://${address.getAddress}:$servicePort"
       }).toSet
