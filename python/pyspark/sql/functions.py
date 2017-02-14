@@ -1864,6 +1864,11 @@ class UserDefinedFunction(object):
     .. versionadded:: 1.3
     """
     def __init__(self, func, returnType, name=None):
+        if not callable(func):
+            raise TypeError(
+                "Not a function or callable (__call__ is not defined): "
+                "{0}".format(type(func)))
+
         self.func = func
         self.returnType = (
             returnType if isinstance(returnType, DataType)
