@@ -1822,12 +1822,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a string, b int)
-              |USING parquet
-              |OPTIONS(path "file:${dir.getCanonicalPath}")
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
         assert(table.location.stripSuffix("/") == expectedPath)
 
         dir.delete
@@ -1864,13 +1864,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a int, b int, c int, d int)
-              |USING parquet
-              |PARTITIONED BY(a, b)
-              |LOCATION "file:${dir.getCanonicalPath}"
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
         assert(table.location.stripSuffix("/") == expectedPath)
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
@@ -1883,8 +1883,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         spark.sql("INSERT OVERWRITE TABLE t PARTITION(a=1, b=2) SELECT 7, 8")
         assert(partLoc.exists())
         checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
-
-        // TODO:insert into a partition after alter the partition location by alter command
       }
     }
   }
@@ -1894,12 +1892,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a string, b int)
-              |USING parquet
-              |OPTIONS(path "file:${dir.getAbsolutePath}")
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
         assert(table.location.stripSuffix("/") == expectedPath)
 
         dir.delete()
@@ -1921,13 +1919,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a int, b int, c int, d int)
-              |USING parquet
-              |PARTITIONED BY(a, b)
-              |LOCATION "file:${dir.getCanonicalPath}"
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
            """.stripMargin)
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
 
