@@ -60,7 +60,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @param standardization Whether to standardize the training features before fitting the model. The coefficients
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
-#'                        to the same solution when no regularization is applied. Default is TRUE, same as glmnet.
+#'                        to the same solution when no regularization is applied.
 #' @param threshold The threshold in binary classification, in range [0, 1].
 #' @param weightCol The weight column name.
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
