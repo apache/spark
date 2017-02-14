@@ -568,6 +568,21 @@ class SQLTests(ReusedPySparkTestCase):
             [2, 3.0, "FOO", "foo", "foo", 3, 1.0]
         )
 
+    def test_udf_wrapper(self):
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import IntegerType
+
+        def f(x):
+            """Identity"""
+            return x
+
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
