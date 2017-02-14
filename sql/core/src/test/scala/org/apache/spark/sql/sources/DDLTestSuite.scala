@@ -83,13 +83,13 @@ class DDLTestSuite extends DataSourceTest with SharedSQLContext {
     super.beforeAll()
     sql(
       """
-      |CREATE TEMPORARY TABLE ddlPeople
-      |USING org.apache.spark.sql.sources.DDLScanSource
-      |OPTIONS (
-      |  From '1',
-      |  To '10',
-      |  Table 'test1'
-      |)
+       |CREATE OR REPLACE TEMPORARY VIEW ddlPeople
+       |USING org.apache.spark.sql.sources.DDLScanSource
+       |OPTIONS (
+       |  From '1',
+       |  To '10',
+       |  Table 'test1'
+       |)
       """.stripMargin)
   }
 
