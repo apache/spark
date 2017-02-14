@@ -18,39 +18,33 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.internal.HiveSerDe
 
 
 /**
- * Determine the serde/format of the Hive serde table, according to the storage properties.
+ * Determine the database, serde/format and schema of the Hive serde table, according to the storage
+ * properties.
  */
-class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) && t.storage.serde.isEmpty =>
-      if (t.bucketSpec.isDefined) {
+class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
+  private def determineHiveSerde(table: CatalogTable): CatalogTable = {
+    if (table.storage.serde.nonEmpty) {
+      table
+    } else {
+      if (table.bucketSpec.isDefined) {
         throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
       }
-      if (t.partitionColumnNames.nonEmpty && query.isDefined) {
-        val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
-          "create a partitioned table using Hive's file formats. " +
-          "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
-          "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
-          "CTAS statement."
-        throw new AnalysisException(errorMessage)
-      }
 
-      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-      val options = new HiveOptions(t.storage.properties)
+      val defaultStorage = HiveSerDe.getDefaultStorage(session.sessionState.conf)
+      val options = new HiveOptions(table.storage.properties)
 
       val fileStorage = if (options.fileFormat.isDefined) {
         HiveSerDe.sourceToSerDe(options.fileFormat.get) match {
@@ -76,59 +70,63 @@ class DetermineHiveSerde(conf: SQLConf) extends Rule[LogicalPlan] {
         CatalogStorageFormat.empty
       }
 
-      val storage = t.storage.copy(
+      val storage = table.storage.copy(
         inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
         outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
         serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
         properties = options.serdeProperties)
 
-      c.copy(tableDesc = t.copy(storage = storage))
+      table.copy(storage = storage)
+    }
   }
-}
 
-class HiveAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case InsertIntoTable(table: MetastoreRelation, partSpec, query, overwrite, ifNotExists)
-        if hasBeenPreprocessed(table.output, table.partitionKeys.toStructType, partSpec, query) =>
-      InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
+    case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
+      // Finds the database name if the name does not exist.
+      val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
+      val table = t.copy(identifier = t.identifier.copy(database = Some(dbName)))
 
-    case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      // Currently `DataFrameWriter.saveAsTable` doesn't support the Append mode of hive serde
-      // tables yet.
-      if (mode == SaveMode.Append) {
-        throw new AnalysisException(
-          "CTAS for hive serde tables does not support append semantics.")
+      // Determines the serde/format of Hive tables
+      val withStorage = determineHiveSerde(table)
+
+      // Infers the schema, if empty, because the schema could be determined by Hive
+      // serde.
+      val catalogTable = if (query.isEmpty) {
+        val withSchema = HiveUtils.inferSchema(withStorage)
+        if (withSchema.schema.length <= 0) {
+          throw new AnalysisException("Unable to infer the schema. " +
+            s"The schema specification is required to create the table ${withSchema.identifier}.")
+        }
+        withSchema
+      } else {
+        withStorage
       }
 
-      val dbName = tableDesc.identifier.database.getOrElse(session.catalog.currentDatabase)
-      CreateHiveTableAsSelectCommand(
-        tableDesc.copy(identifier = tableDesc.identifier.copy(database = Some(dbName))),
-        query,
-        mode == SaveMode.Ignore)
-  }
-
-  /**
-   * Returns true if the [[InsertIntoTable]] plan has already been preprocessed by analyzer rule
-   * [[PreprocessTableInsertion]]. It is important that this rule([[HiveAnalysis]]) has to
-   * be run after [[PreprocessTableInsertion]], to normalize the column names in partition spec and
-   * fix the schema mismatch by adding Cast.
-   */
-  private def hasBeenPreprocessed(
-      tableOutput: Seq[Attribute],
-      partSchema: StructType,
-      partSpec: Map[String, Option[String]],
-      query: LogicalPlan): Boolean = {
-    val partColNames = partSchema.map(_.name).toSet
-    query.resolved && partSpec.keys.forall(partColNames.contains) && {
-      val staticPartCols = partSpec.filter(_._2.isDefined).keySet
-      val expectedColumns = tableOutput.filterNot(a => staticPartCols.contains(a.name))
-      expectedColumns.toStructType.sameType(query.schema)
-    }
+      c.copy(tableDesc = catalogTable)
   }
 }
 
 /**
- * Replaces [[SimpleCatalogRelation]] with [[MetastoreRelation]] if its table provider is hive.
+ * Replaces generic operations with specific variants that are designed to work with Hive.
+ *
+ * Note that, this rule must be run after `PreprocessTableCreation` and
+ * `PreprocessTableInsertion`.
+ */
+object HiveAnalysis extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case InsertIntoTable(table: MetastoreRelation, partSpec, query, overwrite, ifNotExists) =>
+      InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
+
+    case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
+      CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+
+    case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
+      CreateHiveTableAsSelectCommand(tableDesc, query, mode)
+  }
+}
+
+/**
+ * Replaces `SimpleCatalogRelation` with [[MetastoreRelation]] if its table provider is hive.
  */
 class FindHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {

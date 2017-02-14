@@ -106,6 +106,13 @@ class Analyzer(
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  /**
+   * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
+   * in an individual batch. This batch is to run right after the normal resolution batch and
+   * execute its rules in one pass.
+   */
+  val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
@@ -139,6 +146,7 @@ class Analyzer(
       ResolveInlineTables ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("View", Once,
       AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
@@ -147,6 +155,8 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    Batch("ResolveTimeZone", Once,
+      ResolveTimeZone),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -215,7 +225,7 @@ class Analyzer(
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
-              case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
+              case c @ Cast(ne: NamedExpression, _, _) => Alias(c, ne.name)()
               case e: ExtractValue => Alias(e, toPrettySQL(e))()
               case e if optGenAliasFunc.isDefined =>
                 Alias(child, optGenAliasFunc.get.apply(e))()
@@ -565,9 +575,9 @@ class Analyzer(
     //     |- view2 (defaultDatabase = db2)
     //        |- view3 (defaultDatabase = db3)
     //   |- view4 (defaultDatabase = db4)
-    // In this case, the view `view1` is a nested view, it directly references `table2`、`view2`
+    // In this case, the view `view1` is a nested view, it directly references `table2`, `view2`
     // and `view4`, the view `view2` references `view3`. On resolving the table, we look up the
-    // relations `table2`、`view2`、`view4` using the default database `db1`, and look up the
+    // relations `table2`, `view2`, `view4` using the default database `db1`, and look up the
     // relation `view3` using the default database `db2`.
     //
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
@@ -2061,7 +2071,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -2302,6 +2312,18 @@ class Analyzer(
 
         case UpCast(child, dataType, walkedTypePath) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  /**
+   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * time zone.
+   */
+  object ResolveTimeZone extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+      case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
+        e.withTimeZone(conf.sessionLocalTimeZone)
     }
   }
 }

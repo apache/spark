@@ -62,7 +62,7 @@ object FileSourceStrategy extends Strategy with Logging {
       val filterSet = ExpressionSet(filters)
 
       // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we donot need to
+      // case insensitive, we should change them to match the one in schema, so we do not need to
       // worry about case sensitivity anymore.
       val normalizedFilters = filters.map { e =>
         e transform {

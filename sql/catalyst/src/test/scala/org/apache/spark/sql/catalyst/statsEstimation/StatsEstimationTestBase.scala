@@ -45,11 +45,12 @@ class StatsEstimationTestBase extends SparkFunSuite {
 protected case class StatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
-    attributeStats: AttributeMap[ColumnStat]) extends LeafNode {
+    attributeStats: AttributeMap[ColumnStat],
+    size: Option[BigInt] = None) extends LeafNode {
   override def output: Seq[Attribute] = outputList
   override def computeStats(conf: CatalystConf): Statistics = Statistics(
-    // sizeInBytes in stats of StatsTestPlan is useless in cbo estimation, we just use a fake value
-    sizeInBytes = Int.MaxValue,
+    // If sizeInBytes is useless in testing, we just use a fake value
+    sizeInBytes = size.getOrElse(Int.MaxValue),
     rowCount = Some(rowCount),
     attributeStats = attributeStats)
 }

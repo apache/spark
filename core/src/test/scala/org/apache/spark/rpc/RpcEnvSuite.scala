@@ -637,11 +637,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(anotherEnv.address.port != env.address.port)
   }
 
-  test("send with authentication") {
-    val conf = new SparkConf
-    conf.set("spark.authenticate", "true")
-    conf.set("spark.authenticate.secret", "good")
-
+  private def testSend(conf: SparkConf): Unit = {
     val localEnv = createRpcEnv(conf, "authentication-local", 0)
     val remoteEnv = createRpcEnv(conf, "authentication-remote", 0, clientMode = true)
 
@@ -667,11 +663,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("ask with authentication") {
-    val conf = new SparkConf
-    conf.set("spark.authenticate", "true")
-    conf.set("spark.authenticate.secret", "good")
-
+  private def testAsk(conf: SparkConf): Unit = {
     val localEnv = createRpcEnv(conf, "authentication-local", 0)
     val remoteEnv = createRpcEnv(conf, "authentication-remote", 0, clientMode = true)
 
@@ -693,6 +685,48 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       remoteEnv.shutdown()
       remoteEnv.awaitTermination()
     }
+  }
+
+  test("send with authentication") {
+    testSend(new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good"))
+  }
+
+  test("send with SASL encryption") {
+    testSend(new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.authenticate.enableSaslEncryption", "true"))
+  }
+
+  test("send with AES encryption") {
+    testSend(new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.network.crypto.enabled", "true")
+      .set("spark.network.crypto.saslFallback", "false"))
+  }
+
+  test("ask with authentication") {
+    testAsk(new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good"))
+  }
+
+  test("ask with SASL encryption") {
+    testAsk(new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.authenticate.enableSaslEncryption", "true"))
+  }
+
+  test("ask with AES encryption") {
+    testAsk(new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.network.crypto.enabled", "true")
+      .set("spark.network.crypto.saslFallback", "false"))
   }
 
   test("construct RpcTimeout with conf property") {

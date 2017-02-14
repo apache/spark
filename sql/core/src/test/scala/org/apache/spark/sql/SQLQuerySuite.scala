@@ -982,6 +982,33 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
+  test("SPARK-19218 SET command should show a result in a sorted order") {
+    val overrideConfs = sql("SET").collect()
+    sql(s"SET test.key3=1")
+    sql(s"SET test.key2=2")
+    sql(s"SET test.key1=3")
+    val result = sql("SET").collect()
+    assert(result ===
+      (overrideConfs ++ Seq(
+        Row("test.key1", "3"),
+        Row("test.key2", "2"),
+        Row("test.key3", "1"))).sortBy(_.getString(0))
+    )
+    spark.sessionState.conf.clear()
+  }
+
+  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
+    import SQLConf._
+    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
+
+    try {
+      val result = sql("SET -v").collect()
+      assert(result === result.sortBy(_.getString(0)))
+    } finally {
+      SQLConf.unregister(confEntry)
+    }
+  }
+
   test("SET commands with illegal or inappropriate argument") {
     spark.sessionState.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
@@ -1544,7 +1571,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("specifying database name for a temporary table is not allowed") {
+  test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
       val path = dir.toURI.toString
       val df =
@@ -1558,23 +1585,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       intercept[AnalysisException] {
         spark.sql(
           s"""
-          |CREATE TEMPORARY TABLE db.t
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
+            |CREATE TEMPORARY VIEW db.t
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+           """.stripMargin)
       }.getMessage
 
       // If you use backticks to quote the name then it's OK.
       spark.sql(
         s"""
-          |CREATE TEMPORARY TABLE `db.t`
+          |CREATE TEMPORARY VIEW `db.t`
           |USING parquet
           |OPTIONS (
           |  path '$path'
           |)
-        """.stripMargin)
+         """.stripMargin)
       checkAnswer(spark.table("`db.t`"), df)
     }
   }
@@ -2521,4 +2548,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer( sql("SELECT * FROM `_tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
     }
   }
+
+  test("SPARK-19334: check code injection is prevented") {
+    // The end of comment (*/) should be escaped.
+    val badQuery =
+      """|SELECT inline(array(cast(struct(1) AS
+         |  struct<`=
+         |    new Object() {
+         |      {f();}
+         |      public void f() {throw new RuntimeException("This exception is injected.");}
+         |      public int x;
+         |    }.x
+         |  `:int>)))""".stripMargin.replaceAll("\n", "")
+
+    checkAnswer(sql(badQuery), Row(1) :: Nil)
+  }
+
 }

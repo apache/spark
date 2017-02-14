@@ -67,28 +67,34 @@ class EquivalentExpressions {
   /**
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
-   * If ignoreLeaf is true, leaf nodes are ignored.
    */
-  def addExprTree(
-      root: Expression,
-      ignoreLeaf: Boolean = true,
-      skipReferenceToExpressions: Boolean = true): Unit = {
-    val skip = (root.isInstanceOf[LeafExpression] && ignoreLeaf) ||
+  def addExprTree(expr: Expression): Unit = {
+    val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      root.find(_.isInstanceOf[LambdaVariable]).isDefined
-    // There are some special expressions that we should not recurse into children.
+      expr.find(_.isInstanceOf[LambdaVariable]).isDefined
+
+    // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-    //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
-    val shouldRecurse = root match {
-      // TODO: some expressions implements `CodegenFallback` but can still do codegen,
-      // e.g. `CaseWhen`, we should support them.
-      case _: CodegenFallback => false
-      case _: ReferenceToExpressions if skipReferenceToExpressions => false
-      case _ => true
+    //   2. If: common subexpressions will always be evaluated at the beginning, but the true and
+    //          false expressions in `If` may not get accessed, according to the predicate
+    //          expression. We should only recurse into the predicate expression.
+    //   3. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
+    //                condition. We should only recurse into the first condition expression as it
+    //                will always get accessed.
+    //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
+    //                children, because others may not get accessed.
+    def childrenToRecurse: Seq[Expression] = expr match {
+      case _: CodegenFallback => Nil
+      case i: If => i.predicate :: Nil
+      // `CaseWhen` implements `CodegenFallback`, we only need to handle `CaseWhenCodegen` here.
+      case c: CaseWhenCodegen => c.children.head :: Nil
+      case c: Coalesce => c.children.head :: Nil
+      case other => other.children
     }
-    if (!skip && !addExpr(root) && shouldRecurse) {
-      root.children.foreach(addExprTree(_, ignoreLeaf))
+
+    if (!skip && !addExpr(expr)) {
+      childrenToRecurse.foreach(addExprTree)
     }
   }
 

@@ -380,8 +380,8 @@ abstract class Catalog {
    *
    * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
    * i.e. it will be automatically dropped when the application terminates. It's tied to a system
-   * preserved database `_global_temp`, and we must use the qualified name to refer a global temp
-   * view, e.g. `SELECT * FROM _global_temp.view1`.
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
    *
    * @param viewName the name of the view to be dropped.
    * @return true if the view is dropped successfully, false otherwise.

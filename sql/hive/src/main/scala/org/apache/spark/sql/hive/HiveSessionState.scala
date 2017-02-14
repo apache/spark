@@ -60,18 +60,20 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.OrcConversions ::
-        AnalyzeCreateTable(sparkSession) ::
-        PreprocessTableInsertion(conf) ::
-        DataSourceAnalysis(conf) ::
-        new DetermineHiveSerde(conf) ::
-        new HiveAnalysis(sparkSession) ::
+        new ResolveHiveSerdeTable(sparkSession) ::
         new FindDataSourceTable(sparkSession) ::
         new FindHiveSerdeTable(sparkSession) ::
-        new ResolveDataSource(sparkSession) :: Nil
+        new ResolveSQLOnFile(sparkSession) :: Nil
 
-      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
+      override val postHocResolutionRules =
+        catalog.ParquetConversions ::
+        catalog.OrcConversions ::
+        PreprocessTableCreation(sparkSession) ::
+        PreprocessTableInsertion(conf) ::
+        DataSourceAnalysis(conf) ::
+        HiveAnalysis :: Nil
+
+      override val extendedCheckRules = Seq(PreWriteCheck)
     }
   }
 
@@ -87,7 +89,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          DDLStrategy,
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
