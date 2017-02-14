@@ -179,7 +179,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     }
 
     val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    if (isSetOffsetCol(this)) SchemaUtils.checkNumericType(schema, $(offsetCol))
+    if (fitting) {
+      if (isSetOffsetCol(this)) SchemaUtils.checkNumericType(schema, $(offsetCol))
+    }
     if (hasLinkPredictionCol) {
       SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
     } else {
@@ -437,11 +439,11 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   /** Checks whether weight column is set and nonempty */
   private[regression] def isSetWeightCol(params: GeneralizedLinearRegressionBase): Boolean =
-    params.isSet(params.weightCol) && !params.getWeightCol.isEmpty
+    params.isSet(params.weightCol) && params.getWeightCol.nonEmpty
 
   /** Checks whether offset column is set and nonempty */
   private[regression] def isSetOffsetCol(params: GeneralizedLinearRegressionBase): Boolean =
-    params.isSet(params.offsetCol) && !params.getOffsetCol.isEmpty
+    params.isSet(params.offsetCol) && params.getOffsetCol.nonEmpty
 
   /**
    * Wrapper of family and link combination used in the model.
@@ -981,12 +983,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   private lazy val familyAndLink = FamilyAndLink(this)
 
   override protected def predict(features: Vector): Double = {
-    if (!isSetOffsetCol(this)) {
-      val eta = BLAS.dot(features, coefficients) + intercept
-      familyAndLink.fitted(eta)
-    } else {
-      throw new SparkException("Must supply offset to predict when offset column is set.")
-    }
+    predict(features, 0.0)
   }
 
   /**
@@ -1012,7 +1009,22 @@ class GeneralizedLinearRegressionModel private[ml] (
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
     val predictLinkUDF = udf { (features: Vector, offset: Double) => predictLink(features, offset) }
-    val offset = if (!isSetOffsetCol(this)) lit(0.0) else col($(offsetCol)).cast(DoubleType)
+    /*
+     Offset is only validated when it's specified in the model and available in prediction data set.
+     When offset is specified but missing in the prediction data set, we default it to zero.
+     */
+    val offset = {
+      if (!isSetOffsetCol(this)) {
+        lit(0.0)
+      } else {
+        if (dataset.schema.fieldNames.contains($(offsetCol))) {
+          SchemaUtils.checkNumericType(dataset.schema, $(offsetCol))
+          col($(offsetCol)).cast(DoubleType)
+        } else {
+          lit(0.0)
+        }
+      }
+    }
     var output = dataset
     if ($(predictionCol).nonEmpty) {
       output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), offset))

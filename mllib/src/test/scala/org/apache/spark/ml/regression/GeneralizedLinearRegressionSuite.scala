@@ -853,10 +853,10 @@ class GeneralizedLinearRegressionSuite
 
     for (fitIntercept <- Seq(false, true)) {
       for (family <- Seq("gaussian", "binomial", "poisson", "gamma", "tweedie")) {
-        var trainer = new GeneralizedLinearRegression().setFamily(family)
+        val trainer = new GeneralizedLinearRegression().setFamily(family)
           .setFitIntercept(fitIntercept).setOffsetCol("offset")
           .setWeightCol("weight").setLinkPredictionCol("linkPrediction")
-        if (family == "tweedie") trainer = trainer.setVariancePower(1.5)
+        if (family == "tweedie") trainer.setVariancePower(1.5)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with family = $family," +
@@ -878,6 +878,31 @@ class GeneralizedLinearRegressionSuite
 
         idx += 1
       }
+    }
+  }
+
+  test("generalized linear regression: predict with no offset") {
+    val trainData = Seq(
+      OffsetInstance(2.0, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
+      OffsetInstance(8.0, 2.0, 3.0, Vectors.dense(1.0, 7.0)),
+      OffsetInstance(3.0, 3.0, 1.0, Vectors.dense(2.0, 11.0)),
+      OffsetInstance(9.0, 4.0, 4.0, Vectors.dense(3.0, 13.0))
+    ).toDF()
+    val testData = trainData.select("weight", "features")
+
+    val trainer = new GeneralizedLinearRegression()
+      .setFamily("poisson")
+      .setWeightCol("weight")
+      .setOffsetCol("offset")
+      .setLinkPredictionCol("linkPrediction")
+
+    val model = trainer.fit(trainData)
+    model.transform(testData).show()
+    model.transform(testData).select("features", "linkPrediction")
+      .collect().foreach {
+      case Row(features: DenseVector, linkPrediction1: Double) =>
+        val linkPrediction2 = BLAS.dot(features, model.coefficients) + model.intercept
+        assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch")
     }
   }
 

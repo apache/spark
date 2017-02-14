@@ -37,8 +37,11 @@ private[ml] case class Instance(label: Double, weight: Double, features: Vector)
  * @param offset The offset used for this data point.
  * @param features The vector of features for this data point.
  */
-private[ml] case class OffsetInstance(label: Double, weight: Double, offset: Double,
-                                   features: Vector) {
+private[ml] case class OffsetInstance(
+    label: Double,
+    weight: Double,
+    offset: Double,
+    features: Vector) {
 
   /** Constructs from an [[Instance]] object and offset */
   def this(instance: Instance, offset: Double = 0.0) = {
