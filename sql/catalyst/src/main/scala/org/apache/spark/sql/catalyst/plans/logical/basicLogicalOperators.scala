@@ -363,6 +363,29 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
+ * A general hint for the child. This node will be eliminated post analysis.
+ * A pair of (name, parameters).
+ */
+case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * Options for writing new data into a table.
+ *
+ * @param enabled whether to overwrite existing data in the table.
+ * @param specificPartition only data in the specified partition will be overwritten.
+ */
+case class OverwriteOptions(
+    enabled: Boolean,
+    specificPartition: Option[CatalogTypes.TablePartitionSpec] = None) {
+  if (specificPartition.isDefined) {
+    assert(enabled, "Overwrite must be enabled when specifying a partition to overwrite.")
+  }
+}
+
+/**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
  * concrete implementations during analysis.
  *
