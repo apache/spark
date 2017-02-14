@@ -32,8 +32,14 @@ test_that("spark.svmLinear", {
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   model <- model <- spark.svmLinear(training,  Species ~ ., regParam = 0.01, maxIter = 10)
   summary <- summary(model)
-  expect_equal(summary$coefficients, list(-0.1563083, -0.460648, 0.2276626, 1.055085),
-               tolerance = 1e-2)
+
+  # test summary coefficients return matrix type
+  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(class(summary$coefficients[, 1]) == "numeric")
+
+  coefs <- summary$coefficients[, "Estimate"]
+  expected_coefs <- c(-0.1563083, -0.460648, 0.2276626, 1.055085)
+  expect_true(all(abs(coefs - expected_coefs) < 0.1))
   expect_equal(summary$intercept, -0.06004978, tolerance = 1e-2)
 
   # Test prediction with string label

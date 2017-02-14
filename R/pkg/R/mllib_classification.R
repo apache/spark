@@ -98,14 +98,16 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
                    threshold = 0.5, weightCol = NULL, aggregationDepth = 2) {
             formula <- paste(deparse(formula), collapse = "")
 
-            if (weightCol == "") {
+            if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LinearSVCWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam), as.integer(maxIter),
                                 as.numeric(tol), as.logical(standardization), as.numeric(threshold),
-                                as.character(weightCol), as.integer(aggregationDepth))
+                                weightCol, as.integer(aggregationDepth))
             new("LinearSVCModel", jobj = jobj)
           })
 
@@ -136,10 +138,20 @@ setMethod("predict", signature(object = "LinearSVCModel"),
 setMethod("summary", signature(object = "LinearSVCModel"),
           function(object) {
             jobj <- object@jobj
+            features <- callJMethod(jobj, "features")
+            labels <- callJMethod(jobj, "labels")
             coefficients <- callJMethod(jobj, "coefficients")
+            nCol <- length(coefficients) / length(features)
+            coefficients <- matrix(unlist(coefficients), ncol = nCol)
             intercept <- callJMethod(jobj, "intercept")
             numClasses <- callJMethod(jobj, "numClasses")
             numFeatures <- callJMethod(jobj, "numFeatures")
+            if (nCol == 1) {
+              colnames(coefficients) <- c("Estimate")
+            } else {
+              colnames(coefficients) <- unlist(labels)
+            }
+            rownames(coefficients) <- unlist(features)
             list(coefficients = coefficients, intercept = intercept,
                  numClasses = numClasses, numFeatures = numFeatures)
           })
