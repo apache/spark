@@ -1546,12 +1546,12 @@ class GeneralizedLinearRegressionSuite
     val formula = new RFormula().setFormula("y ~ x1 + x2")
     val dataset2 = formula.fit(datasetTmp).transform(datasetTmp)
 
-    val expectedFeature = Seq(Array("V1", "V2"), Array("x1", "x2"))
+    val expectedFeature = Seq(Array("features_0", "features_1"), Array("x1", "x2"))
 
     var idx = 0
     for (dataset <- Seq(dataset1, dataset2)) {
       val model = new GeneralizedLinearRegression().fit(dataset)
-      model.summary.featureName.zip(expectedFeature(idx))
+      model.summary.featureNames.zip(expectedFeature(idx))
         .foreach{ x => assert(x._1 === x._2) }
       idx += 1
     }
@@ -1566,8 +1566,8 @@ class GeneralizedLinearRegressionSuite
       Instance(2.0, 5.0, Vectors.dense(2.0, 3.0))
     ).toDF()
 
-    val expectedFeature = Seq(Array("V1", "V2"),
-      Array("Intercept", "V1", "V2"))
+    val expectedFeature = Seq(Array("features_0", "features_1"),
+      Array("Intercept", "features_0", "features_1"))
     val expectedEstimate = Seq(Vectors.dense(0.2884, 0.538),
       Vectors.dense(0.7903, 0.2258, 0.4677))
     val expectedStdError = Seq(Vectors.dense(1.724, 0.3787),
@@ -1585,17 +1585,17 @@ class GeneralizedLinearRegressionSuite
       val model = trainer.fit(dataset)
       val summaryTable = model.summary.summaryTable
 
-      summaryTable.select("Feature").rdd.collect.map(_.getString(0))
+      summaryTable.select("Feature").collect.map(_.getString(0))
         .zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
         "Feature name mismatch in summaryTable") }
-      assert(Vectors.dense(summaryTable.select("Estimate").rdd.collect.map(_.getDouble(0)))
-        ~= expectedEstimate(idx) absTol 1E-3, "Coefficient mismatch in summaryTable")
+      assert(Vectors.dense(summaryTable.select("Coefficient").rdd.collect.map(_.getDouble(0)))
+        ~== expectedEstimate(idx) absTol 1E-3, "Coefficient mismatch in summaryTable")
       assert(Vectors.dense(summaryTable.select("StdError").rdd.collect.map(_.getDouble(0)))
-        ~= expectedStdError(idx) absTol 1E-3, "Standard error mismatch in summaryTable")
+        ~== expectedStdError(idx) absTol 1E-3, "Standard error mismatch in summaryTable")
       assert(Vectors.dense(summaryTable.select("TValue").rdd.collect.map(_.getDouble(0)))
-        ~= expectedTValue(idx) absTol 1E-3, "TValue mismatch in summaryTable")
+        ~== expectedTValue(idx) absTol 1E-3, "TValue mismatch in summaryTable")
       assert(Vectors.dense(summaryTable.select("PValue").rdd.collect.map(_.getDouble(0)))
-        ~= expectedPValue(idx) absTol 1E-3, "PValue mismatch in summaryTable")
+        ~== expectedPValue(idx) absTol 1E-3, "PValue mismatch in summaryTable")
 
       idx += 1
     }

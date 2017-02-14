@@ -471,6 +471,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] val epsilon: Double = 1E-16
 
+  private[regression] val Intercept: String = "Intercept"
+
   /**
    * Wrapper of family and link combination used in the model.
    */
@@ -1209,14 +1211,15 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Name of features. If the name cannot be retrieved from attributes,
-   * set default names to "V1", "V2", and so on.
+   * set default names to feature column name with numbered suffix "_0", "_1", and so on.
    */
   @Since("2.2.0")
-  lazy val featureName: Array[String] = {
+  lazy val featureNames: Array[String] = {
     val featureAttrs = AttributeGroup.fromStructField(
       dataset.schema(model.getFeaturesCol)).attributes
     if (featureAttrs == None) {
-      Array.tabulate[String](origModel.numFeatures)((x: Int) => ("V" + (x + 1)))
+      Array.tabulate[String](origModel.numFeatures)(
+        (x: Int) => (model.getFeaturesCol + "_" + x))
     } else {
       featureAttrs.get.map(_.name.get)
     }
@@ -1484,21 +1487,22 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
   @Since("2.2.0")
   lazy val summaryTable: DataFrame = {
     if (isNormalSolver) {
-      var featureNames = featureName
+      var featureNamesLocal = featureNames
       var coefficients = model.coefficients.toArray
       var idx = Array.range(0, coefficients.length)
       if (model.getFitIntercept) {
-        featureNames = featureNames :+ "Intercept"
+        featureNamesLocal = featureNamesLocal :+ Intercept
         coefficients = coefficients :+ model.intercept
         // Reorder so that intercept comes first
         idx = (coefficients.length - 1) +: idx
       }
       val result = for (i <- idx.toSeq) yield
-        (featureNames(i), coefficients(i), coefficientStandardErrors(i), tValues(i), pValues(i))
+        (featureNamesLocal(i), coefficients(i), coefficientStandardErrors(i),
+        tValues(i), pValues(i))
 
       val spark = SparkSession.builder().getOrCreate()
       import spark.implicits._
-      result.toDF("Feature", "Estimate", "StdError", "TValue", "PValue").repartition(1)
+      result.toDF("Feature", "Coefficient", "StdError", "TValue", "PValue").repartition(1)
     } else {
       throw new UnsupportedOperationException(
         "No summary table available for this GeneralizedLinearRegressionModel")
