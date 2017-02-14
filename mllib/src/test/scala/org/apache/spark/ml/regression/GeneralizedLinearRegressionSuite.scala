@@ -897,7 +897,6 @@ class GeneralizedLinearRegressionSuite
       .setLinkPredictionCol("linkPrediction")
 
     val model = trainer.fit(trainData)
-    model.transform(testData).show()
     model.transform(testData).select("features", "linkPrediction")
       .collect().foreach {
       case Row(features: DenseVector, linkPrediction1: Double) =>
