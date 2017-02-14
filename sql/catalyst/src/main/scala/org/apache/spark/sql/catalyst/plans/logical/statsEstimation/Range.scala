@@ -48,7 +48,8 @@ object Range {
 
   def isIntersected(r1: Range, r2: Range): Boolean = (r1, r2) match {
     case (_, _: DefaultRange) | (_: DefaultRange, _) =>
-      // Skip overlapping check for binary/string types
+      // The DefaultRange represents string/binary types which do not have max/min stats,
+      // we assume they are intersected to be conservative on estimation
       true
     case (_, _: NullRange) | (_: NullRange, _) =>
       false

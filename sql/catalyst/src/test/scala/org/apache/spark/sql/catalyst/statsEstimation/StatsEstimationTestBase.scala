@@ -30,6 +30,7 @@ class StatsEstimationTestBase extends SparkFunSuite {
   protected val conf = SimpleCatalystConf(caseSensitiveAnalysis = true, cboEnabled = true)
 
   def getColSize(attribute: Attribute, colStat: ColumnStat): Long = attribute.dataType match {
+    // For UTF8String: base + offset + numBytes
     case StringType => colStat.avgLen + 8 + 4
     case _ => colStat.avgLen
   }
