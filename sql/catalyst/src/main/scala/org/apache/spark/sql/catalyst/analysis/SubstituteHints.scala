@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.{immutable, mutable}
-
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 
 
 /**
  * Substitute Hints.
  * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
+ *
+ * In the case of broadcast hint, we find the frontier of
  *
  * This rule substitutes `UnresolvedRelation`s in `Substitute` batch before `ResolveRelations`
  * rule is applied. Here are two reasons.
@@ -37,47 +38,48 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * All new `Hint`s should be transformed into concrete Hint classes `BroadcastHint` here.
  */
 class SubstituteHints(conf: CatalystConf) extends Rule[LogicalPlan] {
-  private val BROADCAST_HINT_NAMES = immutable.Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
+  private val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
 
   def resolver: Resolver = conf.resolver
 
-  private def appendAllDescendant(set: mutable.Set[LogicalPlan], plan: LogicalPlan): Unit = {
-    set += plan
-    plan.children.foreach { child => appendAllDescendant(set, child) }
+  private def applyBroadcastHint(plan: LogicalPlan, toBroadcast: Set[String]): LogicalPlan = {
+    // Whether to continue recursing down the tree
+    var recurse = true
+
+    val newNode = CurrentOrigin.withOrigin(plan.origin) {
+      plan match {
+        case r: UnresolvedRelation =>
+          val alias = r.alias.getOrElse(r.tableIdentifier.table)
+          if (toBroadcast.exists(resolver(_, alias))) BroadcastHint(plan) else plan
+        case r: SubqueryAlias =>
+          if (toBroadcast.exists(resolver(_, r.alias))) {
+            BroadcastHint(plan)
+          } else {
+            // Don't recurse down subquery aliases if there are no match.
+            recurse = false
+            plan
+          }
+        case _: BroadcastHint =>
+          // Found a broadcast hint; don't change the plan but also don't recurse down.
+          recurse = false
+          plan
+        case _ =>
+          plan
+      }
+    }
+
+    if ((plan fastEquals newNode) && recurse) {
+      newNode.mapChildren(child => applyBroadcastHint(child, toBroadcast))
+    } else {
+      newNode
+    }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case logical: LogicalPlan => logical transformDown {
-      case h @ Hint(name, parameters, child) if BROADCAST_HINT_NAMES.contains(name.toUpperCase) =>
-        var resolvedChild = child
-        for (table <- parameters) {
-          var stop = false
-          val skipNodeSet = scala.collection.mutable.Set.empty[LogicalPlan]
-          resolvedChild = resolvedChild.transformDown {
-            case n if skipNodeSet.contains(n) =>
-              skipNodeSet -= n
-              n
-            case p @ Project(_, _) if p != resolvedChild =>
-              appendAllDescendant(skipNodeSet, p)
-              skipNodeSet -= p
-              p
-            case r @ BroadcastHint(UnresolvedRelation(t, _))
-              if !stop && resolver(t.table, table) =>
-              stop = true
-              r
-            case r @ UnresolvedRelation(t, alias) if !stop && resolver(t.table, table) =>
-              stop = true
-              if (alias.isDefined) {
-                SubqueryAlias(alias.get, BroadcastHint(r.copy(alias = None)), None)
-              } else {
-                BroadcastHint(r)
-              }
-          }
-        }
-        resolvedChild
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case h: Hint if BROADCAST_HINT_NAMES.contains(h.name.toUpperCase) =>
+      applyBroadcastHint(h.child, h.parameters.toSet)
 
-      // Remove unrecognized hints
-      case Hint(name, _, child) => child
-    }
+    // Remove unrecognized hints
+    case h: Hint => h.child
   }
 }

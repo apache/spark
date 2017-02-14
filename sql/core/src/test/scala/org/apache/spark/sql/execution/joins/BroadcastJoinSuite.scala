@@ -139,7 +139,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     assert(plan.collect { case p: BroadcastHashJoinExec => p }.size === 1)
   }
 
-  test("broadcast hint is propagated correctly") {
+  test("broadcast hint programming API") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"), (3, "2"))).toDF("key", "value")
       val broadcasted = broadcast(df2)
@@ -159,7 +159,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("Broadcast Hint") {
+  test("broadcast hint in SQL") {
     import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join}
 
     spark.range(10).createOrReplaceTempView("t")
@@ -180,77 +180,6 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       assert(!plan3.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
       assert(!plan3.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
     }
-  }
-
-  test("Broadcast Hint matches the nearest one") {
-    val tbl_a = spark.range(10)
-    val tbl_b = spark.range(20)
-    val tbl_c = spark.range(30)
-
-    tbl_a.createOrReplaceTempView("tbl_a")
-    tbl_b.createOrReplaceTempView("tbl_b")
-    tbl_c.createOrReplaceTempView("tbl_c")
-
-    val plan = sql(
-      """SELECT /*+ MAPJOIN(tbl_b) */
-        |       *
-        |FROM   tbl_a A
-        |       JOIN tbl_b B
-        |        ON B.id = A.id
-        |       JOIN (SELECT XA.id
-        |             FROM   tbl_b XA
-        |             LEFT SEMI JOIN tbl_c XB
-        |             ON XB.id = XA.id) C
-        |        ON C.id = A.id
-      """.stripMargin).queryExecution.analyzed
-
-    val correct_answer =
-      SubqueryAlias("A", tbl_a.logicalPlan, Some(TableIdentifier("tbl_a")))
-        .join(SubqueryAlias("B", broadcast(SubqueryAlias("tbl_b", tbl_b.logicalPlan,
-          Some(TableIdentifier("tbl_b")))).logicalPlan, None), $"B.id" === $"A.id", "inner")
-        .join(SubqueryAlias("XA", tbl_b.logicalPlan, Some(TableIdentifier("tbl_b")))
-          .join(SubqueryAlias("XB", tbl_c.logicalPlan, Some(TableIdentifier("tbl_c"))),
-            $"XB.id" === $"XA.id", "leftsemi")
-          .select("XA.id").as("C"), $"C.id" === $"A.id", "inner")
-        .select(col("*")).logicalPlan
-
-    comparePlans(plan, correct_answer)
-  }
-
-  test("Nested Broadcast Hint") {
-    val tbl_a = spark.range(10)
-    val tbl_b = spark.range(20)
-    val tbl_c = spark.range(30)
-
-    tbl_a.createOrReplaceTempView("tbl_a")
-    tbl_b.createOrReplaceTempView("tbl_b")
-    tbl_c.createOrReplaceTempView("tbl_c")
-
-    val plan = sql(
-      """SELECT /*+ MAPJOIN(tbl_a, tbl_a) */
-        |       *
-        |FROM   tbl_a A
-        |       JOIN tbl_b B
-        |        ON B.id = A.id
-        |       JOIN (SELECT /*+ MAPJOIN(tbl_c) */
-        |                    XA.id
-        |             FROM   tbl_b XA
-        |             LEFT SEMI JOIN tbl_c XB
-        |             ON XB.id = XA.id) C
-        |        ON C.id = A.id
-      """.stripMargin).queryExecution.analyzed
-
-    val correct_answer =
-      broadcast(SubqueryAlias("tbl_a", tbl_a.logicalPlan, Some(TableIdentifier("tbl_a")))).as("A")
-        .join(SubqueryAlias("B", tbl_b.logicalPlan, Some(TableIdentifier("tbl_b"))),
-          $"B.id" === $"A.id", "inner")
-        .join(SubqueryAlias("XA", tbl_b.logicalPlan, Some(TableIdentifier("tbl_b")))
-          .join(broadcast(SubqueryAlias("tbl_c", tbl_c.logicalPlan, Some(TableIdentifier("tbl_c"))))
-            .as("XB"), $"XB.id" === $"XA.id", "leftsemi")
-            .select("XA.id").as("C"), $"C.id" === $"A.id", "inner")
-        .select(col("*")).logicalPlan
-
-    comparePlans(plan, correct_answer)
   }
 
   test("join key rewritten") {

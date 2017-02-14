@@ -115,11 +115,11 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
+      new SubstituteHints(conf),
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new SubstituteUnresolvedOrdinals(conf),
-      new SubstituteHints(conf)),
+      new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveRelations ::

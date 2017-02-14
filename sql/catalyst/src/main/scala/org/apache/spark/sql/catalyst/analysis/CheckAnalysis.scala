@@ -387,9 +387,9 @@ trait CheckAnalysis extends PredicateHelper {
                  |in operator ${operator.simpleString}
                """.stripMargin)
 
-          case Hint(_, _, _) =>
+          case _: Hint =>
             throw new IllegalStateException(
-              "logical hint operator should have been removed by analyzer")
+              "Internal error: logical hint operator should have been removed during analysis")
 
           case _ => // Analysis successful!
         }

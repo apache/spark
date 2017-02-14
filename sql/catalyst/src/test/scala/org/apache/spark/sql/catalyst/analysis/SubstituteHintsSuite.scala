@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 
 class SubstituteHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
-
-  val a = testRelation.output(0)
-  val b = testRelation2.output(0)
 
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
@@ -40,86 +40,77 @@ class SubstituteHintsSuite extends AnalysisTest {
 
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      BroadcastHint(testRelation))
+      BroadcastHint(testRelation),
+      caseSensitive = true)
 
     checkAnalysis(
       Hint("MAPJOIN", Seq("table"), table("TaBlE")),
-      testRelation)
+      testRelation,
+      caseSensitive = true)
   }
 
-  test("single hint") {
+  test("multiple broadcast hint aliases") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").select(a)),
-      BroadcastHint(testRelation).select(a))
-
-    checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
-      BroadcastHint(testRelation).join(testRelation2).select(a))
-
-    checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE2"),
-        table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
-      testRelation.join(BroadcastHint(testRelation2)).select(a))
+      Hint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
+      Join(BroadcastHint(testRelation), BroadcastHint(testRelation2), Inner, None),
+      caseSensitive = false)
   }
 
-  test("single hint with multiple parameters") {
+  test("do not traverse past existing broadcast hints") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE", "TaBlE"),
-        table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
-      BroadcastHint(testRelation).join(testRelation2).select(a))
-
-    checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE", "TaBlE2"),
-        table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
-      BroadcastHint(testRelation).join(BroadcastHint(testRelation2)).select(a))
+      Hint("MAPJOIN", Seq("table"), BroadcastHint(table("table").where('a > 1))),
+      BroadcastHint(testRelation.where('a > 1)).analyze,
+      caseSensitive = false)
   }
 
-  test("duplicated nested hints are transformed into one") {
-    checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").as("t").select('a))
-          .join(table("TaBlE2").as("u")).select(a)),
-      BroadcastHint(testRelation).select(a).join(testRelation2).select(a))
+  test("should work for subqueries") {
+    val relation = UnresolvedRelation(TableIdentifier("table"), Some("tableAlias"))
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE2"),
-        table("TaBlE").as("t").select(a)
-          .join(Hint("MAPJOIN", Seq("TaBlE2"), table("TaBlE2").as("u").select(b))).select(a)),
-      testRelation.select(a).join(BroadcastHint(testRelation2).select(b)).select(a))
+      Hint("MAPJOIN", Seq("tableAlias"), relation),
+      BroadcastHint(testRelation),
+      caseSensitive = false)
+
+    checkAnalysis(
+      Hint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
+      BroadcastHint(testRelation),
+      caseSensitive = false)
+
+    // Negative case: if the alias doesn't match, don't match the original table name.
+    checkAnalysis(
+      Hint("MAPJOIN", Seq("table"), relation),
+      testRelation,
+      caseSensitive = false)
   }
 
-  test("distinct nested two hints are handled separately") {
+  test("do not traverse past subquery alias") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE2"),
-        Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").as("t").select(a))
-          .join(table("TaBlE2").as("u")).select(a)),
-      BroadcastHint(testRelation).select(a).join(BroadcastHint(testRelation2)).select(a))
-
-    checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        table("TaBlE").as("t")
-          .join(Hint("MAPJOIN", Seq("TaBlE2"), table("TaBlE2").as("u").select(b))).select(a)),
-      BroadcastHint(testRelation).join(BroadcastHint(testRelation2).select(b)).select(a))
+      Hint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
+      testRelation.where('a > 1).analyze,
+      caseSensitive = false)
   }
 
-  test("deep self join") {
+  test("should work for CTE") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        table("TaBlE").join(table("TaBlE")).join(table("TaBlE")).join(table("TaBlE")).select(a)),
-      BroadcastHint(testRelation).join(testRelation).join(testRelation).join(testRelation)
-        .select(a))
+      CatalystSqlParser.parsePlan(
+        """
+          |WITH ctetable AS (SELECT * FROM table WHERE a > 1)
+          |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
+        """.stripMargin
+      ),
+      BroadcastHint(testRelation.where('a > 1).select('a)).select('a).analyze,
+      caseSensitive = false)
   }
 
-  test("subquery should be ignored") {
+  test("should not traverse down CTE") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        table("TaBlE").select(a).as("x").join(table("TaBlE")).select(a)),
-      testRelation.select(a).join(BroadcastHint(testRelation)).select(a))
-
-    checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        table("TaBlE").as("t").select(a).as("x")
-          .join(table("TaBlE2").as("t2")).select(a)),
-      testRelation.select(a).join(testRelation2).select(a))
+      CatalystSqlParser.parsePlan(
+        """
+          |WITH ctetable AS (SELECT * FROM table WHERE a > 1)
+          |SELECT /*+ BROADCAST(table) */ * FROM ctetable
+        """.stripMargin
+      ),
+      testRelation.where('a > 1).select('a).select('a).analyze,
+      caseSensitive = false)
   }
 }
