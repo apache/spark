@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.ml.linalg.ElementwiseSlicing
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
@@ -299,5 +300,75 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(currL1)
+  }
+}
+
+object MultivariateOnlineSummarizer {
+  implicit object SummarizerSlicing extends ElementwiseSlicing[MultivariateOnlineSummarizer] {
+    override def slice(x: MultivariateOnlineSummarizer, num: Int):
+        Iterator[MultivariateOnlineSummarizer] = {
+      val sliceLength = math.ceil(x.n.toDouble / num).toInt
+      val meanIter = x.currMean.sliding(sliceLength, sliceLength)
+      val m2nIter = x.currM2n.sliding(sliceLength, sliceLength)
+      val m2Iter = x.currM2.sliding(sliceLength, sliceLength)
+      val l1Iter = x.currL1.sliding(sliceLength, sliceLength)
+      val weightSumIter = x.weightSum.sliding(sliceLength, sliceLength)
+      val nnzIter = x.nnz.sliding(sliceLength, sliceLength)
+      val maxIter = x.currMax.sliding(sliceLength, sliceLength)
+      val minIter = x.currMin.sliding(sliceLength, sliceLength)
+
+      meanIter.map { mean =>
+        val summary = new MultivariateOnlineSummarizer
+        summary.currMean = mean
+        summary.currM2n = m2nIter.next()
+        summary.currM2 = m2Iter.next()
+        summary.currL1 = l1Iter.next()
+        summary.totalCnt = x.totalCnt
+        summary.totalWeightSum = x.totalWeightSum
+        summary.weightSquareSum = x.weightSquareSum
+        summary.weightSum = weightSumIter.next()
+        summary.nnz = nnzIter.next()
+        summary.currMax = maxIter.next()
+        summary.currMin = minIter.next()
+        summary.n = summary.currMean.length
+        summary
+      }
+    }
+
+    override def compose(iter: Iterator[MultivariateOnlineSummarizer]):
+        MultivariateOnlineSummarizer = {
+      val (iter1, iter2) = iter.duplicate
+
+      // what if iter1 is empty
+      val length = iter1.map(_.n).sum
+
+      val compSummary = new MultivariateOnlineSummarizer
+      compSummary.n = length
+      compSummary.currMean = new Array[Double](length)
+      compSummary.currM2n = new Array[Double](length)
+      compSummary.currM2 = new Array[Double](length)
+      compSummary.currL1 = new Array[Double](length)
+      compSummary.weightSum = new Array[Double](length)
+      compSummary.nnz = new Array[Long](length)
+      compSummary.currMax = new Array[Double](length)
+      compSummary.currMin = new Array[Double](length)
+
+      var accumNum = 0
+      iter2.foreach { summary =>
+        summary.currMean.copyToArray(compSummary.currMean, accumNum, summary.currMean.length)
+        summary.currM2n.copyToArray(compSummary.currM2n, accumNum, summary.currM2n.length)
+        summary.currM2.copyToArray(compSummary.currM2, accumNum, summary.currM2.length)
+        summary.currL1.copyToArray(compSummary.currL1, accumNum, summary.currL1.length)
+        compSummary.totalCnt = summary.totalCnt
+        compSummary.totalWeightSum = summary.totalWeightSum
+        compSummary.weightSquareSum = summary.weightSquareSum
+        summary.weightSum.copyToArray(compSummary.weightSum, accumNum, summary.weightSum.length)
+        summary.nnz.copyToArray(compSummary.nnz, accumNum, summary.nnz.length)
+        summary.currMax.copyToArray(compSummary.currMax, accumNum, summary.currMax.length)
+        summary.currMin.copyToArray(compSummary.currMin, accumNum, summary.currMin.length)
+        accumNum += summary.currMean.length
+      }
+      compSummary
+    }
   }
 }

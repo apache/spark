@@ -32,6 +32,7 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.rdd.RDDFunctions._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -49,7 +50,7 @@ import org.apache.spark.util.VersionUtils
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth {
+  with HasStandardization with HasWeightCol with HasThreshold {
 
   import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
@@ -233,7 +234,7 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Set the convergence tolerance of iterations.
-   * Smaller value will lead to higher accuracy at the cost of more iterations.
+   * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
    *
    * @group setParam
@@ -298,18 +299,6 @@ class LogisticRegression @Since("1.2.0") (
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
 
-  /**
-   * Suggested depth for treeAggregate (greater than or equal to 2).
-   * If the dimensions of features or the number of partitions are large,
-   * this param could be adjusted to a larger size.
-   * Default is 2.
-   *
-   * @group expertSetParam
-   */
-  @Since("2.1.0")
-  def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
-
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
   private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
@@ -338,18 +327,20 @@ class LogisticRegression @Since("1.2.0") (
     instr.logParams(regParam, elasticNetParam, standardization, threshold,
       maxIter, tol, fitIntercept)
 
-    val (summarizer, labelSummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
+    val summarizer = {
+      val seqOp = (c: MultivariateOnlineSummarizer, instance: Instance) =>
+        c.add(instance.features, instance.weight)
+      val combOp = (c1: MultivariateOnlineSummarizer, c2: MultivariateOnlineSummarizer) =>
+        c1.merge(c2)
+      val numSlice = math.ceil(instances.first().features.size / 10000).toInt
+      instances.sliceAggregate(new MultivariateOnlineSummarizer)(seqOp, combOp, numSlice)
+    }
 
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
+    val labelSummarizer = {
+      val seqOp = (summary: MultiClassSummarizer, instance: Instance) =>
+        summary.add(instance.label, instance.weight)
+      val combOp = (c1: MultiClassSummarizer, c2: MultiClassSummarizer) => c1.merge(c2)
+      instances.treeAggregate(new MultiClassSummarizer)(seqOp, combOp)
     }
 
     val histogram = labelSummarizer.histogram
@@ -434,8 +425,7 @@ class LogisticRegression @Since("1.2.0") (
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial,
-          $(aggregationDepth))
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = isMultinomial)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -1431,7 +1421,12 @@ private class LogisticAggregator(
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val gradientSumArray = Array.fill[Double](coefficientSize)(0.0D)
+  private var gradientSumArray = Array.ofDim[Double](coefficientSize)
+
+  def setGradientSumArray(grad: Array[Double]): this.type = {
+    gradientSumArray = grad.clone()
+    this
+  }
 
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +
@@ -1634,6 +1629,50 @@ private class LogisticAggregator(
     scal(1.0 / weightSum, result)
     new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept, result.toArray)
   }
+
+  override def clone(): LogisticAggregator = {
+    val agg = new LogisticAggregator(bcCoefficients, bcFeaturesStd, numClasses,
+      fitIntercept, multinomial)
+    agg.lossSum = this.lossSum
+    agg.weightSum = this.weightSum
+    agg.gradientSumArray = this.gradientSumArray.clone()
+    agg
+  }
+}
+
+private object LogisticAggregator {
+
+  implicit object LogisticAggregatorSlicing extends ElementwiseSlicing[LogisticAggregator] {
+    override def slice(x: LogisticAggregator, numSlices: Int): Iterator[LogisticAggregator] = {
+      val sliceLength = math.ceil(x.gradientSumArray.length.toDouble / numSlices).toInt
+
+      x.gradientSumArray.sliding(sliceLength, sliceLength)
+        .map { slice =>
+          val localAggregator = x.clone()
+          localAggregator.setGradientSumArray(slice)
+        }
+    }
+
+    override def compose(iter: Iterator[LogisticAggregator]): LogisticAggregator = {
+      require(iter.hasNext, "compose empty GradientAndLoss!")
+      val (iter1, iter2) = iter.duplicate
+      val gradientLength = iter1.map(_.gradientSumArray.length).sum
+
+      val comGradient = new Array[Double](gradientLength)
+
+      var accumNum = 0
+      var logisticAggregator: LogisticAggregator = null
+      iter2.foreach { aggregator =>
+        if (accumNum == 0) logisticAggregator = aggregator.clone()
+        val gradSlice = aggregator.gradientSumArray
+        val sliceLength = gradSlice.length
+        gradSlice.copyToArray(comGradient, accumNum, sliceLength)
+        accumNum += sliceLength
+      }
+
+      logisticAggregator.setGradientSumArray(comGradient)
+    }
+  }
 }
 
 /**
@@ -1649,8 +1688,7 @@ private class LogisticCostFun(
     standardization: Boolean,
     bcFeaturesStd: Broadcast[Array[Double]],
     regParamL2: Double,
-    multinomial: Boolean,
-    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
+    multinomial: Boolean) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -1663,11 +1701,12 @@ private class LogisticCostFun(
     val logisticAggregator = {
       val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
+      val numSlice = math.ceil((numCoefficientSets * numFeaturesPlusIntercept) / 100000).toInt
 
-      instances.treeAggregate(
+      instances.sliceAggregate(
         new LogisticAggregator(bcCoeffs, bcFeaturesStd, numClasses, fitIntercept,
           multinomial)
-      )(seqOp, combOp, aggregationDepth)
+      )(seqOp, combOp, numSlice)
     }
 
     val totalGradientMatrix = logisticAggregator.gradient
