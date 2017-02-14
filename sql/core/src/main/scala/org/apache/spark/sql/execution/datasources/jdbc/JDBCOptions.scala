@@ -26,20 +26,15 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient private val parameters: CaseInsensitiveMap)
+    @transient private val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import JDBCOptions._
 
-  def this(params: Map[String, String]) = {
-    this(params match {
-      case cMap: CaseInsensitiveMap => cMap
-      case _ => new CaseInsensitiveMap(params)
-    })
-  }
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   def this(url: String, table: String, parameters: Map[String, String]) = {
-    this(new CaseInsensitiveMap(parameters ++ Map(
+    this(CaseInsensitiveMap(parameters ++ Map(
       JDBCOptions.JDBC_URL -> url,
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
@@ -49,7 +44,7 @@ class JDBCOptions(
    */
   val asProperties: Properties = {
     val properties = new Properties()
-    parameters.caseSensitiveMap.foreach { case (k, v) => properties.setProperty(k, v) }
+    parameters.originalMap.foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
 
@@ -60,7 +55,7 @@ class JDBCOptions(
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    parameters.caseSensitiveMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
+    parameters.originalMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }

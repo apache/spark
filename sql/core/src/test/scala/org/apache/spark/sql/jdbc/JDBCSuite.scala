@@ -899,7 +899,7 @@ class JDBCSuite extends SparkFunSuite
       "dbtable" -> "t1",
       "numPartitions" -> "10")
     assert(new JDBCOptions(parameters).asConnectionProperties.isEmpty)
-    assert(new JDBCOptions(new CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
+    assert(new JDBCOptions(CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
@@ -926,52 +926,51 @@ class JDBCSuite extends SparkFunSuite
     assert(res.outputRows === foobarCnt :: Nil)
   }
 
-  test("SPARK-19318: Connection properties keys should be case-sensitivie.") {
-    val parameters = Map(
-      "url" -> urlWithUserAndPass,
-      "dbTable" -> "t1",
-      "numPartitions" -> "10",
-      "oracle.jdbc.mapDateToTimestamp" -> "false"
-    )
+  test("SPARK-19318: Connection properties keys should be case-sensitive.") {
+    def testJdbcOptions(options: JDBCOptions): Unit = {
+      // Spark JDBC data source options are case-insensitive
+      assert(options.table == "t1")
+      // When we convert it to properties, it should be case-sensitive.
+      assert(options.asProperties.size == 3)
+      assert(options.asProperties.get("customkey") == null)
+      assert(options.asProperties.get("customKey") == "a-value")
+      assert(options.asConnectionProperties.size == 1)
+      assert(options.asConnectionProperties.get("customkey") == null)
+      assert(options.asConnectionProperties.get("customKey") == "a-value")
+    }
 
-    assert(new JDBCOptions(parameters).asConnectionProperties.keySet()
-      .toArray()(0) == "oracle.jdbc.mapDateToTimestamp")
-
-    val caseInsensitiveMap = new CaseInsensitiveMap(parameters)
-    assert(new JDBCOptions(caseInsensitiveMap).asConnectionProperties.keySet()
-      .toArray()(0) == "oracle.jdbc.mapDateToTimestamp")
-    assert(caseInsensitiveMap.get("dbtable").get == "t1")
-
-    // add new key-value to case-insensitive map
-    val caseInsensitiveMap1 = caseInsensitiveMap + ("connTimeOut" -> "60")
-    val connProps = new JDBCOptions(caseInsensitiveMap1).asConnectionProperties
-    assert(connProps.get("oracle.jdbc.mapDateToTimestamp") == "false")
-    assert(connProps.get("connTimeOut") == "60")
-    assert(caseInsensitiveMap1.get("dbtable").get == "t1")
-
-    // remove key from case-insensitive map
-    val caseInsensitiveMap2 = caseInsensitiveMap1 - "oracle.jdbc.mapDateToTimestamp"
-    val connProps1 = new JDBCOptions(caseInsensitiveMap2).asConnectionProperties
-    assert(connProps1.get("oracle.jdbc.mapDateToTimestamp") == null)
-    assert(connProps1.get("connTimeOut") == "60")
-    assert(caseInsensitiveMap2.get("dbtable").get == "t1")
+    val parameters = Map("url" -> url, "dbTAblE" -> "t1", "customKey" -> "a-value")
+    testJdbcOptions(new JDBCOptions(parameters))
+    testJdbcOptions(new JDBCOptions(CaseInsensitiveMap(parameters)))
+    // test add/remove key-value from the case-insensitive map
+    var modifiedParameters = CaseInsensitiveMap(Map.empty) ++ parameters
+    testJdbcOptions(new JDBCOptions(modifiedParameters))
+    modifiedParameters -= "dbtable"
+    assert(modifiedParameters.get("dbTAblE").isEmpty)
+    modifiedParameters -= "customkey"
+    assert(modifiedParameters.get("customKey").isEmpty)
+    modifiedParameters += ("customKey" -> "a-value")
+    modifiedParameters += ("dbTable" -> "t1")
+    testJdbcOptions(new JDBCOptions(modifiedParameters))
+    assert ((modifiedParameters -- parameters.keys).size == 0)
   }
 
-  test("SPARK-19318: jdbc data source options should be treated case-insensitivie.") {
+  test("SPARK-19318: jdbc data source options should be treated case-insensitive.") {
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
-      .option("dbTable", "TEST.PEOPLE")
+      .option("DbTaBle", "TEST.PEOPLE")
       .load()
     assert(df.count() == 3)
 
-    sql(
-      s"""
-         |CREATE TEMPORARY VIEW fooview
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (uRl '$url', dbTable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+    withTempView("people_view") {
+      sql(
+        s"""
+           |CREATE TEMPORARY VIEW people_view
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
-    assert(sql("select * from fooview").count() == 3)
+      assert(sql("select * from people_view").count() == 3)
+    }
   }
-
 }

@@ -174,14 +174,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   }
 
   test("SPARK-19318: connection property keys should be case-sensitive") {
-    val row = sql("SELECT * FROM datetime where id = 1").head()
-    assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
-    assert(row.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
-
+    def checkRow(row: Row): Unit = {
+      assert(row.getInt(0) == 1)
+      assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
+      assert(row.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+    }
+    checkRow(sql("SELECT * FROM datetime where id = 1").head())
     sql("INSERT INTO TABLE datetime1 SELECT * FROM datetime where id = 1")
-    val row1 = sql("SELECT * FROM datetime1 where id = 1").head()
-    assert(row1.getInt(0) == 1)
-    assert(row1.getDate(1).equals(Date.valueOf("1991-11-09")))
-    assert(row1.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+    checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
   }
 }
