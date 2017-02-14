@@ -24,7 +24,7 @@ from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.clustering import BisectingKMeans, BisectingKMeansModel
 # $example off$
-#
+
 
 if __name__ == "__main__":
     sc = SparkContext(appName="PythonBisectingKMeansExample")  # SparkContext
