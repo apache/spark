@@ -69,6 +69,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 
   /**
    * param to control the number of models evaluated in parallel
+   * Default: 1
    *
    * @group param
    */
@@ -96,6 +97,8 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
     instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
   }
+
+  setDefault(numParallelEval -> 1)
 }
 
 private[ml] object ValidatorParams {

@@ -50,7 +50,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
   /** @group getParam */
   def getTrainRatio: Double = $(trainRatio)
 
-  setDefault(trainRatio -> 0.75, numParallelEval -> 1)
+  setDefault(trainRatio -> 0.75)
 }
 
 /**
@@ -111,17 +111,19 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     validationDataset.cache()
 
     logDebug(s"Train split with multiple sets of parameters.")
-    // Fit models concurrently, limited by using a sliding window over models
+    // Fit models concurrently, limited by a sliding window of size 'numPar' over estimator params
     val models = epm.grouped(numPar).map { win =>
-      win.par.map(est.fit(trainingDataset, _))
+      win.par.map { paramMap =>
+        est.fit(trainingDataset, paramMap)
+      }
     }.toList.flatten.asInstanceOf[Seq[Model[_]]]
     trainingDataset.unpersist()
-    // Evaluate models concurrently, limited by using a sliding window over models
+    // Evaluate models concurrently, limited by a sliding window of size 'numPar' over models
     val metrics = models.zip(epm).grouped(numPar).map { win =>
-      win.par.map { m =>
+      win.par.map { case (model, paramMap) =>
         // TODO: duplicate evaluator to take extra params from input
-        val metric = eval.evaluate(m._1.transform(validationDataset, m._2))
-        logDebug(s"Got metric $metric for model trained with ${m._2}.")
+        val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+        logDebug(s"Got metric $metric for model trained with $paramMap.")
         metric
       }
     }.toList.flatten.toArray
