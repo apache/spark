@@ -102,14 +102,14 @@ object SQLConf {
       .createWithDefault(true)
 
   val CACHE_COMPRESSION_CODEC =
-     SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.compression.codec")
-       .internal()
-       .doc("Sets the compression codec use when columnar caching is compressed.")
-       .stringConf
-       .transform(_.toLowerCase())
-       .createWithDefault("lz4")
+    buildConf("spark.sql.inMemoryColumnarStorage.compression.codec")
+      .internal()
+      .doc("Sets the compression codec use when columnar caching is compressed.")
+      .stringConf
+      .transform(_.toLowerCase())
+      .createWithDefault("lz4")
 
-  val PREFER_SORTMERGEJOIN = SQLConfigBuilder("spark.sql.join.preferSortMergeJoin")
+  val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
     .booleanConf
