@@ -31,7 +31,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * @param plan a LogicalPlan node that must be an instance of Filter
  * @param catalystConf a configuration showing if CBO is enabled
  */
 case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Logging {
@@ -56,6 +55,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @return Option[Statistics] When there is no statistics collected, it returns None.
    */
   def estimate: Option[Statistics] = {
+    // We first copy child node's statistics and then modify it based on filter selectivity.
     val stats: Statistics = plan.child.stats(catalystConf)
     if (stats.rowCount.isEmpty) return None
 
@@ -96,7 +96,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param condition the compound logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
-   * @return a double value to show the percentage of rows meeting a given condition
+   * @return a double value to show the percentage of rows meeting a given condition.
+   *         Returns 1.0 (a conservative filter estimate) if a condition is not supported.
    */
   def calculateConditions(condition: Expression, update: Boolean = true): Double = {
 
@@ -365,15 +366,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     // decide if the value is in [min, max] of the column.
     // We currently don't store min/max for binary/string type.
     // Hence, we assume it is in boundary for binary/string type.
-    val inBoundary: Boolean = attrRef.dataType match {
-      case _: NumericType | DateType | TimestampType =>
-        val statsRange =
-          Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
-        val lit = numericLiteralToBigDecimal(attrRef.dataType, literal.value, literal.dataType)
-        (lit >= statsRange.min) && (lit <= statsRange.max)
-
-      case _ => true  /** for String/Binary type */
-    }
+    val statsRange = Range(aColStat.min, aColStat.max, attrRef.dataType)
+    val litRange = Range(Some(literal.value), Some(literal.value), literal.dataType)
+    val inBoundary: Boolean = Range.isIntersected(statsRange, litRange)
 
     if (inBoundary) {
 
@@ -534,13 +529,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
     // determine the overlapping degree between predicate range and column's range
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
-      case LessThan(l, r) =>
+      case _: LessThan =>
         (literalValueBD <= statsRange.min, literalValueBD > statsRange.max)
-      case LessThanOrEqual(l, r) =>
+      case _: LessThanOrEqual =>
         (literalValueBD < statsRange.min, literalValueBD >= statsRange.max)
-      case GreaterThan(l, r) =>
+      case _: GreaterThan =>
         (literalValueBD >= statsRange.max, literalValueBD < statsRange.min)
-      case GreaterThanOrEqual(l, r) =>
+      case _: GreaterThanOrEqual =>
         (literalValueBD > statsRange.max, literalValueBD <= statsRange.min)
     }
 
@@ -561,14 +556,14 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       // We just prorate the adjusted range over the initial range to compute filter selectivity.
       // For ease of computation, we convert all relevant numeric values to Double.
       percent = op match {
-        case LessThan(l, r) =>
+        case _: LessThan =>
           (literalToDouble - minToDouble) / (maxToDouble - minToDouble)
-        case LessThanOrEqual(l, r) =>
+        case _: LessThanOrEqual =>
           if (literalValueBD == BigDecimal(statsRange.min)) 1.0 / ndv.toDouble
           else (literalToDouble - minToDouble) / (maxToDouble - minToDouble)
-        case GreaterThan(l, r) =>
+        case _: GreaterThan =>
           (maxToDouble - literalToDouble) / (maxToDouble - minToDouble)
-        case GreaterThanOrEqual(l, r) =>
+        case _: GreaterThanOrEqual =>
           if (literalValueBD == BigDecimal(statsRange.max)) 1.0 / ndv.toDouble
           else (maxToDouble - literalToDouble) / (maxToDouble - minToDouble)
       }
@@ -582,10 +577,10 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
               case _ => DateTimeUtils.toJavaDate(literal.value.toString.toInt)
             }
             op match {
-              case GreaterThan(l, r) => newMin = Some(dateValue)
-              case GreaterThanOrEqual(l, r) => newMin = Some(dateValue)
-              case LessThan(l, r) => newMax = Some(dateValue)
-              case LessThanOrEqual(l, r) => newMax = Some(dateValue)
+              case _: GreaterThan => newMin = Some(dateValue)
+              case _: GreaterThanOrEqual => newMin = Some(dateValue)
+              case _: LessThan => newMax = Some(dateValue)
+              case _: LessThanOrEqual => newMax = Some(dateValue)
             }
 
           case TimestampType =>
@@ -595,18 +590,18 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
               case _ => DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong)
             }
             op match {
-              case GreaterThan(l, r) => newMin = Some(tsValue)
-              case GreaterThanOrEqual(l, r) => newMin = Some(tsValue)
-              case LessThan(l, r) => newMax = Some(tsValue)
-              case LessThanOrEqual(l, r) => newMax = Some(tsValue)
+              case _: GreaterThan => newMin = Some(tsValue)
+              case _: GreaterThanOrEqual => newMin = Some(tsValue)
+              case _: LessThan => newMax = Some(tsValue)
+              case _: LessThanOrEqual => newMax = Some(tsValue)
             }
 
           case _ =>
             op match {
-              case GreaterThan (l, r) => newMin = Some (literal.value)
-              case GreaterThanOrEqual (l, r) => newMin = Some (literal.value)
-              case LessThan (l, r) => newMax = Some (literal.value)
-              case LessThanOrEqual (l, r) => newMax = Some (literal.value)
+              case _: GreaterThan => newMin = Some(literal.value)
+              case _: GreaterThanOrEqual => newMin = Some(literal.value)
+              case _: LessThan => newMax = Some(literal.value)
+              case _: LessThanOrEqual => newMax = Some(literal.value)
             }
         }
         newNdv = math.max(math.round(ndv.toDouble * percent), 1)
