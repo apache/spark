@@ -244,6 +244,8 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> modelPath = temp_path + "/brp-model"
     >>> model.save(modelPath)
     >>> model2 = BucketedRandomProjectionLSHModel.load(modelPath)
+    >>> model.transform(df).head().hashes == model2.transform(df).head().hashes
+    True
 
     .. versionadded:: 2.2.0
     """
@@ -995,6 +997,8 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> modelPath = temp_path + "/mh-model"
     >>> model.save(modelPath)
     >>> model2 = MinHashLSHModel.load(modelPath)
+    >>> model.transform(df).head().hashes == model2.transform(df).head().hashes
+    True
 
     .. versionadded:: 2.2.0
     """

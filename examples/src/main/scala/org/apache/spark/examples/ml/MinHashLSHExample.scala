@@ -21,7 +21,7 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.feature.MinHashLSH
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.col
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -69,10 +69,10 @@ object MinHashLSHExample {
     // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     // `model.approxSimilarityJoin(transformedA, transformedB, 0.6)`
     println("Approximately joining dfA and dfB on Jaccard distance smaller than 0.6:")
-    model.approxSimilarityJoin(dfA, dfB, 0.6)
+    model.approxSimilarityJoin(dfA, dfB, 0.6, "JaccardDistance")
       .select(col("datasetA.id").alias("idA"),
         col("datasetB.id").alias("idB"),
-        col("distCol").alias("JaccardDistance")).show()
+        col("JaccardDistance")).show()
 
     // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     // neighbor search.
