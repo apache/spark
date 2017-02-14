@@ -125,32 +125,27 @@ WHERE  t1c IN
 
 -- CTE inside and outside
 -- TC 01.04
-WITH cte1 AS
-(
-       SELECT t1a,
-              t1b
-       FROM   t1
-       WHERE  t1b IN
-              (
-                         SELECT     t2b
-                         FROM       t2
-                         RIGHT JOIN t1
-                         ON         t1c = t2c
-                         LEFT JOIN  t3
-                         ON         t2d = t3d ) AND
-              t1a = "val1b")
+WITH cte1
+     AS (SELECT t1a,
+                t1b
+         FROM   t1
+         WHERE  t1b IN (SELECT t2b
+                        FROM   t2
+                               RIGHT JOIN t1
+                                       ON t1c = t2c
+                               LEFT JOIN t3
+                                      ON t2d = t3d)
+                AND t1a = "val1b")
 SELECT *
-FROM   (
-                       SELECT          *
-                       FROM            cte1
-                       JOIN            cte1 cte2
-                       on              cte1.t1b > 5
-                       AND             cte1.t1a = cte2.t1a
-                       FULL OUTER JOIN cte1 cte3
-                       ON              cte1.t1a = cte3.t1a INNER
-                       JOIN            cte1 cte4
-                       ON              cte1.t1b = cte4.t1b) s
-;
+FROM   (SELECT *
+        FROM   cte1
+               JOIN cte1 cte2
+                 ON cte1.t1b > 5
+                    AND cte1.t1a = cte2.t1a
+               FULL OUTER JOIN cte1 cte3
+                            ON cte1.t1a = cte3.t1a
+               INNER JOIN cte1 cte4
+                       ON cte1.t1b = cte4.t1b) s;
 
 -- TC 01.05
 WITH cte1 AS
