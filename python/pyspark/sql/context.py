@@ -338,6 +338,8 @@ class SQLContext(object):
 
         Temporary tables exist only during the lifetime of this instance of :class:`SQLContext`.
 
+        >>> df = sqlContext.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                                 ['field1', 'field2'])
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
         df.createOrReplaceTempView(tableName)
@@ -346,6 +348,8 @@ class SQLContext(object):
     def dropTempTable(self, tableName):
         """ Remove the temp table from catalog.
 
+        >>> df = sqlContext.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                                 ['field1', 'field2'])
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
@@ -376,6 +380,8 @@ class SQLContext(object):
 
         :return: :class:`DataFrame`
 
+        >>> df = sqlContext.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                                 ['field1', 'field2'])
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
@@ -389,6 +395,8 @@ class SQLContext(object):
 
         :return: :class:`DataFrame`
 
+        >>> df = sqlContext.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                                 ['field1', 'field2'])
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
@@ -409,6 +417,8 @@ class SQLContext(object):
         :param dbName: string, name of the database to use.
         :return: :class:`DataFrame`
 
+        >>> df = sqlContext.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                                 ['field1', 'field2'])
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.tables()
         >>> df2.filter("tableName = 'table1'").first()
@@ -426,6 +436,8 @@ class SQLContext(object):
         :param dbName: string, name of the database to use. Default to the current database.
         :return: list of table names, in string
 
+        >>> df = sqlContext.createDataFrame([(1, 'row1'), (2, 'row2'), (3, 'row3')],
+        ...                                 ['field1', 'field2'])
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> "table1" in sqlContext.tableNames()
         True
@@ -474,6 +486,7 @@ class SQLContext(object):
 
         :return: :class:`DataStreamReader`
 
+        >>> import tempfile
         >>> text_sdf = sqlContext.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
         True
@@ -553,34 +566,18 @@ class UDFRegistration(object):
 def _test():
     import os
     import doctest
-    import tempfile
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import SQLContext
     import pyspark.sql.context
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.context.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
-    globs['tempfile'] = tempfile
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['rdd'] = rdd = sc.parallelize(
-        [Row(field1=1, field2="row1"),
-         Row(field1=2, field2="row2"),
-         Row(field1=3, field2="row3")]
-    )
-    globs['df'] = rdd.toDF()
-    jsonStrings = [
-        '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
-        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
-        '"field6":[{"field7": "row2"}]}',
-        '{"field1" : null, "field2": "row3", '
-        '"field3":{"field4":33, "field5": []}}'
-    ]
-    globs['jsonStrings'] = jsonStrings
-    globs['json'] = sc.parallelize(jsonStrings)
+
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.context, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
