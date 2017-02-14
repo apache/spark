@@ -1306,9 +1306,9 @@ test_that("column functions", {
 
   # Test first(), last()
   df <- read.json(jsonPath)
-  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA_real_)
   expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
-  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age")))[[1]], NA_real_)
   expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
   expect_equal(collect(select(df, last(df$age)))[[1]], 19)
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
@@ -2775,6 +2775,44 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   expect_warning(read.json(jsonPath, a = 1, 2, 3, "a"),
                  "Unnamed arguments ignored: 2, 3, a.")
+})
+
+test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {
+  ldf <- data.frame(col1 = c(0, 1, 2),
+                   col2 = c(as.POSIXct("2017-01-01 00:00:01"),
+                            NA,
+                            as.POSIXct("2017-01-01 12:00:01")),
+                   col3 = c(as.POSIXlt("2016-01-01 00:59:59"),
+                            NA,
+                            as.POSIXlt("2016-01-01 12:01:01")))
+  sdf1 <- createDataFrame(ldf)
+  ldf1 <- collect(sdf1)
+  expect_equal(dtypes(sdf1), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf1$col1), "numeric")
+  expect_equal(class(ldf1$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf1$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with NAs at the top
+  sdf2 <- filter(sdf1, "col1 > 1")
+  ldf2 <- collect(sdf2)
+  expect_equal(dtypes(sdf2), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf2$col1), "numeric")
+  expect_equal(class(ldf2$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf2$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with only NAs, the type will also be cast to PRIMITIVE_TYPE
+  sdf3 <- filter(sdf1, "col1 == 0")
+  ldf3 <- collect(sdf3)
+  expect_equal(dtypes(sdf3), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf3$col1), "numeric")
+  expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
 unlink(parquetPath)
