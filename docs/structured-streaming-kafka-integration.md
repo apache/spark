@@ -119,6 +119,122 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 </div>
 </div>
 
+### Creating a Kafka Source Batch
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+// Subscribe to 1 topic defaults to the earliest and latest offsets
+val ds1 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
+
+// Subscribe to multiple topics, specifying explicit Kafka offsets
+val ds2 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""")
+  .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""")
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
+
+// Subscribe to a pattern, at the earliest and latest offsets
+val ds3 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .option("startingOffsets", "earliest")
+  .option("endingOffsets", "latest")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .as[(String, String)]
+
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+// Subscribe to 1 topic defaults to the earliest and latest offsets
+Dataset<Row> ds1 = spark
+  .read()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+// Subscribe to multiple topics, specifying explicit Kafka offsets
+Dataset<Row> ds2 = spark
+  .read()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .option("startingOffsets", "{\"topic1\":{\"0\":23,\"1\":-2},\"topic2\":{\"0\":-2}}")
+  .option("endingOffsets", "{\"topic1\":{\"0\":50,\"1\":-1},\"topic2\":{\"0\":-1}})
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+// Subscribe to a pattern, at the earliest and latest offsets
+Dataset<Row> ds3 = spark
+  .read()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .option("startingOffsets", "earliest")
+  .option("endingOffsets", "latest")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+{% endhighlight %}
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Subscribe to 1 topic defaults to the earliest and latest offsets
+ds1 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1")
+  .load()
+ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to multiple topics, specifying explicit Kafka offsets
+ds2 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribe", "topic1,topic2")
+  .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""")
+  .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""")
+  .load()
+ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to a pattern, at the earliest and latest offsets
+ds3 = spark
+  .read
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("subscribePattern", "topic.*")
+  .option("startingOffsets", "earliest")
+  .option("endingOffsets", "latest")
+  .load()
+ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+{% endhighlight %}
+</div>
+</div>
+
 Each row in the source has the following schema:
 <table class="table">
 <tr><th>Column</th><th>Type</th></tr>
@@ -152,7 +268,7 @@ Each row in the source has the following schema:
 </tr>
 </table>
 
-The following options must be set for the Kafka source.
+The following options must be set for the Kafka source (streaming and batch).
 
 <table class="table">
 <tr><th>Option</th><th>value</th><th>meaning</th></tr>
@@ -187,25 +303,39 @@ The following options must be set for the Kafka source.
 The following configurations are optional:
 
 <table class="table">
-<tr><th>Option</th><th>value</th><th>default</th><th>meaning</th></tr>
+<tr><th>Option</th><th>value</th><th>default</th><th>mode</th><th>meaning</th></tr>
 <tr>
   <td>startingOffsets</td>
-  <td>earliest, latest, or json string
+  <td>earliest, latest (streaming only), or json string
   {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}}
   </td>
-  <td>latest</td>
+  <td>streaming=latest, batch=earliest</td>
+  <td>streaming and batch</td>
   <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
   "latest" which is just from the latest offsets, or a json string specifying a starting offset for
   each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
-  Note: This only applies when a new Streaming query is started, and that resuming will always pick
-  up from where the query left off. Newly discovered partitions during a query will start at
+  Note: For Batch, latest (either implicitly or by using -1 in json) is not allowed.
+  For Streaming, this only applies when a new Streaming query is started, and that resuming will
+  always pick up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
+</tr>
+<tr>
+  <td>endingOffsets</td>
+  <td>latest or json string
+  {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}}
+  </td>
+  <td>latest</td>
+  <td>batch only</td>
+  <td>The end point when a batch query is started, either "latest" which is just from the latest
+  offsets, or a json string specifying a starting offset for each TopicPartition.  In the json, -1
+  as an offset can be used to refer to latest, and -2 (earliest) as an offset is not allowed.</td>
 </tr>
 <tr>
   <td>failOnDataLoss</td>
   <td>true or false</td>
   <td>true</td>
-  <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or 
+  <td>streaming only</td>
+  <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
   offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
   as you expected.</td>
 </tr>
@@ -213,24 +343,28 @@ The following configurations are optional:
   <td>kafkaConsumer.pollTimeoutMs</td>
   <td>long</td>
   <td>512</td>
+  <td>streaming and batch</td>
   <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
 </tr>
 <tr>
   <td>fetchOffset.numRetries</td>
   <td>int</td>
   <td>3</td>
+  <td>streaming and batch</td>
   <td>Number of times to retry before giving up fatch Kafka latest offsets.</td>
 </tr>
 <tr>
   <td>fetchOffset.retryIntervalMs</td>
   <td>long</td>
   <td>10</td>
+  <td>streaming and batch</td>
   <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
 </tr>
 <tr>
   <td>maxOffsetsPerTrigger</td>
   <td>long</td>
   <td>none</td>
+  <td>streaming and batch</td>
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
 </tr>
 </table>
