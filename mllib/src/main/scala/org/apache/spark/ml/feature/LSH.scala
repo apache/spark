@@ -230,9 +230,10 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    * @param datasetA One of the datasets to join.
    * @param datasetB Another dataset to join.
    * @param threshold The threshold for the distance of row pairs.
-   * @param distCol Output column for storing the distance between each result row and the key.
+   * @param distCol Output column for storing the distance between each pair of rows.
    * @return A joined dataset containing pairs of rows. The original rows are in columns
-   *         "datasetA" and "datasetB", and a distCol is added to show the distance of each pair.
+   *         "datasetA" and "datasetB", and a distCol is added to show the distance between each
+   *         pair.
    */
   def approxSimilarityJoin(
       datasetA: Dataset[_],

@@ -1564,7 +1564,7 @@ for more details on the API.
 Refer to the [BucketedRandomProjectionLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.BucketedRandomProjectionLSH)
 for more details on the API.
 
-{% include_example python/ml/bucketed_random_projection_lsh.py %}
+{% include_example python/ml/bucketed_random_projection_lsh_example.py %}
 </div>
 
 </div>
@@ -1605,6 +1605,6 @@ for more details on the API.
 Refer to the [MinHashLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinHashLSH)
 for more details on the API.
 
-{% include_example python/ml/min_hash_lsh.py %}
+{% include_example python/ml/min_hash_lsh_example.py %}
 </div>
 </div>

@@ -135,14 +135,12 @@ class LSHParams(Params):
     def __init__(self):
         super(LSHParams, self).__init__()
 
-    @since("2.2.0")
     def setNumHashTables(self, value):
         """
         Sets the value of :py:attr:`numHashTables`.
         """
         return self._set(numHashTables=value)
 
-    @since("2.2.0")
     def getNumHashTables(self):
         """
         Gets the value of numHashTables or its default value.
@@ -155,7 +153,6 @@ class LSHModel(JavaModel):
     Mixin for Locality Sensitive Hashing (LSH) models.
     """
 
-    @since("2.2.0")
     def approxNearestNeighbors(self, dataset, key, numNearestNeighbors, distCol="distCol"):
         """
         Given a large dataset and an item, approximately find at most k items which have the
@@ -170,13 +167,12 @@ class LSHModel(JavaModel):
         :param numNearestNeighbors: The maximum number of nearest neighbors.
         :param distCol: Output column for storing the distance between each result row and the key.
                         Use "distCol" as default value if it's not specified.
-        :return: A dataset containing at most k items closest to the key. A distCol is added
-                 to show the distance between each row and the key.
+        :return: A dataset containing at most k items closest to the key. A column "distCol" is
+                 added to show the distance between each row and the key.
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors,
                                distCol)
 
-    @since("2.2.0")
     def approxSimilarityJoin(self, datasetA, datasetB, threshold, distCol="distCol"):
         """
         Join two datasets to approximately find all pairs of rows whose distance are smaller than
@@ -187,11 +183,11 @@ class LSHModel(JavaModel):
         :param datasetA: One of the datasets to join.
         :param datasetB: Another dataset to join.
         :param threshold: The threshold for the distance of row pairs.
-        :param distCol: Output column for storing the distance between each result row and the key.
-                        Use "distCol" as default value if it's not specified.
+        :param distCol: Output column for storing the distance between each pair of rows. Use
+                        "distCol" as default value if it's not specified.
         :return: A joined dataset containing pairs of rows. The original rows are in columns
-                "datasetA" and "datasetB", and a distCol is added to show the distance of
-                each pair.
+                 "datasetA" and "datasetB", and a column "distCol" is added to show the distance
+                 between each pair.
         """
         return self._call_java("approxSimilarityJoin", datasetA, datasetB, threshold, distCol)
 
@@ -230,10 +226,10 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     >>> df2 = spark.createDataFrame(data2, ["id", "features"])
     >>> model.approxNearestNeighbors(df2, Vectors.dense([1.0, 2.0]), 1).collect()
     [Row(id=4, features=DenseVector([2.0, 2.0]), hashes=[DenseVector([1.0])], distCol=1.0)]
-    >>> model.approxSimilarityJoin(df, df2, 3.0).select(
+    >>> model.approxSimilarityJoin(df, df2, 3.0, distCol="EuclideanDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
-    ...     col("distCol").alias("EuclideanDistance")).show()
+    ...     col("EuclideanDistance")).show()
     +---+---+-----------------+
     |idA|idB|EuclideanDistance|
     +---+---+-----------------+
@@ -980,10 +976,10 @@ class MinHashLSH(JavaEstimator, LSHParams, HasInputCol, HasOutputCol, HasSeed,
     >>> key = Vectors.sparse(6, [1, 2], [1.0, 1.0])
     >>> model.approxNearestNeighbors(df2, key, 1).collect()
     [Row(id=5, features=SparseVector(6, {1: 1.0, 2: 1.0, 4: 1.0}), hashes=[DenseVector([-163892...
-    >>> model.approxSimilarityJoin(df, df2, 0.6).select(
+    >>> model.approxSimilarityJoin(df, df2, 0.6, distCol="JaccardDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
-    ...     col("distCol").alias("JaccardDistance")).show()
+    ...     col("JaccardDistance")).show()
     +---+---+---------------+
     |idA|idB|JaccardDistance|
     +---+---+---------------+

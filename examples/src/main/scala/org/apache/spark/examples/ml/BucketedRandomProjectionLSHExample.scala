@@ -25,6 +25,11 @@ import org.apache.spark.sql.functions._
 // $example off$
 import org.apache.spark.sql.SparkSession
 
+/**
+ * An example demonstrating BucketedRandomProjectionLSH.
+ * Run with:
+ *   bin/run-example org.apache.spark.examples.ml.BucketedRandomProjectionLSHExample
+ */
 object BucketedRandomProjectionLSHExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession
@@ -67,10 +72,10 @@ object BucketedRandomProjectionLSHExample {
     // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     // `model.approxSimilarityJoin(transformedA, transformedB, 1.5)`
     println("Approximately joining dfA and dfB on Euclidean distance smaller than 1.5:")
-    model.approxSimilarityJoin(dfA, dfB, 1.5)
+    model.approxSimilarityJoin(dfA, dfB, 1.5, "EuclideanDistance")
       .select(col("datasetA.id").alias("idA"),
         col("datasetB.id").alias("idB"),
-        col("distCol").alias("EuclideanDistance")).show()
+        col("EuclideanDistance")).show()
 
     // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     // neighbor search.

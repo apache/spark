@@ -65,10 +65,10 @@ if __name__ == "__main__":
     # We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     # `model.approxSimilarityJoin(transformedA, transformedB, 1.5)`
     print("Approximately joining dfA and dfB on Euclidean distance smaller than 1.5:")
-    model.approxSimilarityJoin(dfA, dfB, 1.5)\
+    model.approxSimilarityJoin(dfA, dfB, 1.5, distCol="EuclideanDistance")\
         .select(col("datasetA.id").alias("idA"),
                 col("datasetB.id").alias("idB"),
-                col("distCol").alias("EuclideanDistance")).show()
+                col("EuclideanDistance")).show()
 
     # Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     # neighbor search.

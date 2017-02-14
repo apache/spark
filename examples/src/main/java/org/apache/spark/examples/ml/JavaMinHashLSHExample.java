@@ -36,9 +36,14 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.functions.col;
 // $example off$
 
+/**
+ * An example demonstrating MinHashLSH.
+ * Run with:
+ *   bin/run-example org.apache.spark.examples.ml.JavaMinHashLSHExample
+ */
 public class JavaMinHashLSHExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
@@ -86,16 +91,17 @@ public class JavaMinHashLSHExample {
     // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     // `model.approxSimilarityJoin(transformedA, transformedB, 0.6)`
     System.out.println("Approximately joining dfA and dfB on Jaccard distance smaller than 0.6:");
-    model.approxSimilarityJoin(dfA, dfB, 0.6)
+    model.approxSimilarityJoin(dfA, dfB, 0.6, "JaccardDistance")
       .select(col("datasetA.id").alias("idA"),
         col("datasetB.id").alias("idB"),
-        col("distCol").alias("JaccardDistance")).show();
+        col("JaccardDistance")).show();
 
     // Compute the locality sensitive hashes for the input rows, then perform approximate nearest
     // neighbor search.
     // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     // `model.approxNearestNeighbors(transformedA, key, 2)`
-    // It may return less than 2 rows because of lack of elements in the hash buckets.
+    // It may return less than 2 rows when not enough approximate near-neighbor candidates are
+    // found.
     System.out.println("Approximately searching dfA for 2 nearest neighbors of the key:");
     model.approxNearestNeighbors(dfA, key, 2).show();
     // $example off$

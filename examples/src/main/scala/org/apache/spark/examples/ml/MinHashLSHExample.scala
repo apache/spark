@@ -25,6 +25,11 @@ import org.apache.spark.sql.functions._
 // $example off$
 import org.apache.spark.sql.SparkSession
 
+/**
+ * An example demonstrating MinHashLSH.
+ * Run with:
+ *   bin/run-example org.apache.spark.examples.ml.MinHashLSHExample
+ */
 object MinHashLSHExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession
@@ -73,7 +78,8 @@ object MinHashLSHExample {
     // neighbor search.
     // We could avoid computing hashes by passing in the already-transformed dataset, e.g.
     // `model.approxNearestNeighbors(transformedA, key, 2)`
-    // It may return less than 2 rows because of lack of elements in the hash buckets.
+    // It may return less than 2 rows when not enough approximate near-neighbor candidates are
+    // found.
     println("Approximately searching dfA for 2 nearest neighbors of the key:")
     model.approxNearestNeighbors(dfA, key, 2).show()
     // $example off$
