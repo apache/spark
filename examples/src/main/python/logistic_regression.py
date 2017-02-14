@@ -32,6 +32,7 @@ from pyspark.sql import SparkSession
 
 D = 10  # Number of dimensions
 
+
 # Read a batch of points from the input file into a NumPy matrix object. We operate on batches to
 # make further computations faster.
 # The data file contains lines of the form <label> <x1> <x2> ... <xD>. We load each block of these
