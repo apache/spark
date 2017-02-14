@@ -266,6 +266,9 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(result[0][0], "a")
         self.assertEqual(result[0][1], "b")
 
+        with self.assertRaises(ValueError):
+            data.select(explode(data.mapfield).alias("a", "b", metadata={'max': 99})).count()
+
     def test_and_in_expression(self):
         self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
         self.assertRaises(ValueError, lambda: (self.df.key <= 10) and (self.df.value <= "2"))
@@ -894,6 +897,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(self.testData, df.select("*").collect())
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
+
+    def test_column_alias_metadata(self):
+        df = self.df
+        df_with_meta = df.select(df.key.alias('pk', metadata={'label': 'Primary Key'}))
+        self.assertEqual(df_with_meta.schema['pk'].metadata['label'], 'Primary Key')
+        with self.assertRaises(AssertionError):
+            df.select(df.key.alias('pk', metdata={'label': 'Primary Key'}))
 
     def test_freqItems(self):
         vals = [Row(a=1, b=-2.0) if i % 2 == 0 else Row(a=i, b=i * 1.0) for i in range(100)]
