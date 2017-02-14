@@ -27,6 +27,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
 class SubstituteHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  test("invalid hints should be ignored") {
+    checkAnalysis(
+      Hint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
+      testRelation,
+      caseSensitive = false)
+  }
+
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
