@@ -674,6 +674,41 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
   }
 
+  private val shuffleFetchFailureTests = Seq(
+    ("fetch failure with external shuffle service enabled", true, Set(0, 1, 2, 4)),
+    ("fetch failure with internal shuffle service enabled", false, Set(0, 1)))
+
+  for((eventDescription, shuffleServiceOn, expectedPartitionsLost)
+      <- shuffleFetchFailureTests) {
+    test(eventDescription) {
+      afterEach()
+      val conf = new SparkConf()
+      conf.set("spark.shuffle.service.enabled", shuffleServiceOn.toString)
+      init(conf)
+      assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
+
+      val shuffleMapRdd = new MyRDD(sc, 5, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+      val shuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+      submit(reduceRdd, Array(0, 1))
+
+      complete(taskSets(0), Seq(
+        (Success, makeMapStatus("hostA", reduceRdd.partitions.length, 5, Some("exec-hostA-1"))),
+        (Success, makeMapStatus("hostA", reduceRdd.partitions.length, 5, Some("exec-hostA-1"))),
+        (Success, makeMapStatus("hostA", reduceRdd.partitions.length, 5, Some("exec-hostA-2"))),
+        (Success, makeMapStatus("hostB", reduceRdd.partitions.length, 5, Some("exec-hostB-1"))),
+        (Success, makeMapStatus("hostA", reduceRdd.partitions.length, 5, Some("exec-hostA-2")))))
+
+      complete(taskSets(1), Seq(
+        (Success, 42),
+        (FetchFailed(makeBlockManagerId("hostA", Some("exec-hostA-1")),
+          shuffleId, 0, 0, "ignored"), null)))
+      scheduler.resubmitFailedStages()
+      assert(taskSets(2).tasks.map(_.partitionId).toSet === expectedPartitionsLost)
+    }
+  }
+
   // Helper function to validate state when creating tests for task failures
   private def checkStageId(stageId: Int, attempt: Int, stageAttempt: TaskSet) {
     assert(stageAttempt.stageId === stageId)
@@ -2330,9 +2365,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 }
 
 object DAGSchedulerSuite {
-  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes))
+  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2,
+                    execId: Option[String] = None): MapStatus =
+    MapStatus(makeBlockManagerId(host, execId), Array.fill[Long](reduces)(sizes))
 
-  def makeBlockManagerId(host: String): BlockManagerId =
-    BlockManagerId("exec-" + host, host, 12345)
+  def makeBlockManagerId(host: String, execId: Option[String] = None): BlockManagerId =
+    BlockManagerId(execId.getOrElse("exec-" + host), host, 12345)
 }

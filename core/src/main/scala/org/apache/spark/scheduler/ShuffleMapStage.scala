@@ -132,25 +132,45 @@ private[spark] class ShuffleMapStage(
     outputLocs.map(_.headOption.orNull)
   }
 
-  /**
-   * Removes all shuffle outputs associated with this executor. Note that this will also remove
-   * outputs which are served by an external shuffle server (if one exists), as they are still
-   * registered with this execId.
-   */
-  def removeOutputsOnExecutor(execId: String): Unit = {
+  private def removeOutputsHelper(locationChecker: BlockManagerId => Boolean): Boolean = {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
       val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.location.executorId == execId)
+      val newList = prevList.filterNot(status => locationChecker(status.location))
       outputLocs(partition) = newList
       if (prevList != Nil && newList == Nil) {
         becameUnavailable = true
         _numAvailableOutputs -= 1
       }
     }
+    becameUnavailable
+  }
+
+  /**
+   * Removes all shuffle outputs associated with this executor. Note that this will also remove
+   * outputs which are served by an external shuffle server (if one exists), as they are still
+   * registered with this execId.
+   */
+  def removeOutputsOnExecutor(execId: String): Unit = {
+    val becameUnavailable = removeOutputsHelper(
+      (blockManagerId: BlockManagerId) => { blockManagerId.executorId == execId })
+
     if (becameUnavailable) {
       logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
         this, execId, _numAvailableOutputs, numPartitions, isAvailable))
+    }
+  }
+
+  /**
+   * Removes all shuffle outputs associated with the external shuffle service on this host.
+   */
+  def removeOutputsOnHost(host: String): Unit = {
+    val becameUnavailable = removeOutputsHelper(
+      (blockManagerId: BlockManagerId) => { blockManagerId.host == host })
+
+    if (becameUnavailable) {
+      logInfo("%s is now unavailable on host %s (%d/%d, %s)".format(
+        this, host, _numAvailableOutputs, numPartitions, isAvailable))
     }
   }
 }
