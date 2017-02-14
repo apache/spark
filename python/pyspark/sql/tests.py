@@ -504,6 +504,13 @@ class SQLTests(ReusedPySparkTestCase):
 
         self.assertTupleEqual(expected, actual)
 
+    def test_udf_shouldnt_accept_noncallable_object(self):
+        from pyspark.sql.functions import UserDefinedFunction
+        from pyspark.sql.types import StringType
+
+        non_callable = None
+        self.assertRaises(TypeError, UserDefinedFunction, non_callable, StringType())
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
