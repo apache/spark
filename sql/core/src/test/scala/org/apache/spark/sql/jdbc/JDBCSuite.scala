@@ -965,10 +965,10 @@ class JDBCSuite extends SparkFunSuite
     withTempView("people_view") {
       sql(
         s"""
-           |CREATE TEMPORARY VIEW people_view
-           |USING org.apache.spark.sql.jdbc
-           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+          |CREATE TEMPORARY VIEW people_view
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
+        """.stripMargin.replaceAll("\n", " "))
 
       assert(sql("select * from people_view").count() == 3)
     }

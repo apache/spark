@@ -64,15 +64,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
       .executeUpdate()
-    conn.prepareStatement("INSERT INTO datetime VALUES ("
-      + "1, {d '1991-11-09'}, {ts '1996-01-01 01:23:45'})").executeUpdate()
+    conn.prepareStatement(
+      """INSERT INTO datetime VALUES
+        |(1, {d '1991-11-09'}, {ts '1996-01-01 01:23:45'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
 
     sql(
       s"""
-         |CREATE TEMPORARY VIEW datetime
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$jdbcUrl', dbTable 'datetime', oracle.jdbc.mapDateToTimestamp 'false')
+        |CREATE TEMPORARY VIEW datetime
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$jdbcUrl', dbTable 'datetime', oracle.jdbc.mapDateToTimestamp 'false')
       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("CREATE TABLE datetime1 (id NUMBER(10), d DATE, t TIMESTAMP)")
@@ -81,9 +83,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
 
     sql(
       s"""
-         |CREATE TEMPORARY VIEW datetime1
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$jdbcUrl', dbTable 'datetime1', oracle.jdbc.mapDateToTimestamp 'false')
+        |CREATE TEMPORARY VIEW datetime1
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$jdbcUrl', dbTable 'datetime1', oracle.jdbc.mapDateToTimestamp 'false')
       """.stripMargin.replaceAll("\n", " "))
   }
 
