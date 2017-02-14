@@ -304,11 +304,12 @@ class Column(object):
         Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
-        Optional ``metadata`` keyword argument can be passed when aliasing a single column.
-        Its contents will be stored in the ``metadata`` attribute of the matching ``StructField``.
+        :param alias: strings of desired column names (collects all positional arguments passed)
+        :param metadata: a dict of information to be stored in ``metadata`` attribute of the
+            corresponding :class: `StructField` (optional, keyword only argument)
 
         .. versionchanged:: 2.2
-           Added optional metadata argument.
+           Added optional ``metadata`` argument.
 
         >>> df.select(df.age.alias("age2")).collect()
         [Row(age2=2), Row(age2=5)]
