@@ -11,7 +11,7 @@ Please review http://spark.apache.org/contributing.html before opening a pull re
 
 ## Discussion detail.
 
-More detailed discussion, please refers to:
+(Please fill in related JIRA url; otherwise, remove this. The format should be:)
 
-(Please fill in related JIRA url; otherwise, remove this. The format like:)
+For more detailed discussion, please refers to:
 - [SPARK-XXX](https://issues.apache.org/jira/browse/SPARK-XXX)
