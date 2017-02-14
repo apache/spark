@@ -92,7 +92,8 @@ object SubstituteHints {
   }
 
   /**
-   * Removes all the hints. This must be executed after all the other hint rules are executed.
+   * Removes all the hints, used to remove invalid hints provided by the user.
+   * This must be executed after all the other hint rules are executed.
    */
   object RemoveAllHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {

@@ -383,7 +383,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val withWindow = withDistinct.optionalMap(windows)(withWindows)
 
         // Hint
-        withWindow.optionalMap(ctx.hint)(withHints)
+        withWindow.optionalMap(hint)(withHints)
     }
   }
 

@@ -71,10 +71,8 @@ class SubstituteHintsSuite extends AnalysisTest {
   }
 
   test("should work for subqueries") {
-    val relation = UnresolvedRelation(TableIdentifier("table"), Some("tableAlias"))
-
     checkAnalysis(
-      Hint("MAPJOIN", Seq("tableAlias"), relation),
+      Hint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
       BroadcastHint(testRelation),
       caseSensitive = false)
 
@@ -85,7 +83,7 @@ class SubstituteHintsSuite extends AnalysisTest {
 
     // Negative case: if the alias doesn't match, don't match the original table name.
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), relation),
+      Hint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
       testRelation,
       caseSensitive = false)
   }
