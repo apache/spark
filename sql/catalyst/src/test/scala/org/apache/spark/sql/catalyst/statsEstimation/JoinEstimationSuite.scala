@@ -24,6 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Project, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
 
@@ -88,6 +89,56 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 1,
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
+    assert(join.stats(conf) == expectedStats)
+  }
+
+  test("disjoint left outer join") {
+    // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
+    // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
+    // key-5-9 and key-2-4 are disjoint
+    val join = Join(table1, table2, LeftOuter,
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+    val expectedStats = Statistics(
+      sizeInBytes = 5 * (8 + 4 * 4),
+      rowCount = Some(5),
+      attributeStats = AttributeMap(Seq("key-1-5", "key-5-9").map(nameToColInfo) ++
+        // Null count for right side columns = left row count
+        Seq(nameToAttr("key-1-2") -> nullColumnStat(nameToAttr("key-1-2").dataType, 5),
+          nameToAttr("key-2-4") -> nullColumnStat(nameToAttr("key-2-4").dataType, 5))))
+    assert(join.stats(conf) == expectedStats)
+  }
+
+  test("disjoint right outer join") {
+    // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
+    // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
+    // key-5-9 and key-2-4 are disjoint
+    val join = Join(table1, table2, RightOuter,
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+    val expectedStats = Statistics(
+      sizeInBytes = 3 * (8 + 4 * 4),
+      rowCount = Some(3),
+      attributeStats = AttributeMap(Seq("key-1-2", "key-2-4").map(nameToColInfo) ++
+        // Null count for left side columns = right row count
+        Seq(nameToAttr("key-1-5") -> nullColumnStat(nameToAttr("key-1-5").dataType, 3),
+          nameToAttr("key-5-9") -> nullColumnStat(nameToAttr("key-5-9").dataType, 3))))
+    assert(join.stats(conf) == expectedStats)
+  }
+
+  test("disjoint full outer join") {
+    // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
+    // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
+    // key-5-9 and key-2-4 are disjoint
+    val join = Join(table1, table2, FullOuter,
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+    val expectedStats = Statistics(
+      sizeInBytes = (5 + 3) * (8 + 4 * 4),
+      rowCount = Some(5 + 3),
+      attributeStats = AttributeMap(
+        // Update null count in column stats.
+        Seq(nameToAttr("key-1-5") -> columnInfo(nameToAttr("key-1-5")).copy(nullCount = 3),
+          nameToAttr("key-5-9") -> columnInfo(nameToAttr("key-5-9")).copy(nullCount = 3),
+          nameToAttr("key-1-2") -> columnInfo(nameToAttr("key-1-2")).copy(nullCount = 5),
+          nameToAttr("key-2-4") -> columnInfo(nameToAttr("key-2-4")).copy(nullCount = 5))))
     assert(join.stats(conf) == expectedStats)
   }
 

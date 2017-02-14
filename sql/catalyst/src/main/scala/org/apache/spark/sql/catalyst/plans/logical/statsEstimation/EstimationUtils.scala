@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DataType, StringType}
 
 
 object EstimationUtils {
@@ -36,6 +36,11 @@ object EstimationUtils {
     statsAndAttr.forall { case (stats, attr) =>
       stats.attributeStats.contains(attr)
     }
+  }
+
+  def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
+    ColumnStat(distinctCount = 0, min = None, max = None, nullCount = rowCount,
+      avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
   }
 
   def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()

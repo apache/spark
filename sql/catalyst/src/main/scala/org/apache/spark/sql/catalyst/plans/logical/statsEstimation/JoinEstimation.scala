@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
@@ -26,7 +27,6 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.types.DataType
 
 
 object JoinEstimation extends Logging {
@@ -88,54 +88,52 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       // 3. Update statistics based on the output of join
       val inputAttrStats = AttributeMap(
         leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
-      val joinKeyStats = if (innerJoinedRows == 0) {
-        val leftKeys = joinKeyPairs.map(_._1)
-        val rightKeys = joinKeyPairs.map(_._2)
+      val attributesWithStat = join.output.filter(a => inputAttrStats.contains(a))
+      val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
+
+      val outputStats: Seq[(Attribute, ColumnStat)] = if (innerJoinedRows == 0) {
         joinType match {
           // For outer joins, if the inner join part is empty, the number of output rows is the
           // same as that of the outer side. And column stats of join keys from the outer side
           // keep unchanged, while column stats of join keys from the other side should be updated
           // based on added null values.
           case LeftOuter =>
-            AttributeMap[ColumnStat](leftKeys.map(k => (k, inputAttrStats(k))) ++
-              rightKeys.map(k => (k, nullColumnStat(k.dataType, leftRows))))
+            fromLeft.map(a => (a, inputAttrStats(a))) ++
+              fromRight.map(a => (a, nullColumnStat(a.dataType, leftRows)))
           case RightOuter =>
-            AttributeMap[ColumnStat](rightKeys.map(k => (k, inputAttrStats(k))) ++
-              leftKeys.map(k => (k, nullColumnStat(k.dataType, rightRows))))
+            fromRight.map(a => (a, inputAttrStats(a))) ++
+              fromLeft.map(a => (a, nullColumnStat(a.dataType, rightRows)))
           case FullOuter =>
-            AttributeMap[ColumnStat](leftKeys.map { k =>
-              val oriColStat = inputAttrStats(k)
-              (k, oriColStat.copy(distinctCount = oriColStat.distinctCount + rightRows))
-            } ++ rightKeys.map { k =>
-              val oriColStat = inputAttrStats(k)
-              (k, oriColStat.copy(distinctCount = oriColStat.distinctCount + leftRows))
-            })
+            fromLeft.map { a =>
+              val oriColStat = inputAttrStats(a)
+              (a, oriColStat.copy(nullCount = oriColStat.nullCount + rightRows))
+            } ++ fromRight.map { a =>
+              val oriColStat = inputAttrStats(a)
+              (a, oriColStat.copy(nullCount = oriColStat.nullCount + leftRows))
+            }
           case _ =>
-            AttributeMap[ColumnStat](Nil)
+            // For inner join, since the output is empty, we don't need to keep column stats.
+            Nil
         }
       } else {
-        getIntersectedStats(joinKeyPairs)
+        val joinKeyStats = getIntersectedStats(joinKeyPairs)
+        join.joinType match {
+          // For outer joins, don't update column stats from the outer side.
+          case LeftOuter =>
+            fromLeft.map(a => (a, inputAttrStats(a))) ++
+              updateAttrStats(outputRows, fromRight, inputAttrStats, joinKeyStats)
+          case RightOuter =>
+            updateAttrStats(outputRows, fromLeft, inputAttrStats, joinKeyStats) ++
+              fromRight.map(a => (a, inputAttrStats(a)))
+          case FullOuter =>
+            attributesWithStat.map(a => (a, inputAttrStats(a)))
+          case _ =>
+            // Update column stats from both sides for inner or cross join.
+            updateAttrStats(outputRows, attributesWithStat, inputAttrStats, joinKeyStats)
+        }
       }
-      val attributesWithStat = join.output.filter(a => inputAttrStats.contains(a))
-      val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
-      val outputStats: Map[Attribute, ColumnStat] = join.joinType match {
-        case LeftOuter =>
-          // Don't update column stats for attributes from left side.
-          fromLeft.map(a => (a, inputAttrStats(a))).toMap ++
-            updateAttrStats(outputRows, fromRight, inputAttrStats, joinKeyStats)
-        case RightOuter =>
-          // Don't update column stats for attributes from right side.
-          updateAttrStats(outputRows, fromLeft, inputAttrStats, joinKeyStats) ++
-            fromRight.map(a => (a, inputAttrStats(a))).toMap
-        case FullOuter =>
-          // Don't update column stats for attributes from both sides.
-          attributesWithStat.map(a => (a, inputAttrStats(a))).toMap
-        case _ =>
-          // Update column stats from both sides for inner or cross join.
-          updateAttrStats(outputRows, attributesWithStat, inputAttrStats, joinKeyStats)
-      }
-      val outputAttrStats = AttributeMap(outputStats.toSeq)
 
+      val outputAttrStats = AttributeMap(outputStats)
       Some(Statistics(
         sizeInBytes = getOutputSize(join.output, outputRows, outputAttrStats),
         rowCount = Some(outputRows),
@@ -213,13 +211,13 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       outputRows: BigInt,
       attributes: Seq[Attribute],
       oldAttrStats: AttributeMap[ColumnStat],
-      joinKeyStats: AttributeMap[ColumnStat]): AttributeMap[ColumnStat] = {
-    val outputAttrStats = new mutable.HashMap[Attribute, ColumnStat]()
+      joinKeyStats: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
+    val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
     val leftRows = leftStats.rowCount.get
     val rightRows = rightStats.rowCount.get
     if (outputRows == leftRows * rightRows) {
       // Cartesian product, just propagate the original column stats
-      attributes.foreach(a => outputAttrStats.put(a, oldAttrStats(a)))
+      attributes.foreach(a => outputAttrStats += a -> oldAttrStats(a))
     } else if (outputRows != 0) {
       val leftRatio =
         if (leftRows != 0) BigDecimal(outputRows) / BigDecimal(leftRows) else BigDecimal(0)
@@ -228,7 +226,7 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       attributes.foreach { a =>
         // check if this attribute is a join key
         if (joinKeyStats.contains(a)) {
-          outputAttrStats.put(a, joinKeyStats(a))
+          outputAttrStats += a -> joinKeyStats(a)
         } else {
           val oldCS = oldAttrStats(a)
           val oldNdv = oldCS.distinctCount
@@ -243,11 +241,11 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
             oldNdv
           }
           // TODO: support nullCount updates for specific outer joins
-          outputAttrStats.put(a, oldCS.copy(distinctCount = newNdv))
+          outputAttrStats += a -> oldCS.copy(distinctCount = newNdv)
         }
       }
     }
-    AttributeMap(outputAttrStats.toSeq)
+    outputAttrStats
   }
 
   /** Get intersected column stats for join keys. */
@@ -273,11 +271,6 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
       }
     }
     AttributeMap(intersectedStats.toSeq)
-  }
-
-  private def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
-    ColumnStat(distinctCount = 0, min = None, max = None, nullCount = rowCount,
-      avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
   }
 
   private def intersectedColumnStat(
