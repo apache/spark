@@ -270,7 +270,8 @@ Each row in the source has the following schema:
 </tr>
 </table>
 
-The following options must be set for the Kafka source (streaming and batch).
+The following options must be set for the Kafka source
+for both batch and streaming queries.
 
 <table class="table">
 <tr><th>Option</th><th>value</th><th>meaning</th></tr>
@@ -305,19 +306,19 @@ The following options must be set for the Kafka source (streaming and batch).
 The following configurations are optional:
 
 <table class="table">
-<tr><th>Option</th><th>value</th><th>default</th><th>mode</th><th>meaning</th></tr>
+<tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
 <tr>
   <td>startingOffsets</td>
-  <td>earliest, latest (streaming only), or json string
-  {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}}
+  <td>"earliest", "latest" (streaming only), or json string
+  """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """
   </td>
-  <td>streaming=latest, batch=earliest</td>
+  <td>"latest" for streaming, "earliest" for batch</td>
   <td>streaming and batch</td>
   <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
   "latest" which is just from the latest offsets, or a json string specifying a starting offset for
   each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
-  Note: For Batch, latest (either implicitly or by using -1 in json) is not allowed.
-  For Streaming, this only applies when a new Streaming query is started, and that resuming will
+  Note: For Batch queries, latest (either implicitly or by using -1 in json) is not allowed.
+  For Streaming queries, this only applies when a new query is started, and that resuming will
   always pick up from where the query left off. Newly discovered partitions during a query will start at
   earliest.</td>
 </tr>
@@ -353,7 +354,7 @@ The following configurations are optional:
   <td>int</td>
   <td>3</td>
   <td>streaming and batch</td>
-  <td>Number of times to retry before giving up fatch Kafka latest offsets.</td>
+  <td>Number of times to retry before giving up fetching Kafka offsets.</td>
 </tr>
 <tr>
   <td>fetchOffset.retryIntervalMs</td>
