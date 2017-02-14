@@ -349,4 +349,17 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(e.contains("Invalid value `0` for parameter `numPartitions` in table writing " +
       "via JDBC. The minimum value is 1."))
   }
+
+  test("SPARK-19318 temporary view data source option keys should be case-insensitive") {
+    withTempView("people_view") {
+      sql(
+        s"""
+          |CREATE TEMPORARY VIEW people_view
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (uRl '$url1', DbTaBlE 'TEST.PEOPLE1', User 'testUser', PassWord 'testPass')
+        """.stripMargin.replaceAll("\n", " "))
+      sql("INSERT OVERWRITE TABLE PEOPLE_VIEW SELECT * FROM PEOPLE")
+      assert(sql("select * from people_view").count() == 2)
+    }
+  }
 }
