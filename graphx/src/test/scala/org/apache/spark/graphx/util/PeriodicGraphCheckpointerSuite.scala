@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.impl
+package org.apache.spark.graphx.util
 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.{Edge, Graph, LocalSparkContext}
-import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -90,6 +89,7 @@ class PeriodicGraphCheckpointerSuite extends SparkFunSuite with LocalSparkContex
 }
 
 private object PeriodicGraphCheckpointerSuite {
+  private val defaultStorageLevel = StorageLevel.MEMORY_ONLY_SER
 
   case class GraphToCheck(graph: Graph[Double, Double], gIndex: Int)
 
@@ -100,7 +100,8 @@ private object PeriodicGraphCheckpointerSuite {
     Edge[Double](3, 4, 0))
 
   def createGraph(sc: SparkContext): Graph[Double, Double] = {
-    Graph.fromEdges[Double, Double](sc.parallelize(edges), 0)
+    Graph.fromEdges[Double, Double](
+      sc.parallelize(edges), 0, defaultStorageLevel, defaultStorageLevel)
   }
 
   def checkPersistence(graphs: Seq[GraphToCheck], iteration: Int): Unit = {
@@ -120,8 +121,8 @@ private object PeriodicGraphCheckpointerSuite {
         assert(graph.vertices.getStorageLevel == StorageLevel.NONE)
         assert(graph.edges.getStorageLevel == StorageLevel.NONE)
       } else {
-        assert(graph.vertices.getStorageLevel != StorageLevel.NONE)
-        assert(graph.edges.getStorageLevel != StorageLevel.NONE)
+        assert(graph.vertices.getStorageLevel == defaultStorageLevel)
+        assert(graph.edges.getStorageLevel == defaultStorageLevel)
       }
     } catch {
       case _: AssertionError =>
