@@ -29,13 +29,9 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
  * Note that this is separatedly into two rules because in the future we might introduce new hint
  * rules that have different ordering requirements from broadcast.
  */
-object SubstituteHints {
+object ResolveHints {
 
   /**
-   * Substitute Hints.
-   *
-   * The only hint currently available is broadcast join hint.
-   *
    * For broadcast hint, we accept "BROADCAST", "BROADCASTJOIN", and "MAPJOIN", and a sequence of
    * relation aliases can be specified in the hint. A broadcast hint plan node will be inserted
    * on top of any relation (that is not aliased differently), subquery, or common table expression
@@ -47,7 +43,7 @@ object SubstituteHints {
    *
    * This rule must happen before common table expressions.
    */
-  class SubstituteBroadcastHints(conf: CatalystConf) extends Rule[LogicalPlan] {
+  class ResolveBroadcastHints(conf: CatalystConf) extends Rule[LogicalPlan] {
     private val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
 
     def resolver: Resolver = conf.resolver
@@ -61,18 +57,21 @@ object SubstituteHints {
           case r: UnresolvedRelation =>
             val alias = r.alias.getOrElse(r.tableIdentifier.table)
             if (toBroadcast.exists(resolver(_, alias))) BroadcastHint(plan) else plan
-          case r: SubqueryAlias =>
-            if (toBroadcast.exists(resolver(_, r.alias))) {
-              BroadcastHint(plan)
-            } else {
-              // Don't recurse down subquery aliases if there are no match.
-              recurse = false
-              plan
-            }
-          case _: BroadcastHint =>
-            // Found a broadcast hint; don't change the plan but also don't recurse down.
+
+          case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
+            BroadcastHint(plan)
+
+          case _: BroadcastHint | _: View | _: With | _: SubqueryAlias =>
+            // Don't traverse down these nodes.
+            // For an existing broadcast hint, there is no point going down (if we do, we either
+            // won't change the structure, or will introduce another broadcast hint that is useless.
+            // The rest (view, with, subquery) indicates different scopes that we shouldn't traverse
+            // down. Note that technically when this rule is executed, we haven't completed view
+            // resolution yet and as a result the view part should be deadcode. I'm leaving it here
+            // to be more future proof in case we change the view we do view resolution.
             recurse = false
             plan
+
           case _ =>
             plan
         }
