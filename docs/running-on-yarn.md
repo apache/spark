@@ -604,3 +604,17 @@ spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spn
 
 Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
 will include a list of all tokens obtained, and their expiry details
+
+## Using the Spark History Server to replace the Spark Web UI
+
+It is possible to use the Spark History Server application page as the tracking URL for running
+applications in scenarios where it may be desired to disable the built-in application UI. Two steps
+need to be taken for this to work:
+
+- On the application side, set <code>spark.yarn.historyServer.allowTracking=true</code> in Spark's
+  configuration. This will tell Spark to use the history server's URL as the tracking URL if
+  the application's UI is disabled.
+- On the Spark History Server, add <code>org.apache.spark.deploy.yarn.YarnProxyRedirectFilter</code>
+  to the list of filters in the <code>spark.ui.filters</code> configuration.
+
+Be aware that the history server information may not be up-to-date with the application's state.
