@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -158,13 +158,16 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel)
+        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel,
+          encrypt = true)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
       serializerManager
         .dataDeserializeStream(
-          blockId, new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
+          blockId,
+          new ChunkedByteBuffer(dataRead).toInputStream(),
+          maybeEncrypted = false)(elementClassTag)
         .asInstanceOf[Iterator[T]]
     }
 

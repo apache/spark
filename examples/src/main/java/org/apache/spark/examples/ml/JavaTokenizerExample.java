@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType;
 // col("...") is preferable to df.col("...")
 import static org.apache.spark.sql.functions.callUDF;
 import static org.apache.spark.sql.functions.col;
-// $example off
+// $example off$
 
 public class JavaTokenizerExample {
   public static void main(String[] args) {

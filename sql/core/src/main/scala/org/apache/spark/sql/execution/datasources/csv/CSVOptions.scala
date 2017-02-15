@@ -27,11 +27,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
 private[csv] class CSVOptions(
-    @transient private val parameters: CaseInsensitiveMap, defaultTimeZoneId: String)
+    @transient private val parameters: CaseInsensitiveMap[String], defaultTimeZoneId: String)
   extends Logging with Serializable {
 
   def this(parameters: Map[String, String], defaultTimeZoneId: String) =
-    this(new CaseInsensitiveMap(parameters), defaultTimeZoneId)
+    this(CaseInsensitiveMap(parameters), defaultTimeZoneId)
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
