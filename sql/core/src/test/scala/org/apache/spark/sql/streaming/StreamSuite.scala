@@ -22,6 +22,7 @@ import scala.util.control.ControlThrowable
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.StreamSourceProvider
@@ -279,8 +280,19 @@ class StreamSuite extends StreamTest {
   test("explain") {
     val inputData = MemoryStream[String]
     val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
-    // Test `explain` not throwing errors
-    df.explain()
+
+    // Test `df.explain`
+    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    assert(explainString.contains("StateStoreRestore"))
+
+    // Test StreamingQuery.display
     val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
       .start()
       .asInstanceOf[StreamingQueryWrapper]
