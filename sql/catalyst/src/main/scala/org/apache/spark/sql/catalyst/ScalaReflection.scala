@@ -786,7 +786,6 @@ object ScalaReflection extends ScalaReflection {
           }), nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
-      //        Schema(BinaryType, nullable = false)
     }
   }
 
