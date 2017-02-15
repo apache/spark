@@ -506,7 +506,10 @@ case class JsonToStruct(
 
   override def nullSafeEval(json: Any): Any = {
     try {
-      parser.parse(json.asInstanceOf[UTF8String], CreateJacksonParser.utf8String).headOption.orNull
+      parser.parse(
+        json.asInstanceOf[UTF8String],
+        CreateJacksonParser.utf8String,
+        identity[UTF8String]).headOption.orNull
     } catch {
       case _: SparkSQLJsonProcessingException => null
     }

@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Interface used to load a [[Dataset]] from external storage systems (e.g. file systems,
@@ -349,7 +350,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val parsed = jsonRDD.mapPartitions { iter =>
       val parser = new JacksonParser(schema, parsedOptions)
-      iter.flatMap(parser.parse(_, createParser))
+      iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
     }
 
     Dataset.ofRows(

@@ -455,7 +455,7 @@ class JacksonParser(
   def parse[T](
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
-      recordLiteral: PartialFunction[T, UTF8String] = PartialFunction.empty): Seq[InternalRow] = {
+      recordLiteral: T => UTF8String): Seq[InternalRow] = {
     try {
       Utils.tryWithResource(createParser(factory, record)) { parser =>
         // a null first token is equivalent to testing for input.trim.isEmpty
@@ -470,9 +470,7 @@ class JacksonParser(
       }
     } catch {
       case _: JsonProcessingException | _: SparkSQLJsonProcessingException =>
-        failedRecord(() => recordLiteral.applyOrElse[T, UTF8String](
-          record,
-          record => UTF8String.fromString(record.toString)))
+        failedRecord(() => recordLiteral(record))
     }
   }
 }

@@ -152,7 +152,11 @@ object TextInputJsonDataSource extends JsonDataSource[Text] {
       parser: JacksonParser): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-    linesReader.flatMap(parser.parse(_, createParser))
+    linesReader.flatMap(parser.parse(_, createParser, textToUTF8String))
+  }
+
+  private def textToUTF8String(value: Text): UTF8String = {
+    UTF8String.fromBytes(value.getBytes, 0, value.getLength)
   }
 
   override def createParser(jsonFactory: JsonFactory, value: Text): JsonParser = {
@@ -198,11 +202,10 @@ object WholeFileJsonDataSource extends JsonDataSource[PortableDataStream] {
       conf: Configuration,
       file: PartitionedFile,
       parser: JacksonParser): Iterator[InternalRow] = {
-    val partitionedFileString: PartialFunction[Any, UTF8String] = {
-      case _ =>
-        Utils.tryWithResource(createInputStream(conf, file.filePath)) { inputStream =>
-          UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
-        }
+    def partitionedFileString(ignored: Any): UTF8String = {
+      Utils.tryWithResource(createInputStream(conf, file.filePath)) { inputStream =>
+        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
+      }
     }
 
     parser.parse(
