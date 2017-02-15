@@ -89,19 +89,21 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
  * @param output output schema
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
+ * @param streaming whether it's a streaming plan
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
       Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false,
-    codegen: Boolean = false)
+    codegen: Boolean = false,
+    streaming: Boolean = false)
   extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val queryExecution =
-      if (logicalPlan.isStreaming) {
+      if (streaming) {
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0, 0)

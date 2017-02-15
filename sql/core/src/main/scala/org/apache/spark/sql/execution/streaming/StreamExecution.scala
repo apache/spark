@@ -673,7 +673,7 @@ class StreamExecution(
     if (lastExecution == null) {
       "No physical plan. Waiting for data."
     } else {
-      val explain = ExplainCommand(lastExecution.logical, extended = extended)
+      val explain = ExplainCommand(lastExecution.logical, extended = extended, streaming = true)
       sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect()
         .map(_.getString(0)).mkString("\n")
     }
