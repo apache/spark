@@ -233,7 +233,7 @@ class Word2VecModel private[ml] (
   @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(findSynonymsLocal(word, num)).toDF("word", "similarity")
+    spark.createDataFrame(findSynonymsArray(word, num)).toDF("word", "similarity")
   }
 
   /**
@@ -246,7 +246,7 @@ class Word2VecModel private[ml] (
   @Since("2.0.0")
   def findSynonyms(vec: Vector, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    spark.createDataFrame(findSynonymsLocal(vec, num)).toDF("word", "similarity")
+    spark.createDataFrame(findSynonymsArray(vec, num)).toDF("word", "similarity")
   }
 
   /**
@@ -257,7 +257,7 @@ class Word2VecModel private[ml] (
    * word vector.
    */
   @Since("2.2.0")
-  def findSynonymsLocal(vec: Vector, num: Int): Array[(String, Double)] = {
+  def findSynonymsArray(vec: Vector, num: Int): Array[(String, Double)] = {
     wordVectors.findSynonyms(vec, num)
   }
 
@@ -268,7 +268,7 @@ class Word2VecModel private[ml] (
    * word vector.
    */
   @Since("2.2.0")
-  def findSynonymsLocal(word: String, num: Int): Array[(String, Double)] = {
+  def findSynonymsArray(word: String, num: Int): Array[(String, Double)] = {
     wordVectors.findSynonyms(word, num)
   }
 
