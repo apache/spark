@@ -37,35 +37,42 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
 
     val benchmark = new Benchmark(s"Array with $numRows rows", iterations * numRows)
 
-    benchmark.addCase("ArrayBuffer version") { _: Int =>
+    // Internally, `ExternalAppendOnlyUnsafeRowArray` will create an
+    // in-memory buffer of size `numSpillThreshold`. This will mimic that
+    val initialSize =
+      Math.min(
+        ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer,
+        numSpillThreshold)
+
+    benchmark.addCase("ArrayBuffer") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ArrayBuffer[UnsafeRow]()
-        rows.foreach(array.append(_))
+        val array = new ArrayBuffer[UnsafeRow](initialSize)
+
+        // Internally, `ExternalAppendOnlyUnsafeRowArray` will create a
+        // copy of the row. This will mimic that
+        rows.foreach(x => array += x.copy())
 
         var i = 0
         val n = array.length
         while (i < n) {
-          if (i < n) {
-            sum = sum + array(i).getLong(0)
-            i += 1
-          }
+          sum = sum + array(i).getLong(0)
+          i += 1
         }
         array.clear()
       }
     }
 
-    benchmark.addCase("ExternalAppendOnlyUnsafeRowArray version") { _: Int =>
+    benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
         val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold)
-        rows.foreach(array.add)
+        rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()
         while (iterator.hasNext) {
           sum = sum + iterator.next().getLong(0)
         }
-
         array.clear()
       }
     }
@@ -85,9 +92,9 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
 
   def main(args: Array[String]): Unit = {
 
-    // ----------------------------------------------------------------------------------------- //
+    // ========================================================================================= //
     // WITHOUT SPILL
-    // ----------------------------------------------------------------------------------------- //
+    // ========================================================================================= //
 
     var spillThreshold = 100 * 1000
 
@@ -96,34 +103,34 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
 
     Array with 1000 rows:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    ArrayBuffer version                           1969 / 2004         33.3          30.0       1.0X
-    ExternalAppendOnlyUnsafeRowArray version      2184 / 2233         30.0          33.3       0.9X
+    ArrayBuffer                                   7821 / 7941         33.5          29.8       1.0X
+    ExternalAppendOnlyUnsafeRowArray              8798 / 8819         29.8          33.6       0.9X
     */
-    test(spillThreshold, 1000, 1 << 16)
+    test(spillThreshold, 1000, 1 << 18)
 
     /*
     Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
 
     Array with 30000 rows:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    ArrayBuffer version                           2442 / 2465         50.3          19.9       1.0X
-    ExternalAppendOnlyUnsafeRowArray version      5015 / 5039         24.5          40.8       0.5X
+    ArrayBuffer                                 19200 / 19206         25.6          39.1       1.0X
+    ExternalAppendOnlyUnsafeRowArray            19558 / 19562         25.1          39.8       1.0X
     */
-    test(spillThreshold, 30 * 1000, 1 << 12)
+    test(spillThreshold, 30 * 1000, 1 << 14)
 
     /*
     Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
 
     Array with 100000 rows:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    ArrayBuffer version                           4492 / 4575         22.8          43.9       1.0X
-    ExternalAppendOnlyUnsafeRowArray version      6654 / 6656         15.4          65.0       0.7X
+    ArrayBuffer                                   5949 / 6028         17.2          58.1       1.0X
+    ExternalAppendOnlyUnsafeRowArray              6078 / 6138         16.8          59.4       1.0X
     */
     test(spillThreshold, 100 * 1000, 1 << 10)
 
-    // ----------------------------------------------------------------------------------------- //
+    // ========================================================================================= //
     // WITH SPILL
-    // ----------------------------------------------------------------------------------------- //
+    // ========================================================================================= //
 
     spillThreshold = 100
 
@@ -132,8 +139,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
 
     Array with 1000 rows:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    ArrayBuffer version                              4 /    5         61.2          16.3       1.0X
-    ExternalAppendOnlyUnsafeRowArray version      2331 / 2356          0.1        9106.1       0.0X
+    ArrayBuffer                                      8 /    9         31.8          31.4       1.0X
+    ExternalAppendOnlyUnsafeRowArray              2218 / 2247          0.1        8663.2       0.0X
     */
     test(spillThreshold, 1000, 1 << 8)
 
@@ -142,8 +149,8 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
 
     Array with 10000 rows:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    ArrayBuffer version                              3 /    4         57.6          17.3       1.0X
-    ExternalAppendOnlyUnsafeRowArray version      2229 / 2310          0.1       13928.8       0.0X
+    ArrayBuffer                                      5 /    6         30.5          32.8       1.0X
+    ExternalAppendOnlyUnsafeRowArray              2498 / 2585          0.1       15615.3       0.0X
     */
     test(spillThreshold, 10 * 1000, 1 << 4)
   }

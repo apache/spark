@@ -214,5 +214,5 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
 }
 
 private[sql] object ExternalAppendOnlyUnsafeRowArray {
-  private val DefaultInitialSizeOfInMemoryBuffer = 128
+  val DefaultInitialSizeOfInMemoryBuffer = 128
 }
