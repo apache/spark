@@ -164,7 +164,7 @@ object ScalaReflection extends ScalaReflection {
 
     /** Returns the current path or `GetColumnByOrdinal`. */
     def getPath: Expression = {
-      val dataType = schemaFor(tpe).dataType
+      val dataType = schemaForDefaultBinaryType(tpe).dataType
       if (path.isDefined) {
         path.get
       } else {
@@ -409,7 +409,8 @@ object ScalaReflection extends ScalaReflection {
         val cls = getClassFromType(tpe)
 
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
-          val Schema(dataType, nullable) = schemaFor(fieldType)
+          val Schema(dataType, nullablity) = schemaForDefaultBinaryType(fieldType)
+
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
@@ -424,7 +425,7 @@ object ScalaReflection extends ScalaReflection {
               Some(addToPath(fieldName, dataType, newTypePath)),
               newTypePath)
 
-            if (!nullable) {
+            if (!nullablity) {
               AssertNotNull(constructor, newTypePath)
             } else {
               constructor
@@ -445,6 +446,7 @@ object ScalaReflection extends ScalaReflection {
         }
 
       case _ =>
+        // default kryo deserializer
         DecodeUsingSerializer(getPath, ClassTag(getClassFromType(tpe)), true)
     }
   }
@@ -644,7 +646,8 @@ object ScalaReflection extends ScalaReflection {
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
-      case other =>
+      case _ =>
+        // default kryo serializer
         EncodeUsingSerializer(inputObject, true)
     }
 
@@ -712,6 +715,13 @@ object ScalaReflection extends ScalaReflection {
       s.toAttributes
   }
 
+  /**
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   * If the tpe mismatched in schemaFor function, the default BinaryType returned
+   */
+  def schemaForDefaultBinaryType(tpe: `Type`): Schema = scala.util.Try(schemaFor(tpe)).toOption
+    .getOrElse(Schema(BinaryType, nullable = true))
+
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
 
@@ -775,7 +785,8 @@ object ScalaReflection extends ScalaReflection {
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case other =>
-        Schema(BinaryType, nullable = false)
+        throw new UnsupportedOperationException(s"Schema for type $other is not supported")
+      //        Schema(BinaryType, nullable = false)
     }
   }
 
