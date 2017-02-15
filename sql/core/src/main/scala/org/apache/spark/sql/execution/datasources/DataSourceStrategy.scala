@@ -201,6 +201,7 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
         t.options,
         actualQuery,
         mode,
+        overwrite,
         table,
         Some(t.location))
   }

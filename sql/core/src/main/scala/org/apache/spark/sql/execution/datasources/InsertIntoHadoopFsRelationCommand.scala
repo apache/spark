@@ -47,6 +47,7 @@ case class InsertIntoHadoopFsRelationCommand(
     options: Map[String, String],
     query: LogicalPlan,
     mode: SaveMode,
+    overwrite: Boolean,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
   extends RunnableCommand {
@@ -97,60 +98,45 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       isAppend = isAppend)
 
-    val doInsertion = (mode, pathExists) match {
-      case (SaveMode.ErrorIfExists, true) =>
-        throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-      case (SaveMode.Overwrite, true) =>
-        deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
-        true
-      case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
-        true
-      case (SaveMode.Ignore, exists) =>
-        !exists
-      case (s, exists) =>
-        throw new IllegalStateException(s"unsupported save mode $s ($exists)")
+    if (overwrite) {
+      deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
     }
 
-    if (doInsertion) {
-
-      // Callback for updating metastore partition metadata after the insertion job completes.
-      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
-        if (partitionsTrackedByCatalog) {
-          val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
-          if (newPartitions.nonEmpty) {
-            AlterTableAddPartitionCommand(
-              catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
-              ifNotExists = true).run(sparkSession)
-          }
-          if (mode == SaveMode.Overwrite) {
-            val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
-            if (deletedPartitions.nonEmpty) {
-              AlterTableDropPartitionCommand(
-                catalogTable.get.identifier, deletedPartitions.toSeq,
-                ifExists = true, purge = false,
-                retainData = true /* already deleted */).run(sparkSession)
-            }
+    // Callback for updating metastore partition metadata after the insertion job completes.
+    def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+      if (partitionsTrackedByCatalog) {
+        val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
+        if (newPartitions.nonEmpty) {
+          AlterTableAddPartitionCommand(
+            catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
+            ifNotExists = true).run(sparkSession)
+        }
+        if (mode == SaveMode.Overwrite) {
+          val deletedPartitions = initialMatchingPartitions.toSet -- updatedPartitions
+          if (deletedPartitions.nonEmpty) {
+            AlterTableDropPartitionCommand(
+              catalogTable.get.identifier, deletedPartitions.toSeq,
+              ifExists = true, purge = false,
+              retainData = true /* already deleted */).run(sparkSession)
           }
         }
       }
-
-      FileFormatWriter.write(
-        sparkSession = sparkSession,
-        queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
-        fileFormat = fileFormat,
-        committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(
-          qualifiedOutputPath.toString, customPartitionLocations),
-        hadoopConf = hadoopConf,
-        partitionColumns = partitionColumns,
-        bucketSpec = bucketSpec,
-        refreshFunction = refreshPartitionsCallback,
-        options = options)
-
-      fileIndex.foreach(_.refresh())
-    } else {
-      logInfo("Skipping insertion into a relation that already exists.")
     }
+
+    FileFormatWriter.write(
+      sparkSession = sparkSession,
+      queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+      fileFormat = fileFormat,
+      committer = committer,
+      outputSpec = FileFormatWriter.OutputSpec(
+        qualifiedOutputPath.toString, customPartitionLocations),
+      hadoopConf = hadoopConf,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
+      refreshFunction = refreshPartitionsCallback,
+      options = options)
+
+    fileIndex.foreach(_.refresh())
 
     Seq.empty[Row]
   }
