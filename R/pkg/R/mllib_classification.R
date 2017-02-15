@@ -95,7 +95,7 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @note spark.svmLinear since 2.2.0
 setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, maxIter = 100, tol = 1E-6, standardization = TRUE,
-                   threshold = 0.5, weightCol = NULL, aggregationDepth = 2) {
+                   threshold = 0.0, weightCol = NULL, aggregationDepth = 2) {
             formula <- paste(deparse(formula), collapse = "")
 
             if (!is.null(weightCol) && weightCol == "") {

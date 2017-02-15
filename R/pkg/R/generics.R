@@ -1380,10 +1380,6 @@ setGeneric("spark.kstest", function(data, ...) { standardGeneric("spark.kstest")
 #' @export
 setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
-#' @rdname spark.svmLinear
-#' @export
-setGeneric("spark.svmLinear", function(data, formula, ...) { standardGeneric("spark.svmLinear") })
-
 #' @rdname spark.logit
 #' @export
 setGeneric("spark.logit", function(data, formula, ...) { standardGeneric("spark.logit") })
@@ -1404,6 +1400,10 @@ setGeneric("spark.randomForest",
 #' @rdname spark.survreg
 #' @export
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+
+#' @rdname spark.svmLinear
+#' @export
+setGeneric("spark.svmLinear", function(data, formula, ...) { standardGeneric("spark.svmLinear") })
 
 #' @rdname spark.lda
 #' @export
