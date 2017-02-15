@@ -129,6 +129,8 @@ class SQLExecutionSuite extends SparkFunSuite {
     df.collect()
 
     assert(df.queryExecution === queryExecution)
+
+    spark.stop()
   }
 }
 
