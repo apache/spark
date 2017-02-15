@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -727,6 +728,12 @@ object SQLConf {
       .intConf
       .createWithDefault(Int.MaxValue)
 
+  val CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.cartesianProductExec.buffer.spill.threshold")
+      .doc("Threshold for number of rows buffered in cartesian product operator")
+      .intConf
+      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -961,6 +968,9 @@ class SQLConf extends Serializable with Logging {
 
   def sortMergeJoinExecBufferSpillThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def cartesianProductExecBufferSpillThreshold: Int =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 

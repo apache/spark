@@ -43,7 +43,11 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
   private val initialSizeOfInMemoryBuffer =
     Math.min(DefaultInitialSizeOfInMemoryBuffer, numRowsSpillThreshold)
 
-  private val inMemoryBuffer = new ArrayBuffer[UnsafeRow](initialSizeOfInMemoryBuffer)
+  private val inMemoryBuffer = if (initialSizeOfInMemoryBuffer > 0) {
+    new ArrayBuffer[UnsafeRow](initialSizeOfInMemoryBuffer)
+  } else {
+    null
+  }
 
   private var spillableArray: UnsafeExternalSorter = _
   private var numRows = 0
@@ -67,7 +71,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
       // inside `UnsafeExternalSorter`
       spillableArray.cleanupResources()
       spillableArray = null
-    } else {
+    } else if (inMemoryBuffer != null) {
       inMemoryBuffer.clear()
     }
     numFieldsPerRow = 0
@@ -91,7 +95,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
           TaskContext.get(),
           null,
           null,
-          if (numRowsSpillThreshold > 2) numRowsSpillThreshold / 2 else 1,
+          1024,
           SparkEnv.get.memoryManager.pageSizeBytes,
           numRowsSpillThreshold,
           false)
