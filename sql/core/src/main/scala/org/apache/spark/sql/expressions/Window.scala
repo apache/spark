@@ -148,9 +148,9 @@ object Window {
    * }}}
    *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *              less than minimum int value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this is larger
+   *            than maximum int value  (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
@@ -200,9 +200,9 @@ object Window {
    * }}}
    *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *              less than minimum int value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this is larger
+   *            than maximum int value  (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.

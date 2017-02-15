@@ -116,9 +116,9 @@ class WindowSpec private[sql](
    * }}}
    *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *              less than minimum int value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this is larger
+   *            than maximum int value  (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
@@ -167,9 +167,9 @@ class WindowSpec private[sql](
    * }}}
    *
    * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *              less than minimum int value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this is larger
+   *            than maximum int value  (`Window.unboundedFollowing`).
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.
@@ -193,7 +193,7 @@ class WindowSpec private[sql](
       case x if x < 0 && x >= Int.MinValue => ValuePreceding(-end.toInt)
       case x if x > 0 && x <= Int.MaxValue => ValueFollowing(end.toInt)
       case _ => throw new IllegalArgumentException(s"Boundary end($end) should not be " +
-        s"smaller than Int.MinValue(${Int.MinValue}).")
+        s"less than Int.MinValue(${Int.MinValue}).")
     }
 
     new WindowSpec(
