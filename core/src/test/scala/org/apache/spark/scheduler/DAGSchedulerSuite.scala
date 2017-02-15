@@ -2048,6 +2048,54 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   /**
+   * In this test, we run a map stage where one of the executors fails but we still receive a
+   * "zombie" complete message from that executor. We want to make sure the stage is not reported
+   * as done until all tasks have completed.
+   */
+  test("map stage submission with executor failure late map task completions") {
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+
+    submitMapStage(shuffleDep)
+
+    val oldTaskSet = taskSets(0)
+    runEvent(makeCompletionEvent(oldTaskSet.tasks(0), Success, makeMapStatus("hostA", 2)))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // Pretend host A was lost
+    val oldEpoch = mapOutputTracker.getEpoch
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
+    val newEpoch = mapOutputTracker.getEpoch
+    assert(newEpoch > oldEpoch)
+
+    // Suppose we also get a completed event from task 1 on the same host; this should be ignored
+    runEvent(makeCompletionEvent(oldTaskSet.tasks(1), Success, makeMapStatus("hostA", 2)))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // A completion from another task should work because it's a non-failed host
+    runEvent(makeCompletionEvent(oldTaskSet.tasks(2), Success, makeMapStatus("hostB", 2)))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // Now complete tasks in the second task set
+    val newTaskSet = taskSets(1)
+    assert(newTaskSet.tasks.size === 2)     // Both tasks 0 and 1 were on hostA
+    runEvent(makeCompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
+    assert(results.size === 0)    // Map stage job should not be complete yet
+    runEvent(makeCompletionEvent(newTaskSet.tasks(1), Success, makeMapStatus("hostB", 2)))
+    assert(results.size === 1)    // Map stage job should now finally be complete
+    assertDataStructuresEmpty()
+
+    // Also test that a reduce stage using this shuffled data can immediately run
+    val reduceRDD = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    results.clear()
+    submit(reduceRDD, Array(0, 1))
+    complete(taskSets(2), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  /**
    * Checks the DAGScheduler's internal logic for traversing an RDD DAG by making sure that
    * getShuffleDependencies correctly returns the direct shuffle dependencies of a particular
    * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
