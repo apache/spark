@@ -737,20 +737,20 @@ object ScalaReflection extends ScalaReflection {
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
-        Schema(schemaFor(optType).dataType, nullable = true)
+        Schema(schemaForDefaultBinaryType(optType).dataType, nullable = true)
       case t if t <:< localTypeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
+        val Schema(dataType, nullable) = schemaForDefaultBinaryType(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
+        val Schema(dataType, nullable) = schemaForDefaultBinaryType(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
-        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-        Schema(MapType(schemaFor(keyType).dataType,
+        val Schema(valueDataType, valueNullable) = schemaForDefaultBinaryType(valueType)
+        Schema(MapType(schemaForDefaultBinaryType(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
@@ -781,7 +781,7 @@ object ScalaReflection extends ScalaReflection {
         val params = getConstructorParameters(t)
         Schema(StructType(
           params.map { case (fieldName, fieldType) =>
-            val Schema(dataType, nullable) = schemaFor(fieldType)
+            val Schema(dataType, nullable) = schemaForDefaultBinaryType(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case other =>
