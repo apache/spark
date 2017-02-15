@@ -169,19 +169,20 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test("write bucketed data with the overlapping bucketBy and partitionBy columns") {
-    intercept[AnalysisException](df.write
+  test("write bucketed data with the overlapping bucketBy/sortBy and partitionBy columns") {
+    val e1 = intercept[AnalysisException](df.write
       .partitionBy("i", "j")
       .bucketBy(8, "j", "k")
       .sortBy("k")
       .saveAsTable("bucketed_table"))
-  }
+    assert(e1.message.contains("bucketing column 'j' should not be part of partition columns"))
 
-  test("write bucketed data with the identical bucketBy and partitionBy columns") {
-    intercept[AnalysisException](df.write
-      .partitionBy("i")
-      .bucketBy(8, "i")
+    val e2 = intercept[AnalysisException](df.write
+      .partitionBy("i", "j")
+      .bucketBy(8, "k")
+      .sortBy("i")
       .saveAsTable("bucketed_table"))
+    assert(e2.message.contains("bucket sorting column 'i' should not be part of partition columns"))
   }
 
   test("write bucketed data without partitionBy") {
