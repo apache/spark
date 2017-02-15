@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
@@ -32,6 +33,12 @@ object SQLExecution {
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
+  private val executionIdToQueryExecution = new ConcurrentHashMap[Long, QueryExecution]()
+
+  def getQueryExecution(executionId: Long): QueryExecution = {
+    executionIdToQueryExecution.get(executionId)
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
@@ -44,6 +51,7 @@ object SQLExecution {
     if (oldExecutionId == null) {
       val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+      executionIdToQueryExecution.put(executionId, queryExecution)
       val r = try {
         // sparkContext.getCallSite() would first try to pick up any call site that was previously
         // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
@@ -60,6 +68,7 @@ object SQLExecution {
             executionId, System.currentTimeMillis()))
         }
       } finally {
+        executionIdToQueryExecution.remove(executionId)
         sc.setLocalProperty(EXECUTION_ID_KEY, null)
       }
       r
