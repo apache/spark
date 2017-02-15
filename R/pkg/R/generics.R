@@ -1401,6 +1401,10 @@ setGeneric("spark.randomForest",
 #' @export
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
 
+#' @rdname spark.svmLinear
+#' @export
+setGeneric("spark.svmLinear", function(data, formula, ...) { standardGeneric("spark.svmLinear") })
+
 #' @rdname spark.lda
 #' @export
 setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark.posterior") })
