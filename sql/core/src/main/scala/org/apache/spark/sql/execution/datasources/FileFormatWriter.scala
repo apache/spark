@@ -112,10 +112,10 @@ object FileFormatWriter extends Logging {
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = queryExecution.logical.output.filterNot(partitionSet.contains)
     val bucketColumns = bucketSpec.toSeq.flatMap {
-      spec => spec.bucketColumnNames.map(c => allColumns.find(_.name == c).get)
+      spec => spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
     }
     val sortColumns = bucketSpec.toSeq.flatMap {
-      spec => spec.sortColumnNames.map(c => allColumns.find(_.name == c).get)
+      spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
     }
 
     // Note: prepareWrite has side effect. It sets "job".
@@ -126,7 +126,7 @@ object FileFormatWriter extends Logging {
       uuid = UUID.randomUUID().toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
-      allColumns = queryExecution.logical.output,
+      allColumns = allColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
       bucketColumns = bucketColumns,
@@ -149,15 +149,25 @@ object FileFormatWriter extends Logging {
         HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
       }
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
-      val requiredOrdering = (partitionColumns ++ bucketIdExpression ++ sortColumns)
-        .map(SortOrder(_, Ascending))
-      val actualOrdering = queryExecution.executedPlan.outputOrdering
-      // We can still avoid the sort if the required ordering is [partCol] and the actual ordering
-      // is [partCol, anotherCol].
-      val rdd = if (requiredOrdering == actualOrdering.take(requiredOrdering.length)) {
+      val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
+      // the sort order doesn't matter
+      val actualOrdering = queryExecution.executedPlan.outputOrdering.map(_.child)
+      val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
+        false
+      } else {
+        requiredOrdering.zip(actualOrdering).forall {
+          case (requiredOrder, childOutputOrder) =>
+            requiredOrder.semanticEquals(childOutputOrder)
+        }
+      }
+
+      val rdd = if (orderingMatched) {
         queryExecution.toRdd
       } else {
-        SortExec(requiredOrdering, global = false, queryExecution.executedPlan).execute()
+        SortExec(
+          requiredOrdering.map(SortOrder(_, Ascending)),
+          global = false,
+          child = queryExecution.executedPlan).execute()
       }
 
       try {
@@ -345,7 +355,7 @@ object FileFormatWriter extends Logging {
     }
 
     /**
-     * Open and returns a new OutputWriter given a partition key and optional bucket id.
+     * Opens a new OutputWriter given a partition key and optional bucket id.
      * If bucket id is specified, we will append it to the end of the file name, but before the
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
      *
