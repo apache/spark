@@ -20,7 +20,6 @@ package org.apache.spark;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,6 +45,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.base.Throwables;
 import com.google.common.io.Files;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.DefaultCodec;
@@ -1075,18 +1075,23 @@ public class JavaAPISuite implements Serializable {
     byte[] content2 = "spark is also easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
     String tempDirName = tempDir.getAbsolutePath();
-    Files.write(content1, new File(tempDirName + "/part-00000"));
-    Files.write(content2, new File(tempDirName + "/part-00001"));
+    String path1 = new Path(tempDirName, "part-00000").toUri().getPath();
+    String path2 = new Path(tempDirName, "part-00001").toUri().getPath();
+
+    Files.write(content1, new File(path1));
+    Files.write(content2, new File(path2));
 
     Map<String, String> container = new HashMap<>();
-    container.put(tempDirName+"/part-00000", new Text(content1).toString());
-    container.put(tempDirName+"/part-00001", new Text(content2).toString());
+    container.put(path1, new Text(content1).toString());
+    container.put(path2, new Text(content2).toString());
 
     JavaPairRDD<String, String> readRDD = sc.wholeTextFiles(tempDirName, 3);
     List<Tuple2<String, String>> result = readRDD.collect();
 
     for (Tuple2<String, String> res : result) {
-      assertEquals(res._2(), container.get(new URI(res._1()).getPath()));
+      // Note that the paths from `wholeTextFiles` are in URI format on Windows,
+      // for example, file:/C:/a/b/c.
+      assertEquals(res._2(), container.get(new Path(res._1()).toUri().getPath()));
     }
   }
 

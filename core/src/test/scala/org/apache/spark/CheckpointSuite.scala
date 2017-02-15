@@ -500,7 +500,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
   }
 
   runTest("CheckpointRDD with zero partitions") { reliableCheckpoint: Boolean =>
-    val rdd = new BlockRDD[Int](sc, Array[BlockId]())
+    val rdd = new BlockRDD[Int](sc, Array.empty[BlockId])
     assert(rdd.partitions.size === 0)
     assert(rdd.isCheckpointed === false)
     assert(rdd.isCheckpointedAndMaterialized === false)

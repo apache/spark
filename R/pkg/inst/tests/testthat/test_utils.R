@@ -224,6 +224,16 @@ test_that("varargsToStrEnv", {
   expect_error(varargsToStrEnv(a = list(1, "a")),
                paste0("Unsupported type for a : list. Supported types are logical, ",
                       "numeric, character and NULL."))
+  expect_warning(varargsToStrEnv(a = 1, 2, 3, 4), "Unnamed arguments ignored: 2, 3, 4.")
+  expect_warning(varargsToStrEnv(1, 2, 3, 4), "Unnamed arguments ignored: 1, 2, 3, 4.")
+})
+
+test_that("basenameSansExtFromUrl", {
+  x <- paste0("http://people.apache.org/~pwendell/spark-nightly/spark-branch-2.1-bin/spark-2.1.1-",
+              "SNAPSHOT-2016_12_09_11_08-eb2d9bf-bin/spark-2.1.1-SNAPSHOT-bin-hadoop2.7.tgz")
+  expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
+  z <- "http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz"
+  expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
 })
 
 sparkR.session.stop()

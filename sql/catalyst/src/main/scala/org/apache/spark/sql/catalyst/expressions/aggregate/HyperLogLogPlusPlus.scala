@@ -47,10 +47,10 @@ import org.apache.spark.sql.types._
  */
 // scalastyle:on
 @ExpressionDescription(
-  usage = """_FUNC_(expr) - Returns the estimated cardinality by HyperLogLog++.
-    _FUNC_(expr, relativeSD=0.05) - Returns the estimated cardinality by HyperLogLog++
-      with relativeSD, the maximum estimation error allowed.
-    """)
+  usage = """
+    _FUNC_(expr[, relativeSD]) - Returns the estimated cardinality by HyperLogLog++.
+      `relativeSD` defines the maximum estimation error allowed.
+  """)
 case class HyperLogLogPlusPlus(
     child: Expression,
     relativeSD: Double = 0.05,
@@ -93,7 +93,7 @@ case class HyperLogLogPlusPlus(
   private[this] val p = Math.ceil(2.0d * Math.log(1.106d / relativeSD) / Math.log(2.0d)).toInt
 
   require(p >= 4, "HLL++ requires at least 4 bits for addressing. " +
-    "Use a lower error, at most 27%.")
+    "Use a lower error, at most 39%.")
 
   /**
    * Shift used to extract the index of the register from the hashed value.
@@ -139,8 +139,6 @@ case class HyperLogLogPlusPlus(
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
@@ -296,8 +294,9 @@ case class HyperLogLogPlusPlus(
     // We integrate two steps from the paper:
     // val Z = 1.0d / zInverse
     // val E = alphaM2 * Z
+    val E = alphaM2 / zInverse
     @inline
-    def EBiasCorrected = alphaM2 / zInverse match {
+    def EBiasCorrected = E match {
       case e if p < 19 && e < 5.0d * m => e - estimateBias(e)
       case e => e
     }
@@ -306,7 +305,9 @@ case class HyperLogLogPlusPlus(
     val estimate = if (V > 0) {
       // Use linear counting for small cardinality estimates.
       val H = m * Math.log(m / V)
-      if (H <= THRESHOLDS(p - 4)) {
+      // HLL++ is defined only when p < 19, otherwise we need to fallback to HLL.
+      // The threshold `2.5 * m` is from the original HLL algorithm.
+      if ((p < 19 && H <= THRESHOLDS(p - 4)) || E <= 2.5 * m) {
         H
       } else {
         EBiasCorrected

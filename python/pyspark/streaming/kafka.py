@@ -144,7 +144,7 @@ class KafkaUtils(object):
         """
         .. note:: Experimental
 
-        Create a RDD from Kafka using offset ranges for each topic and partition.
+        Create an RDD from Kafka using offset ranges for each topic and partition.
 
         :param sc:  SparkContext object
         :param kafkaParams: Additional params for Kafka
@@ -155,7 +155,7 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
                                meta using messageHandler (default is None).
-        :return: A RDD object
+        :return: An RDD object
         """
         if leaders is None:
             leaders = dict()

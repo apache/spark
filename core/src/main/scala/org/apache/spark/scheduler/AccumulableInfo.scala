@@ -24,11 +24,6 @@ import org.apache.spark.annotation.DeveloperApi
  * :: DeveloperApi ::
  * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
  *
- * Note: once this is JSON serialized the types of `update` and `value` will be lost and be
- * cast to strings. This is because the user can define an accumulator of any type and it will
- * be difficult to preserve the type in consumers of the event log. This does not apply to
- * internal accumulators that represent task level metrics.
- *
  * @param id accumulator ID
  * @param name accumulator name
  * @param update partial value from a task, may be None if used on driver to describe a stage
@@ -36,6 +31,11 @@ import org.apache.spark.annotation.DeveloperApi
  * @param internal whether this accumulator was internal
  * @param countFailedValues whether to count this accumulator's partial value if the task failed
  * @param metadata internal metadata associated with this accumulator, if any
+ *
+ * @note Once this is JSON serialized the types of `update` and `value` will be lost and be
+ * cast to strings. This is because the user can define an accumulator of any type and it will
+ * be difficult to preserve the type in consumers of the event log. This does not apply to
+ * internal accumulators that represent task level metrics.
  */
 @DeveloperApi
 case class AccumulableInfo private[spark] (

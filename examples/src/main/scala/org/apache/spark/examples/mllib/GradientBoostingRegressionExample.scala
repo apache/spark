@@ -61,6 +61,8 @@ object GradientBoostingRegressionExample {
     val sameModel = GradientBoostedTreesModel.load(sc,
       "target/tmp/myGradientBoostingRegressionModel")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

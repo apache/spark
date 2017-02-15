@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.{AnalysisException, InternalOutputModes}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -43,8 +46,13 @@ object UnsupportedOperationChecker {
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
+    /** Collect all the streaming aggregates in a sub plan */
+    def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
+      subplan.collect { case a: Aggregate if a.isStreaming => a }
+    }
+
     // Disallow multiple streaming aggregations
-    val aggregates = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+    val aggregates = collectStreamingAggregates(plan)
 
     if (aggregates.size > 1) {
       throwError(
@@ -55,11 +63,22 @@ object UnsupportedOperationChecker {
     // Disallow some output mode
     outputMode match {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
-        throwError(
-          s"$outputMode output mode not supported when there are streaming aggregations on " +
-            s"streaming DataFrames/DataSets")(plan)
+        val aggregate = aggregates.head
 
-      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+        // Find any attributes that are associated with an eventTime watermark.
+        val watermarkAttributes = aggregate.groupingExpressions.collect {
+          case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
+        }
+
+        // We can append rows to the sink once the group is under the watermark. Without this
+        // watermark a group is never "finished" so we would never output anything.
+        if (watermarkAttributes.isEmpty) {
+          throwError(
+            s"$outputMode output mode not supported when there are streaming aggregations on " +
+                s"streaming DataFrames/DataSets")(plan)
+        }
+
+      case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")(plan)
@@ -73,7 +92,7 @@ object UnsupportedOperationChecker {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = plan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
@@ -83,12 +102,23 @@ object UnsupportedOperationChecker {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
+        case Aggregate(_, aggregateExpressions, child) =>
+          val distinctAggExprs = aggregateExpressions.flatMap { expr =>
+            expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
+          }
+          throwErrorIf(
+            child.isStreaming && distinctAggExprs.nonEmpty,
+            "Distinct aggregations are not supported on streaming DataFrames/Datasets, unless " +
+              "it is on aggregated DataFrame/Dataset in Complete output mode. Consider using " +
+              "approximate distinct aggregation (e.g. approx_count_distinct() instead of count()).")
+
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
-        case _: InsertIntoTable =>
-          throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
+        case m: MapGroupsWithState if collectStreamingAggregates(m).nonEmpty =>
+          throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
+            "streaming DataFrame/Dataset")
 
         case Join(left, right, joinType, _) =>
 
@@ -131,7 +161,7 @@ object UnsupportedOperationChecker {
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
         case Except(left, right) if right.isStreaming =>
-          throwError("Except with a streaming DataFrame/Dataset on the right is not supported")
+          throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
         case Intersect(left, right) if left.isStreaming && right.isStreaming =>
           throwError("Intersect between two streaming DataFrames/Datasets is not supported")
@@ -142,9 +172,9 @@ object UnsupportedOperationChecker {
         case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
-        case Sort(_, _, _) | SortPartitions(_, _) if !containsCompleteData(subPlan) =>
+        case Sort(_, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on" +
-            "aggregated DataFrame/Dataset in Complete mode")
+            "aggregated DataFrame/Dataset in Complete output mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")

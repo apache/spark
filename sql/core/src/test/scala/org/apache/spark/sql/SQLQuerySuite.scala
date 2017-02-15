@@ -19,12 +19,9 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -88,15 +85,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase",
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase",
       "Extended Usage:",
+      "Examples:",
       "> SELECT upper('SparkSql');",
-      "'SPARKSQL'")
+      "SPARKSQL")
 
     checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
-      "Usage: upper(str) - Returns str with all characters changed to uppercase")
+      "Usage: upper(str) - Returns `str` with all characters changed to uppercase")
 
     checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
@@ -463,20 +461,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
       Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
-    )
-  }
-
-  test("agg") {
-    checkAnswer(
-      sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
-      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
-  }
-
-  test("aggregates with nulls") {
-    checkAnswer(
-      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
-        "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(0, -1.5, 1, 3, 2, 1.0, 1, 6, 3)
     )
   }
 
@@ -998,6 +982,33 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
+  test("SPARK-19218 SET command should show a result in a sorted order") {
+    val overrideConfs = sql("SET").collect()
+    sql(s"SET test.key3=1")
+    sql(s"SET test.key2=2")
+    sql(s"SET test.key1=3")
+    val result = sql("SET").collect()
+    assert(result ===
+      (overrideConfs ++ Seq(
+        Row("test.key1", "3"),
+        Row("test.key2", "2"),
+        Row("test.key3", "1"))).sortBy(_.getString(0))
+    )
+    spark.sessionState.conf.clear()
+  }
+
+  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
+    import SQLConf._
+    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
+
+    try {
+      val result = sql("SET -v").collect()
+      assert(result === result.sortBy(_.getString(0)))
+    } finally {
+      SQLConf.unregister(confEntry)
+    }
+  }
+
   test("SET commands with illegal or inappropriate argument") {
     spark.sessionState.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
@@ -1106,6 +1117,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-17863: SELECT distinct does not work correctly if order by missing attribute") {
+    checkAnswer(
+      sql("""select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin),
+      Row(1, 2) :: Nil)
+
+    val error = intercept[AnalysisException] {
+      sql("""select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+    }
+    assert(error.message contains "cannot resolve '`struct.a`' given input columns: [a, b]")
+
+  }
+
   test("cast boolean to string") {
     // TODO Ensure true/false string letter casing is consistent with Hive in all cases.
     checkAnswer(
@@ -1155,27 +1190,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT CASE WHEN key = 1 THEN 1 ELSE 2 END FROM testData WHERE key = 1 group by key"),
       Row(1))
-  }
-
-  test("throw errors for non-aggregate attributes with aggregation") {
-    def checkAggregation(query: String, isInvalidQuery: Boolean = true) {
-      if (isInvalidQuery) {
-        val e = intercept[AnalysisException](sql(query).queryExecution.analyzed)
-        assert(e.getMessage contains "group by")
-      } else {
-        // Should not throw
-        sql(query).queryExecution.analyzed
-      }
-    }
-
-    checkAggregation("SELECT key, COUNT(*) FROM testData")
-    checkAggregation("SELECT COUNT(key), COUNT(*) FROM testData", isInvalidQuery = false)
-
-    checkAggregation("SELECT value, COUNT(*) FROM testData GROUP BY key")
-    checkAggregation("SELECT COUNT(value), SUM(key) FROM testData GROUP BY key", false)
-
-    checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
-    checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
   }
 
   testQuietly(
@@ -1557,9 +1571,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("specifying database name for a temporary table is not allowed") {
+  test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
-      val path = dir.getCanonicalPath
+      val path = dir.toURI.toString
       val df =
         sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
@@ -1571,23 +1585,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       intercept[AnalysisException] {
         spark.sql(
           s"""
-          |CREATE TEMPORARY TABLE db.t
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
+            |CREATE TEMPORARY VIEW db.t
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+           """.stripMargin)
       }.getMessage
 
       // If you use backticks to quote the name then it's OK.
       spark.sql(
         s"""
-          |CREATE TEMPORARY TABLE `db.t`
+          |CREATE TEMPORARY VIEW `db.t`
           |USING parquet
           |OPTIONS (
           |  path '$path'
           |)
-        """.stripMargin)
+         """.stripMargin)
       checkAnswer(spark.table("`db.t`"), df)
     }
   }
@@ -1984,195 +1998,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(false) :: Row(true) :: Nil)
   }
 
-  test("rollup") {
-    checkAnswer(
-      sql("select course, year, sum(earnings) from courseSales group by rollup(course, year)" +
-        " order by course, year"),
-      Row(null, null, 113000.0) ::
-        Row("Java", null, 50000.0) ::
-        Row("Java", 2012, 20000.0) ::
-        Row("Java", 2013, 30000.0) ::
-        Row("dotNET", null, 63000.0) ::
-        Row("dotNET", 2012, 15000.0) ::
-        Row("dotNET", 2013, 48000.0) :: Nil
-    )
-  }
-
-  test("grouping sets when aggregate functions containing groupBy columns") {
-    checkAnswer(
-      sql("select course, sum(earnings) as sum from courseSales group by course, earnings " +
-        "grouping sets((), (course), (course, earnings)) " +
-        "order by course, sum"),
-      Row(null, 113000.0) ::
-        Row("Java", 20000.0) ::
-        Row("Java", 30000.0) ::
-        Row("Java", 50000.0) ::
-        Row("dotNET", 5000.0) ::
-        Row("dotNET", 10000.0) ::
-        Row("dotNET", 48000.0) ::
-        Row("dotNET", 63000.0) :: Nil
-    )
-
-    checkAnswer(
-      sql("select course, sum(earnings) as sum, grouping_id(course, earnings) from courseSales " +
-        "group by course, earnings grouping sets((), (course), (course, earnings)) " +
-        "order by course, sum"),
-      Row(null, 113000.0, 3) ::
-        Row("Java", 20000.0, 0) ::
-        Row("Java", 30000.0, 0) ::
-        Row("Java", 50000.0, 1) ::
-        Row("dotNET", 5000.0, 0) ::
-        Row("dotNET", 10000.0, 0) ::
-        Row("dotNET", 48000.0, 0) ::
-        Row("dotNET", 63000.0, 1) :: Nil
-    )
-  }
-
-  test("cube") {
-    checkAnswer(
-      sql("select course, year, sum(earnings) from courseSales group by cube(course, year)"),
-      Row("Java", 2012, 20000.0) ::
-        Row("Java", 2013, 30000.0) ::
-        Row("Java", null, 50000.0) ::
-        Row("dotNET", 2012, 15000.0) ::
-        Row("dotNET", 2013, 48000.0) ::
-        Row("dotNET", null, 63000.0) ::
-        Row(null, 2012, 35000.0) ::
-        Row(null, 2013, 78000.0) ::
-        Row(null, null, 113000.0) :: Nil
-    )
-  }
-
-  test("grouping sets") {
-    checkAnswer(
-      sql("select course, year, sum(earnings) from courseSales group by course, year " +
-        "grouping sets(course, year)"),
-      Row("Java", null, 50000.0) ::
-        Row("dotNET", null, 63000.0) ::
-        Row(null, 2012, 35000.0) ::
-        Row(null, 2013, 78000.0) :: Nil
-    )
-
-    checkAnswer(
-      sql("select course, year, sum(earnings) from courseSales group by course, year " +
-        "grouping sets(course)"),
-      Row("Java", null, 50000.0) ::
-        Row("dotNET", null, 63000.0) :: Nil
-    )
-
-    checkAnswer(
-      sql("select course, year, sum(earnings) from courseSales group by course, year " +
-        "grouping sets(year)"),
-      Row(null, 2012, 35000.0) ::
-        Row(null, 2013, 78000.0) :: Nil
-    )
-  }
-
-  test("grouping and grouping_id") {
-    checkAnswer(
-      sql("select course, year, grouping(course), grouping(year), grouping_id(course, year)" +
-        " from courseSales group by cube(course, year)"),
-      Row("Java", 2012, 0, 0, 0) ::
-        Row("Java", 2013, 0, 0, 0) ::
-        Row("Java", null, 0, 1, 1) ::
-        Row("dotNET", 2012, 0, 0, 0) ::
-        Row("dotNET", 2013, 0, 0, 0) ::
-        Row("dotNET", null, 0, 1, 1) ::
-        Row(null, 2012, 1, 0, 2) ::
-        Row(null, 2013, 1, 0, 2) ::
-        Row(null, null, 1, 1, 3) :: Nil
-    )
-
-    var error = intercept[AnalysisException] {
-      sql("select course, year, grouping(course) from courseSales group by course, year")
-    }
-    assert(error.getMessage contains "grouping() can only be used with GroupingSets/Cube/Rollup")
-    error = intercept[AnalysisException] {
-      sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
-    }
-    assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    error = intercept[AnalysisException] {
-      sql("select course, year, grouping__id from courseSales group by cube(course, year)")
-    }
-    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
-  }
-
-  test("grouping and grouping_id in having") {
-    checkAnswer(
-      sql("select course, year from courseSales group by cube(course, year)" +
-        " having grouping(year) = 1 and grouping_id(course, year) > 0"),
-        Row("Java", null) ::
-        Row("dotNET", null) ::
-        Row(null, null) :: Nil
-    )
-
-    var error = intercept[AnalysisException] {
-      sql("select course, year from courseSales group by course, year" +
-        " having grouping(course) > 0")
-    }
-    assert(error.getMessage contains
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    error = intercept[AnalysisException] {
-      sql("select course, year from courseSales group by course, year" +
-        " having grouping_id(course, year) > 0")
-    }
-    assert(error.getMessage contains
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    error = intercept[AnalysisException] {
-      sql("select course, year from courseSales group by cube(course, year)" +
-        " having grouping__id > 0")
-    }
-    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
-  }
-
-  test("grouping and grouping_id in sort") {
-    checkAnswer(
-      sql("select course, year, grouping(course), grouping(year) from courseSales" +
-        " group by cube(course, year) order by grouping_id(course, year), course, year"),
-      Row("Java", 2012, 0, 0) ::
-        Row("Java", 2013, 0, 0) ::
-        Row("dotNET", 2012, 0, 0) ::
-        Row("dotNET", 2013, 0, 0) ::
-        Row("Java", null, 0, 1) ::
-        Row("dotNET", null, 0, 1) ::
-        Row(null, 2012, 1, 0) ::
-        Row(null, 2013, 1, 0) ::
-        Row(null, null, 1, 1) :: Nil
-    )
-
-    checkAnswer(
-      sql("select course, year, grouping_id(course, year) from courseSales" +
-        " group by cube(course, year) order by grouping(course), grouping(year), course, year"),
-      Row("Java", 2012, 0) ::
-        Row("Java", 2013, 0) ::
-        Row("dotNET", 2012, 0) ::
-        Row("dotNET", 2013, 0) ::
-        Row("Java", null, 1) ::
-        Row("dotNET", null, 1) ::
-        Row(null, 2012, 2) ::
-        Row(null, 2013, 2) ::
-        Row(null, null, 3) :: Nil
-    )
-
-    var error = intercept[AnalysisException] {
-      sql("select course, year from courseSales group by course, year" +
-        " order by grouping(course)")
-    }
-    assert(error.getMessage contains
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    error = intercept[AnalysisException] {
-      sql("select course, year from courseSales group by course, year" +
-        " order by grouping_id(course, year)")
-    }
-    assert(error.getMessage contains
-      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
-    error = intercept[AnalysisException] {
-      sql("select course, year from courseSales group by cube(course, year)" +
-        " order by grouping__id")
-    }
-    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
-  }
-
   test("filter on a grouping column that is not presented in SELECT") {
     checkAnswer(
       sql("select count(1) from (select 1 as a) t group by a having a > 0"),
@@ -2286,13 +2111,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       spark.read.json(rdd).write.mode("overwrite").parquet(dir.toString)
       spark.read.parquet(dir.toString).collect()
     }
-  }
-
-  test("SPARK-14986: Outer lateral view with empty generate expression") {
-    checkAnswer(
-      sql("select nil from (select 1 as x ) x lateral view outer explode(array()) n as nil"),
-      Row(null) :: Nil
-    )
   }
 
   test("data source table created in InMemoryCatalog should be able to read/write") {
@@ -2678,4 +2496,72 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-18053: ARRAY equality is broken") {
+    withTable("array_tbl") {
+      spark.range(10).select(array($"id").as("arr")).write.saveAsTable("array_tbl")
+      assert(sql("SELECT * FROM array_tbl where arr = ARRAY(1L)").count == 1)
+    }
+  }
+
+  test("SPARK-19157: should be able to change spark.sql.runSQLOnFiles at runtime") {
+    withTempPath { path =>
+      Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
+
+      val newSession = spark.newSession()
+      val originalValue = newSession.sessionState.conf.runSQLonFile
+
+      try {
+        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
+        intercept[AnalysisException] {
+          newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
+        }
+
+        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
+        checkAnswer(
+          newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
+          Row(1, "a"))
+      } finally {
+        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
+      }
+    }
+  }
+
+  test("should be able to resolve a persistent view") {
+    withTable("t1", "t2") {
+      withView("v1") {
+        sql("CREATE TABLE `t1` USING parquet AS SELECT * FROM VALUES(1, 1) AS t1(a, b)")
+        sql("CREATE TABLE `t2` USING parquet AS SELECT * FROM VALUES('a', 2, 1.0) AS t2(d, e, f)")
+        sql("CREATE VIEW `v1`(x, y) AS SELECT * FROM t1")
+        checkAnswer(spark.table("v1").orderBy("x"), Row(1, 1))
+
+        sql("ALTER VIEW `v1` AS SELECT * FROM t2")
+        checkAnswer(spark.table("v1").orderBy("f"), Row("a", 2, 1.0))
+      }
+    }
+  }
+
+  test("SPARK-19059: read file based table whose name starts with underscore") {
+    withTable("_tbl") {
+      sql("CREATE TABLE `_tbl`(i INT) USING parquet")
+      sql("INSERT INTO `_tbl` VALUES (1), (2), (3)")
+      checkAnswer( sql("SELECT * FROM `_tbl`"), Row(1) :: Row(2) :: Row(3) :: Nil)
+    }
+  }
+
+  test("SPARK-19334: check code injection is prevented") {
+    // The end of comment (*/) should be escaped.
+    val badQuery =
+      """|SELECT inline(array(cast(struct(1) AS
+         |  struct<`=
+         |    new Object() {
+         |      {f();}
+         |      public void f() {throw new RuntimeException("This exception is injected.");}
+         |      public int x;
+         |    }.x
+         |  `:int>)))""".stripMargin.replaceAll("\n", "")
+
+    checkAnswer(sql(badQuery), Row(1) :: Nil)
+  }
+
 }

@@ -17,10 +17,12 @@
 
 package org.apache.spark
 
-import java.io.{File, FileWriter}
+import java.io._
+import java.util.zip.GZIPOutputStream
 
 import scala.io.Source
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
 import org.apache.hadoop.mapred.{FileAlreadyExistsException, FileSplit, JobConf, TextInputFormat, TextOutputFormat}
@@ -29,6 +31,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.input.PortableDataStream
+import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -56,10 +59,15 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     nums.saveAsTextFile(outputDir)
     // Read the plain text file and check it's OK
     val outputFile = new File(outputDir, "part-00000")
-    val content = Source.fromFile(outputFile).mkString
-    assert(content === "1\n2\n3\n4\n")
-    // Also try reading it in as a text file RDD
-    assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
+    val bufferSrc = Source.fromFile(outputFile)
+    Utils.tryWithSafeFinally {
+      val content = bufferSrc.mkString
+      assert(content === "1\n2\n3\n4\n")
+      // Also try reading it in as a text file RDD
+      assert(sc.textFile(outputDir).collect().toList === List("1", "2", "3", "4"))
+    } {
+      bufferSrc.close()
+    }
   }
 
   test("text files (compressed)") {
@@ -248,7 +256,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val (infile: String, indata: PortableDataStream) = inRdd.collect.head
 
     // Make sure the name and array match
-    assert(infile.contains(outFileName)) // a prefix may get added
+    assert(infile.contains(outFile.toURI.getPath)) // a prefix may get added
     assert(indata.toArray === testOutput)
   }
 
@@ -525,7 +533,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         .mapPartitionsWithInputSplit { (split, part) =>
           Iterator(split.asInstanceOf[FileSplit].getPath.toUri.getPath)
         }.collect()
-    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+    val outPathOne = new Path(outDir, "part-00000").toUri.getPath
+    val outPathTwo = new Path(outDir, "part-00001").toUri.getPath
+    assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
 
   test("Get input files via new Hadoop API") {
@@ -539,6 +549,66 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
         .mapPartitionsWithInputSplit { (split, part) =>
           Iterator(split.asInstanceOf[NewFileSplit].getPath.toUri.getPath)
         }.collect()
-    assert(inputPaths.toSet === Set(s"$outDir/part-00000", s"$outDir/part-00001"))
+    val outPathOne = new Path(outDir, "part-00000").toUri.getPath
+    val outPathTwo = new Path(outDir, "part-00001").toUri.getPath
+    assert(inputPaths.toSet === Set(outPathOne, outPathTwo))
   }
+
+  test("spark.files.ignoreCorruptFiles should work both HadoopRDD and NewHadoopRDD") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+
+      // Reading a corrupt gzip file should throw EOFException
+      sc = new SparkContext("local", "test")
+      // Test HadoopRDD
+      var e = intercept[SparkException] {
+        sc.textFile(inputFile.toURI.toString).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      // Test NewHadoopRDD
+      e = intercept[SparkException] {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect()
+      }
+      assert(e.getCause.isInstanceOf[EOFException])
+      assert(e.getCause.getMessage === "Unexpected end of input stream")
+      sc.stop()
+
+      val conf = new SparkConf().set(IGNORE_CORRUPT_FILES, true)
+      sc = new SparkContext("local", "test", conf)
+      // Test HadoopRDD
+      assert(sc.textFile(inputFile.toURI.toString).collect().isEmpty)
+      // Test NewHadoopRDD
+      assert {
+        sc.newAPIHadoopFile(
+          inputFile.toURI.toString,
+          classOf[NewTextInputFormat],
+          classOf[LongWritable],
+          classOf[Text]).collect().isEmpty
+      }
+    } finally {
+      inputFile.delete()
+    }
+  }
+
 }

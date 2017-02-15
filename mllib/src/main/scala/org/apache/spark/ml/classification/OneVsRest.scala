@@ -135,10 +135,13 @@ final class OneVsRestModel private[ml] (
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
-  /** A Python-friendly auxiliary constructor. */
-  private[ml] def this(uid: String, models: JList[_ <: ClassificationModel[_, _]]) = {
-    this(uid, Metadata.empty, models.asScala.toArray)
-  }
+  /** @group setParam */
+  @Since("2.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -175,6 +178,7 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
+        model.setFeaturesCol($(featuresCol))
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(rawPredictionCol)))
@@ -299,6 +303,10 @@ final class OneVsRest @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): OneVsRestModel = {
     transformSchema(dataset.schema)
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, predictionCol)
+    instr.logNamedValue("classifier", $(classifier).getClass.getCanonicalName)
+
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
     val computeNumClasses: () => Int = () => {
@@ -307,6 +315,7 @@ final class OneVsRest @Since("1.4.0") (
       maxLabelIndex.toInt + 1
     }
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
+    instr.logNumClasses(numClasses)
 
     val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
 
@@ -330,6 +339,7 @@ final class OneVsRest @Since("1.4.0") (
       paramMap.put(classifier.predictionCol -> getPredictionCol)
       classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]
+    instr.logNumFeatures(models.head.numFeatures)
 
     if (handlePersistence) {
       multiclassLabeled.unpersist()
@@ -343,6 +353,7 @@ final class OneVsRest @Since("1.4.0") (
       case attr: Attribute => attr
     }
     val model = new OneVsRestModel(uid, labelAttribute.toMetadata(), models).setParent(this)
+    instr.logSuccess(model)
     copyValues(model)
   }
 

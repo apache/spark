@@ -46,6 +46,8 @@ object PrefixSpanExample {
           ", " + freqSequence.freq)
     }
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:off println

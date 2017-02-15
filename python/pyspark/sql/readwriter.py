@@ -160,8 +160,9 @@ class DataFrameReader(OptionUtils):
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None):
         """
-        Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
-        (one object per record) and returns the result as a :class`DataFrame`.
+        Loads a JSON file (`JSON Lines text format or newline-delimited JSON
+        <http://jsonlines.org/>`_) or an RDD of Strings storing JSON objects (one object per
+        record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -398,7 +399,8 @@ class DataFrameReader(OptionUtils):
         accessible via JDBC URL ``url`` and connection ``properties``.
 
         Partitions of the table will be retrieved in parallel if either ``column`` or
-        ``predicates`` is specified.
+        ``predicates`` is specified. ``lowerBound`, ``upperBound`` and ``numPartitions``
+        is needed when ``column`` is specified.
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
@@ -428,8 +430,10 @@ class DataFrameReader(OptionUtils):
         for k in properties:
             jprop.setProperty(k, properties[k])
         if column is not None:
-            if numPartitions is None:
-                numPartitions = self._spark._sc.defaultParallelism
+            assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
+            assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
+            assert numPartitions is not None, \
+                "numPartitions can not be None when ``column`` is specified"
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:

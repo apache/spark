@@ -36,8 +36,8 @@ class Window(object):
 
     For example:
 
-    >>> # PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    >>> window = Window.partitionBy("country").orderBy("date").rowsBetween(-sys.maxsize, 0)
+    >>> # ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    >>> window = Window.orderBy("date").rowsBetween(Window.unboundedPreceding, Window.currentRow)
 
     >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
@@ -46,6 +46,18 @@ class Window(object):
 
     .. versionadded:: 1.4
     """
+
+    _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
+    _JAVA_MAX_LONG = (1 << 63) - 1  # 9223372036854775807
+    _PRECEDING_THRESHOLD = max(-sys.maxsize, _JAVA_MIN_LONG)
+    _FOLLOWING_THRESHOLD = min(sys.maxsize, _JAVA_MAX_LONG)
+
+    unboundedPreceding = _JAVA_MIN_LONG
+
+    unboundedFollowing = _JAVA_MAX_LONG
+
+    currentRow = 0
+
     @staticmethod
     @since(1.4)
     def partitionBy(*cols):
@@ -77,15 +89,21 @@ class Window(object):
         For example, "0" means "current row", while "-1" means the row before
         the current row, and "5" means the fifth row after the current row.
 
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to -9223372036854775808.
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to 9223372036854775807.
         """
-        if start <= -sys.maxsize:
-            start = WindowSpec._JAVA_MIN_LONG
-        if end >= sys.maxsize:
-            end = WindowSpec._JAVA_MAX_LONG
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
         return WindowSpec(jspec)
@@ -101,15 +119,21 @@ class Window(object):
         "0" means "current row", while "-1" means one off before the current row,
         and "5" means the five off after the current row.
 
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= -sys.maxsize:
-            start = WindowSpec._JAVA_MIN_LONG
-        if end >= sys.maxsize:
-            end = WindowSpec._JAVA_MAX_LONG
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
@@ -126,9 +150,6 @@ class WindowSpec(object):
 
     .. versionadded:: 1.4
     """
-
-    _JAVA_MAX_LONG = (1 << 63) - 1
-    _JAVA_MIN_LONG = - (1 << 63)
 
     def __init__(self, jspec):
         self._jspec = jspec
@@ -160,15 +181,21 @@ class WindowSpec(object):
         For example, "0" means "current row", while "-1" means the row before
         the current row, and "5" means the fifth row after the current row.
 
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= -sys.maxsize:
-            start = self._JAVA_MIN_LONG
-        if end >= sys.maxsize:
-            end = self._JAVA_MAX_LONG
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
     @since(1.4)
@@ -180,15 +207,21 @@ class WindowSpec(object):
         "0" means "current row", while "-1" means one off before the current row,
         and "5" means the five off after the current row.
 
+        We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
+
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``-sys.maxsize`` (or lower).
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``sys.maxsize`` (or higher).
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= -sys.maxsize:
-            start = self._JAVA_MIN_LONG
-        if end >= sys.maxsize:
-            end = self._JAVA_MAX_LONG
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 

@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.StructType
  * This class takes a feature vector and outputs a new feature vector with a subarray of the
  * original features.
  *
- * The subset of features can be specified with either indices ([[setIndices()]])
- * or names ([[setNames()]]).  At least one feature must be selected. Duplicate features
+ * The subset of features can be specified with either indices (`setIndices()`)
+ * or names (`setNames()`). At least one feature must be selected. Duplicate features
  * are not allowed, so there can be no overlap between selected indices and names.
  *
  * The output vector will order features with the selected indices first (in the order given),

@@ -51,12 +51,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16', "
       + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}', '{0.11, 0.22}', 'd1', 1.01, 1)"""
     ).executeUpdate()
+    conn.prepareStatement("INSERT INTO bar VALUES (null, null, null, null, null, "
+      + "null, null, null, null, null, "
+      + "null, null, null, null, null, null, null)"
+    ).executeUpdate()
   }
 
   test("Type mapping for various types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
+    val rows = df.collect().sortBy(_.toString())
+    assert(rows.length == 2)
+    // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
     assert(types.length == 17)
     assert(classOf[String].isAssignableFrom(types(0)))
@@ -96,6 +101,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getString(14) == "d1")
     assert(rows(0).getFloat(15) == 1.01f)
     assert(rows(0).getShort(16) == 1)
+
+    // Test reading null values using the second row.
+    assert(0.until(16).forall(rows(1).isNullAt(_)))
   }
 
   test("Basic write test") {

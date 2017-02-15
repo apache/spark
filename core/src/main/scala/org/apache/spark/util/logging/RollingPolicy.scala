@@ -18,7 +18,7 @@
 package org.apache.spark.util.logging
 
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import java.util.{Calendar, Locale}
 
 import org.apache.spark.internal.Logging
 
@@ -59,7 +59,7 @@ private[spark] class TimeBasedRollingPolicy(
   }
 
   @volatile private var nextRolloverTime = calculateNextRolloverTime()
-  private val formatter = new SimpleDateFormat(rollingFileSuffixPattern)
+  private val formatter = new SimpleDateFormat(rollingFileSuffixPattern, Locale.US)
 
   /** Should rollover if current time has exceeded next rollover time */
   def shouldRollover(bytesToBeWritten: Long): Boolean = {
@@ -109,7 +109,7 @@ private[spark] class SizeBasedRollingPolicy(
   }
 
   @volatile private var bytesWrittenSinceRollover = 0L
-  val formatter = new SimpleDateFormat("--yyyy-MM-dd--HH-mm-ss--SSSS")
+  val formatter = new SimpleDateFormat("--yyyy-MM-dd--HH-mm-ss--SSSS", Locale.US)
 
   /** Should rollover if the next set of bytes is going to exceed the size limit */
   def shouldRollover(bytesToBeWritten: Long): Boolean = {

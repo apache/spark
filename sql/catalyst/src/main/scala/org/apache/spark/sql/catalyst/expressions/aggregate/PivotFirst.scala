@@ -77,8 +77,6 @@ case class PivotFirst(
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
-  override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
-
   override val nullable: Boolean = false
 
   val valueDataType = valueColumn.dataType

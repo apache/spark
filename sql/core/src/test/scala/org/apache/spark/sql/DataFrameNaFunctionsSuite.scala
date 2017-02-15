@@ -138,6 +138,24 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq[(String, String)]((null, null)).toDF("col1", "col2").na.fill("test", "col1" :: Nil),
       Row("test", null))
+
+    checkAnswer(
+      Seq[(Long, Long)]((1, 2), (-1, -2), (9123146099426677101L, 9123146560113991650L))
+        .toDF("a", "b").na.fill(0),
+      Row(1, 2) :: Row(-1, -2) :: Row(9123146099426677101L, 9123146560113991650L) :: Nil
+    )
+
+    checkAnswer(
+      Seq[(java.lang.Long, java.lang.Double)]((null, 1.23), (3L, null), (4L, 3.45))
+        .toDF("a", "b").na.fill(2.34),
+      Row(2, 1.23) :: Row(3, 2.34) :: Row(4, 3.45) :: Nil
+    )
+
+    checkAnswer(
+      Seq[(java.lang.Long, java.lang.Double)]((null, 1.23), (3L, null), (4L, 3.45))
+        .toDF("a", "b").na.fill(5),
+      Row(5, 1.23) :: Row(3, 5.0) :: Row(4, 3.45) :: Nil
+    )
   }
 
   test("fill with map") {

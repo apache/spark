@@ -412,10 +412,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         repositories = value
 
       case CONF =>
-        value.split("=", 2).toSeq match {
-          case Seq(k, v) => sparkProperties(k) = v
-          case _ => SparkSubmit.printErrorAndExit(s"Spark config without '=': $value")
-        }
+        val (confName, confValue) = SparkSubmit.parseSparkConfProperty(value)
+        sparkProperties(confName) = confValue
 
       case PROXY_USER =>
         proxyUser = value
@@ -508,7 +506,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
-        |                              directory of each executor.
+        |                              directory of each executor. File paths of these files
+        |                              in executors can be accessed via SparkFiles.get(fileName).
         |
         |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not

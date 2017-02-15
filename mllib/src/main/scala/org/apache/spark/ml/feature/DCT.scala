@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.DataType
  * It returns a real vector of the same length representing the DCT. The return vector is scaled
  * such that the transform matrix is unitary (aka scaled DCT-II).
  *
- * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
+ * More information on <a href="https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II">
+ * DCT-II in Discrete cosine transform (Wikipedia)</a>.
  */
 @Since("1.5.0")
 class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)

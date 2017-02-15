@@ -40,9 +40,8 @@ import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.ConfigProvider;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 public class TransportClientFactorySuite {
@@ -53,7 +52,7 @@ public class TransportClientFactorySuite {
 
   @Before
   public void setUp() {
-    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
     RpcHandler rpcHandler = new NoOpRpcHandler();
     context = new TransportContext(conf, rpcHandler);
     server1 = context.createServer();
@@ -100,6 +99,8 @@ public class TransportClientFactorySuite {
             clients.add(client);
           } catch (IOException e) {
             failed.incrementAndGet();
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
           }
         }
       };
@@ -143,7 +144,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void returnDifferentClientsForDifferentServers() throws IOException {
+  public void returnDifferentClientsForDifferentServers() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
@@ -172,7 +173,7 @@ public class TransportClientFactorySuite {
   }
 
   @Test
-  public void closeBlockClientsWithFactory() throws IOException {
+  public void closeBlockClientsWithFactory() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
     TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
@@ -198,6 +199,11 @@ public class TransportClientFactorySuite {
           throw new NoSuchElementException(name);
         }
         return value;
+      }
+
+      @Override
+      public Iterable<Map.Entry<String, String>> getAll() {
+        throw new UnsupportedOperationException();
       }
     });
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);

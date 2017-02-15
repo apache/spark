@@ -116,16 +116,35 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate in subqueries of Union queries") {
     val query = Union(
       Seq(
-        testRelation.select(Literal(1).as('x), 'a).select('x + 'a),
-        testRelation.select(Literal(2).as('x), 'a).select('x + 'a)))
+        testRelation.select(Literal(1).as('x), 'a).select('x, 'x + 'a),
+        testRelation.select(Literal(2).as('x), 'a).select('x, 'x + 'a)))
       .select('x)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = Union(
       Seq(
-        testRelation.select(Literal(1).as('x), 'a).select((Literal(1).as('x) + 'a).as("(x + a)")),
-        testRelation.select(Literal(2).as('x), 'a).select((Literal(2).as('x) + 'a).as("(x + a)"))))
+        testRelation.select(Literal(1).as('x), 'a)
+          .select(Literal(1).as('x), (Literal(1).as('x) + 'a).as("(x + a)")),
+        testRelation.select(Literal(2).as('x), 'a)
+          .select(Literal(2).as('x), (Literal(2).as('x) + 'a).as("(x + a)"))))
       .select('x).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 
+  test("Propagate in expand") {
+    val c1 = Literal(1).as('a)
+    val c2 = Literal(2).as('b)
+    val a1 = c1.toAttribute.withNullability(true)
+    val a2 = c2.toAttribute.withNullability(true)
+    val expand = Expand(
+      Seq(Seq(Literal(null), 'b), Seq('a, Literal(null))),
+      Seq(a1, a2),
+      OneRowRelation.select(c1, c2))
+    val query = expand.where(a1.isNotNull).select(a1, a2).analyze
+    val optimized = Optimize.execute(query)
+    val correctExpand = expand.copy(projections = Seq(
+      Seq(Literal(null), c2),
+      Seq(c1, Literal(null))))
+    val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
     comparePlans(optimized, correctAnswer)
   }
 }

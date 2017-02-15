@@ -163,7 +163,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      stringToFile(new File(testCase.resultFile), goldenOutput)
+      val resultFile = new File(testCase.resultFile);
+      val parent = resultFile.getParentFile();
+      if (!parent.exists()) {
+        assert(parent.mkdirs(), "Could not create directory: " + parent)
+      }
+      stringToFile(resultFile, goldenOutput)
     }
 
     // Read back the golden file.
@@ -196,7 +201,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       assertResult(expected.schema, s"Schema did not match for query #$i\n${expected.sql}") {
         output.schema
       }
-      assertResult(expected.output, s"Result dit not match for query #$i\n${expected.sql}") {
+      assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
         output.output
       }
     }
@@ -214,12 +219,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     try {
       val df = session.sql(sql)
       val schema = df.schema
-      val answer = df.queryExecution.hiveResultString()
+      // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
+      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x"))
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
 
     } catch {
+      case a: AnalysisException if a.plan.nonEmpty =>
+        // Do not output the logical plan tree which contains expression IDs.
+        // Also implement a crude way of masking expression IDs in the error message
+        // with a generic pattern "###".
+        (StructType(Seq.empty),
+          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))
