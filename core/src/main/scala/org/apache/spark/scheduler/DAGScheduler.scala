@@ -1189,10 +1189,10 @@ class DAGScheduler(
               // This task was for the currently running attempt of the stage. Since the task
               // completed successfully from the perspective of the TaskSetManager, mark it as
               // no longer pending (the TaskSetManager may consider the task complete even
-              // when the output needs to be ignored because the task's epoch is too small below).
-              // This can result in inconsistency between pending partitions and output locations
-              // of stage. When pending partitions is empty, the scheduler will check output
-              // locations, if there are missing, the stage will be resubmitted.
+              // when the output needs to be ignored because the task's epoch is too small below,
+              // if so, this can result in inconsistency between pending partitions and output
+              // locations of stage. When pending partitions is empty, the scheduler will check
+              // output locations, if there is missing, the stage will be resubmitted.
               shuffleStage.pendingPartitions -= task.partitionId
             }
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
