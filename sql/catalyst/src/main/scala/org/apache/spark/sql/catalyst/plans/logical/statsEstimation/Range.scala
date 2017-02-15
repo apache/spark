@@ -59,22 +59,17 @@ object Range {
 
   /**
    * Intersected results of two ranges. This is only for two overlapped ranges.
-   * The outputs are the intersected min/max values of the two columns based on their data types.
+   * The outputs are the intersected min/max values.
    */
-  def intersect(
-      r1: Range,
-      r2: Range,
-      dt1: DataType,
-      dt2: DataType): (Option[Any], Option[Any], Option[Any], Option[Any]) = {
+  def intersect(r1: Range, r2: Range, dt: DataType): (Option[Any], Option[Any]) = {
     (r1, r2) match {
       case (_, _: DefaultRange) | (_: DefaultRange, _) =>
         // binary/string types don't support intersecting.
-        (None, None, None, None)
+        (None, None)
       case (n1: NumericRange, n2: NumericRange) =>
         val newRange = NumericRange(n1.min.max(n2.min), n1.max.min(n2.max))
-        val (newMin1, newMax1) = fromNumericRange(newRange, dt1)
-        val (newMin2, newMax2) = fromNumericRange(newRange, dt2)
-        (Some(newMin1), Some(newMax1), Some(newMin2), Some(newMax2))
+        val (newMin, newMax) = fromNumericRange(newRange, dt)
+        (Some(newMin), Some(newMax))
     }
   }
 
