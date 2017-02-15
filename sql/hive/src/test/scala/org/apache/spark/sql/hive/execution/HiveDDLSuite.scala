@@ -1599,7 +1599,7 @@ class HiveDDLSuite
                |PARTITIONED BY(a, b)
                |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-           """.stripMargin)
+             """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
