@@ -51,7 +51,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-      val jsonSchema = InferSchema.infer(
+      val jsonSchema = JsonInferSchema.infer(
         createBaseRdd(sparkSession, files),
         columnNameOfCorruptRecord,
         parsedOptions)

@@ -323,7 +323,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a `DataFrame` from a [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -448,7 +448,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
    * that is generally created automatically through implicits from a `SparkSession`, or can be
    * created explicitly by calling static methods on [[Encoders]].

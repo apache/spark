@@ -999,7 +999,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-19218 `SET -v` should not fail with null value configuration") {
     import SQLConf._
-    val confEntry = SQLConfigBuilder("spark.test").doc("doc").stringConf.createWithDefault(null)
+    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
 
     try {
       val result = sql("SET -v").collect()
@@ -1571,7 +1571,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("specifying database name for a temporary table is not allowed") {
+  test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
       val path = dir.toURI.toString
       val df =
@@ -1585,23 +1585,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       intercept[AnalysisException] {
         spark.sql(
           s"""
-          |CREATE TEMPORARY TABLE db.t
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
+            |CREATE TEMPORARY VIEW db.t
+            |USING parquet
+            |OPTIONS (
+            |  path '$path'
+            |)
+           """.stripMargin)
       }.getMessage
 
       // If you use backticks to quote the name then it's OK.
       spark.sql(
         s"""
-          |CREATE TEMPORARY TABLE `db.t`
+          |CREATE TEMPORARY VIEW `db.t`
           |USING parquet
           |OPTIONS (
           |  path '$path'
           |)
-        """.stripMargin)
+         """.stripMargin)
       checkAnswer(spark.table("`db.t`"), df)
     }
   }

@@ -90,7 +90,7 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to 1 topic
 ds1 = spark
-  .readStream()
+  .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
@@ -108,7 +108,7 @@ ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern
 ds3 = spark
-  .readStream()
+  .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribePattern", "topic.*")

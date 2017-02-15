@@ -84,7 +84,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  *    $$
  * </blockquote>
  *
- * For the case $E_{max} == E_{min}$, $Rescaled(e_i) = 0.5 * (max + min)$.
+ * For the case \(E_{max} == E_{min}\), \(Rescaled(e_i) = 0.5 * (max + min)\).
  *
  * @note Since zero values will probably be transformed to non-zero values, output of the
  * transformer will be DenseVector even for sparse input.

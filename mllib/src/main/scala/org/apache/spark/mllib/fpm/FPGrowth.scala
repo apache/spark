@@ -52,7 +52,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
     @Since("1.3.0") val freqItemsets: RDD[FreqItemset[Item]])
   extends Saveable with Serializable {
   /**
-   * Generates association rules for the [[Item]]s in [[freqItemsets]].
+   * Generates association rules for the `Item`s in [[freqItemsets]].
    * @param confidence minimal confidence of the rules produced
    */
   @Since("1.5.0")

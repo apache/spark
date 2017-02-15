@@ -44,6 +44,9 @@ library(SparkR)
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
+```{r, include=FALSE}
+install.spark()
+```
 ```{r, message=FALSE, results="hide"}
 sparkR.session()
 ```
@@ -488,6 +491,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Clustering
 
+* Bisecting $k$-means
+
 * Gaussian Mixture Model (GMM)
 
 * $k$-means Clustering
@@ -736,6 +741,18 @@ df <- createDataFrame(longley)
 rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
+```
+
+#### Bisecting k-Means
+
+`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+summary(model)
+fitted <- predict(model, df)
+head(select(fitted, "Sepal_Length", "prediction"))
 ```
 
 #### Gaussian Mixture Model

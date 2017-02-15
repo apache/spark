@@ -323,10 +323,8 @@ setMethod("names",
 setMethod("names<-",
           signature(x = "SparkDataFrame"),
           function(x, value) {
-            if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
-              dataFrame(sdf)
-            }
+            colnames(x) <- value
+            x
           })
 
 #' @rdname columns
@@ -417,7 +415,7 @@ setMethod("coltypes",
                   type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
-              type
+              type[[1]]
             })
 
             # Find which types don't have mapping to R
@@ -1138,6 +1136,7 @@ setMethod("collect",
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
+                    class(vec) <- PRIMITIVE_TYPES[[colType]]
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col

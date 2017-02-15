@@ -2520,7 +2520,7 @@ class Dataset[T] private[sql](
   def unpersist(): this.type = unpersist(blocking = false)
 
   /**
-   * Represents the content of the Dataset as an `RDD` of [[T]].
+   * Represents the content of the Dataset as an `RDD` of `T`.
    *
    * @group basic
    * @since 1.6.0
@@ -2534,14 +2534,14 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns the content of the Dataset as a `JavaRDD` of [[T]]s.
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
-   * Returns the content of the Dataset as a `JavaRDD` of [[T]]s.
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
    * @group basic
    * @since 1.6.0
    */

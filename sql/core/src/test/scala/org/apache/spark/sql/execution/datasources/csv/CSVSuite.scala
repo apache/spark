@@ -186,16 +186,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test different encoding") {
-    // scalastyle:off
-    spark.sql(
-      s"""
-         |CREATE TEMPORARY TABLE carsTable USING csv
-         |OPTIONS (path "${testFile(carsFile8859)}", header "true",
-         |charset "iso-8859-1", delimiter "þ")
-      """.stripMargin.replaceAll("\n", " "))
-    // scalastyle:on
-
-    verifyCars(spark.table("carsTable"), withHeader = true)
+    withView("carsTable") {
+      // scalastyle:off
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable USING csv
+          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
+          |charset "iso-8859-1", delimiter "þ")
+         """.stripMargin.replaceAll("\n", " "))
+      // scalastyle:on
+      verifyCars(spark.table("carsTable"), withHeader = true)
+    }
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
@@ -213,27 +214,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("DDL test with tab separated file") {
-    spark.sql(
-      s"""
-         |CREATE TEMPORARY TABLE carsTable USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable USING csv
+          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+         """.stripMargin.replaceAll("\n", " "))
 
-    verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
+      verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
+    }
   }
 
   test("DDL test parsing decimal type") {
-    spark.sql(
-      s"""
-         |CREATE TEMPORARY TABLE carsTable
-         |(yearMade double, makeName string, modelName string, priceTag decimal,
-         | comments string, grp string)
-         |USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable
+          |(yearMade double, makeName string, modelName string, priceTag decimal,
+          | comments string, grp string)
+          |USING csv
+          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+         """.stripMargin.replaceAll("\n", " "))
 
-    assert(
-      spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().size === 1)
+      assert(
+        spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().size === 1)
+    }
   }
 
   test("test for DROPMALFORMED parsing mode") {
@@ -300,28 +305,34 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("DDL test with empty file") {
-    spark.sql(s"""
-           |CREATE TEMPORARY TABLE carsTable
-           |(yearMade double, makeName string, modelName string, comments string, grp string)
-           |USING csv
-           |OPTIONS (path "${testFile(emptyFile)}", header "false")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable
+          |(yearMade double, makeName string, modelName string, comments string, grp string)
+          |USING csv
+          |OPTIONS (path "${testFile(emptyFile)}", header "false")
+         """.stripMargin.replaceAll("\n", " "))
 
-    assert(spark.sql("SELECT count(*) FROM carsTable").collect().head(0) === 0)
+      assert(spark.sql("SELECT count(*) FROM carsTable").collect().head(0) === 0)
+    }
   }
 
   test("DDL test with schema") {
-    spark.sql(s"""
-           |CREATE TEMPORARY TABLE carsTable
-           |(yearMade double, makeName string, modelName string, comments string, blank string)
-           |USING csv
-           |OPTIONS (path "${testFile(carsFile)}", header "true")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable
+          |(yearMade double, makeName string, modelName string, comments string, blank string)
+          |USING csv
+          |OPTIONS (path "${testFile(carsFile)}", header "true")
+         """.stripMargin.replaceAll("\n", " "))
 
-    val cars = spark.table("carsTable")
-    verifyCars(cars, withHeader = true, checkHeader = false, checkValues = false)
-    assert(
-      cars.schema.fieldNames === Array("yearMade", "makeName", "modelName", "comments", "blank"))
+      val cars = spark.table("carsTable")
+      verifyCars(cars, withHeader = true, checkHeader = false, checkValues = false)
+      assert(
+        cars.schema.fieldNames === Array("yearMade", "makeName", "modelName", "comments", "blank"))
+    }
   }
 
   test("save csv") {

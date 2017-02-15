@@ -122,12 +122,12 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.2.0</hadoop.version>
+    <hadoop.version>2.6.5</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <flume.version>1.6.0</flume.version>
-    <zookeeper.version>3.4.5</zookeeper.version>
-    <curator.version>2.4.0</curator.version>
+    <zookeeper.version>3.4.6</zookeeper.version>
+    <curator.version>2.6.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>1.2.1.spark2</hive.version>
@@ -144,7 +144,7 @@
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-    <jets3t.version>0.7.1</jets3t.version>
+    <jets3t.version>0.9.3</jets3t.version>
     <aws.kinesis.client.version>1.6.2</aws.kinesis.client.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
@@ -2548,43 +2548,14 @@
     -->
 
     <profile>
-      <id>hadoop-2.2</id>
-    <!-- SPARK-7249: Default hadoop profile. Uses global properties. -->
-    </profile>
-
-    <profile>
-      <id>hadoop-2.3</id>
-      <properties>
-        <hadoop.version>2.3.0</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
-      </properties>
-    </profile>
-
-    <profile>
-      <id>hadoop-2.4</id>
-      <properties>
-        <hadoop.version>2.4.1</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
-      </properties>
-    </profile>
-
-    <profile>
       <id>hadoop-2.6</id>
-      <properties>
-        <hadoop.version>2.6.5</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
-        <zookeeper.version>3.4.6</zookeeper.version>
-        <curator.version>2.6.0</curator.version>
-      </properties>
+      <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 
     <profile>
       <id>hadoop-2.7</id>
       <properties>
         <hadoop.version>2.7.3</hadoop.version>
-        <jets3t.version>0.9.3</jets3t.version>
-        <zookeeper.version>3.4.6</zookeeper.version>
-        <curator.version>2.6.0</curator.version>
       </properties>
     </profile>
 
