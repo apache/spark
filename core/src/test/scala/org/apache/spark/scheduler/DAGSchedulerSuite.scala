@@ -2161,7 +2161,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
   }
 
-  test("After fetching failed, success of old attempt of stage should be taken as valid.") {
+  test("After a fetch failure, success of old attempt of stage should be taken as valid.") {
     // Create 3 RDDs with shuffle dependencies on each other: rddA <--- rddB <--- rddC
     val rddA = new MyRDD(sc, 2, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
