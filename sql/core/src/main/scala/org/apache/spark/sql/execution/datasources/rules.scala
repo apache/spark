@@ -226,9 +226,21 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     }
     checkDuplication(columnNames, "table definition of " + table.identifier)
 
-    table.copy(
-      partitionColumnNames = normalizePartitionColumns(schema, table),
-      bucketSpec = normalizeBucketSpec(schema, table))
+    val normalizedPartCols = normalizePartitionColumns(schema, table)
+    val normalizedBucketSpec = normalizeBucketSpec(schema, table)
+
+    normalizedBucketSpec.foreach { spec =>
+      for (bucketCol <- spec.bucketColumnNames if normalizedPartCols.contains(bucketCol)) {
+        throw new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
+          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+      }
+      for (sortCol <- spec.sortColumnNames if normalizedPartCols.contains(sortCol)) {
+        throw new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
+          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+      }
+    }
+
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
