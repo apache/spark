@@ -20,6 +20,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -27,22 +29,26 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
     dataset = FPGrowthSuite.getFPGrowthData(spark)
   }
 
-  test("FPGrowth fit and transform") {
-    val model = new FPGrowth().setMinSupport(0.8).fit(dataset)
-    val generatedRules = model.setMinConfidence(0.8).getAssociationRules
-    val expectedRules = spark.createDataFrame(Seq(
-      (Array("2"), Array("1"), 1.0),
-      (Array("1"), Array("2"), 1.0)
-    )).toDF("antecedent", "consequent", "confidence")
+  test("FPGrowth fit and transform with different data types") {
+    Array(IntegerType, StringType, ShortType, LongType, ByteType).foreach { dt =>
+      val intData = dataset.withColumn("features", col("features").cast(ArrayType(dt)))
+      val model = new FPGrowth().setMinSupport(0.8).fit(intData)
+      val generatedRules = model.setMinConfidence(0.8).getAssociationRules
+      val expectedRules = spark.createDataFrame(Seq(
+        (Array("2"), Array("1"), 1.0),
+        (Array("1"), Array("2"), 1.0)
+      )).toDF("antecedent", "consequent", "confidence")
+        .withColumn("antecedent", col("antecedent").cast(ArrayType(dt)))
+        .withColumn("consequent", col("consequent").cast(ArrayType(dt)))
 
-    assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
-      generatedRules.sort("antecedent").rdd.collect()))
-    val transformed = model.transform(dataset)
-    assert(transformed.count() == 3)
+      assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
+        generatedRules.sort("antecedent").rdd.collect()))
+      val transformed = model.transform(intData)
+      assert(transformed.count() == 3)
+    }
   }
 
   test("FPGrowth getFreqItems") {
@@ -79,8 +85,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("read/write") {
     def checkModelData(model: FPGrowthModel, model2: FPGrowthModel): Unit = {
-      assert(model.getAssociationRules.collect() ===
-        model2.getAssociationRules.collect())
+      assert(model.freqItemsets.sort("items").collect() ===
+        model2.freqItemsets.sort("items").collect())
     }
     val fPGrowth = new FPGrowth()
     testEstimatorAndModelReadWrite(
@@ -105,7 +111,8 @@ object FPGrowthSuite {
    * This excludes input columns to simplify some tests.
    */
   val allParamSettings: Map[String, Any] = Map(
-    "minSupport" -> 0.3,
+    "minSupport" -> 0.321,
+    "minConfidence" -> 0.456,
     "numPartitions" -> 5,
     "featuresCol" -> "features",
     "predictionCol" -> "myPrediction"
