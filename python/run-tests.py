@@ -72,7 +72,7 @@ def run_individual_python_test(test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
-    LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
+    LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
         per_test_output = tempfile.TemporaryFile()
