@@ -617,8 +617,8 @@ class Analyzer(
     private def lookupTableFromCatalog(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
-      val db = u.tableIdentifier.database.orElse(defaultDatabase)
-      val tableIdentWithDb = u.tableIdentifier.copy(database = db)
+      val tableIdentWithDb = u.tableIdentifier.copy(database = u.tableIdentifier.database
+        .orElse(defaultDatabase))
       try {
         catalog.lookupRelation(tableIdentWithDb, u.alias)
       } catch {
@@ -626,9 +626,9 @@ class Analyzer(
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")
         // If the database is defined and that database is not found, throw an AnalysisException.
         // Note that if the database is not defined, it is possible we are looking up a temp view.
-        case _: NoSuchDatabaseException if db.isDefined =>
+        case e: NoSuchDatabaseException =>
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-            s"database ${db.get} doesn't exsits.")
+            s"database ${e.db} doesn't exsits.")
       }
     }
 
