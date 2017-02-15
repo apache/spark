@@ -1146,7 +1146,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df = ds.toDF()
     val x = df.schema
     assert(df.schema(0).dataType == StringType)
-    assert(df.schema(1).dataType == ArrayType(IntegerType, null = false))
+    assert(df.schema(1).dataType == ArrayType(IntegerType, containsNull = false))
     assert(df.schema(2).dataType == BinaryType)
   }
 }
