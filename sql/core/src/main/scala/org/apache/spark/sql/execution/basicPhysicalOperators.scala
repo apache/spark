@@ -365,6 +365,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
     val taskContext = ctx.freshName("taskContext")
     ctx.addMutableState("TaskContext", taskContext, s"$taskContext = TaskContext.get();")
+    val inputMetrics = ctx.freshName("inputMetrics")
+    ctx.addMutableState("InputMetrics", inputMetrics,
+        s"$inputMetrics = $taskContext.taskMetrics().inputMetrics();")
 
     // In order to periodically update the metrics without inflicting performance penalty, this
     // operator produces elements in batches. After a batch is complete, the metrics are updated
@@ -460,7 +463,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     if ($nextBatchTodo == 0) break;
       |   }
       |   $numOutput.add($nextBatchTodo);
-      |   $numGenerated.add($nextBatchTodo);
+      |   $inputMetrics.incRecordsRead($nextBatchTodo);
       |
       |   $batchEnd += $nextBatchTodo * ${step}L;
       | }
@@ -469,7 +472,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val numGeneratedRows = longMetric("numGeneratedRows")
     sqlContext
       .sparkContext
       .parallelize(0 until numSlices, numSlices)
@@ -488,10 +490,12 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         val safePartitionEnd = getSafeMargin(partitionEnd)
         val rowSize = UnsafeRow.calculateBitSetWidthInBytes(1) + LongType.defaultSize
         val unsafeRow = UnsafeRow.createFromByteArray(rowSize, 1)
+        val taskContext = TaskContext.get()
 
         val iter = new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
           private[this] var overflow: Boolean = false
+          private[this] val inputMetrics = taskContext.taskMetrics().inputMetrics
 
           override def hasNext =
             if (!overflow) {
@@ -513,12 +517,12 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
             }
 
             numOutputRows += 1
-            numGeneratedRows += 1
+            inputMetrics.incRecordsRead(1)
             unsafeRow.setLong(0, ret)
             unsafeRow
           }
         }
-        new InterruptibleIterator(TaskContext.get(), iter)
+        new InterruptibleIterator(taskContext, iter)
       }
   }
 

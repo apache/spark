@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.io.File
+
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.SparkPlanInfo
@@ -309,4 +314,84 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     assert(metricInfoDeser.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 
+  test("range metrics") {
+    val res1 = InputOutputMetricsHelper.run(
+      spark.range(30).filter(x => x % 3 == 0).toDF()
+    )
+    assert(res1 === (30L, 0L, 30L) :: Nil)
+
+    val res2 = InputOutputMetricsHelper.run(
+      spark.range(150).repartition(4).filter(x => x < 10).toDF()
+    )
+    assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
+
+    withTempDir { tempDir =>
+      val dir = new File(tempDir, "pqS").getCanonicalPath
+
+      spark.range(10).write.parquet(dir)
+      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+
+      val res3 = InputOutputMetricsHelper.run(
+        spark.range(0, 30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+      )
+      assert(res3 === (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil)
+    }
+  }
+}
+
+object InputOutputMetricsHelper {
+   private class InputOutputMetricsListener extends SparkListener {
+    private case class MetricsResult(
+        var recordsRead: Long = 0L,
+        var shuffleRecordsRead: Long = 0L,
+        var sumMaxOutputRows: Long = 0L)
+
+    private[this] var stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
+
+    def reset(): Unit = {
+      stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
+    }
+
+    def getResults(): List[(Long, Long, Long)] = {
+      stageIdToMetricsResult.keySet.toList.sorted.map({ stageId =>
+        val res = stageIdToMetricsResult(stageId)
+        (res.recordsRead, res.shuffleRecordsRead, res.sumMaxOutputRows)})
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+      val res = stageIdToMetricsResult.getOrElseUpdate(taskEnd.stageId, { MetricsResult() })
+
+      res.recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+      res.shuffleRecordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
+
+      var maxOutputRows = 0L
+      for (accum <- taskEnd.taskMetrics.externalAccums) {
+        val info = accum.toInfo(Some(accum.value), None)
+        if (info.name.toString.contains("number of output rows")) {
+          info.update match {
+            case Some(n: Number) =>
+              if (n.longValue() > maxOutputRows) {
+                maxOutputRows = n.longValue()
+              }
+            case _ => // Ignore.
+          }
+        }
+      }
+      res.sumMaxOutputRows += maxOutputRows
+    }
+  }
+
+  def run(df: DataFrame): List[(Long, Long, Long)] = {
+    val spark = df.sparkSession
+    val sparkContext = spark.sparkContext
+    val listener = new InputOutputMetricsListener()
+    sparkContext.addSparkListener(listener)
+
+    sparkContext.listenerBus.waitUntilEmpty(5000)
+    listener.reset()
+    df.collect()
+    sparkContext.listenerBus.waitUntilEmpty(5000)
+    sparkContext.removeSparkListener(listener)
+    listener.getResults()
+  }
 }
