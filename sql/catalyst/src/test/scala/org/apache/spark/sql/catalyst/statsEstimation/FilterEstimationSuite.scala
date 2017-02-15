@@ -215,17 +215,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
-  test("cdate = '2017-01-02' ") {
-    val d20170102 = Date.valueOf("2017-01-02")
-    validateEstimatedStats(
-      arDate,
-      Filter(EqualTo(arDate, Literal("2017-01-02")), childStatsTestPlan(Seq(arDate))),
-      ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      Some(1L)
-    )
-  }
-
   test("cdate = cast('2017-01-02' AS DATE)") {
     val d20170102 = Date.valueOf("2017-01-02")
     val d20170102_SQLDate = DateTimeUtils.fromJavaDate(d20170102)
@@ -273,18 +262,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
         nullCount = 0, avgLen = 4, maxLen = 4),
       Some(3L)
-    )
-  }
-
-  test("ctimestamp = '2017-01-01 02:00:00' ") {
-    val ts2017010102 = Timestamp.valueOf("2017-01-01 02:00:00")
-    validateEstimatedStats(
-      arTimestamp,
-      Filter(EqualTo(arTimestamp, Literal("2017-01-01 02:00:00")),
-        childStatsTestPlan(Seq(arTimestamp))),
-      ColumnStat(distinctCount = 1, min = Some(ts2017010102), max = Some(ts2017010102),
-        nullCount = 0, avgLen = 8, maxLen = 8),
-      Some(1L)
     )
   }
 

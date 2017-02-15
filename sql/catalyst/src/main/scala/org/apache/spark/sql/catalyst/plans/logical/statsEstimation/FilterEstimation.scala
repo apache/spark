@@ -269,23 +269,6 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       return None
     }
 
-    // Make sure that the Date/Timestamp literal is a valid one
-    attrRef.dataType match {
-      case DateType if literal.dataType.isInstanceOf[StringType] =>
-        val dateLiteral = DateTimeUtils.stringToDate(literal.value.asInstanceOf[UTF8String])
-        if (dateLiteral.isEmpty) {
-          logDebug("[CBO] Date literal is wrong, No statistics for " + attrRef)
-          return None
-        }
-      case TimestampType if literal.dataType.isInstanceOf[StringType] =>
-        val tsLiteral = DateTimeUtils.stringToTimestamp(literal.value.asInstanceOf[UTF8String])
-        if (tsLiteral.isEmpty) {
-          logDebug("[CBO] Timestamp literal is wrong, No statistics for " + attrRef)
-          return None
-        }
-      case _ =>
-    }
-
     op match {
       case EqualTo(l, r) => evaluateEqualTo(attrRef, literal, update)
       case _ =>
@@ -381,19 +364,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             aColStat.copy(distinctCount = 1, min = newValue,
               max = newValue, nullCount = 0)
           case DateType =>
-            val dateValue = literal.dataType match {
-              case StringType =>
-                Some(Date.valueOf(literal.value.toString))
-              case _ => Some(DateTimeUtils.toJavaDate(literal.value.toString.toInt))
-            }
+            val dateValue = Some(DateTimeUtils.toJavaDate(literal.value.toString.toInt))
             aColStat.copy(distinctCount = 1, min = dateValue,
               max = dateValue, nullCount = 0)
           case TimestampType =>
-            val tsValue = literal.dataType match {
-              case StringType =>
-                Some(Timestamp.valueOf(literal.value.toString))
-              case _ => Some(DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong))
-            }
+            val tsValue = Some(DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong))
             aColStat.copy(distinctCount = 1, min = tsValue,
               max = tsValue, nullCount = 0)
           case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
