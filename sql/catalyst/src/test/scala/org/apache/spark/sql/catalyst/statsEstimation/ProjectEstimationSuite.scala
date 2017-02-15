@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -95,12 +95,7 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = 2,
         min = Some(t1), max = Some(t2), nullCount = 0, avgLen = 8, maxLen = 8)
     ))
-    val columnSizes = columnInfo.map { case (attr, colStat) =>
-      (attr, attr.dataType match {
-        case StringType => colStat.avgLen + 8 + 4
-        case _ => colStat.avgLen
-      })
-    }
+    val columnSizes: Map[Attribute, Long] = columnInfo.map(kv => (kv._1, getColSize(kv._1, kv._2)))
     val child = StatsTestPlan(
       outputList = columnInfo.keys.toSeq,
       rowCount = 2,
@@ -108,11 +103,13 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
 
     // Row with single column
     columnInfo.keys.foreach { attr =>
-      checkProjectStats(
-        child = child,
-        projectAttrMap = AttributeMap(attr -> columnInfo(attr) :: Nil),
-        expectedSize = 2 * (8 + columnSizes(attr)),
-        expectedRowCount = 2)
+      withClue(s"For data type ${attr.dataType}") {
+        checkProjectStats(
+          child = child,
+          projectAttrMap = AttributeMap(attr -> columnInfo(attr) :: Nil),
+          expectedSize = 2 * (8 + columnSizes(attr)),
+          expectedRowCount = 2)
+      }
     }
 
     // Row with multiple columns
