@@ -28,7 +28,7 @@ setGeneric("cacheRDD", function(x) { standardGeneric("cacheRDD") })
 # @rdname coalesce
 # @seealso repartition
 # @export
-setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coalesce") })
+setGeneric("coalesceRDD", function(x, numPartitions, ...) { standardGeneric("coalesceRDD") })
 
 # @rdname checkpoint-methods
 # @export
@@ -405,6 +405,13 @@ setGeneric("attach")
 #' @rdname cache
 #' @export
 setGeneric("cache", function(x) { standardGeneric("cache") })
+
+#' @rdname coalesce
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, additional Columns can be optionally
+#'        provided.
+#' @export
+setGeneric("coalesce", function(x, ...) { standardGeneric("coalesce") })
 
 #' @rdname collect
 #' @export

@@ -286,6 +286,28 @@ setMethod("ceil",
             column(jc)
           })
 
+#' Returns the first column that is not NA
+#'
+#' Returns the first column that is not NA, or NA if all inputs are.
+#'
+#' @rdname coalesce
+#' @name coalesce
+#' @family normal_funcs
+#' @export
+#' @aliases coalesce,Column-method
+#' @examples \dontrun{coalesce(df$c, df$d, df$e)}
+#' @note coalesce(Column) since 2.1.1
+setMethod("coalesce",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "coalesce", jcols)
+            column(jc)
+          })
+
 #' Though scala functions has "col" function, we don't expose it in SparkR
 #' because we don't want to conflict with the "col" function in the R base
 #' package and we also have "column" function exported which is an alias of "col".
@@ -297,7 +319,7 @@ col <- function(x) {
 #' Returns a Column based on the given column name
 #'
 #' Returns a Column based on the given column name.
-#
+#'
 #' @param x Character column name.
 #'
 #' @rdname column
@@ -305,7 +327,7 @@ col <- function(x) {
 #' @family normal_funcs
 #' @export
 #' @aliases column,character-method
-#' @examples \dontrun{column(df)}
+#' @examples \dontrun{column("name")}
 #' @note column since 1.6.0
 setMethod("column",
           signature(x = "character"),

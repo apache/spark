@@ -315,7 +315,7 @@ test_that("repartition/coalesce on RDDs", {
   expect_true(count >= 0 && count <= 4)
 
   # coalesce
-  r3 <- coalesce(rdd, 1)
+  r3 <- coalesceRDD(rdd, 1)
   expect_equal(getNumPartitionsRDD(r3), 1L)
   count <- length(collectPartition(r3, 0L))
   expect_equal(count, 20)
