@@ -62,7 +62,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      val dummyOption = new JSONOptions(Map.empty[String, String])
+      val dummyOption = new JSONOptions(Map.empty[String, String], "GMT")
       val dummySchema = StructType(Seq.empty)
       val parser = new JacksonParser(dummySchema, "", dummyOption)
 
@@ -1366,7 +1366,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = JsonInferSchema.infer(empty, "", new JSONOptions(Map.empty[String, String]))
+    val emptySchema = JsonInferSchema.infer(
+      empty, "", new JSONOptions(Map.empty[String, String], "GMT"))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1391,7 +1392,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-8093 Erase empty structs") {
     val emptySchema = JsonInferSchema.infer(
-      emptyRecords, "", new JSONOptions(Map.empty[String, String]))
+      emptyRecords, "", new JSONOptions(Map.empty[String, String], "GMT"))
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1723,7 +1724,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("Write timestamps correctly with dateFormat option") {
+  test("Write timestamps correctly with timestampFormat option") {
     val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
     withTempDir { dir =>
       // With dateFormat option.
@@ -1748,6 +1749,43 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row("2016/01/28 20:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
+    }
+  }
+
+  test("Write timestamps correctly with timestampFormat option and timeZone option") {
+    val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
+    withTempDir { dir =>
+      // With dateFormat option and timeZone option.
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
+      val timestampsWithFormat = spark.read
+        .schema(customSchema)
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .json(datesRecords)
+      timestampsWithFormat.write
+        .format("json")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
+        .option("timeZone", "GMT")
+        .save(timestampsWithFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+      val stringTimestampsWithFormat = spark.read
+        .schema(stringSchema)
+        .json(timestampsWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/27 01:00"),
+        Row("2014/10/28 01:30"),
+        Row("2016/01/29 04:00"))
+
+      checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
+
+      val readBack = spark.read
+        .schema(customSchema)
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
+        .option("timeZone", "GMT")
+        .json(timestampsWithFormatPath)
+
+      checkAnswer(readBack, timestampsWithFormat)
     }
   }
 

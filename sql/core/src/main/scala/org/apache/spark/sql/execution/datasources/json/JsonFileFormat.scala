@@ -47,7 +47,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (files.isEmpty) {
       None
     } else {
-      val parsedOptions: JSONOptions = new JSONOptions(options)
+      val parsedOptions: JSONOptions =
+        new JSONOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
@@ -67,7 +68,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val parsedOptions: JSONOptions =
+      new JSONOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -97,7 +99,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val parsedOptions: JSONOptions =
+      new JSONOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
