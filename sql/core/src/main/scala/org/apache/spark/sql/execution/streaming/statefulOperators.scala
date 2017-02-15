@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjecti
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalKeyedState}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
@@ -68,6 +67,37 @@ trait StateStoreWriter extends StatefulOperator {
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
 }
 
+trait WatermarkSupport extends SparkPlan {
+
+  def keyExpressions: Seq[Attribute]
+
+  def eventTimeWatermark: Option[Long]
+
+  /** Generate a predicate that matches data older than the watermark */
+  lazy val watermarkPredicate: Option[Predicate] = {
+    val optionalWatermarkAttribute =
+      keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
+
+    optionalWatermarkAttribute.map { watermarkAttribute =>
+      // If we are evicting based on a window, use the end of the window.  Otherwise just
+      // use the attribute itself.
+      val evictionExpression =
+        if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+          LessThanOrEqual(
+            GetStructField(watermarkAttribute, 1),
+            Literal(eventTimeWatermark.get * 1000))
+        } else {
+          LessThanOrEqual(
+            watermarkAttribute,
+            Literal(eventTimeWatermark.get * 1000))
+        }
+
+      logInfo(s"Filtering state store on: $evictionExpression")
+      newPredicate(evictionExpression, keyExpressions)
+    }
+  }
+}
+
 /**
  * For each input tuple, the key is calculated and the value from the [[StateStore]] is added
  * to the stream (in addition to the input tuple) if present.
@@ -76,7 +106,7 @@ case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
     child: SparkPlan)
-  extends execution.UnaryExecNode with StateStoreReader {
+  extends UnaryExecNode with StateStoreReader {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -113,31 +143,7 @@ case class StateStoreSaveExec(
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
-  extends execution.UnaryExecNode with StateStoreWriter {
-
-  /** Generate a predicate that matches data older than the watermark */
-  private lazy val watermarkPredicate: Option[Predicate] = {
-    val optionalWatermarkAttribute =
-      keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
-
-    optionalWatermarkAttribute.map { watermarkAttribute =>
-      // If we are evicting based on a window, use the end of the window.  Otherwise just
-      // use the attribute itself.
-      val evictionExpression =
-        if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-          LessThanOrEqual(
-            GetStructField(watermarkAttribute, 1),
-            Literal(eventTimeWatermark.get * 1000))
-        } else {
-          LessThanOrEqual(
-            watermarkAttribute,
-            Literal(eventTimeWatermark.get * 1000))
-        }
-
-      logInfo(s"Filtering state store on: $evictionExpression")
-      newPredicate(evictionExpression, keyExpressions)
-    }
-  }
+  extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -320,4 +326,95 @@ case class MapGroupsWithStateExec(
         })
       }
   }
+}
+
+
+/** Physical operator for executing streaming Deduplication. */
+case class DeduplicationExec(
+    keyExpressions: Seq[Attribute],
+    child: SparkPlan,
+    stateId: Option[OperatorStateId] = None,
+    outputMode: Option[OutputMode] = None,
+    eventTimeWatermark: Option[Long] = None)
+  extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  /** Distribute by grouping attributes */
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(keyExpressions) :: Nil
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    metrics // force lazy init at driver
+    assert(outputMode.nonEmpty,
+      "Incorrect planning in IncrementalExecution, outputMode has not been set")
+
+    child.execute().mapPartitionsWithStateStore(
+      getStateId.checkpointLocation,
+      operatorId = getStateId.operatorId,
+      storeVersion = getStateId.batchId,
+      keyExpressions.toStructType,
+      child.output.toStructType,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+      val numOutputRows = longMetric("numOutputRows")
+      val numTotalStateRows = longMetric("numTotalStateRows")
+      val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+
+      outputMode match {
+        // Add new rows and output all rows in the StateStore.
+        case Some(Complete) =>
+          while (iter.hasNext) {
+            val row = iter.next().asInstanceOf[UnsafeRow]
+            val key = getKey(row)
+            val value = store.get(key)
+            if (value.isEmpty) {
+              store.put(key.copy(), row.copy())
+              numUpdatedStateRows += 1
+            } else {
+              // Drop duplicated rows
+            }
+          }
+          store.commit()
+          numTotalStateRows += store.numKeys()
+          store.iterator().map { case (k, v) =>
+            numOutputRows += 1
+            v.asInstanceOf[InternalRow]
+          }
+
+        // Add and output new rows for both Append and Update modes
+        case Some(Append) | Some(Update) =>
+          val baseIterator = watermarkPredicate match {
+            case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+            case None => iter
+          }
+
+          while (baseIterator.hasNext) {
+            val row = baseIterator.next().asInstanceOf[UnsafeRow]
+            val key = getKey(row)
+            val value = store.get(key)
+            if (value.isEmpty) {
+              store.put(key.copy(), row.copy())
+              numUpdatedStateRows += 1
+            } else {
+              // Drop duplicated rows
+            }
+          }
+
+          watermarkPredicate.foreach(f => store.remove(f.eval _))
+          store.commit()
+
+          numTotalStateRows += store.numKeys()
+          store.updates().filter(_.isInstanceOf[ValueAdded]).map { added =>
+            numOutputRows += 1
+            added.value.asInstanceOf[InternalRow]
+          }
+
+        case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+      }
+    }
+  }
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }

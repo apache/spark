@@ -35,6 +35,9 @@ object UnsupportedOperationChecker {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
+      case p: Deduplication =>
+        throwError("Batch queries should not use Deduplication")(p)
+
       case _ =>
     }
   }
@@ -51,12 +54,25 @@ object UnsupportedOperationChecker {
       subplan.collect { case a: Aggregate if a.isStreaming => a }
     }
 
+    /** Collect all the streaming Deduplications in a sub plan */
+    def collectStreamingDeduplications(subplan: LogicalPlan): Seq[Deduplication] = {
+      subplan.collect { case d: Deduplication => d }
+    }
+
     // Disallow multiple streaming aggregations
     val aggregates = collectStreamingAggregates(plan)
 
     if (aggregates.size > 1) {
       throwError(
         "Multiple streaming aggregations are not supported with " +
+          "streaming DataFrames/Datasets")(plan)
+    }
+
+    // Disallow multiple streaming deduplications
+    val deduplications = collectStreamingDeduplications(plan)
+    if (deduplications.size > 1) {
+      throwError(
+        "Multiple streaming dropDuplicates are not supported with " +
           "streaming DataFrames/Datasets")(plan)
     }
 
@@ -75,10 +91,10 @@ object UnsupportedOperationChecker {
         if (watermarkAttributes.isEmpty) {
           throwError(
             s"$outputMode output mode not supported when there are streaming aggregations on " +
-                s"streaming DataFrames/DataSets")(plan)
+                s"streaming DataFrames/DataSets without watermark")(plan)
         }
 
-      case InternalOutputModes.Complete if aggregates.isEmpty =>
+      case InternalOutputModes.Complete if aggregates.isEmpty && deduplications.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")(plan)
@@ -112,12 +128,22 @@ object UnsupportedOperationChecker {
               "it is on aggregated DataFrame/Dataset in Complete output mode. Consider using " +
               "approximate distinct aggregation (e.g. approx_count_distinct() instead of count()).")
 
+          throwErrorIf(
+            outputMode == InternalOutputModes.Complete
+              && collectStreamingDeduplications(subPlan).nonEmpty,
+            "Aggregation on dropDuplicates DataFrame/Dataset in Complete output mode " +
+              "is not supported")
+
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
         case m: MapGroupsWithState if collectStreamingAggregates(m).nonEmpty =>
           throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
+            "streaming DataFrame/Dataset")
+
+        case d: Deduplication if collectStreamingAggregates(d).nonEmpty =>
+          throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
         case Join(left, right, joinType, _) =>

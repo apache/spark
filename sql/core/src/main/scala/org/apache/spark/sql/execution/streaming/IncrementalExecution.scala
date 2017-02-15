@@ -93,6 +93,16 @@ class IncrementalExecution(
               keys,
               Some(stateId),
               child) :: Nil))
+      case DeduplicationExec(keys, child, None, None, None) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+
+        DeduplicationExec(
+          keys,
+          child,
+          Some(stateId),
+          Some(outputMode),
+          Some(currentEventTimeWatermark))
       case MapGroupsWithStateExec(
              f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
         val stateId =

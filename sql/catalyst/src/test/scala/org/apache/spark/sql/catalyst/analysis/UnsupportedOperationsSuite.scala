@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{MapGroupsWithState, _}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends Command
@@ -36,6 +37,11 @@ case class DummyCommand() extends Command
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
   val attribute = AttributeReference("a", IntegerType, nullable = true)()
+  val watermarkMetadata = new MetadataBuilder()
+    .withMetadata(attribute.metadata)
+    .putLong(EventTimeWatermark.delayKey, 1000L)
+    .build()
+  val attributeWithWatermark = attribute.withMetadata(watermarkMetadata)
   val batchRelation = LocalRelation(attribute)
   val streamRelation = new TestStreamingRelation(attribute)
 
@@ -98,6 +104,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Update,
     expectedMsgs = Seq("multiple streaming aggregations"))
 
+  assertSupportedInStreamingPlan(
+    "aggregate - streaming aggregations in update mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Update)
+
+  assertSupportedInStreamingPlan(
+    "aggregate - streaming aggregations in complete mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Complete)
+
+  assertSupportedInStreamingPlan(
+    "aggregate - streaming aggregations with watermark in append mode",
+    Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - streaming aggregations without watermark in append mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+
   // Aggregation: Distinct aggregates not supported on streaming relation
   val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
   assertSupportedInStreamingPlan(
@@ -128,6 +155,40 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       Aggregate(Nil, aggExprs("c"), streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("(map/flatMap)GroupsWithState"))
+
+  // Deduplication:  Not supported after a streaming aggregation
+  assertNotSupportedInBatchPlan(
+    "Deduplication - Deduplication on batch relation",
+    Deduplication(Seq(att), batchRelation),
+    expectedMsgs = Seq("Deduplication"))
+
+  assertSupportedInStreamingPlan(
+    "Deduplication - Deduplication on streaming relation before aggregation in append mode",
+    Aggregate(Seq(attributeWithWatermark), aggExprs("c"), Deduplication(Seq(att), streamRelation)),
+    outputMode = Append)
+
+  assertSupportedInStreamingPlan(
+    "Deduplication - Deduplication on streaming relation before aggregation in update mode",
+    Aggregate(Nil, aggExprs("c"), Deduplication(Seq(att), streamRelation)),
+    outputMode = Update)
+
+  assertNotSupportedInStreamingPlan(
+    "Deduplication - Deduplication on streaming relation before aggregation in complete mode",
+    Aggregate(Nil, aggExprs("c"), Deduplication(Seq(att), streamRelation)),
+    outputMode = Complete,
+    expectedMsgs = Seq("dropDuplicates", "aggregation", "complete"))
+
+  assertNotSupportedInStreamingPlan(
+    "Deduplication - Deduplication on streaming relation after aggregation",
+    Deduplication(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
+    outputMode = Complete,
+    expectedMsgs = Seq("dropDuplicates"))
+
+  assertNotSupportedInStreamingPlan(
+    "Deduplication - Multiple Deduplications on streaming relation",
+    Deduplication(Seq(att), Deduplication(Seq(att), streamRelation)),
+    outputMode = Complete,
+    expectedMsgs = Seq("multiple streaming dropDuplicates"))
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(
