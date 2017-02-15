@@ -911,6 +911,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       freePage(dataPage);
     }
     allocate(initialCapacity);
+    canGrowArray = true;
     currentPage = null;
     pageCursor = 0;
   }
