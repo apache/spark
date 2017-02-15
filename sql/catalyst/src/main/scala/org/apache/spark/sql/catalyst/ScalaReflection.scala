@@ -409,7 +409,7 @@ object ScalaReflection extends ScalaReflection {
         val cls = getClassFromType(tpe)
 
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
-          val Schema(dataType, nullablity) = schemaForDefaultBinaryType(fieldType)
+          val Schema(dataType, nullable) = schemaForDefaultBinaryType(fieldType)
 
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
@@ -425,7 +425,7 @@ object ScalaReflection extends ScalaReflection {
               Some(addToPath(fieldName, dataType, newTypePath)),
               newTypePath)
 
-            if (!nullablity) {
+            if (!nullable) {
               AssertNotNull(constructor, newTypePath)
             } else {
               constructor
