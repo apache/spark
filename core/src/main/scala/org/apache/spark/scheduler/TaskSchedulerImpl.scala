@@ -59,6 +59,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   extends TaskScheduler with Logging
 {
 
+  import TaskSchedulerImpl._
+
   def this(sc: SparkContext) = {
     this(
       sc,
@@ -130,7 +132,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
-  private val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
   private var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
   // default scheduler is FIFO
@@ -139,8 +140,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     SchedulingMode.withName(schedulingModeConf.toUpperCase)
   } catch {
     case e: java.util.NoSuchElementException =>
-      throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf. " +
-        s"Supported modes: ${SchedulingMode.FAIR} or ${SchedulingMode.FIFO}.")
+      throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
   }
 
   // This is a var so that we can reset it for testing purposes.
@@ -156,10 +156,13 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
-        case SchedulingMode.FIFO => new FIFOSchedulableBuilder(rootPool)
-        case SchedulingMode.FAIR => new FairSchedulableBuilder(rootPool, conf)
-        case _ => throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
-          s"$schedulingMode. Supported modes: ${SchedulingMode.FAIR} or ${SchedulingMode.FIFO}.")
+        case SchedulingMode.FIFO =>
+          new FIFOSchedulableBuilder(rootPool)
+        case SchedulingMode.FAIR =>
+          new FairSchedulableBuilder(rootPool, conf)
+        case _ =>
+          throw new IllegalArgumentException(s"Unsupported $SCHEDULER_MODE_PROPERTY: " +
+          s"$schedulingMode")
       }
     }
     schedulableBuilder.buildPools()
@@ -683,6 +686,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
 
 private[spark] object TaskSchedulerImpl {
+
+  val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
+
   /**
    * Used to balance containers across hosts.
    *

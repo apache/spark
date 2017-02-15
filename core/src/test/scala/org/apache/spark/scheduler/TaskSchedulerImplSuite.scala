@@ -41,8 +41,6 @@ private class FakeSchedulerBackend extends SchedulerBackend {
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
     with Logging with MockitoSugar {
 
-  val SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode"
-
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
   var failedTaskSet = false
@@ -907,7 +905,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("TaskScheduler should throw IllegalArgumentException when schedulingMode is not supported") {
     intercept[IllegalArgumentException] {
-      val taskScheduler = setupScheduler(SCHEDULER_MODE_PROPERTY -> SchedulingMode.NONE.toString)
+      val taskScheduler = setupScheduler(
+        TaskSchedulerImpl.SCHEDULER_MODE_PROPERTY -> SchedulingMode.NONE.toString)
       taskScheduler.initialize(new FakeSchedulerBackend)
     }
   }

@@ -49,10 +49,13 @@ private[spark] class Pool(
 
   private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
-      case SchedulingMode.FAIR => new FairSchedulingAlgorithm()
-      case SchedulingMode.FIFO => new FIFOSchedulingAlgorithm()
-      case _ => throw new IllegalArgumentException("Unsupported scheduling mode: " +
-        s"$schedulingMode. Supported modes: ${SchedulingMode.FAIR} or ${SchedulingMode.FIFO}.")
+      case SchedulingMode.FAIR =>
+        new FairSchedulingAlgorithm()
+      case SchedulingMode.FIFO =>
+        new FIFOSchedulingAlgorithm()
+      case _ =>
+        val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
+        throw new IllegalArgumentException(msg)
     }
   }
 
