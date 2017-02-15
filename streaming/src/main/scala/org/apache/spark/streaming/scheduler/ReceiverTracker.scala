@@ -447,7 +447,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     ssc.conf.get("spark.master") match {
       case m if m.startsWith("yarn") =>
-        val numCoresPerExecutor = ssc.conf.get(EXECUTOR_CORES).getOrElse(1)
+        val numCoresPerExecutor = ssc.conf.get(EXECUTOR_CORES)
         val numExecutors = getTargetExecutorNumber()
         if (numExecutors * numCoresPerExecutor / coresPerTask < numReceivers) {
           throw new SparkException("There are no enough resource to run Spark Streaming job: " +

@@ -89,7 +89,7 @@ package object config {
 
   private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
     .intConf
-    .createOptional
+    .createWithDefault(1)
 
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
     .intConf
