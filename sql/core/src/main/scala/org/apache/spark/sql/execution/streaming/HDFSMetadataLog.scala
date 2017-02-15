@@ -109,7 +109,34 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      writeBatch(batchId, metadata)
+      if (fileManager.isLocalFileSystem) {
+        Thread.currentThread match {
+          case ut: UninterruptibleThread =>
+            // When using a local file system, "writeBatch" must be called on a
+            // [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be disabled
+            // while writing the batch file.
+            //
+            // This is because Hadoop "Shell.runCommand" swallows InterruptException (HADOOP-14084).
+            // If the user tries to stop a query, and the thread running "Shell.runCommand" is
+            // interrupted, then InterruptException will be dropped and the query will be still
+            // running. (Note: `writeBatch` creates a file using HDFS APIs and will call
+            // "Shell.runCommand" to set the file permission if using the local file system)
+            //
+            // Hence, we make sure that "writeBatch" is called on [[UninterruptibleThread]] which
+            // allows us to disable interrupts here, in order to propagate the interrupt state
+            // correctly. Also see SPARK-19599.
+            ut.runUninterruptibly { writeBatch(batchId, metadata) }
+          case _ =>
+            throw new IllegalStateException(
+              "HDFSMetadataLog.add() on a local file system must be executed on " +
+                "a o.a.spark.util.UninterruptibleThread")
+        }
+      } else {
+        // For a distributed file system, such as HDFS or S3, if the network is broken, write
+        // operations may just hang until timeout. We should enable interrupts to allow stopping
+        // the query fast.
+        writeBatch(batchId, metadata)
+      }
       true
     }
   }
@@ -300,6 +327,9 @@ object HDFSMetadataLog {
 
     /** Recursively delete a path if it exists. Should not throw exception if file doesn't exist. */
     def delete(path: Path): Unit
+
+    /** Whether the file systme is a local FS. */
+    def isLocalFileSystem: Boolean
   }
 
   /**
@@ -343,6 +373,13 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
         // ignore if file has already been deleted
       }
+    }
+
+    override def isLocalFileSystem: Boolean = fc.getDefaultFileSystem match {
+      case _: local.LocalFs | _: local.RawLocalFs =>
+        // LocalFs = RawLocalFs + ChecksumFs
+        true
+      case _ => false
     }
   }
 
@@ -399,6 +436,13 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
           // ignore if file has already been deleted
       }
+    }
+
+    override def isLocalFileSystem: Boolean = fs match {
+      case _: LocalFileSystem | _: RawLocalFileSystem =>
+        // LocalFileSystem = RawLocalFileSystem + ChecksumFileSystem
+        true
+      case _ => false
     }
   }
 }

@@ -49,16 +49,6 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
   }
 
   after {
-    val activeQueries = spark.streams.active
-    if (activeQueries.nonEmpty) {
-      for (query <- activeQueries) {
-        val stackTrace =
-          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.microBatchThread.getStackTrace
-        // scalastyle:off
-        println(stackTrace.mkString("\n"))
-        // scalastyle:on
-      }
-    }
     assert(spark.streams.active.isEmpty)
     spark.streams.resetTerminated()
   }

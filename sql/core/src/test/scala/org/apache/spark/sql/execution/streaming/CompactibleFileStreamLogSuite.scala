@@ -156,7 +156,7 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
       })
   }
 
-  test("compact") {
+  testWithUninterruptibleThread("compact") {
     withFakeCompactibleFileStreamLog(
       fileCleanupDelayMs = Long.MaxValue,
       defaultCompactInterval = 3,
@@ -174,7 +174,7 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
       })
   }
 
-  test("delete expired file") {
+  testWithUninterruptibleThread("delete expired file") {
     // Set `fileCleanupDelayMs` to 0 so that we can detect the deleting behaviour deterministically
     withFakeCompactibleFileStreamLog(
       fileCleanupDelayMs = 0,
