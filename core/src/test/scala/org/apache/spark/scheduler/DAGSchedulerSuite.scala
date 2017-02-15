@@ -1575,7 +1575,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    * stage is resubmitted so that the task that ran on the failed executor is re-executed, and
    * that the stage is only marked as finished once that task completes.
    */
-  test("run trivial shuffle with out-of-band failure and retry") {
+  test("run trivial shuffle with out-of-band executor failure and retry") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
@@ -2051,6 +2051,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    * In this test, we run a map stage where one of the executors fails but we still receive a
    * "zombie" complete message from that executor. We want to make sure the stage is not reported
    * as done until all tasks have completed.
+   *
+   * Most of the functionality in this test is tested in "run trivial shuffle with out-of-band
+   * executor failure and retry".  However, that test uses ShuffleMapStages that are followed by
+   * a ResultStage, whereas in this test, the ShuffleMapStage is tested in isolation, without a
+   * ResultStage after it.
    */
   test("map stage submission with executor failure late map task completions") {
     val shuffleMapRdd = new MyRDD(sc, 3, Nil)
@@ -2062,7 +2067,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     runEvent(makeCompletionEvent(oldTaskSet.tasks(0), Success, makeMapStatus("hostA", 2)))
     assert(results.size === 0)    // Map stage job should not be complete yet
 
-    // Pretend host A was lost
+    // Pretend host A was lost. This will cause the TaskSetManager to resubmit task 0, because it
+    // completed on hostA.
     val oldEpoch = mapOutputTracker.getEpoch
     runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
     val newEpoch = mapOutputTracker.getEpoch
@@ -2074,13 +2080,26 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // A completion from another task should work because it's a non-failed host
     runEvent(makeCompletionEvent(oldTaskSet.tasks(2), Success, makeMapStatus("hostB", 2)))
-    assert(results.size === 0)    // Map stage job should not be complete yet
+
+    // At this point, no more tasks are running for the stage (and the TaskSetManager considers
+    // the stage complete), but the task that ran on hostA needs to be re-run, so the map stage
+    // shouldn't be marked as complete, and the DAGScheduler should re-submit the stage.
+    assert(results.size === 0)
+    assert(taskSets.size === 2)
 
     // Now complete tasks in the second task set
     val newTaskSet = taskSets(1)
-    assert(newTaskSet.tasks.size === 2)     // Both tasks 0 and 1 were on hostA
+    // 2 tasks should have been re-submitted, for tasks 0 and 1 (which ran on hostA).
+    assert(newTaskSet.tasks.size === 2)
+    // Complete task 0 from the original task set (i.e., not hte one that's currently active).
+    // This should still be counted towards the job being complete (but there's still one
+    // outstanding task).
     runEvent(makeCompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
-    assert(results.size === 0)    // Map stage job should not be complete yet
+    assert(results.size === 0)
+
+    // Complete the final task, from the currently active task set.  There's still one
+    // running task, task 0 in the currently active stage attempt, but the success of task 0 means
+    // the DAGScheduler can mark the stage as finished.
     runEvent(makeCompletionEvent(newTaskSet.tasks(1), Success, makeMapStatus("hostB", 2)))
     assert(results.size === 1)    // Map stage job should now finally be complete
     assertDataStructuresEmpty()
