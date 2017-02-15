@@ -1760,4 +1760,151 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val rows: Seq[Row] = df.toLocalIterator().asScala.toSeq
     assert(rows.length > 0)
   }
+
+  test("SET LOCATION for managed table") {
+    withTable("tbl") {
+      withTempDir { dir =>
+        sql("CREATE TABLE tbl(i INT) USING parquet")
+        sql("INSERT INTO tbl SELECT 1")
+        checkAnswer(spark.table("tbl"), Row(1))
+        val defaultTablePath = spark.sessionState.catalog
+          .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
+
+        sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        spark.catalog.refreshTable("tbl")
+        // SET LOCATION won't move data from previous table path to new table path.
+        assert(spark.table("tbl").count() == 0)
+        // the previous table path should be still there.
+        assert(new File(new URI(defaultTablePath)).exists())
+
+        sql("INSERT INTO tbl SELECT 2")
+        checkAnswer(spark.table("tbl"), Row(2))
+        // newly inserted data will go to the new table path.
+        assert(dir.listFiles().nonEmpty)
+
+        sql("DROP TABLE tbl")
+        // the new table path will be removed after DROP TABLE.
+        assert(!dir.exists())
+      }
+    }
+  }
+
+  test("insert data to a data source table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
+        assert(table.location.stripSuffix("/") == expectedPath)
+
+        dir.delete
+        val tableLocFile = new File(table.location.stripPrefix("file:"))
+        assert(!tableLocFile.exists)
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        Utils.deleteRecursively(dir)
+        assert(!tableLocFile.exists)
+        spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        val newDirFile = new File(newDir)
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists)
+
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(newDirFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+      }
+    }
+  }
+
+  test("insert into a data source table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
+        assert(table.location.stripSuffix("/") == expectedPath)
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        val partLoc = new File(s"${dir.getAbsolutePath}/a=1")
+        Utils.deleteRecursively(partLoc)
+        assert(!partLoc.exists())
+        // insert overwrite into a partition which location has been deleted.
+        spark.sql("INSERT OVERWRITE TABLE t PARTITION(a=1, b=2) SELECT 7, 8")
+        assert(partLoc.exists())
+        checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
+        assert(table.location.stripSuffix("/") == expectedPath)
+
+        dir.delete()
+        checkAnswer(spark.table("t"), Nil)
+
+        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!new File(newDir).exists())
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
+           """.stripMargin)
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        // select from a partition which location has been deleted.
+        Utils.deleteRecursively(dir)
+        assert(!dir.exists())
+        spark.sql("REFRESH TABLE t")
+        checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+      }
+    }
+  }
 }
