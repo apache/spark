@@ -1184,9 +1184,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
     NaN handling: Note also that
     QuantileDiscretizer will raise an error when it finds NaN values in the dataset, but the user
     can also choose to either keep or remove NaN values within the dataset by setting
-    `handleInvalid`. If the user chooses to keep NaN values, they will be handled specially and
-    placed into their own bucket, for example, if 4 buckets are used, then non-NaN data will be
-    put into buckets[0-3], but NaNs will be counted in a special bucket[4].
+    :py:attr:`handleInvalid` parameter. If the user chooses to keep NaN values, they will be
+    handled specially and placed into their own bucket, for example, if 4 buckets are used, then
+    non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
 
     Algorithm: The bin ranges are chosen using an approximate algorithm (see the documentation for
     :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
