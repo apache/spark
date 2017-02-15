@@ -291,6 +291,8 @@ class StreamSuite extends StreamTest {
         .map(_.getString(0))
         .mkString("\n")
     assert(explainString.contains("StateStoreRestore"))
+    assert(explainString.contains("StreamingRelation"))
+    assert(!explainString.contains("LocalTableScan"))
 
     // Test StreamingQuery.display
     val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")

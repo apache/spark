@@ -86,17 +86,17 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
  * }}}
  *
  * @param logicalPlan plan to explain
- * @param output output schema
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute] =
-      Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false,
     codegen: Boolean = false)
   extends RunnableCommand {
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("plan", StringType, nullable = true)())
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
