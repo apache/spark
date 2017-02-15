@@ -17,7 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.SparkSession;
 
 // $example on$
@@ -26,6 +25,7 @@ import java.util.List;
 
 import org.apache.spark.ml.feature.MinHashLSH;
 import org.apache.spark.ml.feature.MinHashLSHModel;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
