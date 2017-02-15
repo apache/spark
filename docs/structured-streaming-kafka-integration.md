@@ -328,7 +328,7 @@ The following configurations are optional:
   {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}}
   </td>
   <td>latest</td>
-  <td>batch only</td>
+  <td>batch query</td>
   <td>The end point when a batch query is ended, either "latest" which is just referred to the
   latest, or a json string specifying an ending offset for each TopicPartition.  In the json, -1
   as an offset can be used to refer to latest, and -2 (earliest) as an offset is not allowed.</td>
@@ -337,10 +337,11 @@ The following configurations are optional:
   <td>failOnDataLoss</td>
   <td>true or false</td>
   <td>true</td>
-  <td>streaming only</td>
+  <td>streaming query</td>
   <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
   offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
-  as you expected.</td>
+  as you expected. Batch queries will always fail if it fails to read any data from the provided
+  offsets due to lost data.</td>
 </tr>
 <tr>
   <td>kafkaConsumer.pollTimeoutMs</td>
