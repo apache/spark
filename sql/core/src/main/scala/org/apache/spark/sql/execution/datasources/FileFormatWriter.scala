@@ -137,40 +137,40 @@ object FileFormatWriter extends Logging {
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile)
     )
 
+    val bucketIdExpression = bucketSpec.map { spec =>
+      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
+      // guarantee the data distribution is same between shuffle and bucketed data source, which
+      // enables us to only shuffle one side when join a bucketed table and a normal one.
+      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+    }
+    // We should first sort by partition columns, then bucket id, and finally sorting columns.
+    val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
+    // the sort order doesn't matter
+    val actualOrdering = queryExecution.executedPlan.outputOrdering.map(_.child)
+    val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
+      false
+    } else {
+      requiredOrdering.zip(actualOrdering).forall {
+        case (requiredOrder, childOutputOrder) =>
+          requiredOrder.semanticEquals(childOutputOrder)
+      }
+    }
+
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       // This call shouldn't be put into the `try` block below because it only initializes and
       // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
       committer.setupJob(job)
 
-      val bucketIdExpression = bucketSpec.map { spec =>
-        // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
-        // guarantee the data distribution is same between shuffle and bucketed data source, which
-        // enables us to only shuffle one side when join a bucketed table and a normal one.
-        HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
-      }
-      // We should first sort by partition columns, then bucket id, and finally sorting columns.
-      val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
-      // the sort order doesn't matter
-      val actualOrdering = queryExecution.executedPlan.outputOrdering.map(_.child)
-      val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
-        false
-      } else {
-        requiredOrdering.zip(actualOrdering).forall {
-          case (requiredOrder, childOutputOrder) =>
-            requiredOrder.semanticEquals(childOutputOrder)
-        }
-      }
-
-      val rdd = if (orderingMatched) {
-        queryExecution.toRdd
-      } else {
-        SortExec(
-          requiredOrdering.map(SortOrder(_, Ascending)),
-          global = false,
-          child = queryExecution.executedPlan).execute()
-      }
-
       try {
+        val rdd = if (orderingMatched) {
+          queryExecution.toRdd
+        } else {
+          SortExec(
+            requiredOrdering.map(SortOrder(_, Ascending)),
+            global = false,
+            child = queryExecution.executedPlan).execute()
+        }
+
         val ret = sparkSession.sparkContext.runJob(rdd,
           (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
             executeTask(
