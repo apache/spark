@@ -114,6 +114,7 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
               val oriColStat = inputAttrStats(a)
               (a, oriColStat.copy(nullCount = oriColStat.nullCount + leftRows))
             }
+          case _ => Nil
         }
       } else {
         val joinKeyStats = getIntersectedStats(joinKeyPairs)
