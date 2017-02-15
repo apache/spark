@@ -748,6 +748,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = new StructType,
+        provider = Some("json"),
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -1276,6 +1277,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = new StructType,
+        provider = Some("json"),
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
@@ -1373,6 +1375,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             properties = Map("path" -> path.getAbsolutePath)
           ),
           schema = new StructType(),
+          provider = Some("parquet"),
           properties = Map(
             HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)

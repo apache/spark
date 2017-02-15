@@ -34,7 +34,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     spark.read.json(rdd).createOrReplaceTempView("jt")
     sql(
       s"""
-        |CREATE TEMPORARY TABLE jsonTable (a int, b string)
+        |CREATE TEMPORARY VIEW jsonTable (a int, b string)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
         |  path '${path.toURI.toString}'
@@ -293,7 +293,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   test("it's not allowed to insert into a relation that is not an InsertableRelation") {
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTen
+        |CREATE TEMPORARY VIEW oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',
