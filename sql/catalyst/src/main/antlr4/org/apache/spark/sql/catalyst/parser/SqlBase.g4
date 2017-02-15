@@ -380,7 +380,6 @@ hint
 
 hintStatement
     : hintName=identifier
-    | hintName=identifier '(' parameters+=identifier parameters+=identifier ')'
     | hintName=identifier '(' parameters+=identifier (',' parameters+=identifier)* ')'
     ;
 
