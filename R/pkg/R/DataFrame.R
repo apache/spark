@@ -3515,3 +3515,64 @@ setMethod("getNumPartitions",
           function(x) {
             callJMethod(callJMethod(x@sdf, "rdd"), "getNumPartitions")
           })
+
+#' Write the streaming SparkDataFrame to a data source.
+#'
+#' The data source is specified by the \code{source} and a set of options (...).
+#' If \code{source} is not specified, the default data source configured by
+#' spark.sql.sources.default will be used.
+#'
+#' Additionally, \code{outputMode} specifies how data of a streaming SparkDataFrame is written to a
+#' output data source. There are three modes:
+#' \itemize{
+#'   \item append: Only the new rows in the streaming SparkDataFrame will be written out. This
+#'                 output mode can be only be used in queries that do not contain any aggregation.
+#'   \item complete: All the rows in the streaming SparkDataFrame will be written out every time
+#'                   there are some updates. This output mode can only be used in queries that
+#'                   contain aggregations.
+#'   \item update: Only the rows that were updated in the streaming SparkDataFrame will be written
+#'                 out every time there are some updates. If the query doesn't contain aggregations,
+#'                 it will be equivalent to \code{append} mode.
+#' }
+#'
+#' @param df a streaming SparkDataFrame.
+#' @param source a name for external data source.
+#' @param outputMode one of 'append', 'complete', 'update'
+#' @param ... additional argument(s) passed to the method.
+#'
+#' @family SparkDataFrame functions
+#' @aliases write.stream,SparkDataFrame-method
+#' @rdname write.stream
+#' @name write.stream
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' queryName
+#' }
+#' @note write.stream since 2.2.0
+#' @note experimental
+setMethod("write.stream",
+          signature(df = "SparkDataFrame"),
+          function(df, source = NULL, outputMode = NULL, ...) {
+            if (!is.null(source) && !is.character(source)) {
+              stop("source should be character, NULL or omitted. It is the datasource specified ",
+                   "in 'spark.sql.sources.default' configuration by default.")
+            }
+            if (!is.character(outputMode)) {
+              stop("outputMode should be charactor or omitted.")
+            }
+            if (is.null(source)) {
+              source <- getDefaultSqlSource()
+            }
+            options <- varargsToStrEnv(...)
+            write <- callJMethod(df@sdf, "writeStream")
+            write <- callJMethod(write, "format", source)
+            if (!is.null(outputMode)) {
+              write <- callJMethod(write, "outputMode", outputMode)
+            }
+            write <- callJMethod(write, "options", options)
+            # TODO support trigger, partitionBy
+            ssq <- handledCallJMethod(write, "start")
+            streamingQuery(ssq)
+          })
