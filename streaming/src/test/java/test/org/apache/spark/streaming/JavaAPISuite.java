@@ -560,7 +560,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<Integer, String> pairStream1 = JavaPairDStream.fromJavaDStream(
         JavaTestUtils.attachTestInputStream(ssc, pairStream1input, 1));
 
-    List<JavaDStream<?>> listOfDStreams1 = Arrays.<JavaDStream<?>>asList(stream1, stream2);
+    List<JavaDStream<?>> listOfDStreams1 = Arrays.asList(stream1, stream2);
 
     // This is just to test whether this transform to JavaStream compiles
     ssc.transform(
@@ -572,7 +572,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     );
 
     List<JavaDStream<?>> listOfDStreams2 =
-        Arrays.<JavaDStream<?>>asList(stream1, stream2, pairStream1.toJavaDStream());
+        Arrays.asList(stream1, stream2, pairStream1.toJavaDStream());
 
     JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2,

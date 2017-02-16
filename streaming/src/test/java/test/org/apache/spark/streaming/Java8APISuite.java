@@ -314,7 +314,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaPairDStream<Integer, String> pairStream1 = JavaPairDStream.fromJavaDStream(
       JavaTestUtils.attachTestInputStream(ssc, pairStream1input, 1));
 
-    List<JavaDStream<?>> listOfDStreams1 = Arrays.<JavaDStream<?>>asList(stream1, stream2);
+    List<JavaDStream<?>> listOfDStreams1 = Arrays.asList(stream1, stream2);
 
     // This is just to test whether this transform to JavaStream compiles
     JavaDStream<Long> transformed1 = ssc.transform(
@@ -324,7 +324,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     });
 
     List<JavaDStream<?>> listOfDStreams2 =
-      Arrays.<JavaDStream<?>>asList(stream1, stream2, pairStream1.toJavaDStream());
+      Arrays.asList(stream1, stream2, pairStream1.toJavaDStream());
 
     JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2, (List<JavaRDD<?>> listOfRDDs, Time time) -> {
@@ -628,7 +628,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, Integer> combined = pairStream.<Integer>combineByKey(i -> i,
+    JavaPairDStream<String, Integer> combined = pairStream.combineByKey(i -> i,
       (x, y) -> x + y, (x, y) -> x + y, new HashPartitioner(2));
 
     JavaTestUtils.attachTestOutputStream(combined);

@@ -19,13 +19,13 @@ package org.apache.spark.network;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.common.collect.Maps;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -75,7 +75,7 @@ public class TransportClientFactorySuite {
   private void testClientReuse(int maxConnections, boolean concurrent)
     throws IOException, InterruptedException {
 
-    Map<String, String> configMap = Maps.newHashMap();
+    Map<String, String> configMap = new HashMap<>();
     configMap.put("spark.shuffle.io.numConnectionsPerPeer", Integer.toString(maxConnections));
     TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
 

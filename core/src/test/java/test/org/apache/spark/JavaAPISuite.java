@@ -31,7 +31,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.*;
 
 import org.apache.spark.Accumulator;
@@ -208,7 +207,7 @@ public class JavaAPISuite implements Serializable {
     assertEquals(new Tuple2<>(3, 2), sortedPairs.get(2));
 
     // Custom comparator
-    sortedRDD = rdd.sortByKey(Collections.<Integer>reverseOrder(), false);
+    sortedRDD = rdd.sortByKey(Collections.reverseOrder(), false);
     assertEquals(new Tuple2<>(-1, 1), sortedRDD.first());
     sortedPairs = sortedRDD.collect();
     assertEquals(new Tuple2<>(0, 4), sortedPairs.get(1));
