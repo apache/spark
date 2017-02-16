@@ -86,17 +86,17 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
  * }}}
  *
  * @param logicalPlan plan to explain
- * @param output output schema
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute] =
-      Seq(AttributeReference("plan", StringType, nullable = true)()),
     extended: Boolean = false,
     codegen: Boolean = false)
   extends RunnableCommand {
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("plan", StringType, nullable = true)())
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
@@ -112,6 +112,28 @@ case class ExplainCommand(
       if (codegen) {
         codegenString(queryExecution.executedPlan)
       } else if (extended) {
+        queryExecution.toString
+      } else {
+        queryExecution.simpleString
+      }
+    Seq(Row(outputString))
+  } catch { case cause: TreeNodeException[_] =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  }
+}
+
+/** An explain command for users to see how a streaming batch is executed. */
+case class StreamingExplainCommand(
+    queryExecution: IncrementalExecution,
+    extended: Boolean) extends RunnableCommand {
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("plan", StringType, nullable = true)())
+
+  // Run through the optimizer to generate the physical plan.
+  override def run(sparkSession: SparkSession): Seq[Row] = try {
+    val outputString =
+      if (extended) {
         queryExecution.toString
       } else {
         queryExecution.simpleString
