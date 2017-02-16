@@ -178,8 +178,8 @@ class StreamExecution(
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
-   * [[org.apache.spark.util.UninterruptibleThread]] to avoid swallowing `InterruptException` when
-   * using [[HDFSMetadataLog]]. See SPARK-19599 for more details.
+   * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
+   * running `KafkaConsumer` may cause endless loop.
    */
   val microBatchThread =
     new StreamExecutionThread(s"stream execution thread for $prettyIdString") {
