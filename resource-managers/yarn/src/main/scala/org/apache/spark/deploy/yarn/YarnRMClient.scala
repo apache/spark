@@ -66,7 +66,7 @@ private[spark] class YarnRMClient extends Logging {
     this.uiHistoryAddress = uiHistoryAddress
 
     val trackingUrl = uiAddress.getOrElse {
-      if (sparkConf.get(HISTORY_SERVER_ALLOW_TRACKING)) uiHistoryAddress else ""
+      if (sparkConf.get(ALLOW_HISTORY_SERVER_TRACKING_URL)) uiHistoryAddress else ""
     }
 
     logInfo("Registering the ApplicationMaster")
