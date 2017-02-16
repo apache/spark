@@ -1230,7 +1230,7 @@ test_that("column functions", {
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
   c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
   c20 <- to_timestamp(c)
-  
+
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
 
