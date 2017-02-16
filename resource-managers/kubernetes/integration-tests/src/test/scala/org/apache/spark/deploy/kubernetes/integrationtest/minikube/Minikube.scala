@@ -76,7 +76,7 @@ private[spark] object Minikube extends Logging {
 
   def getDockerEnv: Map[String, String] = synchronized {
     assert(MINIKUBE_EXECUTABLE_DEST.exists(), EXPECTED_DOWNLOADED_MINIKUBE_MESSAGE)
-    executeMinikube("docker-env")
+    executeMinikube("docker-env", "--shell", "bash")
         .filter(_.startsWith("export"))
         .map(_.replaceFirst("export ", "").split('='))
         .map(arr => (arr(0), arr(1).replaceAllLiterally("\"", "")))

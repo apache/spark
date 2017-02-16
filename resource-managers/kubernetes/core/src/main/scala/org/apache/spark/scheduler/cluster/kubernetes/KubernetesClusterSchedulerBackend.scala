@@ -44,7 +44,6 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val EXECUTOR_MODIFICATION_LOCK = new Object
   private val runningExecutorPods = new scala.collection.mutable.HashMap[String, Pod]
 
-  private val kubernetesMaster = "https://kubernetes"
   private val executorDockerImage = conf.get(EXECUTOR_DOCKER_IMAGE)
   private val kubernetesNamespace = conf.get(KUBERNETES_NAMESPACE)
   private val executorPort = conf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
@@ -77,7 +76,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     ThreadUtils.newDaemonCachedThreadPool("kubernetes-executor-requests"))
 
   private val kubernetesClient = KubernetesClientBuilder
-    .buildFromWithinPod(kubernetesMaster, kubernetesNamespace)
+    .buildFromWithinPod(kubernetesNamespace)
 
   private val driverPod = try {
     kubernetesClient.pods().inNamespace(kubernetesNamespace).
