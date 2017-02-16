@@ -206,7 +206,7 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with non-zero buckets") {
+  test("create table using as select - with valid number of buckets") {
     val catalog = spark.sessionState.catalog
     withTable("t") {
       sql(
@@ -222,19 +222,21 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with zero buckets") {
+  test("create table using as select - with invalid number of buckets") {
     withTable("t") {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toURI}')
-             |CLUSTERED BY (a) SORTED BY (b) INTO 0 BUCKETS
-             |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
-        )
-      }.getMessage
-      assert(e.contains("Expected positive number of buckets, but got `0`"))
+      Seq(0, 100000).foreach(numBuckets => {
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE t USING PARQUET
+               |OPTIONS (PATH '${path.toURI}')
+               |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
+               |AS SELECT 1 AS a, 2 AS b
+             """.stripMargin
+          )
+        }.getMessage
+        assert(e.contains("Number of buckets should be greater than 0 but less than 100000"))
+      })
     }
   }
 
