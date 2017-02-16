@@ -216,6 +216,33 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <!-- Triggers scalatest plugin in the integration-test phase instead of
+             the test phase, so that test jobs are copied over beforehand.
+             See copy-test-spark-jobs execution of maven-dependency-plugin above. -->
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>test</id>
+            <goals>
+              <goal>test</goal>
+            </goals>
+            <configuration>
+              <!-- The negative pattern below prevents integration tests such as
+                   KubernetesSuite from running in the test phase. -->
+              <suffixes>(?&lt;!Suite)</suffixes>
+            </configuration>
+          </execution>
+          <execution>
+            <id>integration-test</id>
+            <phase>integration-test</phase>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
 
   </build>
