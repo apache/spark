@@ -500,7 +500,7 @@ class DataStreamReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, timeZone=timeZone=timestampFormat, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, timeZone=timeZone, wholeFile=wholeFile)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
