@@ -309,6 +309,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
       case DateType =>
         val dateLiteral = litDataType match {
+          case DateType =>
+            DateTimeUtils.fromJavaDate(litValue.asInstanceOf[Date]).toString
           case StringType =>
             DateTimeUtils.stringToDate(litValue.asInstanceOf[UTF8String])
               .getOrElse(0).toString
@@ -318,6 +320,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
       case TimestampType =>
         val tsLiteral = litDataType match {
+          case TimestampType =>
+            DateTimeUtils.fromJavaTimestamp(litValue.asInstanceOf[Timestamp]).toString
           case StringType =>
             DateTimeUtils.stringToTimestamp(litValue.asInstanceOf[UTF8String])
                 .getOrElse(0).toString
@@ -364,11 +368,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             aColStat.copy(distinctCount = 1, min = newValue,
               max = newValue, nullCount = 0)
           case DateType =>
-            val dateValue = Some(DateTimeUtils.toJavaDate(literal.value.toString.toInt))
+            val dateValue = Some(literal.value)
             aColStat.copy(distinctCount = 1, min = dateValue,
               max = dateValue, nullCount = 0)
           case TimestampType =>
-            val tsValue = Some(DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong))
+            val tsValue = Some(literal.value)
             aColStat.copy(distinctCount = 1, min = tsValue,
               max = tsValue, nullCount = 0)
           case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
@@ -544,41 +548,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       }
 
       if (update) {
-        attrRef.dataType match {
-          case DateType =>
-            val dateValue = literal.dataType match {
-              case StringType =>
-                Date.valueOf(literal.value.toString)
-              case _ => DateTimeUtils.toJavaDate(literal.value.toString.toInt)
-            }
-            op match {
-              case _: GreaterThan => newMin = Some(dateValue)
-              case _: GreaterThanOrEqual => newMin = Some(dateValue)
-              case _: LessThan => newMax = Some(dateValue)
-              case _: LessThanOrEqual => newMax = Some(dateValue)
-            }
-
-          case TimestampType =>
-            val tsValue = literal.dataType match {
-              case StringType =>
-                Timestamp.valueOf(literal.value.toString)
-              case _ => DateTimeUtils.toJavaTimestamp(literal.value.toString.toLong)
-            }
-            op match {
-              case _: GreaterThan => newMin = Some(tsValue)
-              case _: GreaterThanOrEqual => newMin = Some(tsValue)
-              case _: LessThan => newMax = Some(tsValue)
-              case _: LessThanOrEqual => newMax = Some(tsValue)
-            }
-
-          case _ =>
-            op match {
-              case _: GreaterThan => newMin = Some(literal.value)
-              case _: GreaterThanOrEqual => newMin = Some(literal.value)
-              case _: LessThan => newMax = Some(literal.value)
-              case _: LessThanOrEqual => newMax = Some(literal.value)
-            }
+        op match {
+          case _: GreaterThan => newMin = Some(literal.value)
+          case _: GreaterThanOrEqual => newMin = Some(literal.value)
+          case _: LessThan => newMax = Some(literal.value)
+          case _: LessThanOrEqual => newMax = Some(literal.value)
         }
+
         newNdv = math.max(math.round(ndv.toDouble * percent), 1)
         val newStats = aColStat.copy(distinctCount = newNdv, min = newMin,
           max = newMax, nullCount = 0)
