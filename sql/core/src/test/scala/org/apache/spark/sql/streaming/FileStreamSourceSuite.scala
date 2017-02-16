@@ -1174,7 +1174,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assert(map.isNewFile("b", 10))
   }
 
-  testWithUninterruptibleThread("do not recheck that files exist during getBatch") {
+  test("do not recheck that files exist during getBatch") {
     withTempDir { temp =>
       spark.conf.set(
         s"fs.$scheme.impl",

@@ -32,7 +32,6 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.util.UninterruptibleThread
 
 
 /**
@@ -63,34 +62,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   val metadataPath = new Path(path)
   protected val fileManager = createFileManager()
 
-  runUninterruptiblyIfLocal {
-    if (!fileManager.exists(metadataPath)) {
-      fileManager.mkdirs(metadataPath)
-    }
-  }
-
-  /**
-   * Run `body` uninterruptibly if it's using the local file system and running in a streaming
-   * thread. Otherwise, just run it directly.
-   *
-   * Some file system APIs (e.g., "create", "mkdirs") will call `Shell.runCommand` to set the file
-   * permissions if it's a local file system. However, there is a known issue that swallows
-   * InterruptException (HADOOP-14084). If someone tries to stop a streaming query, we will try to
-   * interrupt the streaming thread. This method uses `UninterruptibleThread.runUninterruptibly` to
-   * run `body` to make sure the interrupt state is not swallowed by `Shell.runCommand`, in order to
-   * interrupt the query correctly. (SPARK-19617)
-   */
-  private def runUninterruptiblyIfLocal[T](body: => T): T = {
-    if (fileManager.isLocalFileSystem && Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
-      Thread.currentThread.asInstanceOf[UninterruptibleThread].runUninterruptibly { body }
-    } else {
-      // Case 1: This is not inside a streaming thread. It's fine to call `body` directly.
-      //
-      // Case 2: This is not a local file system. For distributed file systems, such as HDFS or S3,
-      // if the network is broken, write operations may just hang until timeout. We should enable
-      // interrupts to allow stopping the query fast.
-      body
-    }
+  if (!fileManager.exists(metadataPath)) {
+    fileManager.mkdirs(metadataPath)
   }
 
   /**
@@ -135,9 +108,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      runUninterruptiblyIfLocal {
-        writeBatch(batchId, metadata)
-      }
+      writeBatch(batchId, metadata)
       true
     }
   }
@@ -328,9 +299,6 @@ object HDFSMetadataLog {
 
     /** Recursively delete a path if it exists. Should not throw exception if file doesn't exist. */
     def delete(path: Path): Unit
-
-    /** Whether the file systme is a local FS. */
-    def isLocalFileSystem: Boolean
   }
 
   /**
@@ -374,13 +342,6 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
         // ignore if file has already been deleted
       }
-    }
-
-    override def isLocalFileSystem: Boolean = fc.getDefaultFileSystem match {
-      case _: local.LocalFs | _: local.RawLocalFs =>
-        // LocalFs = RawLocalFs + ChecksumFs
-        true
-      case _ => false
     }
   }
 
@@ -437,13 +398,6 @@ object HDFSMetadataLog {
         case e: FileNotFoundException =>
           // ignore if file has already been deleted
       }
-    }
-
-    override def isLocalFileSystem: Boolean = fs match {
-      case _: LocalFileSystem | _: RawLocalFileSystem =>
-        // LocalFileSystem = RawLocalFileSystem + ChecksumFileSystem
-        true
-      case _ => false
     }
   }
 }
