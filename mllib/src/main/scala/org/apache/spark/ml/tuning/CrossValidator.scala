@@ -105,6 +105,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
+    // Barrier to limit parallelism during model fit/evaluation
+    // NOTE: will be capped by size of thread pool used in Scala parallel collections, which is
+    // number of cores in the system by default
     val numParBarrier = new Semaphore($(numParallelEval))
 
     val instr = Instrumentation.create(this, dataset)
@@ -118,7 +121,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
-      // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models concurrently, limited by a barrier with '$numParallelEval' permits

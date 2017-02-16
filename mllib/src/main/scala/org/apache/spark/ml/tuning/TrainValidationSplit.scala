@@ -99,6 +99,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
+    // Barrier to limit parallelism during model fit/evaluation
+    // NOTE: will be capped by size of thread pool used in Scala parallel collections, which is
+    // number of cores in the system by default
     val numParBarrier = new Semaphore($(numParallelEval))
     logDebug(s"Running validation with level of parallelism: ${numParBarrier.availablePermits()}.")
 
@@ -111,8 +114,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     trainingDataset.cache()
     validationDataset.cache()
 
-    logDebug(s"Train split with multiple sets of parameters.")
     // Fit models concurrently, limited by a barrier with '$numParallelEval' permits
+    logDebug(s"Train split with multiple sets of parameters.")
     val models = epm.par.map { paramMap =>
       numParBarrier.acquire()
       val model = est.fit(trainingDataset, paramMap)
@@ -120,6 +123,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       model.asInstanceOf[Model[_]]
     }.seq
     trainingDataset.unpersist()
+
     // Evaluate models concurrently, limited by a barrier with '$numParallelEval' permits
     val metrics = models.zip(epm).par.map { case (model, paramMap) =>
       numParBarrier.acquire()
