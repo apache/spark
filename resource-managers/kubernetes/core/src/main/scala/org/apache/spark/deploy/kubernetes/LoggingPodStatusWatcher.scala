@@ -64,6 +64,7 @@ private[kubernetes] class LoggingPodStatusWatcher(podCompletedFuture: CountDownL
 
     if (phase == "Succeeded" || phase == "Failed") {
       podCompletedFuture.countDown()
+      scheduler.shutdown()
     }
   }
 
