@@ -55,7 +55,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
 
   /**
    * Map from active stages's id => authorized task attempts for each partition id, which hold an
-   * exclusive lock on committing task output for that partition as well as any known failed
+   * exclusive lock on committing task output for that partition, as well as any known failed
    * attempts in the stage.
    *
    * Entries are added to the top-level map when stages start and are removed they finish
@@ -203,11 +203,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private def attemptFailed(stage: StageId,
                             partition: PartitionId,
                             attempt: TaskAttemptNumber): Boolean = synchronized {
-    stageStates.get(stage) match {
-      case Some(state) =>
-        state.failures.get(partition)
-          .exists(_.contains(attempt))
-      case None => false
+    stageStates.get(stage).exists { state =>
+      state.failures.get(partition).exists(_.contains(attempt))
     }
   }
 }
