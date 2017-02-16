@@ -133,7 +133,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   private var schedulableBuilder: SchedulableBuilder = null
-  var rootPool: Pool = null
   // default scheduler is FIFO
   private val schedulingModeConf = conf.get(SCHEDULER_MODE_PROPERTY, SchedulingMode.FIFO.toString)
   val schedulingMode: SchedulingMode = try {
@@ -142,6 +141,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     case e: java.util.NoSuchElementException =>
       throw new SparkException(s"Unrecognized $SCHEDULER_MODE_PROPERTY: $schedulingModeConf")
   }
+
+  val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -152,8 +153,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
-    // temporarily set rootPool name to empty
-    rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>
