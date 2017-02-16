@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.java8;
+package test.org.apache.spark;
 
 import java.io.File;
 import java.io.Serializable;

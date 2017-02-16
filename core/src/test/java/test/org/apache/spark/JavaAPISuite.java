@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package test.org.apache.spark;
 
 import java.io.*;
 import java.nio.channels.FileChannel;
@@ -34,6 +34,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 
+import org.apache.spark.Accumulator;
+import org.apache.spark.AccumulatorParam;
+import org.apache.spark.Partitioner;
+import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContext$;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;

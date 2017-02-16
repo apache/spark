@@ -103,13 +103,7 @@ Dataset<Row> lines = spark
 // Split the lines into words
 Dataset<String> words = lines
   .as(Encoders.STRING())
-  .flatMap(
-    new FlatMapFunction<String, String>() {
-      @Override
-      public Iterator<String> call(String x) {
-        return Arrays.asList(x.split(" ")).iterator();
-      }
-    }, Encoders.STRING());
+  .flatMap((FlatMapFunction<String, String>) x -> Arrays.asList(x.split(" ")).iterator(), Encoders.STRING());
 
 // Generate running word count
 Dataset<Row> wordCounts = words.groupBy("value").count();
@@ -517,7 +511,7 @@ val csvDF = spark
 SparkSession spark = ...
 
 // Read text from socket 
-Dataset[Row] socketDF = spark
+Dataset<Row> socketDF = spark
   .readStream()
   .format("socket")
   .option("host", "localhost")
@@ -530,7 +524,7 @@ socketDF.printSchema();
 
 // Read all the csv files written atomically in a directory
 StructType userSchema = new StructType().add("name", "string").add("age", "integer");
-Dataset[Row] csvDF = spark
+Dataset<Row> csvDF = spark
   .readStream()
   .option("sep", ";")
   .schema(userSchema)      // Specify schema of the csv files
@@ -625,33 +619,15 @@ Dataset<DeviceData> ds = df.as(ExpressionEncoder.javaBean(DeviceData.class)); //
 
 // Select the devices which have signal more than 10
 df.select("device").where("signal > 10"); // using untyped APIs
-ds.filter(new FilterFunction<DeviceData>() { // using typed APIs
-  @Override
-  public boolean call(DeviceData value) throws Exception {
-    return value.getSignal() > 10;
-  }
-}).map(new MapFunction<DeviceData, String>() {
-  @Override
-  public String call(DeviceData value) throws Exception {
-    return value.getDevice();
-  }
-}, Encoders.STRING());
+ds.filter((FilterFunction<DeviceData>) value -> value.getSignal() > 10)
+  .map((MapFunction<DeviceData, String>) value -> value.getDevice(), Encoders.STRING());
 
 // Running count of the number of updates for each device type
 df.groupBy("deviceType").count(); // using untyped API
 
 // Running average signal for each device type
-ds.groupByKey(new MapFunction<DeviceData, String>() { // using typed API
-  @Override
-  public String call(DeviceData value) throws Exception {
-    return value.getDeviceType();
-  }
-}, Encoders.STRING()).agg(typed.avg(new MapFunction<DeviceData, Double>() {
-  @Override
-  public Double call(DeviceData value) throws Exception {
-    return value.getSignal();
-  }
-}));
+ds.groupByKey((MapFunction<DeviceData, String>) value -> value.getDeviceType(), Encoders.STRING())
+  .agg(typed.avg((MapFunction<DeviceData, Double>) value -> value.getSignal()));
 {% endhighlight %}
 
 

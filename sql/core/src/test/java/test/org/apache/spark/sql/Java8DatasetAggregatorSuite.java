@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.java8.sql;
+package test.org.apache.spark.sql;
 
 import java.util.Arrays;
 
@@ -26,7 +26,6 @@ import scala.Tuple2;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.KeyValueGroupedDataset;
 import org.apache.spark.sql.expressions.javalang.typed;
-import test.org.apache.spark.sql.JavaDatasetAggregatorSuiteBase;
 
 /**
  * Suite that replicates tests in JavaDatasetAggregatorSuite using lambda syntax.

@@ -15,11 +15,17 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.java8.dstream;
+package test.org.apache.spark.streaming;
 
 import java.io.Serializable;
 import java.util.*;
 
+import org.apache.spark.streaming.Duration;
+import org.apache.spark.streaming.Durations;
+import org.apache.spark.streaming.JavaTestUtils;
+import org.apache.spark.streaming.LocalJavaStreamingContext;
+import org.apache.spark.streaming.StateSpec;
+import org.apache.spark.streaming.Time;
 import scala.Tuple2;
 
 import com.google.common.collect.Lists;
@@ -32,7 +38,6 @@ import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaMapWithStateDStream;
@@ -139,7 +144,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaDStream<Integer> reducedWindowed = stream.reduceByWindow((x, y) -> x + y,
-      (x, y) -> x - y, new Duration(2000), new Duration(1000));
+                                                                 (x, y) -> x - y, new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 4, 4);
 

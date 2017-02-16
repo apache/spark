@@ -259,7 +259,7 @@ private[kafka010] class KafkaSource(
       val preferredLoc = if (numExecutors > 0) {
         // This allows cached KafkaConsumers in the executors to be re-used to read the same
         // partition in every batch.
-        Some(sortedExecutors(floorMod(tp.hashCode, numExecutors)))
+        Some(sortedExecutors(Math.floorMod(tp.hashCode, numExecutors)))
       } else None
       KafkaSourceRDDOffsetRange(tp, fromOffset, untilOffset, preferredLoc)
     }.filter { range =>
@@ -347,5 +347,4 @@ private[kafka010] object KafkaSource {
     if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
   }
 
-  def floorMod(a: Long, b: Int): Int = ((a % b).toInt + b) % b
 }

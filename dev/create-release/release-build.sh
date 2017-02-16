@@ -267,7 +267,6 @@ if [[ "$1" == "docs" ]]; then
   echo "Building Spark docs"
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-docs"
   cd docs
-  # Compile docs with Java 7 to use nicer format
   # TODO: Make configurable to add this: PRODUCTION=1
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
   echo "Copying release documentation to $dest_dir"

@@ -117,7 +117,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <java.version>1.7</java.version>
+    <java.version>1.8</java.version>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
@@ -186,9 +186,6 @@
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
-    <!-- When using different JDKs for the build, we can't use Zinc for the jdk8 part. -->
-    <useZincForJdk8>true</useZincForJdk8>
-
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
 
@@ -219,8 +216,6 @@
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
 
-    <PermGen>64m</PermGen>
-    <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
   </properties>
   <repositories>
@@ -1920,7 +1915,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>1.12</version>
+          <version>3.0.0</version>
         </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
@@ -1967,8 +1962,6 @@
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
               <jvmArg>-Xmx1024m</jvmArg>
-              <jvmArg>-XX:PermSize=${PermGen}</jvmArg>
-              <jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
             </jvmArgs>
             <javacArgs>
@@ -1983,7 +1976,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.6.0</version>
+          <version>3.6.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2014,7 +2007,7 @@
               <include>**/*Suite.java</include>
             </includes>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-            <argLine>-Xmx3g -Xss4096k -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <argLine>-Xmx3g -Xss4096k -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2063,7 +2056,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
@@ -2149,6 +2142,41 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
           <version>2.10.4</version>
+          <configuration>
+            <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
+            <tags>
+              <tag>
+                <name>example</name>
+                <placement>a</placement>
+                <head>Example:</head>
+              </tag>
+              <tag>
+                <name>note</name>
+                <placement>a</placement>
+                <head>Note:</head>
+              </tag>
+              <tag>
+                <name>group</name>
+                <placement>X</placement>
+              </tag>
+              <tag>
+                <name>tparam</name>
+                <placement>X</placement>
+              </tag>
+              <tag>
+                <name>constructor</name>
+                <placement>X</placement>
+              </tag>
+              <tag>
+                <name>todo</name>
+                <placement>X</placement>
+              </tag>
+              <tag>
+                <name>groupname</name>
+                <placement>X</placement>
+              </tag>
+            </tags>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
@@ -2163,7 +2191,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>2.4.3</version>
+          <version>3.0.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2178,6 +2206,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.0.0</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -2252,7 +2281,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
-        <version>2.10</version>
         <executions>
           <execution>
             <id>generate-test-classpath</id>
@@ -2474,67 +2502,6 @@
     </profile>
 
     <profile>
-      <id>java8-tests</id>
-      <activation>
-        <jdk>[1.8,)</jdk>
-      </activation>
-      <modules>
-        <module>external/java8-tests</module>
-      </modules>
-    </profile>
-
-    <profile>
-      <id>doclint-java8-disable</id>
-      <activation>
-        <jdk>[1.8,)</jdk>
-      </activation>
-
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-javadoc-plugin</artifactId>
-            <configuration>
-              <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
-              <tags>
-                <tag>
-                  <name>example</name>
-                  <placement>a</placement>
-                  <head>Example:</head>
-                </tag>
-                <tag>
-                  <name>note</name>
-                  <placement>a</placement>
-                  <head>Note:</head>
-                </tag>
-                <tag>
-                  <name>group</name>
-                  <placement>X</placement>
-                </tag>
-                <tag>
-                  <name>tparam</name>
-                  <placement>X</placement>
-                </tag>
-                <tag>
-                  <name>constructor</name>
-                  <placement>X</placement>
-                </tag>
-                <tag>
-                  <name>todo</name>
-                  <placement>X</placement>
-                </tag>
-                <tag>
-                  <name>groupname</name>
-                  <placement>X</placement>
-                </tag>
-              </tags>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-
-    <profile>
       <id>docker-integration-tests</id>
       <modules>
         <module>external/docker-integration-tests</module>
@@ -2627,60 +2594,6 @@
       <properties>
         <test.java.home>${env.JAVA_HOME}</test.java.home>
       </properties>
-    </profile>
-
-    <profile>
-      <id>java7</id>
-      <activation>
-        <property><name>env.JAVA_7_HOME</name></property>
-      </activation>
-      <properties>
-        <useZincForJdk8>false</useZincForJdk8>
-      </properties>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-compiler-plugin</artifactId>
-              <configuration>
-                <compilerArgs combine.children="append">
-                  <arg>-bootclasspath</arg>
-                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
-                </compilerArgs>
-                <verbose>true</verbose>
-              </configuration>
-            </plugin>
-            <plugin>
-              <groupId>net.alchim31.maven</groupId>
-              <artifactId>scala-maven-plugin</artifactId>
-              <!-- Note: -javabootclasspath is set on a per-execution basis rather than as a
-                   plugin-wide configuration because doc-jar generation will break if it's
-                   set; see SPARK-15839 for more details -->
-              <executions>
-                <execution>
-                  <id>scala-compile-first</id>
-                  <configuration>
-                    <args combine.children="append">
-                      <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
-                    </args>
-                  </configuration>
-                </execution>
-                <execution>
-                  <id>scala-test-compile-first</id>
-                  <configuration>
-                    <args combine.children="append">
-                      <arg>-javabootclasspath</arg>
-                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar${path.separator}${env.JAVA_7_HOME}/jre/lib/jce.jar</arg>
-                    </args>
-                  </configuration>
-                </execution>
-              </executions>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-      </build>
     </profile>
 
     <profile>
