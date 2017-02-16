@@ -105,7 +105,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       key: Vector,
       numNearestNeighbors: Int,
       singleProbe: Boolean,
-      distCol: String): Dataset[_] = {
+      distCol: String,
+      relativeError: Double): Dataset[_] = {
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
@@ -132,19 +133,28 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistCol = hashDistUDF(col($(outputCol)))
 
       // Compute threshold to get exact k elements.
-      // TODO: SPARK-18409: Use approxQuantile to get the threshold
-      val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(numNearestNeighbors)
-      val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
-      val hashThreshold = thresholdDataset.take(1).head.getDouble(0)
+      val quantile = numNearestNeighbors.toDouble / modelDataset.count()
+      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
+      val hashThreshold = modelDatasetWithDist.stat
+        .approxQuantile(distCol, Array(quantile), relativeError)
 
       // Filter the dataset where the hash value is less than the threshold.
-      modelDataset.filter(hashDistCol <= hashThreshold)
+      modelDataset.filter(hashDistCol <= hashThreshold(0))
     }
 
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: Vector) => keyDistance(x, key), DataTypes.DoubleType)
     val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
     modelSubsetWithDistCol.sort(distCol).limit(numNearestNeighbors)
+  }
+
+  private[feature] def approxNearestNeighbors(
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int,
+      singleProbe: Boolean,
+      distCol: String): Dataset[_] = {
+    approxNearestNeighbors(dataset, key, numNearestNeighbors, singleProbe, distCol, 0.05)
   }
 
   /**
@@ -163,10 +173,10 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    *         to show the distance between each row and the key.
    */
   def approxNearestNeighbors(
-    dataset: Dataset[_],
-    key: Vector,
-    numNearestNeighbors: Int,
-    distCol: String): Dataset[_] = {
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int,
+      distCol: String): Dataset[_] = {
     approxNearestNeighbors(dataset, key, numNearestNeighbors, true, distCol)
   }
 
