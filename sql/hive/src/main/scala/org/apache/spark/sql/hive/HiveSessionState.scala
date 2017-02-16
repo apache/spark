@@ -18,11 +18,13 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.execution.{SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.internal.{NonClosableMutableURLClassLoader, SessionState, SQLConf}
 
 
 /**
@@ -30,37 +32,21 @@ import org.apache.spark.sql.internal.SessionState
  */
 private[hive] class HiveSessionState(
     sparkSession: SparkSession,
-    parentHiveSessionState: Option[HiveSessionState])
-  extends SessionState(sparkSession, parentHiveSessionState) {
+    conf: SQLConf,
+    experimentalMethods: ExperimentalMethods,
+    functionRegistry: FunctionRegistry,
+    override val catalog: HiveSessionCatalog,
+    sqlParser: ParserInterface,
+    val metadataHive: HiveClient)
+  extends SessionState(
+    sparkSession,
+    conf,
+    experimentalMethods,
+    functionRegistry,
+    catalog,
+    sqlParser) {
 
   self =>
-
-  private[hive] def this(associatedSparkSession: SparkSession) = {
-    this(associatedSparkSession, None)
-  }
-
-  /**
-   * A Hive client used for interacting with the metastore.
-   */
-  val metadataHive: HiveClient =
-    parentHiveSessionState.map(_.metadataHive).getOrElse(
-      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-        .newSession())
-
-  /**
-   * Internal catalog for managing table and database states.
-   */
-  override val catalog = {
-    new HiveSessionCatalog(
-      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
-      sparkSession.sharedState.globalTempViewManager,
-      sparkSession,
-      functionResourceLoader,
-      functionRegistry,
-      conf,
-      newHadoopConf(),
-      sqlParser)
-  }
 
   /**
    * An analyzer that uses the Hive metastore.
@@ -156,7 +142,65 @@ private[hive] class HiveSessionState(
   }
 
   override def copy(associatedSparkSession: SparkSession): HiveSessionState = {
-    new HiveSessionState(associatedSparkSession, Some(this.asInstanceOf[HiveSessionState]))
+    val sqlParser: ParserInterface = new SparkSqlParser(conf)
+
+    new HiveSessionState(
+      associatedSparkSession,
+      conf.copy,
+      experimentalMethods.copy,
+      functionRegistry.copy,
+      catalog.copy(associatedSparkSession),
+      sqlParser,
+      metadataHive)
+  }
+
+}
+
+object HiveSessionState {
+
+  def apply(sparkSession: SparkSession): HiveSessionState = {
+    apply(sparkSession, None)
+  }
+
+  def apply(
+     sparkSession: SparkSession,
+     conf: Option[SQLConf]): HiveSessionState = {
+
+    val sqlConf = conf.getOrElse(new SQLConf)
+
+    val functionRegistry = FunctionRegistry.builtin.copy
+
+    val jarClassLoader: NonClosableMutableURLClassLoader = sparkSession.sharedState.jarClassLoader
+
+    val functionResourceLoader: FunctionResourceLoader =
+      SessionState.createFunctionResourceLoader(sparkSession, jarClassLoader)
+
+    val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
+
+    val catalog = new HiveSessionCatalog(
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
+      sparkSession.sharedState.globalTempViewManager,
+      sparkSession,
+      functionResourceLoader,
+      functionRegistry,
+      sqlConf,
+      SessionState.newHadoopConf(sparkSession, sqlConf),
+      sqlParser)
+
+
+    // A Hive client used for interacting with the metastore.
+    val metadataHive: HiveClient =
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+        .newSession()
+
+    new HiveSessionState(
+      sparkSession,
+      sqlConf,
+      new ExperimentalMethods,
+      functionRegistry,
+      catalog,
+      sqlParser,
+      metadataHive)
   }
 
 }

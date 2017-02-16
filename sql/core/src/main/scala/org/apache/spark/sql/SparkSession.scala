@@ -22,7 +22,6 @@ import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -114,7 +113,7 @@ class SparkSession private(
   private[sql] lazy val sessionState: SessionState = {
     existingSessionState
       .map(_.copy(this))
-      .getOrElse(SparkSession.reflect[SessionState, SparkSession](
+      .getOrElse(SparkSession.instantiateSessionState(
         SparkSession.sessionStateClassName(sparkContext.conf),
         self))
   }
@@ -994,16 +993,18 @@ object SparkSession {
   }
 
   /**
-   * Helper method to create an instance of [[T]] using a single-arg constructor that
-   * accepts an [[Arg]].
+   * Helper method to create an instance of `SessionState`
+   * The result is either `SessionState` or `HiveSessionState`
    */
-  private def reflect[T, Arg <: AnyRef](
+  private def instantiateSessionState(
       className: String,
-      ctorArg: Arg)(implicit ctorArgTag: ClassTag[Arg]): T = {
+      sparkSession: SparkSession): SessionState = {
+
     try {
+      // get `SessionState.apply(SparkSession)`
       val clazz = Utils.classForName(className)
-      val ctor = clazz.getDeclaredConstructor(ctorArgTag.runtimeClass)
-      ctor.newInstance(ctorArg).asInstanceOf[T]
+      val method = clazz.getMethod("apply", sparkSession.getClass)
+      method.invoke(null, sparkSession).asInstanceOf[SessionState]
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)

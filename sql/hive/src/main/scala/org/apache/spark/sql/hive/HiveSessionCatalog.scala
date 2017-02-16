@@ -75,6 +75,24 @@ private[sql] class HiveSessionCatalog(
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
+  def copy(associatedSparkSession: SparkSession): HiveSessionCatalog = {
+    val catalog = new HiveSessionCatalog(
+      externalCatalog,
+      globalTempViewManager,
+      associatedSparkSession,
+      functionResourceLoader,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
+
+    catalog.currentDb = currentDb
+    // copy over temporary tables
+    tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+
+    catalog
+  }
+
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = metastoreCatalog.getQualifiedTableName(table)

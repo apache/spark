@@ -30,12 +30,14 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.{ExperimentalMethods, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -145,8 +147,7 @@ private[hive] class TestHiveSparkSession(
   // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
   // logic based on the setting of CATALOG_IMPLEMENTATION.
   @transient
-  override lazy val sessionState: TestHiveSessionState =
-    new TestHiveSessionState(self)
+  override lazy val sessionState: TestHiveSessionState = TestHiveSessionState(self)
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
@@ -491,10 +492,30 @@ private[hive] class TestHiveQueryExecution(
 }
 
 private[hive] class TestHiveSessionState(
-    sparkSession: TestHiveSparkSession)
-  extends HiveSessionState(sparkSession) { self =>
+    sparkSession: TestHiveSparkSession,
+    conf: SQLConf,
+    experimentalMethods: ExperimentalMethods,
+    functionRegistry: org.apache.spark.sql.catalyst.analysis.FunctionRegistry,
+    catalog: HiveSessionCatalog,
+    sqlParser: ParserInterface,
+    metadataHive: HiveClient)
+  extends HiveSessionState(
+      sparkSession,
+      conf,
+      experimentalMethods,
+      functionRegistry,
+      catalog,
+      sqlParser,
+      metadataHive) {
 
-  override lazy val conf: SQLConf = {
+  override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
+    new TestHiveQueryExecution(sparkSession, plan)
+  }
+}
+
+private[hive] object TestHiveSessionState {
+
+  def makeTestConf: SQLConf = {
     new SQLConf {
       clear()
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -505,9 +526,20 @@ private[hive] class TestHiveSessionState(
     }
   }
 
-  override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
-    new TestHiveQueryExecution(sparkSession, plan)
+  def apply(sparkSession: TestHiveSparkSession): TestHiveSessionState = {
+    val sqlConf = makeTestConf
+    val copyHelper = HiveSessionState(sparkSession, Some(sqlConf))
+
+    new TestHiveSessionState(
+      sparkSession,
+      sqlConf,
+      copyHelper.experimentalMethods,
+      copyHelper.functionRegistry,
+      copyHelper.catalog,
+      copyHelper.sqlParser,
+      copyHelper.metadataHive)
   }
+
 }
 
 

@@ -18,7 +18,10 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{ExperimentalMethods, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
@@ -34,8 +37,24 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
     this(new SparkConf)
   }
 
-  class TestSessionState(sparkSession: SparkSession) extends {
-    override val conf: SQLConf = {
+  class TestSessionState(
+      sparkSession: SparkSession,
+      conf: SQLConf,
+      experimentalMethods: ExperimentalMethods,
+      functionRegistry: FunctionRegistry,
+      catalog: SessionCatalog,
+      sqlParser: ParserInterface)
+    extends SessionState(
+        sparkSession,
+        conf,
+        experimentalMethods,
+        functionRegistry,
+        catalog,
+        sqlParser) {}
+
+  object TestSessionState {
+
+    def makeTestConf: SQLConf = {
       new SQLConf {
         clear()
         override def clear(): Unit = {
@@ -45,10 +64,24 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
         }
       }
     }
-  } with SessionState(sparkSession)
+
+    def apply(sparkSession: SparkSession): TestSessionState = {
+      val conf = makeTestConf
+      val copyHelper = SessionState(sparkSession, Some(conf))
+
+      new TestSessionState(
+        sparkSession,
+        conf,
+        copyHelper.experimentalMethods,
+        copyHelper.functionRegistry,
+        copyHelper.catalog,
+        copyHelper.sqlParser
+      )
+    }
+  }
 
   @transient
-  protected[sql] override lazy val sessionState: SessionState = new TestSessionState(this)
+  protected[sql] override lazy val sessionState: SessionState = TestSessionState(this)
 
   // Needed for Java tests
   def loadTestData(): Unit = {
