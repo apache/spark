@@ -35,7 +35,7 @@ import scala.collection.mutable
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.rest.{AppResource, ContainerAppResource, KubernetesCreateSubmissionRequest, RemoteAppResource, TarGzippedData, UploadedAppResource}
+import org.apache.spark.deploy.rest.{AppResource, ContainerAppResource, KubernetesCreateSubmissionRequest, RemoteAppResource, UploadedAppResource}
 import org.apache.spark.deploy.rest.kubernetes._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -59,11 +59,10 @@ private[spark] class Client(
   private val sslSecretsDirectory = s"$DRIVER_CONTAINER_SECRETS_BASE_DIR/$kubernetesAppId-ssl"
   private val sslSecretsName = s"$SUBMISSION_SSL_SECRETS_PREFIX-$kubernetesAppId"
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
-  private val uploadedJars = sparkConf.get(KUBERNETES_DRIVER_UPLOAD_JARS).filter(_.nonEmpty)
-  private val uploadedFiles = sparkConf.get(KUBERNETES_DRIVER_UPLOAD_FILES).filter(_.nonEmpty)
-  uploadedFiles.foreach(validateNoDuplicateUploadFileNames)
   private val uiPort = sparkConf.getInt("spark.ui.port", DEFAULT_UI_PORT)
   private val driverSubmitTimeoutSecs = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_TIMEOUT)
+  private val sparkFiles = sparkConf.getOption("spark.files")
+  private val sparkJars = sparkConf.getOption("spark.jars")
 
   private val waitForAppCompletion: Boolean = sparkConf.get(WAIT_FOR_APP_COMPLETION)
 
@@ -78,9 +77,18 @@ private[spark] class Client(
 
   def run(): Unit = {
     logInfo(s"Starting application $kubernetesAppId in Kubernetes...")
-
-    Seq(uploadedFiles, uploadedJars, Some(mainAppResource)).foreach(checkForFilesExistence)
-
+    val submitterLocalFiles = KubernetesFileUtils.getOnlySubmitterLocalFiles(sparkFiles)
+    val submitterLocalJars = KubernetesFileUtils.getOnlySubmitterLocalFiles(sparkJars)
+    (submitterLocalFiles ++ submitterLocalJars).foreach { file =>
+      if (!new File(Utils.resolveURI(file).getPath).isFile) {
+        throw new SparkException(s"File $file does not exist or is a directory.")
+      }
+    }
+    if (KubernetesFileUtils.isUriLocalFile(mainAppResource) &&
+        !new File(Utils.resolveURI(mainAppResource).getPath).isFile) {
+      throw new SparkException(s"Main app resource file $mainAppResource is not a file or" +
+        s" is a directory.")
+    }
     val (driverSubmitSslOptions, isKeyStoreLocalFile) = parseDriverSubmitSslOptions()
     val parsedCustomLabels = parseCustomLabels(customLabels)
     var k8ConfBuilder = new K8SConfigBuilder()
@@ -145,7 +153,7 @@ private[spark] class Client(
             }
             try {
               submitApplicationToDriverServer(kubernetesClient, driverSubmitSslOptions,
-                ownerReferenceConfiguredDriverService)
+                ownerReferenceConfiguredDriverService, submitterLocalFiles, submitterLocalJars)
               // wait if configured to do so
               if (waitForAppCompletion) {
                 logInfo(s"Waiting for application $kubernetesAppId to finish...")
@@ -193,7 +201,9 @@ private[spark] class Client(
   private def submitApplicationToDriverServer(
       kubernetesClient: KubernetesClient,
       driverSubmitSslOptions: SSLOptions,
-      driverService: Service) = {
+      driverService: Service,
+      submitterLocalFiles: Iterable[String],
+      submitterLocalJars: Iterable[String]): Unit = {
     sparkConf.getOption("spark.app.id").foreach { id =>
       logWarning(s"Warning: Provided app id in spark.app.id as $id will be" +
         s" overridden as $kubernetesAppId")
@@ -211,7 +221,7 @@ private[spark] class Client(
     driverSubmitter.ping()
     logInfo(s"Submitting local resources to driver pod for application " +
       s"$kubernetesAppId ...")
-    val submitRequest = buildSubmissionRequest()
+    val submitRequest = buildSubmissionRequest(submitterLocalFiles, submitterLocalJars)
     driverSubmitter.submitApplication(submitRequest)
     logInfo("Successfully submitted local resources and driver configuration to" +
       " driver pod.")
@@ -502,25 +512,18 @@ private[spark] class Client(
     val maybeKeyStore = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_KEYSTORE)
     val resolvedSparkConf = sparkConf.clone()
     val (isLocalKeyStore, resolvedKeyStore) = maybeKeyStore.map(keyStore => {
-      val keyStoreURI = Utils.resolveURI(keyStore)
-      val isProvidedKeyStoreLocal = keyStoreURI.getScheme match {
-        case "file" | null => true
-        case "container" => false
-        case _ => throw new SparkException(s"Invalid KeyStore URI $keyStore; keyStore URI" +
-          " for submit server must have scheme file:// or container:// (no scheme defaults" +
-          " to file://)")
-      }
-      (isProvidedKeyStoreLocal, Option.apply(keyStoreURI.getPath))
-    }).getOrElse((true, Option.empty[String]))
+      (KubernetesFileUtils.isUriLocalFile(keyStore),
+        Option.apply(Utils.resolveURI(keyStore).getPath))
+    }).getOrElse((false, Option.empty[String]))
     resolvedKeyStore.foreach {
       resolvedSparkConf.set(KUBERNETES_DRIVER_SUBMIT_KEYSTORE, _)
     }
     sparkConf.get(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE).foreach { trustStore =>
-      val trustStoreURI = Utils.resolveURI(trustStore)
-      trustStoreURI.getScheme match {
-        case "file" | null =>
-          resolvedSparkConf.set(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE, trustStoreURI.getPath)
-        case _ => throw new SparkException(s"Invalid trustStore URI $trustStore; trustStore URI" +
+      if (KubernetesFileUtils.isUriLocalFile(trustStore)) {
+        resolvedSparkConf.set(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE,
+          Utils.resolveURI(trustStore).getPath)
+      } else {
+        throw new SparkException(s"Invalid trustStore URI $trustStore; trustStore URI" +
           " for submit server must have no scheme, or scheme file://")
       }
     }
@@ -673,23 +676,24 @@ private[spark] class Client(
         .build())
   }
 
-  private def buildSubmissionRequest(): KubernetesCreateSubmissionRequest = {
-    val appResourceUri = Utils.resolveURI(mainAppResource)
-    val resolvedAppResource: AppResource = appResourceUri.getScheme match {
-      case "file" | null =>
-        val appFile = new File(appResourceUri.getPath)
-        if (!appFile.isFile) {
-          throw new IllegalStateException("Provided local file path does not exist" +
-            s" or is not a file: ${appFile.getAbsolutePath}")
-        }
+  private def buildSubmissionRequest(
+      submitterLocalFiles: Iterable[String],
+      submitterLocalJars: Iterable[String]): KubernetesCreateSubmissionRequest = {
+    val mainResourceUri = Utils.resolveURI(mainAppResource)
+    val resolvedAppResource: AppResource = Option(mainResourceUri.getScheme)
+        .getOrElse("file") match {
+      case "file" =>
+        val appFile = new File(mainResourceUri.getPath)
         val fileBytes = Files.toByteArray(appFile)
         val fileBase64 = Base64.encodeBase64String(fileBytes)
         UploadedAppResource(resourceBase64Contents = fileBase64, name = appFile.getName)
-      case "container" => ContainerAppResource(appResourceUri.getPath)
+      case "local" => ContainerAppResource(mainAppResource)
       case other => RemoteAppResource(other)
     }
-    val uploadJarsBase64Contents = compressFiles(uploadedJars)
-    val uploadFilesBase64Contents = compressFiles(uploadedFiles)
+    val uploadFilesBase64Contents = CompressionUtils.createTarGzip(submitterLocalFiles.map(
+      Utils.resolveURI(_).getPath))
+    val uploadJarsBase64Contents = CompressionUtils.createTarGzip(submitterLocalJars.map(
+      Utils.resolveURI(_).getPath))
     KubernetesCreateSubmissionRequest(
       appResource = resolvedAppResource,
       mainClass = mainClass,
@@ -698,33 +702,6 @@ private[spark] class Client(
       sparkProperties = sparkConf.getAll.toMap,
       uploadedJarsBase64Contents = uploadJarsBase64Contents,
       uploadedFilesBase64Contents = uploadFilesBase64Contents)
-  }
-
-  // Because uploaded files should be added to the working directory of the driver, they
-  // need to not have duplicate file names. They are added to the working directory so the
-  // user can reliably locate them in their application. This is similar in principle to how
-  // YARN handles its `spark.files` setting.
-  private def validateNoDuplicateUploadFileNames(uploadedFilesCommaSeparated: String): Unit = {
-    val pathsWithDuplicateNames = uploadedFilesCommaSeparated
-      .split(",")
-      .groupBy(new File(_).getName)
-      .filter(_._2.length > 1)
-    if (pathsWithDuplicateNames.nonEmpty) {
-      val pathsWithDuplicateNamesSorted = pathsWithDuplicateNames
-        .values
-        .flatten
-        .toList
-        .sortBy(new File(_).getName)
-      throw new SparkException("Cannot upload files with duplicate names via" +
-        s" ${KUBERNETES_DRIVER_UPLOAD_FILES.key}. The following paths have a duplicated" +
-        s" file name: ${pathsWithDuplicateNamesSorted.mkString(",")}")
-    }
-  }
-
-  private def compressFiles(maybeFilePaths: Option[String]): Option[TarGzippedData] = {
-    maybeFilePaths
-      .map(_.split(","))
-      .map(CompressionUtils.createTarGzip(_))
   }
 
   private def buildDriverSubmissionClient(
@@ -812,22 +789,6 @@ private[spark] class Client(
         }
       }).toMap
     }).getOrElse(Map.empty[String, String])
-  }
-
-  private def checkForFilesExistence(maybePaths: Option[String]): Unit = {
-    maybePaths.foreach { paths =>
-      paths.split(",").foreach { path =>
-        val uri = Utils.resolveURI(path)
-        uri.getScheme match {
-          case "file" | null =>
-            val file = new File(uri.getPath)
-            if (!file.isFile) {
-              throw new SparkException(s"""file "${uri}" does not exist!""")
-            }
-          case _ =>
-        }
-      }
-    }
   }
 }
 

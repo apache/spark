@@ -26,8 +26,8 @@ case class KubernetesCreateSubmissionRequest(
   appArgs: Array[String],
   sparkProperties: Map[String, String],
   secret: String,
-  uploadedJarsBase64Contents: Option[TarGzippedData],
-  uploadedFilesBase64Contents: Option[TarGzippedData]) extends SubmitRestProtocolRequest {
+  uploadedJarsBase64Contents: TarGzippedData,
+  uploadedFilesBase64Contents: TarGzippedData) extends SubmitRestProtocolRequest {
   message = "create"
   clientSparkVersion = SPARK_VERSION
 }
