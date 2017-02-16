@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -41,16 +41,20 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at any
  * [[Source]] present in the query plan. Whenever new data arrives, a [[QueryExecution]] is created
  * and the results are committed transactionally to the given [[Sink]].
+ *
+ * @param deleteCheckpointOnStop whether to delete the checkpoint if the query is stopped without
+ *                               errors
  */
 class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
-    checkpointRoot: String,
+    val checkpointRoot: String,
     analyzedPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger,
     val triggerClock: Clock,
-    val outputMode: OutputMode)
+    val outputMode: OutputMode,
+    deleteCheckpointOnStop: Boolean)
   extends StreamingQuery with ProgressReporter with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -157,7 +161,7 @@ class StreamExecution(
   private var state: State = INITIALIZING
 
   @volatile
-  var lastExecution: QueryExecution = _
+  var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
   protected var newData: Map[Source, DataFrame] = _
@@ -174,8 +178,8 @@ class StreamExecution(
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
-   * [[org.apache.spark.util.UninterruptibleThread]] to avoid potential deadlocks in using
-   * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
+   * [[org.apache.spark.util.UninterruptibleThread]] to avoid swallowing `InterruptException` when
+   * using [[HDFSMetadataLog]]. See SPARK-19599 for more details.
    */
   val microBatchThread =
     new StreamExecutionThread(s"stream execution thread for $prettyIdString") {
@@ -213,6 +217,7 @@ class StreamExecution(
    * has been posted to all the listeners.
    */
   def start(): Unit = {
+    logInfo(s"Starting $prettyIdString. Use $checkpointRoot to store the query checkpoint.")
     microBatchThread.setDaemon(true)
     microBatchThread.start()
     startLatch.await()  // Wait until thread started and QueryStart event has been posted
@@ -323,6 +328,20 @@ class StreamExecution(
         sparkSession.streams.notifyQueryTermination(StreamExecution.this)
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
+
+        // Delete the temp checkpoint only when the query didn't fail
+        if (deleteCheckpointOnStop && exception.isEmpty) {
+          val checkpointPath = new Path(checkpointRoot)
+          try {
+            val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            fs.delete(checkpointPath, true)
+          } catch {
+            case NonFatal(e) =>
+              // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
+              // when we cannot delete them.
+              logWarning(s"Cannot delete $checkpointPath", e)
+          }
+        }
       } finally {
         terminationLatch.countDown()
       }
@@ -653,7 +672,7 @@ class StreamExecution(
     if (lastExecution == null) {
       "No physical plan. Waiting for data."
     } else {
-      val explain = ExplainCommand(lastExecution.logical, extended = extended)
+      val explain = StreamingExplainCommand(lastExecution, extended = extended)
       sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect()
         .map(_.getString(0)).mkString("\n")
     }

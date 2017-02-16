@@ -21,4 +21,7 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
+# Setup global test environment
+install.spark()
+
 test_package("SparkR")

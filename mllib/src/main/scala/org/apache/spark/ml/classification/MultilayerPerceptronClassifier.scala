@@ -225,7 +225,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
 
   /**
    * Train a model using the given dataset and parameters.
-   * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
+   * Developers can implement this instead of `fit()` to avoid dealing with schema validation
    * and copying parameters into the model.
    *
    * @param dataset Training dataset
@@ -321,7 +321,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
   override protected def predict(features: Vector): Double = {
     LabelConverter.decodeLabel(mlpModel.predict(features))

@@ -340,11 +340,13 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
-    val consumer = cache.get(key)
-    if (consumer != null) {
-      consumer.inuse = false
-    } else {
-      logWarning(s"Attempting to release consumer that does not exist")
+    synchronized {
+      val consumer = cache.get(key)
+      if (consumer != null) {
+        consumer.inuse = false
+      } else {
+        logWarning(s"Attempting to release consumer that does not exist")
+      }
     }
   }
 
@@ -359,9 +361,11 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
     val topicPartition = new TopicPartition(topic, partition)
     val key = CacheKey(groupId, topicPartition)
 
-    val removedConsumer = cache.remove(key)
-    if (removedConsumer != null) {
-      removedConsumer.close()
+    synchronized {
+      val removedConsumer = cache.remove(key)
+      if (removedConsumer != null) {
+        removedConsumer.close()
+      }
     }
   }
 

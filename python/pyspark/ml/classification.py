@@ -31,7 +31,8 @@ from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
-__all__ = ['LogisticRegression', 'LogisticRegressionModel',
+__all__ = ['LinearSVC', 'LinearSVCModel',
+           'LogisticRegression', 'LogisticRegressionModel',
            'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
@@ -57,6 +58,119 @@ class JavaClassificationModel(JavaPredictionModel):
         Number of classes (values which the label can take).
         """
         return self._call_java("numClasses")
+
+
+@inherit_doc
+class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+                HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
+                HasThreshold, HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
+
+    This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
+    ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
+    >>> svm = LinearSVC(maxIter=5, regParam=0.01)
+    >>> model = svm.fit(df)
+    >>> model.coefficients
+    DenseVector([0.0, -0.2792, -0.1833])
+    >>> model.intercept
+    1.0206118982229047
+    >>> model.numClasses
+    2
+    >>> model.numFeatures
+    3
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, -1.0, -1.0))]).toDF()
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    1.0
+    >>> result.rawPrediction
+    DenseVector([-1.4831, 1.4831])
+    >>> svm_path = temp_path + "/svm"
+    >>> svm.save(svm_path)
+    >>> svm2 = LinearSVC.load(svm_path)
+    >>> svm2.getMaxIter()
+    5
+    >>> model_path = temp_path + "/svm_model"
+    >>> model.save(model_path)
+    >>> model2 = LinearSVCModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.intercept == model2.intercept
+    True
+
+    .. versionadded:: 2.2.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                 aggregationDepth=2):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                 aggregationDepth=2):
+        """
+        super(LinearSVC, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.LinearSVC", self.uid)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
+                         standardization=True, threshold=0.0, aggregationDepth=2)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                  aggregationDepth=2):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                  aggregationDepth=2):
+        Sets params for Linear SVM Classifier.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return LinearSVCModel(java_model)
+
+
+class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    Model fitted by LinearSVC.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def coefficients(self):
+        """
+        Model coefficients of Linear SVM Classifier.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("2.2.0")
+    def intercept(self):
+        """
+        Model intercept of Linear SVM Classifier.
+        """
+        return self._call_java("intercept")
 
 
 @inherit_doc
@@ -1388,6 +1502,11 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
     >>> model.transform(test2).head().prediction
     2.0
+    >>> model_path = temp_path + "/ovr_model"
+    >>> model.save(model_path)
+    >>> model2 = OneVsRestModel.load(model_path)
+    >>> model2.transform(test0).head().prediction
+    1.0
 
     .. versionadded:: 2.0.0
     """
@@ -1630,9 +1749,13 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
 
         :return: Java object equivalent to this instance.
         """
+        sc = SparkContext._active_spark_context
         java_models = [model._to_java() for model in self.models]
+        java_models_array = JavaWrapper._new_java_array(
+            java_models, sc._gateway.jvm.org.apache.spark.ml.classification.ClassificationModel)
+        metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
-                                             self.uid, java_models)
+                                             self.uid, metadata.empty(), java_models_array)
         _java_obj.set("classifier", self.getClassifier()._to_java())
         _java_obj.set("featuresCol", self.getFeaturesCol())
         _java_obj.set("labelCol", self.getLabelCol())

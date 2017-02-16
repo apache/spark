@@ -154,7 +154,7 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               }
 
-              // Skip subquery aliases added by the Analyzer and the SQLBuilder.
+              // Skip subquery aliases added by the Analyzer.
               // For projects, do the necessary mapping and skip to its child.
               def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
                 case s: SubqueryAlias => cleanQuery(s.child)
@@ -321,12 +321,12 @@ trait CheckAnalysis extends PredicateHelper {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (!dt1.sameType(dt2)) {
+                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. $dt1 <> $dt2 at the ${ordinalNumber(ci)} column of
-                      |the ${ordinalNumber(ti + 1)} table
+                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
@@ -376,28 +376,6 @@ trait CheckAnalysis extends PredicateHelper {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
-          case InsertIntoTable(t, _, _, _, _)
-            if !t.isInstanceOf[LeafNode] ||
-              t.isInstanceOf[Range] ||
-              t == OneRowRelation ||
-              t.isInstanceOf[LocalRelation] =>
-            failAnalysis(s"Inserting into an RDD-based table is not allowed.")
-
-          case i @ InsertIntoTable(table, partitions, query, _, _) =>
-            val numStaticPartitions = partitions.values.count(_.isDefined)
-            if (table.output.size != (query.output.size + numStaticPartitions)) {
-              failAnalysis(
-                s"$table requires that the data to be inserted have the same number of " +
-                  s"columns as the target table: target table has ${table.output.size} " +
-                  s"column(s) but the inserted data has " +
-                  s"${query.output.size + numStaticPartitions} column(s), including " +
-                  s"$numStaticPartitions partition column(s) having constant value(s).")
-            }
-
-          case o if !o.resolved =>
-            failAnalysis(
-              s"unresolved operator ${operator.simpleString}")
-
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
@@ -409,10 +387,18 @@ trait CheckAnalysis extends PredicateHelper {
                  |in operator ${operator.simpleString}
                """.stripMargin)
 
+          case _: Hint =>
+            throw new IllegalStateException(
+              "Internal error: logical hint operator should have been removed during analysis")
+
           case _ => // Analysis successful!
         }
     }
     extendedCheckRules.foreach(_(plan))
+    plan.foreachUp {
+      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case _ =>
+    }
 
     plan.foreach(_.setAnalyzed())
   }

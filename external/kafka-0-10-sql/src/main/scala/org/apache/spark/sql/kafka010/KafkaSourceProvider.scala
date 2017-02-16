@@ -154,11 +154,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       endingRelationOffsets)
   }
 
-  override def createSink(sqlContext: SQLContext,
-    parameters: Map[String, String],
-    partitionColumns: Seq[String],
-    outputMode: OutputMode): Sink = {
-
+  override def createSink(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink = {
     if (outputMode != OutputMode.Append()) {
       throw new IllegalArgumentException(s"Kafka supports ${OutputMode.Append()} only")
     }
@@ -170,17 +170,17 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         .filter(_.toLowerCase.startsWith("kafka."))
         .map { k => k.drop(6).toString -> parameters(k) }
         .toMap + ("value.serializer" -> classOf[BytesSerializer].getName,
-                  "key.serializer" -> classOf[BytesSerializer].getName)
+        "key.serializer" -> classOf[BytesSerializer].getName)
     new KafkaSink(sqlContext,
       new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
       defaultTopic)
   }
 
   override def createRelation(
-    outerSQLContext: SQLContext,
-    mode: SaveMode,
-    parameters: Map[String, String],
-    data: DataFrame): BaseRelation = {
+      outerSQLContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
     logInfo(s"Save mode = $mode")
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
     val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC).map(_.trim.toLowerCase)
@@ -190,7 +190,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         .filter(_.toLowerCase.startsWith("kafka."))
         .map { k => k.drop(6).toString -> parameters(k) }
         .toMap + ("value.serializer" -> classOf[BytesSerializer].getName,
-                  "key.serializer" -> classOf[BytesSerializer].getName)
+        "key.serializer" -> classOf[BytesSerializer].getName)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
       new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
       defaultTopic)

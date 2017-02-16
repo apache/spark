@@ -108,17 +108,20 @@ object ExternalCatalogUtils {
       partitionColumnNames: Seq[String],
       tablePath: Path): Path = {
     val partitionPathStrings = partitionColumnNames.map { col =>
-      val partitionValue = spec(col)
-      val partitionString = if (partitionValue == null) {
-        DEFAULT_PARTITION_NAME
-      } else {
-        escapePathName(partitionValue)
-      }
-      escapePathName(col) + "=" + partitionString
+      getPartitionPathString(col, spec(col))
     }
     partitionPathStrings.foldLeft(tablePath) { (totalPath, nextPartPath) =>
       new Path(totalPath, nextPartPath)
     }
+  }
+
+  def getPartitionPathString(col: String, value: String): String = {
+    val partitionString = if (value == null) {
+      DEFAULT_PARTITION_NAME
+    } else {
+      escapePathName(value)
+    }
+    escapePathName(col) + "=" + partitionString
   }
 }
 

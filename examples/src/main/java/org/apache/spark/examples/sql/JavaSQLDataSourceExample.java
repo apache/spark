@@ -224,7 +224,7 @@ public class JavaSQLDataSourceExample {
             "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     JavaRDD<String> anotherPeopleRDD =
             new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
-    Dataset anotherPeople = spark.read().json(anotherPeopleRDD);
+    Dataset<Row> anotherPeople = spark.read().json(anotherPeopleRDD);
     anotherPeople.show();
     // +---------------+----+
     // |        address|name|
