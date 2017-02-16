@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.locks.ReentrantLock
@@ -33,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -162,7 +161,7 @@ class StreamExecution(
   private var state: State = INITIALIZING
 
   @volatile
-  var lastExecution: QueryExecution = _
+  var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
   protected var newData: Map[Source, DataFrame] = _
@@ -673,7 +672,7 @@ class StreamExecution(
     if (lastExecution == null) {
       "No physical plan. Waiting for data."
     } else {
-      val explain = ExplainCommand(lastExecution.logical, extended = extended)
+      val explain = StreamingExplainCommand(lastExecution, extended = extended)
       sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect()
         .map(_.getString(0)).mkString("\n")
     }
