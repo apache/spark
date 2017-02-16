@@ -275,7 +275,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     numBuckets.map { n =>
-      require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
       BucketSpec(n, bucketColumnNames.get, sortColumnNames.getOrElse(Nil))
     }
   }
