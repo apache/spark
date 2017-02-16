@@ -199,6 +199,12 @@ private[v1] class ApiRootResource extends ApiRequestContext {
     new VersionResource(uiRoot)
   }
 
+  @Path("applications/{appId}/environment")
+  def getEnvironment(@PathParam("appId") appId: String): EnvironmentResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new EnvironmentResource(ui)
+    }
+  }
 }
 
 private[spark] object ApiRootResource {

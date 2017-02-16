@@ -252,3 +252,9 @@ class AccumulableInfo private[spark](
 
 class VersionInfo private[spark](
   val spark: String)
+
+class EnvironmentInfo private[spark] (
+    var jvmInformation: Seq[(String, String)],
+    var sparkProperties: Seq[(String, String)],
+    var systemProperties: Seq[(String, String)],
+    var classpathEntries: Seq[(String, String)])
