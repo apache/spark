@@ -336,7 +336,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val parsedOptions = new JSONOptions(extraOptions.toMap,
+    val parsedOptions = new JSONOptions(
+      extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val createParser = CreateJacksonParser.string _
