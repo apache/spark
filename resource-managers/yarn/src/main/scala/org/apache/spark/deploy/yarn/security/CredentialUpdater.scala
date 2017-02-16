@@ -55,14 +55,10 @@ private[spark] class CredentialUpdater(
 
   /** Start the credential updater task */
   def start(): Unit = {
-    val startTime = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
-    val remainingTime = startTime - System.currentTimeMillis()
-    if (remainingTime <= 0) {
-      credentialUpdater.schedule(credentialUpdaterRunnable, 1, TimeUnit.MINUTES)
-    } else {
-      logInfo(s"Scheduling credentials refresh from HDFS in $remainingTime millis.")
-      credentialUpdater.schedule(credentialUpdaterRunnable, remainingTime, TimeUnit.MILLISECONDS)
-    }
+    val startTime = sparkConf.get(CREDENTIALS_UPDATE_TIME)
+    val remainingTime = Math.max(1, startTime - System.currentTimeMillis())
+    logInfo(s"Scheduling credentials refresh from HDFS in $remainingTime millis.")
+    credentialUpdater.schedule(credentialUpdaterRunnable, remainingTime, TimeUnit.MILLISECONDS)
   }
 
   private def updateCredentialsIfRequired(): Unit = {
