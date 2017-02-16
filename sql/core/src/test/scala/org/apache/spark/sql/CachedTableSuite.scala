@@ -39,6 +39,8 @@ private case class BigData(s: String)
 class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
   import testImplicits._
 
+  setupTestData()
+
   override def afterEach(): Unit = {
     try {
       spark.catalog.clearCache()
@@ -185,9 +187,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
 
     assertResult(1, "InMemoryRelation not found, testData should have been cached") {
-      spark.table("testData").queryExecution.withCachedData.collect {
-        case r: InMemoryRelation => r
-      }.size
+      getNumInMemoryRelations(spark.table("testData").queryExecution.withCachedData)
     }
 
     spark.catalog.cacheTable("testData")
@@ -580,10 +580,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     localRelation.createOrReplaceTempView("localRelation")
 
     spark.catalog.cacheTable("localRelation")
-    assert(
-      localRelation.queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i
-      }.size == 1)
+    assert(getNumInMemoryRelations(localRelation.queryExecution.withCachedData) == 1)
   }
 
   test("SPARK-19093 Caching in side subquery") {

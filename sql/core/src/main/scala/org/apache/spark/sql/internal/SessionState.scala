@@ -221,15 +221,14 @@ object SessionState {
     new Analyzer(catalog, sqlConf) {
       override val extendedResolutionRules =
         new FindDataSourceTable(sparkSession) ::
-        new ResolveDataSource(sparkSession) :: Nil
+        new ResolveSQLOnFile(sparkSession) :: Nil
 
       override val postHocResolutionRules =
-        AnalyzeCreateTable(sparkSession) ::
+        PreprocessTableCreation(sparkSession) ::
         PreprocessTableInsertion(sqlConf) ::
         DataSourceAnalysis(sqlConf) :: Nil
 
-      override val extendedCheckRules =
-        Seq(PreWriteCheck(sqlConf, catalog), HiveOnlyCheck)
+      override val extendedCheckRules = Seq(PreWriteCheck, HiveOnlyCheck)
     }
   }
 

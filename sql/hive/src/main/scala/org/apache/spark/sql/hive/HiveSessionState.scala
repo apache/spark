@@ -63,6 +63,7 @@ private[hive] class HiveSessionState(
    */
   override def planner: SparkPlanner = plannerCreator()
 
+
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
@@ -213,20 +214,20 @@ object HiveSessionState {
 
     new Analyzer(catalog, sqlConf) {
       override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-          catalog.OrcConversions ::
-          new DetermineHiveSerde(sqlConf) ::
-          new FindDataSourceTable(sparkSession) ::
-          new FindHiveSerdeTable(sparkSession) ::
-          new ResolveDataSource(sparkSession) :: Nil
+        new ResolveHiveSerdeTable(sparkSession) ::
+        new FindDataSourceTable(sparkSession) ::
+        new FindHiveSerdeTable(sparkSession) ::
+        new ResolveSQLOnFile(sparkSession) :: Nil
 
       override val postHocResolutionRules =
-        AnalyzeCreateTable(sparkSession) ::
-          PreprocessTableInsertion(sqlConf) ::
-          DataSourceAnalysis(sqlConf) ::
-          new HiveAnalysis(sparkSession) :: Nil
+        catalog.ParquetConversions ::
+        catalog.OrcConversions ::
+        PreprocessTableCreation(sparkSession) ::
+        PreprocessTableInsertion(conf) ::
+        DataSourceAnalysis(conf) ::
+        HiveAnalysis :: Nil
 
-      override val extendedCheckRules = Seq(PreWriteCheck(sqlConf, catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck)
     }
   }
 
