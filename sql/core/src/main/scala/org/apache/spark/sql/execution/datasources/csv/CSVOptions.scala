@@ -26,7 +26,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[csv] class CSVOptions(
+private[sql] class CSVOptions(
     @transient private val parameters: CaseInsensitiveMap[String], defaultTimeZoneId: String)
   extends Logging with Serializable {
 
@@ -94,6 +94,8 @@ private[csv] class CSVOptions(
   val failFast = ParseModes.isFailFastMode(parseMode)
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
+
+  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
 
   val nullValue = parameters.getOrElse("nullValue", "")
 

@@ -960,25 +960,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("SPARK-18699 fill null when parsing non-string types malformed") {
+  test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
-    val df = spark
-      .read
-      .format("csv")
-      .option("mode", "PERMISSIVE")
-      .schema(schema)
-      .load(testFile(valueMalformedFile))
-    checkAnswer(df, Row(0, null) :: Row(1, java.sql.Date.valueOf("1983-08-04")) :: Nil)
-
     val errMsg = intercept[SparkException] {
       spark
         .read
-        .format("csv")
-        .option("mode", "FAILFAST")
+        .option("mode", "PERMISSIVE")
         .schema(schema)
-        .load(testFile(valueMalformedFile))
+        .csv(testFile(valueMalformedFile))
         .collect
     }.getCause.getMessage
     assert(errMsg.contains("Timestamp format must be"))
+
+    // If `schema` has `columnNameOfCorruptRecord`, it should handle corrupt records
+    val columnNameOfCorruptRecord = "_unparsed"
+    val df = spark
+      .read
+      .option("mode", "PERMISSIVE")
+      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .schema(schema.add(columnNameOfCorruptRecord, StringType))
+      .csv(testFile(valueMalformedFile))
+
+    checkAnswer(df,
+      Row(0, null, "0,2013-111-11 12:13:14") ::
+      Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+      Nil)
   }
 }
