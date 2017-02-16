@@ -444,8 +444,6 @@ class DataStreamReader(OptionUtils):
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
-                          set, it uses the default value, ``false``.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -487,6 +485,8 @@ class DataStreamReader(OptionUtils):
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
         :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
                          If None is set, it uses the default value, session local timezone.
+        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+                          set, it uses the default value, ``false``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming

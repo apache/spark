@@ -172,8 +172,6 @@ class DataFrameReader(OptionUtils):
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
-                          set, it uses the default value, ``false``.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -215,6 +213,8 @@ class DataFrameReader(OptionUtils):
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
         :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
                          If None is set, it uses the default value, session local timezone.
+        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+                          set, it uses the default value, ``false``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
