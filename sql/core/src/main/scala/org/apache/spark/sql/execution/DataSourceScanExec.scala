@@ -286,7 +286,19 @@ case class FileSourceScanExec(
       } getOrElse {
         metadata
       }
-    withOptPartitionCount
+    val withOptColumnCount = relation.fileFormat match {
+      case columnar: ColumnarFileFormat =>
+        SparkSession
+          .getActiveSession
+          .map { sparkSession =>
+            val columnCount = columnar.columnCountForSchema(sparkSession, requiredSchema)
+            withOptPartitionCount + ("ColumnCount" -> columnCount.toString)
+          } getOrElse {
+            withOptPartitionCount
+          }
+      case _ => withOptPartitionCount
+    }
+    withOptColumnCount
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
