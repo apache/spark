@@ -1558,6 +1558,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaBucketedRandomProjectionLSHExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [BucketedRandomProjectionLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.BucketedRandomProjectionLSH)
+for more details on the API.
+
+{% include_example python/ml/bucketed_random_projection_lsh_example.py %}
+</div>
+
 </div>
 
 ### MinHash for Jaccard Distance
@@ -1589,5 +1598,13 @@ Refer to the [MinHashLSH Java docs](api/java/org/apache/spark/ml/feature/MinHash
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMinHashLSHExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinHashLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinHashLSH)
+for more details on the API.
+
+{% include_example python/ml/min_hash_lsh_example.py %}
 </div>
 </div>
