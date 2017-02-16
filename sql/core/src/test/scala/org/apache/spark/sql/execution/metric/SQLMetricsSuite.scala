@@ -352,6 +352,15 @@ object InputOutputMetricsHelper {
       stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
     }
 
+    /**
+     * Return a list of recorded metrics aggregated per stage.
+     *
+     * The list is sorted in the ascending order on the stageId.
+     * For each recorded stage, the following tuple is returned:
+     *  - sum of inputMetrics.recordsRead for all the tasks in the stage
+     *  - sum of shuffleReadMetrics.recordsRead for all the tasks in the stage
+     *  - sum of the highest values of "number of output rows" metric for all the tasks in the stage
+     */
     def getResults(): List[(Long, Long, Long)] = {
       stageIdToMetricsResult.keySet.toList.sorted.map({ stageId =>
         val res = stageIdToMetricsResult(stageId)
@@ -381,6 +390,7 @@ object InputOutputMetricsHelper {
     }
   }
 
+  // Run df.collect() and return aggregated metrics for each stage.
   def run(df: DataFrame): List[(Long, Long, Long)] = {
     val spark = df.sparkSession
     val sparkContext = spark.sparkContext
