@@ -357,7 +357,8 @@ case class Field(children: Seq[Expression]) extends Expression {
       TypeCheckResult.TypeCheckFailure(s"FIELD requires at least 2 arguments")
     } else if (!children.forall(
         e => e.dataType.isInstanceOf[AtomicType] || e.dataType.isInstanceOf[NullType])) {
-      TypeCheckResult.TypeCheckFailure(s"FIELD requires all arguments to be of AtomicType")
+      TypeCheckResult.TypeCheckFailure(
+        s"FIELD requires all arguments to be of AtomicType or explicitly indicating NULL")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
