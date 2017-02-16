@@ -653,7 +653,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val table = UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
-    table.optionalMap(ctx.sample)(withSample)
+      .optionalMap(ctx.sample)(withSample)
 
     Option(ctx.strictIdentifier).map(_.getText) match {
       case Some(strictIdentifier) =>
