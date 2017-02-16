@@ -16,14 +16,14 @@
  */
 package org.apache.spark.deploy.rest.kubernetes
 
-import java.io.File
+import java.io.{File, FileOutputStream, StringReader}
 import java.net.URI
 import java.nio.file.Paths
 import java.util.concurrent.CountDownLatch
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import com.google.common.base.Charsets
-import com.google.common.io.Files
+import com.google.common.io.{BaseEncoding, ByteStreams, Files}
 import org.apache.commons.codec.binary.Base64
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -145,46 +145,73 @@ private[spark] class KubernetesSparkRestServer(
         } else {
           requestMessage match {
             case KubernetesCreateSubmissionRequest(
-            appResource,
-            mainClass,
-            appArgs,
-            sparkProperties,
-            secret,
-            uploadedJars,
-            uploadedFiles) =>
+                appResource,
+                mainClass,
+                appArgs,
+                sparkProperties,
+                secret,
+                uploadedJars,
+                uploadedFiles) =>
               val decodedSecret = Base64.decodeBase64(secret)
               if (!expectedApplicationSecret.sameElements(decodedSecret)) {
                 responseServlet.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
                 handleError("Unauthorized to submit application.")
               } else {
                 val tempDir = Utils.createTempDir()
-                val appResourcePath = resolvedAppResource(appResource, tempDir)
+                val resolvedAppResource = resolveAppResource(appResource, tempDir)
                 val writtenJars = writeUploadedJars(uploadedJars, tempDir)
                 val writtenFiles = writeUploadedFiles(uploadedFiles)
                 val resolvedSparkProperties = new mutable.HashMap[String, String]
                 resolvedSparkProperties ++= sparkProperties
-
-                // Resolve driver classpath and jars
                 val originalJars = sparkProperties.get("spark.jars")
                   .map(_.split(","))
-                  .getOrElse(Array.empty[String])
-                val resolvedJars = writtenJars ++ originalJars ++ Array(appResourcePath)
-                val sparkJars = new File(sparkHome, "jars").listFiles().map(_.getAbsolutePath)
+                  .getOrElse(Array.empty)
+
+                // The driver at this point has handed us the value of spark.jars verbatim as
+                // specified in spark-submit. At this point, remove all jars that were local
+                // to the submitting user's disk, and replace them with the paths that were
+                // written to disk above.
+                val onlyContainerLocalOrRemoteJars = KubernetesFileUtils
+                  .getNonSubmitterLocalFiles(originalJars)
+                val resolvedJars = (writtenJars ++
+                  onlyContainerLocalOrRemoteJars ++
+                  Array(resolvedAppResource.sparkJarPath)).toSet
+                if (resolvedJars.nonEmpty) {
+                  resolvedSparkProperties("spark.jars") = resolvedJars.mkString(",")
+                } else {
+                  resolvedSparkProperties.remove("spark.jars")
+                }
+
+                // Determining the driver classpath is similar. It's the combination of:
+                // - Jars written from uploads
+                // - Jars in (spark.jars + mainAppResource) that has a "local" prefix
+                // - spark.driver.extraClasspath
+                // - Spark core jars from the installation
+                val sparkCoreJars = new File(sparkHome, "jars").listFiles().map(_.getAbsolutePath)
                 val driverExtraClasspath = sparkProperties
                   .get("spark.driver.extraClassPath")
                   .map(_.split(","))
                   .getOrElse(Array.empty[String])
+                val onlyContainerLocalJars = KubernetesFileUtils
+                  .getOnlyContainerLocalFiles(originalJars)
                 val driverClasspath = driverExtraClasspath ++
-                  resolvedJars ++
-                  sparkJars
-                resolvedSparkProperties("spark.jars") = resolvedJars.mkString(",")
+                  Seq(resolvedAppResource.localPath) ++
+                  writtenJars ++
+                  onlyContainerLocalJars ++
+                  sparkCoreJars
 
-                // Resolve spark.files
+                // Resolve spark.files similarly to spark.jars.
                 val originalFiles = sparkProperties.get("spark.files")
                   .map(_.split(","))
                   .getOrElse(Array.empty[String])
-                val resolvedFiles = originalFiles ++ writtenFiles
-                resolvedSparkProperties("spark.files") = resolvedFiles.mkString(",")
+                val onlyContainerLocalOrRemoteFiles = KubernetesFileUtils
+                  .getNonSubmitterLocalFiles(originalFiles)
+                val resolvedFiles = writtenFiles ++ onlyContainerLocalOrRemoteFiles
+                if (resolvedFiles.nonEmpty) {
+                  resolvedSparkProperties("spark.files") = resolvedFiles.mkString(",")
+                } else {
+                  resolvedSparkProperties.remove("spark.files")
+                }
 
                 val command = new ArrayBuffer[String]
                 command += javaExecutable
@@ -235,35 +262,50 @@ private[spark] class KubernetesSparkRestServer(
       }
     }
 
-    private def writeUploadedJars(files: Option[TarGzippedData], rootTempDir: File):
+    private def writeUploadedJars(jars: TarGzippedData, rootTempDir: File):
         Seq[String] = {
       val resolvedDirectory = new File(rootTempDir, "jars")
       if (!resolvedDirectory.mkdir()) {
         throw new IllegalStateException(s"Failed to create jars dir at " +
           resolvedDirectory.getAbsolutePath)
       }
-      writeBase64ContentsToFiles(files, resolvedDirectory)
+      CompressionUtils.unpackAndWriteCompressedFiles(jars, resolvedDirectory)
     }
 
-    private def writeUploadedFiles(files: Option[TarGzippedData]): Seq[String] = {
+    private def writeUploadedFiles(files: TarGzippedData): Seq[String] = {
       val workingDir = Paths.get("").toFile.getAbsoluteFile
-      writeBase64ContentsToFiles(files, workingDir)
+      CompressionUtils.unpackAndWriteCompressedFiles(files, workingDir)
     }
 
-    def resolvedAppResource(appResource: AppResource, tempDir: File): String = {
-      val appResourcePath = appResource match {
+
+    /**
+     * Retrieve the path on the driver container where the main app resource is, and what value it
+     * ought to have in the spark.jars property. The two may be different because for non-local
+     * dependencies, we have to fetch the resource (if it is not "local") but still want to use
+     * the full URI in spark.jars.
+     */
+    private def resolveAppResource(appResource: AppResource, tempDir: File):
+        ResolvedAppResource = {
+      appResource match {
         case UploadedAppResource(resourceContentsBase64, resourceName) =>
           val resourceFile = new File(tempDir, resourceName)
           val resourceFilePath = resourceFile.getAbsolutePath
           if (resourceFile.createNewFile()) {
-            val resourceContentsBytes = Base64.decodeBase64(resourceContentsBase64)
-            Files.write(resourceContentsBytes, resourceFile)
-            resourceFile.getAbsolutePath
+            Utils.tryWithResource(new StringReader(resourceContentsBase64)) { reader =>
+              Utils.tryWithResource(new FileOutputStream(resourceFile)) { os =>
+                Utils.tryWithResource(BaseEncoding.base64().decodingStream(reader)) {
+                    decodingStream =>
+                  ByteStreams.copy(decodingStream, os)
+                }
+              }
+            }
+            ResolvedAppResource(resourceFile.getAbsolutePath, resourceFile.getAbsolutePath)
           } else {
             throw new IllegalStateException(s"Failed to write main app resource file" +
               s" to $resourceFilePath")
           }
-        case ContainerAppResource(resource) => resource
+        case ContainerAppResource(resource) =>
+          ResolvedAppResource(Utils.resolveURI(resource).getPath, resource)
         case RemoteAppResource(resource) =>
           Utils.fetchFile(resource, tempDir, conf,
             securityManager, SparkHadoopUtil.get.newConfiguration(conf),
@@ -275,19 +317,12 @@ private[spark] class KubernetesSparkRestServer(
             throw new IllegalStateException(s"Main app resource is not a file or" +
               s" does not exist at $downloadedFilePath")
           }
-          downloadedFilePath
+          ResolvedAppResource(downloadedFilePath, resource)
       }
-      appResourcePath
     }
   }
 
-  private def writeBase64ContentsToFiles(
-        maybeCompressedFiles: Option[TarGzippedData],
-        rootDir: File): Seq[String] = {
-    maybeCompressedFiles.map { compressedFiles =>
-      CompressionUtils.unpackAndWriteCompressedFiles(compressedFiles, rootDir)
-    }.getOrElse(Seq.empty[String])
-  }
+  private case class ResolvedAppResource(localPath: String, sparkJarPath: String)
 }
 
 private[spark] object KubernetesSparkRestServer {

@@ -73,8 +73,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   // Kubernetes only
   var kubernetesNamespace: String = null
-  var kubernetesUploadJars: String = null
-  var kubernetesUploadFiles: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -193,12 +191,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
     kubernetesNamespace = Option(kubernetesNamespace)
       .orElse(sparkProperties.get("spark.kubernetes.namespace"))
-      .orNull
-    kubernetesUploadJars = Option(kubernetesUploadJars)
-      .orElse(sparkProperties.get("spark.kubernetes.driver.uploads.jars"))
-      .orNull
-    kubernetesUploadFiles = Option(kubernetesUploadFiles)
-      .orElse(sparkProperties.get("spark.kubernetes.driver.uploads.files"))
       .orNull
 
     // Try to set main class from JAR if no --class argument is given
@@ -440,12 +432,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case KUBERNETES_NAMESPACE =>
         kubernetesNamespace = value
-
-      case KUBERNETES_UPLOAD_JARS =>
-        kubernetesUploadJars = value
-
-      case KUBERNETES_UPLOAD_FILES =>
-        kubernetesUploadFiles = value
 
       case HELP =>
         printUsageAndExit(0)

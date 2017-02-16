@@ -91,30 +91,6 @@ package object config {
       .stringConf
       .createWithDefault("default")
 
-  private[spark] val KUBERNETES_DRIVER_UPLOAD_JARS =
-    ConfigBuilder("spark.kubernetes.driver.uploads.jars")
-      .doc("""
-          | Comma-separated list of jars to send to the driver and
-          | all executors when submitting the application in cluster
-          | mode.
-        """.stripMargin)
-      .stringConf
-      .createOptional
-
-  private[spark] val KUBERNETES_DRIVER_UPLOAD_FILES =
-    ConfigBuilder("spark.kubernetes.driver.uploads.files")
-      .doc("""
-          | Comma-separated list of files to send to the driver and
-          | all executors when submitting the application in cluster
-          | mode. The files are added in a flat hierarchy to the
-          | current working directory of the driver, having the same
-          | names as the names of the original files. Note that two
-          | files with the same name cannot be added, even if they
-          | were in different source directories on the client disk.
-        """.stripMargin)
-      .stringConf
-      .createOptional
-
   // Note that while we set a default for this when we start up the
   // scheduler, the specific default value is dynamically determined
   // based on the executor memory.

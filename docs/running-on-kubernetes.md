@@ -51,87 +51,15 @@ connect without SSL on a different port, the master would be set to `k8s://http:
 
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
-
-### Adding Other JARs
  
-Spark allows users to provide dependencies that are bundled into the driver's Docker image, or that are on the local
-disk of the submitter's machine. These two types of dependencies are specified via different configuration options to
-`spark-submit`:
+### Dependency Management and Docker Containers
+
+Spark supports specifying JAR paths that are either on the submitting host's disk, or are located on the disk of the
+driver and executors. Refer to the [application submission](submitting-applications.html#advanced-dependency-management)
+section for details. Note that files specified with the `local` scheme should be added to the container image of both
+the driver and the executors. Files without a scheme or with the scheme `file://` are treated as being on the disk of
+the submitting machine, and are uploaded to the driver running in Kubernetes before launching the application.
  
-* Local jars provided by specifying the `--jars` command line argument to `spark-submit`, or by setting `spark.jars` in
-  the application's configuration, will be treated as jars that are located on the *disk of the driver container*. This
-  only applies to jar paths that do not specify a scheme or that have the scheme `file://`. Paths with other schemes are
-  fetched from their appropriate locations.
-* Local jars provided by specifying the `--upload-jars` command line argument to `spark-submit`, or by setting
-  `spark.kubernetes.driver.uploads.jars` in the application's configuration, will be treated as jars that are located on
-  the *disk of the submitting machine*. These jars are uploaded to the driver docker container before executing the
-  application.
-* A main application resource path that does not have a scheme or that has the scheme `file://` is assumed to be on the
-  *disk of the submitting machine*. This resource is uploaded to the driver docker container before executing the
-  application. A remote path can still be specified and the resource will be fetched from the appropriate location.
-* A main application resource path that has the scheme `container://` is assumed to be on the *disk of the driver
-  container*.
-  
-In all of these cases, the jars are placed on the driver's classpath, and are also sent to the executors. Below are some
-examples of providing application dependencies.
-
-To submit an application with both the main resource and two other jars living on the submitting user's machine:
-
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class com.example.applications.SampleApplication \
-      --master k8s://192.168.99.100 \
-      --upload-jars /home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
-      /home/exampleuser/exampleapplication/main.jar
-      
-Note that since passing the jars through the `--upload-jars` command line argument is equivalent to setting the
-`spark.kubernetes.driver.uploads.jars` Spark property, the above will behave identically to this command:
-
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class com.example.applications.SampleApplication \
-      --master k8s://192.168.99.100 \
-      --conf spark.kubernetes.driver.uploads.jars=/home/exampleuser/exampleapplication/dep1.jar,/home/exampleuser/exampleapplication/dep2.jar \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
-      /home/exampleuser/exampleapplication/main.jar
-
-To specify a main application resource that can be downloaded from an HTTP service, and if a plugin for that application
-is located in the jar `/opt/spark-plugins/app-plugin.jar` on the docker image's disk:
-
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class com.example.applications.PluggableApplication \
-      --master k8s://192.168.99.100 \
-      --jars /opt/spark-plugins/app-plugin.jar \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
-      http://example.com:8080/applications/sparkpluggable/app.jar
-      
-Note that since passing the jars through the `--jars` command line argument is equivalent to setting the `spark.jars`
-Spark property, the above will behave identically to this command:
-
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class com.example.applications.PluggableApplication \
-      --master k8s://192.168.99.100 \
-      --conf spark.jars=file:///opt/spark-plugins/app-plugin.jar \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
-      http://example.com:8080/applications/sparkpluggable/app.jar
-      
-To specify a main application resource that is in the Docker image, and if it has no other dependencies:
-
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class com.example.applications.PluggableApplication \
-      --master k8s://192.168.99.100:8443 \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver-custom:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
-      container:///home/applications/examples/example.jar
-
 ### Setting Up SSL For Submitting the Driver
 
 When submitting to Kubernetes, a pod is started for the driver, and the pod starts an HTTP server. This HTTP server
@@ -146,9 +74,9 @@ pod in starting the application, set `spark.ssl.kubernetes.submit.trustStore`.
 
 One note about the keyStore is that it can be specified as either a file on the client machine or a file in the
 container image's disk. Thus `spark.ssl.kubernetes.submit.keyStore` can be a URI with a scheme of either `file:`
-or `container:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
+or `local:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
 the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
-`container:`, the file is assumed to already be on the container's disk at the appropriate path.
+`local:`, the file is assumed to already be on the container's disk at the appropriate path.
 
 ### Kubernetes Clusters and the authenticated proxy endpoint
 
@@ -239,24 +167,6 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
     executor pods from the API server.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.driver.uploads.jars</code></td>
-  <td>(none)</td>
-  <td>
-    Comma-separated list of jars to send to the driver and all executors when submitting the application in cluster
-    mode. Refer to <a href="running-on-kubernetes.html#adding-other-jars">adding other jars</a> for more information.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.driver.uploads.files</code></td>
-  <td>(none)</td>
-  <td>
-    Comma-separated list of files to send to the driver and all executors when submitting the application in cluster
-    mode. The files are added in a flat hierarchy to the current working directory of the driver, having the same
-    names as the names of the original files. Note that two files with the same name cannot be added, even if they
-    were in different source directories on the client disk.
   </td>
 </tr>
 <tr>

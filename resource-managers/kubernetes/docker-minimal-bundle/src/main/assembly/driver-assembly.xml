@@ -69,18 +69,7 @@
       <excludes>
         <exclude>org.apache.spark:spark-assembly_${scala.binary.version}:pom</exclude>
         <exclude>org.spark-project.spark:unused</exclude>
-        <exclude>org.apache.spark:spark-examples_${scala.binary.version}</exclude>
       </excludes>
-    </dependencySet>
-    <dependencySet>
-      <outputDirectory>examples/jars</outputDirectory>
-      <useTransitiveDependencies>true</useTransitiveDependencies>
-      <unpack>false</unpack>
-      <scope>provided</scope>
-      <useProjectArtifact>false</useProjectArtifact>
-      <includes>
-        <include>org.apache.spark:spark-examples_${scala.binary.version}:jar</include>
-      </includes>
     </dependencySet>
   </dependencySets>
 </assembly>
