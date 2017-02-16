@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import java.util.{List => JList}
+import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
 
@@ -104,14 +105,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
-    val numPar = $(numParallelEval)
+    val numParBarrier = new Semaphore($(numParallelEval))
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(numFolds, seed)
     logTuningParams(instr)
 
     // Compute metrics for each model over each fold
-    logDebug(s"Running cross-validation with level of parallelism: $numPar.")
+    logDebug("Running cross-validation with level of parallelism: " +
+      s"${numParBarrier.availablePermits()}.")
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
@@ -119,23 +121,24 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      // Fit models concurrently, limited by a sliding window of size 'numPar' over estimator params
-      val models = epm.grouped(numPar).map { win =>
-        win.par.map { paramMap =>
-          est.fit(trainingDataset, paramMap)
-        }
-      }.toList.flatten.asInstanceOf[Seq[Model[_]]]
+      // Fit models concurrently, limited by a barrier with '$numParallelEval' permits
+      val models = epm.par.map { paramMap =>
+        numParBarrier.acquire()
+        val model = est.fit(trainingDataset, paramMap)
+        numParBarrier.release()
+        model.asInstanceOf[Model[_]]
+      }.seq
       trainingDataset.unpersist()
 
-      // Evaluate models concurrently, limited by a sliding window of size 'numPar' over models
-      val foldMetrics = models.zip(epm).grouped(numPar).map { win =>
-        win.par.map { case (model, paramMap) =>
-          // TODO: duplicate evaluator to take extra params from input
-          val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-          logDebug(s"Got metric $metric for model trained with $paramMap.")
-          metric
-        }
-      }.toList.flatten
+      // Evaluate models concurrently, limited by a barrier with '$numParallelEval' permits
+      val foldMetrics = models.zip(epm).par.map { case (model, paramMap) =>
+        numParBarrier.acquire()
+        // TODO: duplicate evaluator to take extra params from input
+        val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+        numParBarrier.release()
+        logDebug(s"Got metric $metric for model trained with $paramMap.")
+        metric
+      }.seq
 
       validationDataset.unpersist()
       foldMetrics

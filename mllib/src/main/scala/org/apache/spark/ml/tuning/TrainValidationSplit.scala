@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tuning
 
 import java.util.{List => JList}
+import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -98,8 +99,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
-    val numPar = $(numParallelEval)
-    logDebug(s"Running validation with level of parallelism: $numPar.")
+    val numParBarrier = new Semaphore($(numParallelEval))
+    logDebug(s"Running validation with level of parallelism: ${numParBarrier.availablePermits()}.")
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(trainRatio, seed)
@@ -111,22 +112,23 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     validationDataset.cache()
 
     logDebug(s"Train split with multiple sets of parameters.")
-    // Fit models concurrently, limited by a sliding window of size 'numPar' over estimator params
-    val models = epm.grouped(numPar).map { win =>
-      win.par.map { paramMap =>
-        est.fit(trainingDataset, paramMap)
-      }
-    }.toList.flatten.asInstanceOf[Seq[Model[_]]]
+    // Fit models concurrently, limited by a barrier with '$numParallelEval' permits
+    val models = epm.par.map { paramMap =>
+      numParBarrier.acquire()
+      val model = est.fit(trainingDataset, paramMap)
+      numParBarrier.release()
+      model.asInstanceOf[Model[_]]
+    }.seq
     trainingDataset.unpersist()
-    // Evaluate models concurrently, limited by a sliding window of size 'numPar' over models
-    val metrics = models.zip(epm).grouped(numPar).map { win =>
-      win.par.map { case (model, paramMap) =>
-        // TODO: duplicate evaluator to take extra params from input
-        val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-        logDebug(s"Got metric $metric for model trained with $paramMap.")
-        metric
-      }
-    }.toList.flatten.toArray
+    // Evaluate models concurrently, limited by a barrier with '$numParallelEval' permits
+    val metrics = models.zip(epm).par.map { case (model, paramMap) =>
+      numParBarrier.acquire()
+      // TODO: duplicate evaluator to take extra params from input
+      val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+      numParBarrier.release()
+      logDebug(s"Got metric $metric for model trained with $paramMap.")
+      metric
+    }.seq.toArray
     validationDataset.unpersist()
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")
