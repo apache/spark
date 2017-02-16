@@ -38,10 +38,14 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[AnalysisException](df.write.bucketBy(2, "k").saveAsTable("tt"))
   }
 
-  test("numBuckets not greater than 0 or less than 100000") {
+  test("numBuckets be greater than 0 but less than 100000") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-    intercept[IllegalArgumentException](df.write.bucketBy(0, "i").saveAsTable("tt"))
-    intercept[IllegalArgumentException](df.write.bucketBy(100000, "i").saveAsTable("tt"))
+
+    Seq(-1, 0, 100000).foreach(numBuckets => {
+      val e = intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt"))
+      assert(
+        e.getMessage.contains("Number of buckets should be greater than 0 but less than 100000"))
+    })
   }
 
   test("specify sorting columns without bucketing columns") {
