@@ -575,6 +575,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     format("csv").save(path)
   }
 
+  /**
+   * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
+   * user-registered callback functions.
+   */
   private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
     val qe = session.sessionState.executePlan(command)
     try {

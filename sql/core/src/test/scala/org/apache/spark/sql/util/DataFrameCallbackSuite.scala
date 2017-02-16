@@ -166,7 +166,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val commands = ArrayBuffer.empty[(String, LogicalPlan)]
     val exceptions = ArrayBuffer.empty[(String, Exception)]
     val listener = new QueryExecutionListener {
-      // Only test successful case here, so no need to implement `onFailure`
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
         exceptions += funcName -> exception
       }
