@@ -443,7 +443,7 @@ class SessionCatalogSuite extends PlanTest {
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
   }
-  
+
   test("look up view relation") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
