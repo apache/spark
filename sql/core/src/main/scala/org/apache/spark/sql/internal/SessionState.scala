@@ -22,17 +22,16 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.streaming.{StreamingQueryManager}
+import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -40,35 +39,22 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * A class that holds all session-specific state in a given [[SparkSession]].
  */
 private[sql] class SessionState(
-    sparkSession: SparkSession,
+    sparkContext: SparkContext,
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
     val catalog: SessionCatalog,
-    val sqlParser: ParserInterface) {
+    val sqlParser: ParserInterface,
+    val analyzer: Analyzer,
+    val streamingQueryManager: StreamingQueryManager,
+    val queryExecutionCreator: LogicalPlan => QueryExecution,
+    val jarClassLoader: NonClosableMutableURLClassLoader) {
 
   /*
    * Interface exposed to the user for registering user-defined functions.
    * Note that the user-defined functions must be deterministic.
    */
   val udf: UDFRegistration = new UDFRegistration(functionRegistry)
-
-  // Logical query plan analyzer for resolving unresolved attributes and relations.
-  val analyzer: Analyzer = {
-    new Analyzer(catalog, conf) {
-      override val extendedResolutionRules =
-        new FindDataSourceTable(sparkSession) ::
-        new ResolveDataSource(sparkSession) :: Nil
-
-      override val postHocResolutionRules =
-        AnalyzeCreateTable(sparkSession) ::
-        PreprocessTableInsertion(conf) ::
-        DataSourceAnalysis(conf) :: Nil
-
-      override val extendedCheckRules =
-        Seq(PreWriteCheck(conf, catalog), HiveOnlyCheck)
-    }
-  }
 
   // Logical query plan optimizer.
   val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
@@ -79,22 +65,15 @@ private[sql] class SessionState(
    */
   val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
-  // Interface to start and stop [[StreamingQuery]]s.
-  val streamingQueryManager: StreamingQueryManager = new StreamingQueryManager(sparkSession)
-
-  // Automatically extract all entries and put it in our SQLConf
-  // We need to call it after all of vals have been initialized.
-  sparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
-    conf.setConfString(k, v)
-  }
-
   /**
    * Planner that converts optimized logical plans to physical plans.
    */
   def planner: SparkPlanner =
-    new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
+    new SparkPlanner(sparkContext, conf, experimentalMethods.extraStrategies)
 
-  def newHadoopConf(): Configuration = SessionState.newHadoopConf(sparkSession, conf)
+  def newHadoopConf(): Configuration = SessionState.newHadoopConf(
+    sparkContext.hadoopConfiguration,
+    conf)
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()
@@ -111,39 +90,38 @@ private[sql] class SessionState(
    */
   def copy(associatedSparkSession: SparkSession): SessionState = {
     val sqlConf = conf.copy
+    val catalogCopy = catalog.copy
     val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
+    val queryExecution = (plan: LogicalPlan) => new QueryExecution(associatedSparkSession, plan)
+
+    associatedSparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
+      sqlConf.setConfString(k, v)
+    }
 
     new SessionState(
-      sparkSession,
+      associatedSparkSession.sparkContext,
       sqlConf,
       experimentalMethods.copy,
       functionRegistry.copy,
-      catalog.copy,
-      sqlParser)
+      catalogCopy,
+      sqlParser,
+      SessionState.createAnalyzer(associatedSparkSession, catalogCopy, sqlConf),
+      new StreamingQueryManager(associatedSparkSession),
+      queryExecution,
+      jarClassLoader)
   }
 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
+  def executePlan(plan: LogicalPlan): QueryExecution = queryExecutionCreator(plan)
 
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
 
-  private val jarClassLoader: NonClosableMutableURLClassLoader =
-    sparkSession.sharedState.jarClassLoader
-
-  def addJar(path: String): Unit = SessionState.addJar(sparkSession, path, jarClassLoader)
-
-  /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   */
-  def analyze(tableIdent: TableIdentifier, noscan: Boolean = true): Unit = {
-    AnalyzeTableCommand(tableIdent, noscan).run(sparkSession)
-  }
+  def addJar(path: String): Unit = SessionState.addJar(sparkContext, path, jarClassLoader)
 
 }
 
@@ -158,8 +136,15 @@ object SessionState {
       sparkSession: SparkSession,
       conf: Option[SQLConf]): SessionState = {
 
+    val sparkContext = sparkSession.sparkContext
+
     // SQL-specific key-value configurations.
     val sqlConf = conf.getOrElse(new SQLConf)
+
+    // Automatically extract all entries and put them in our SQLConf
+    sparkContext.getConf.getAll.foreach { case (k, v) =>
+      sqlConf.setConfString(k, v)
+    }
 
     // Internal catalog for managing functions registered by the user.
     val functionRegistry = FunctionRegistry.builtin.copy
@@ -168,7 +153,7 @@ object SessionState {
 
     // A class for loading resources specified by a function.
     val functionResourceLoader: FunctionResourceLoader =
-      createFunctionResourceLoader(sparkSession, jarClassLoader)
+      createFunctionResourceLoader(sparkContext, jarClassLoader)
 
     // Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
     val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
@@ -180,27 +165,39 @@ object SessionState {
       functionResourceLoader,
       functionRegistry,
       sqlConf,
-      newHadoopConf(sparkSession, sqlConf),
+      newHadoopConf(sparkContext.hadoopConfiguration, sqlConf),
       sqlParser)
 
+    // Logical query plan analyzer for resolving unresolved attributes and relations.
+    val analyzer: Analyzer = createAnalyzer(sparkSession, catalog, sqlConf)
+
+    // Interface to start and stop [[StreamingQuery]]s.
+    val streamingQueryManager: StreamingQueryManager = new StreamingQueryManager(sparkSession)
+
+    val queryExecution = (plan: LogicalPlan) => new QueryExecution(sparkSession, plan)
+
     new SessionState(
-      sparkSession,
+      sparkContext,
       sqlConf,
       new ExperimentalMethods,
       functionRegistry,
       catalog,
-      sqlParser)
+      sqlParser,
+      analyzer,
+      streamingQueryManager,
+      queryExecution,
+      jarClassLoader)
   }
 
   def createFunctionResourceLoader(
-      sparkSession: SparkSession,
+      sparkContext: SparkContext,
       jarClassLoader: NonClosableMutableURLClassLoader): FunctionResourceLoader = {
 
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
         resource.resourceType match {
-          case JarResource => addJar(sparkSession, resource.uri, jarClassLoader)
-          case FileResource => sparkSession.sparkContext.addFile(resource.uri)
+          case JarResource => addJar(sparkContext, resource.uri, jarClassLoader)
+          case FileResource => sparkContext.addFile(resource.uri)
           case ArchiveResource =>
             throw new AnalysisException(
               "Archive is not allowed to be loaded. If YARN mode is used, " +
@@ -210,12 +207,38 @@ object SessionState {
     }
   }
 
-  def addJar(
+  def newHadoopConf(copyHadoopConf: Configuration, sqlConf: SQLConf): Configuration = {
+    val hadoopConf = new Configuration(copyHadoopConf)
+    sqlConf.getAllConfs.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
+    hadoopConf
+  }
+
+  def createAnalyzer(
       sparkSession: SparkSession,
+      catalog: SessionCatalog,
+      sqlConf: SQLConf): Analyzer = {
+
+    new Analyzer(catalog, sqlConf) {
+      override val extendedResolutionRules =
+        new FindDataSourceTable(sparkSession) ::
+        new ResolveDataSource(sparkSession) :: Nil
+
+      override val postHocResolutionRules =
+        AnalyzeCreateTable(sparkSession) ::
+        PreprocessTableInsertion(sqlConf) ::
+        DataSourceAnalysis(sqlConf) :: Nil
+
+      override val extendedCheckRules =
+        Seq(PreWriteCheck(sqlConf, catalog), HiveOnlyCheck)
+    }
+  }
+
+  def addJar(
+      sparkContext: SparkContext,
       path: String,
       jarClassLoader: NonClosableMutableURLClassLoader): Unit = {
 
-    sparkSession.sparkContext.addJar(path)
+    sparkContext.addJar(path)
 
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {
@@ -227,12 +250,6 @@ object SessionState {
     }
     jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(jarClassLoader)
-  }
-
-  def newHadoopConf(sparkSession: SparkSession, conf: SQLConf): Configuration = {
-    val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
-    conf.getAllConfs.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
-    hadoopConf
   }
 
 }

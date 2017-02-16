@@ -19,10 +19,13 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.{NonClosableMutableURLClassLoader, SessionState, SQLConf}
+import org.apache.spark.sql.streaming.StreamingQueryManager
 
 /**
  * A special [[SparkSession]] prepared for testing.
@@ -38,23 +41,31 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
   }
 
   class TestSessionState(
-      sparkSession: SparkSession,
+      sparkContext: SparkContext,
       conf: SQLConf,
       experimentalMethods: ExperimentalMethods,
       functionRegistry: FunctionRegistry,
       catalog: SessionCatalog,
-      sqlParser: ParserInterface)
+      sqlParser: ParserInterface,
+      analyzer: Analyzer,
+      streamingQueryManager: StreamingQueryManager,
+      queryExecution: LogicalPlan => QueryExecution,
+      jarClassLoader: NonClosableMutableURLClassLoader)
     extends SessionState(
-        sparkSession,
+        sparkContext,
         conf,
         experimentalMethods,
         functionRegistry,
         catalog,
-        sqlParser) {}
+        sqlParser,
+        analyzer,
+        streamingQueryManager,
+        queryExecution,
+        jarClassLoader) {}
 
   object TestSessionState {
 
-    def makeTestConf: SQLConf = {
+    def createTestConf: SQLConf = {
       new SQLConf {
         clear()
         override def clear(): Unit = {
@@ -66,16 +77,20 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
     }
 
     def apply(sparkSession: SparkSession): TestSessionState = {
-      val conf = makeTestConf
-      val copyHelper = SessionState(sparkSession, Some(conf))
+      val sqlConf = createTestConf
+      val initHelper = SessionState(sparkSession, Some(sqlConf))
 
       new TestSessionState(
-        sparkSession,
-        conf,
-        copyHelper.experimentalMethods,
-        copyHelper.functionRegistry,
-        copyHelper.catalog,
-        copyHelper.sqlParser
+        sparkSession.sparkContext,
+        sqlConf,
+        initHelper.experimentalMethods,
+        initHelper.functionRegistry,
+        initHelper.catalog,
+        initHelper.sqlParser,
+        initHelper.analyzer,
+        initHelper.streamingQueryManager,
+        initHelper.queryExecutionCreator,
+        initHelper.jarClassLoader
       )
     }
   }

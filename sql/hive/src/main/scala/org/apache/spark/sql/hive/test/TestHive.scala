@@ -31,15 +31,16 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.internal.{NonClosableMutableURLClassLoader, SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -492,30 +493,35 @@ private[hive] class TestHiveQueryExecution(
 }
 
 private[hive] class TestHiveSessionState(
-    sparkSession: TestHiveSparkSession,
+    sparkContext: SparkContext,
     conf: SQLConf,
     experimentalMethods: ExperimentalMethods,
     functionRegistry: org.apache.spark.sql.catalyst.analysis.FunctionRegistry,
     catalog: HiveSessionCatalog,
     sqlParser: ParserInterface,
-    metadataHive: HiveClient)
+    metadataHive: HiveClient,
+    analyzer: Analyzer,
+    streamingQueryManager: StreamingQueryManager,
+    queryExecutionCreator: LogicalPlan => TestHiveQueryExecution,
+    jarClassLoader: NonClosableMutableURLClassLoader,
+    plannerCreator: () => SparkPlanner)
   extends HiveSessionState(
-      sparkSession,
+      sparkContext,
       conf,
       experimentalMethods,
       functionRegistry,
       catalog,
       sqlParser,
-      metadataHive) {
-
-  override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
-    new TestHiveQueryExecution(sparkSession, plan)
-  }
-}
+      metadataHive,
+      analyzer,
+      streamingQueryManager,
+      queryExecutionCreator,
+      jarClassLoader,
+      plannerCreator) {}
 
 private[hive] object TestHiveSessionState {
 
-  def makeTestConf: SQLConf = {
+  def createTestConf: SQLConf = {
     new SQLConf {
       clear()
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -527,17 +533,24 @@ private[hive] object TestHiveSessionState {
   }
 
   def apply(sparkSession: TestHiveSparkSession): TestHiveSessionState = {
-    val sqlConf = makeTestConf
-    val copyHelper = HiveSessionState(sparkSession, Some(sqlConf))
+    val sqlConf = createTestConf
+    val initHelper = HiveSessionState(sparkSession, Some(sqlConf))
+    val queryExecutionCreator = (plan: LogicalPlan) =>
+      new TestHiveQueryExecution(sparkSession, plan)
 
     new TestHiveSessionState(
-      sparkSession,
+      sparkSession.sparkContext,
       sqlConf,
-      copyHelper.experimentalMethods,
-      copyHelper.functionRegistry,
-      copyHelper.catalog,
-      copyHelper.sqlParser,
-      copyHelper.metadataHive)
+      initHelper.experimentalMethods,
+      initHelper.functionRegistry,
+      initHelper.catalog,
+      initHelper.sqlParser,
+      initHelper.metadataHive,
+      initHelper.analyzer,
+      initHelper.streamingQueryManager,
+      queryExecutionCreator,
+      initHelper.jarClassLoader,
+      initHelper.plannerCreator)
   }
 
 }
