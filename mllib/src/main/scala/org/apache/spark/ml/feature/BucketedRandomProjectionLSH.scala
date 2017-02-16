@@ -79,8 +79,7 @@ class BucketedRandomProjectionLSHModel private[ml](
       val hashValues: Array[Double] = randUnitVectors.map({
         randUnitVector => Math.floor(BLAS.dot(key, randUnitVector) / $(bucketLength))
       })
-      // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-      hashValues.map(Vectors.dense(_))
+      hashValues.grouped($(numHashFunctions)).map(Vectors.dense).toArray
     }
   }
 
@@ -137,6 +136,9 @@ class BucketedRandomProjectionLSH(override val uid: String)
   @Since("2.1.0")
   override def setNumHashTables(value: Int): this.type = super.setNumHashTables(value)
 
+  @Since("2.2.0")
+  override def setNumHashFunctions(value: Int): this.type = super.setNumHashFunctions(value)
+
   @Since("2.1.0")
   def this() = {
     this(Identifiable.randomUID("brp-lsh"))
@@ -155,7 +157,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
     inputDim: Int): BucketedRandomProjectionLSHModel = {
     val rand = new Random($(seed))
     val randUnitVectors: Array[Vector] = {
-      Array.fill($(numHashTables)) {
+      Array.fill($(numHashTables) * $(numHashFunctions)) {
         val randArray = Array.fill(inputDim)(rand.nextGaussian())
         Vectors.fromBreeze(normalize(breeze.linalg.Vector(randArray)))
       }
