@@ -202,12 +202,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
     checkAnswer(
       df1.selectExpr("to_json(a)"),
-      Row("""{"_1":1}""") :: Nil)
+      Row( """{"_1":1}""") :: Nil)
 
     val df2 = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     checkAnswer(
       df2.selectExpr("to_json(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
-      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+      Row( """{"_1":"26/08/2015 18:00"}""") :: Nil)
 
     val errMsg1 = intercept[AnalysisException] {
       df2.selectExpr("to_json(a, named_struct('a', 1))")
@@ -218,6 +218,37 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("to_json(a, map('a', 1))")
     }
     assert(errMsg2.getMessage.startsWith(
+      "A type of keys and values in map() must be string, but got"))
+  }
+
+  test("SPARK-19967 Support from_json in SQL") {
+    val df1 = Seq("""{"a": 1}""").toDS()
+    checkAnswer(
+      df1.selectExpr(s"from_json(value, 'a INT')"),
+      Row(Row(1)) :: Nil)
+
+    val df2 = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
+    checkAnswer(
+      df2.selectExpr(
+        s"from_json(value, 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+
+    val errMsg1 = intercept[AnalysisException] {
+      df2.selectExpr(s"from_json(value, 1)")
+    }
+    assert(errMsg1.getMessage.startsWith("Must be a string literal, but:"))
+    val errMsg2 = intercept[AnalysisException] {
+      df2.selectExpr(s"""from_json(value, 'time InvalidType')""")
+    }
+    assert(errMsg2.getMessage.contains("DataType invalidtype() is not supported"))
+    val errMsg3 = intercept[AnalysisException] {
+      df2.selectExpr(s"from_json(value, 'time Timestamp', named_struct('a', 1))")
+    }
+    assert(errMsg3.getMessage.startsWith("Must use a map() function for options"))
+    val errMsg4 = intercept[AnalysisException] {
+      df2.selectExpr(s"from_json(value, 'time Timestamp', map('a', 1))")
+    }
+    assert(errMsg4.getMessage.startsWith(
       "A type of keys and values in map() must be string, but got"))
   }
 }
