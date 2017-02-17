@@ -43,3 +43,5 @@ head(aftPredictions)
 # $example off$
 
 sparkR.session.stop()
+
+

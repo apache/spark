@@ -39,3 +39,4 @@ summary(model)
 prediction <- predict(model, training)
 showDF(prediction)
 # $example off$
+sparkR.session.stop()

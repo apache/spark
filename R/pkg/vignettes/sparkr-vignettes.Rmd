@@ -534,6 +534,26 @@ head(carsDF_test)
 
 ### Models and Algorithms
 
+#### Linear Support Vector Machine (SVM) Classifier
+
+[Linear Support Vector Machine (SVM)](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM) classifier is an SVM classifier with linear kernels.
+This is a binary classifier. We use a simple example to show how to use `spark.svmLinear`
+for binary classification.
+
+```{r}
+# load training data and create a DataFrame
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+# fit a Linear SVM classifier model
+model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
+summary(model)
+```
+
+Predict values on training data
+```{r}
+prediction <- predict(model, training)
+```
+
 #### Logistic Regression
 
 [Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
@@ -564,26 +584,6 @@ df <- createDataFrame(iris)
 # Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
 model <- spark.logit(df, Species ~ ., regParam = 0.056)
 summary(model)
-```
-
-#### Linear Support Vector Machine (SVM) Classifier
-
-[Linear Support Vector Machine (SVM)](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM) classifier is an SVM classifier with linear kernels.
-This is a binary classifier. We use a simple example to show how to use `spark.svmLinear`
-for binary classification.
-
-```{r}
-# load training data and create a DataFrame
-t <- as.data.frame(Titanic)
-training <- createDataFrame(t)
-# fit a Linear SVM classifier model
-model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
-summary(model)
-```
-
-Predict values on training data
-```{r}
-prediction <- predict(model, training)
 ```
 
 #### Multilayer Perceptron
