@@ -130,6 +130,8 @@ private[csv] class CSVOptions(
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
 
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
+
   val maxColumns = getInt("maxColumns", 20480)
 
   val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
