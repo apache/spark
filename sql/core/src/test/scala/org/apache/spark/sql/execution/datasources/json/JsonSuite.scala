@@ -1821,20 +1821,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val jsonDF = spark.read.option("wholeFile", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write
-        .format("json")
         .option("compression", "gZiP")
-        .save(jsonDir)
+        .json(jsonDir)
 
       assert(new File(jsonDir).listFiles().exists(_.getName.endsWith(".json.gz")))
 
-      val jsonCopy = spark.read
-        .format("json")
-        .load(jsonDir)
-
-      assert(jsonCopy.count === jsonDF.count)
-      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
-      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
-      checkAnswer(jsonCopySome, jsonDFSome)
+      val originalData = spark.read.json(primitiveFieldAndType)
+      checkAnswer(jsonDF, originalData)
+      checkAnswer(spark.read.schema(originalData.schema).json(jsonDir), originalData)
     }
   }
 
@@ -1848,21 +1842,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val jsonDF = spark.read.option("wholeFile", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
-      jsonDF.coalesce(1).write
-        .format("json")
-        .save(jsonDir)
+      jsonDF.coalesce(1).write.json(jsonDir)
 
       val compressedFiles = new File(jsonDir).listFiles()
       assert(compressedFiles.exists(_.getName.endsWith(".json")))
 
-      val jsonCopy = spark.read
-        .format("json")
-        .load(jsonDir)
-
-      assert(jsonCopy.count === jsonDF.count)
-      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
-      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
-      checkAnswer(jsonCopySome, jsonDFSome)
+      val originalData = spark.read.json(primitiveFieldAndType)
+      checkAnswer(jsonDF, originalData)
+      checkAnswer(spark.read.schema(originalData.schema).json(jsonDir), originalData)
     }
   }
 
