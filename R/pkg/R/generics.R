@@ -66,7 +66,7 @@ setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("fre
 # @rdname approxQuantile
 # @export
 setGeneric("approxQuantile",
-           function(x, col, probabilities, relativeError) {
+           function(x, cols, probabilities, relativeError) {
              standardGeneric("approxQuantile")
            })
 

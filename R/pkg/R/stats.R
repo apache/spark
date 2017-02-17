@@ -138,9 +138,9 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
             collect(dataFrame(sct))
           })
 
-#' Calculates the approximate quantiles of a numerical column of a SparkDataFrame
+#' Calculates the approximate quantiles of numerical columns of a SparkDataFrame
 #'
-#' Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
+#' Calculates the approximate quantiles of numerical columns of a SparkDataFrame.
 #' The result of this algorithm has the following deterministic bound:
 #' If the SparkDataFrame has N elements and if we request the quantile at probability p up to
 #' error err, then the algorithm will return a sample x from the SparkDataFrame so that the
@@ -149,15 +149,19 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+#' Note that rows containing any NA values will be removed before calculation.
 #'
 #' @param x A SparkDataFrame.
-#' @param col The name of the numerical column.
+#' @param cols A single column name, or a list of names for multiple columns.
 #' @param probabilities A list of quantile probabilities. Each number must belong to [0, 1].
 #'                      For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
 #' @param relativeError The relative target precision to achieve (>= 0). If set to zero,
 #'                      the exact quantiles are computed, which could be very expensive.
 #'                      Note that values greater than 1 are accepted but give the same result as 1.
-#' @return The approximate quantiles at the given probabilities.
+#' @return The approximate quantiles at the given probabilities. If the input is a single column name,
+#'         the output is a list of approximate quantiles in that column; If the input is
+#'         multiple column names, the output should be a list, and each element in it is a list of
+#'         numeric values which represents the approximate quantiles in corresponding column.
 #'
 #' @rdname approxQuantile
 #' @name approxQuantile
@@ -171,12 +175,17 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' }
 #' @note approxQuantile since 2.0.0
 setMethod("approxQuantile",
-          signature(x = "SparkDataFrame", col = "character",
+          signature(x = "SparkDataFrame", cols = "character",
                     probabilities = "numeric", relativeError = "numeric"),
-          function(x, col, probabilities, relativeError) {
+          function(x, cols, probabilities, relativeError) {
             statFunctions <- callJMethod(x@sdf, "stat")
-            callJMethod(statFunctions, "approxQuantile", col,
-                        as.list(probabilities), relativeError)
+            quantiles <- callJMethod(statFunctions, "approxQuantile", as.list(cols),
+                                     as.list(probabilities), relativeError)
+            if (length(cols) == 1) {
+              quantiles[[1]]
+            } else {
+              quantiles
+            }
           })
 
 #' Returns a stratified sample without replacement
