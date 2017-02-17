@@ -117,7 +117,7 @@ object Pregel extends Logging {
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either,
-      checkpointInterval: Int = 25)
+      checkpointInterval: Int = 10)
      (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
@@ -149,8 +149,8 @@ object Pregel extends Logging {
 
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
-      // messages so it can be materialized on the next line, allowing us to uncache the previous
-      // iteration.
+      // and periodic checkpoint messages so it can be materialized on the next line, and avoid
+      // to have a long lineage chain.
       messages = GraphXUtils.mapReduceTriplets(
         g, sendMsg, mergeMsg, Some((oldMessages, activeDirection)))
       // The call to count() materializes `messages` and the vertices of `g`. This hides oldMessages
@@ -168,7 +168,7 @@ object Pregel extends Logging {
       // count the iteration
       i += 1
     }
-    messages.unpersist(blocking = false)
+    messageCheckpointer.unpersist(messages)
     graphCheckpointer.deleteAllCheckpoints()
     messageCheckpointer.deleteAllCheckpoints()
     g
