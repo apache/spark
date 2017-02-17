@@ -953,10 +953,13 @@ read.jdbc <- function(url, tableName,
 #' @return SparkDataFrame
 #' @rdname read.stream
 #' @name read.stream
+#' @seealso \link{write.stream}
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
+#' df <- read.stream("socket", host = "localhost", port = 9999)
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
 #' }
 #' @name read.stream
 #' @note read.stream since 2.2.0

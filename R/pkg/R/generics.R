@@ -1434,10 +1434,36 @@ setGeneric("spark.posterior", function(object, newData) { standardGeneric("spark
 #' @export
 setGeneric("spark.perplexity", function(object, data) { standardGeneric("spark.perplexity") })
 
-
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.
 #' @param ... additional argument(s) passed to the method.
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
+
+
+###################### Streaming Methods ##########################
+
+#' @rdname awaitTermination
+#' @export
+setGeneric("awaitTermination", function(x, timeout) { standardGeneric("awaitTermination") })
+
+#' @rdname isActive
+#' @export
+setGeneric("isActive", function(x) { standardGeneric("isActive") })
+
+#' @rdname lastProgress
+#' @export
+setGeneric("lastProgress", function(x) { standardGeneric("lastProgress") })
+
+#' @rdname queryName
+#' @export
+setGeneric("queryName", function(x) { standardGeneric("queryName") })
+
+#' @rdname status
+#' @export
+setGeneric("status", function(x) { standardGeneric("status") })
+
+#' @rdname stopQuery
+#' @export
+setGeneric("stopQuery", function(x) { standardGeneric("stopQuery") })

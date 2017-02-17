@@ -406,6 +406,13 @@ export("windowPartitionBy",
 
 exportClasses("StreamingQuery")
 
+export("awaitTermination",
+       "isActive",
+       "lastProgress",
+       "queryName",
+       "status",
+       "stopQuery")
+
 
 S3method(print, jobj)
 S3method(print, structField)

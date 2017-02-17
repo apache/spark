@@ -22,10 +22,10 @@ NULL
 
 #' S4 class that represents a StreamingQuery
 #'
-#' StreamingQuery can be created by using readStream()
+#' StreamingQuery can be created by using read.stream()
 #'
 #' @rdname StreamingQuery
-#' @seealso \link{readStream}
+#' @seealso \link{read.stream}
 #'
 #' @param ssq A Java object reference to the backing Scala StreamingQuery
 #' @export
@@ -44,16 +44,172 @@ streamingQuery <- function(ssq) {
   new("StreamingQuery", ssq)
 }
 
+#' @rdname show
+#' @export
+#' @note show(StreamingQuery) since 2.2.0
 setMethod("show", "StreamingQuery",
           function(object) {
             name <- callJMethod(object@ssq, "name")
             if (!is.null(name)) {
               cat("StreamingQuery", name, "\n")
             } else {
-              cat("StreamingQuery", "[No queryName]", "\n")
+              cat("StreamingQuery", "\n")
             }
           })
 
-# https://github.com/apache/spark/blob/master/sql/core/src/main/scala/org/apache/spark/sql/streaming/StreamingQuery.scala
-# explain(bool), awaitTermination, processAllAvailable, lastProgress, status, isActive
-# ?? exception? check status instead; runId, id
+#' queryName
+#'
+#' Returns the user-specified name of the query. This is specified in
+#' \code{write.stream(df, queryName = "query")}. This name, if set, must be unique across all active
+#' queries.
+#'
+#' @param x a StreamingQuery.
+#' @return The name of the query, or NULL if not specified.
+#' @rdname queryName
+#' @name queryName
+#' @aliases queryName,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ queryName(sq) }
+#' @note queryName(StreamingQuery) since 2.2.0
+#' @note experimental
+setMethod("queryName",
+          signature(x = "StreamingQuery"),
+          function(x) {
+            callJMethod(x@ssq, "name")
+          })
+
+#' explain
+#'
+#' Prints the physical plan to the console for debugging purposes.
+#'
+#' @param x a StreamingQuery.
+#' @param extended Logical. If extended is FALSE, prints only the physical plan.
+#' @rdname explain
+#' @name explain
+#' @aliases explain,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ explain(sq) }
+#' @note explain(StreamingQuery) since 2.2.0
+setMethod("explain",
+          signature(x = "StreamingQuery"),
+          function(x, extended = FALSE) {
+            cat(callJMethod(x@ssq, "explainInternal", extended), "\n")
+          })
+
+#' lastProgress
+#'
+#' Prints the most recent progess update of this streaming query in JSON format.
+#'
+#' @param x a StreamingQuery.
+#' @rdname lastProgress
+#' @name lastProgress
+#' @aliases lastProgress,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ lastProgress(sq) }
+#' @note lastProgress(StreamingQuery) since 2.2.0
+#' @note experimental
+setMethod("lastProgress",
+          signature(x = "StreamingQuery"),
+          function(x) {
+            cat(callJMethod(callJMethod(x@ssq, "lastProgress"), "toString"), "\n")
+          })
+
+#' status
+#'
+#' Prints the current status of the query in JSON format.
+#'
+#' @param x a StreamingQuery.
+#' @rdname status
+#' @name status
+#' @aliases status,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ status(sq) }
+#' @note status(StreamingQuery) since 2.2.0
+#' @note experimental
+setMethod("status",
+          signature(x = "StreamingQuery"),
+          function(x) {
+            cat(callJMethod(callJMethod(x@ssq, "status"), "toString"), "\n")
+          })
+
+#' isActive
+#'
+#' Returns TRUE if this query is actively running.
+#'
+#' @param x a StreamingQuery.
+#' @return TRUE if query is actively running, FALSE if stopped.
+#' @rdname isActive
+#' @name isActive
+#' @aliases isActive,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ isActive(sq) }
+#' @note isActive(StreamingQuery) since 2.2.0
+#' @note experimental
+setMethod("isActive",
+          signature(x = "StreamingQuery"),
+          function(x) {
+            callJMethod(x@ssq, "isActive")
+          })
+
+#' awaitTermination
+#'
+#' Waits for the termination of the query, either by \code{stop} or by an error.
+#'
+#' If the query has terminated, then all subsequent calls to this method will return TRUE
+#' immediately.
+#'
+#' @param x a StreamingQuery.
+#' @param timeout time to wait in milliseconds
+#' @return TRUE if query has terminated within the timeout period.
+#' @rdname awaitTermination
+#' @name awaitTermination
+#' @aliases awaitTermination,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ awaitTermination(sq, 10000) }
+#' @note awaitTermination(StreamingQuery) since 2.2.0
+#' @note experimental
+setMethod("awaitTermination",
+          signature(x = "StreamingQuery"),
+          function(x, timeout) {
+            tryCatch(callJMethod(x@ssq, "awaitTermination", as.integer(timeout)),
+                    error = function(e) {
+                      if (any(grep("StreamingQueryException", as.character(e)))) {
+                        stop("Query has terminated with an error")
+                      } else {
+                        stop(paste0("Unknown error: ", as.character(e)))
+                      }
+                    })
+          })
+
+#' stopQuery
+#'
+#' Stops the execution of this query if it is running. This method blocks until the execution is
+#' stopped.
+#'
+#' @param x a StreamingQuery.
+#' @rdname stopQuery
+#' @name stopQuery
+#' @aliases stopQuery,StreamingQuery-method
+#' @family StreamingQuery methods
+#' @export
+#' @examples
+#' \dontrun{ stopQuery(sq) }
+#' @note stopQuery(StreamingQuery) since 2.2.0
+#' @note experimental
+setMethod("stopQuery",
+          signature(x = "StreamingQuery"),
+          function(x) {
+            invisible(callJMethod(x@ssq, "stop"))
+          })

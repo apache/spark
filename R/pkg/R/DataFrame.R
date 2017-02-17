@@ -3541,6 +3541,7 @@ setMethod("getNumPartitions",
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
+#' @seealso \link{read.stream}
 #' @aliases write.stream,SparkDataFrame-method
 #' @rdname write.stream
 #' @name write.stream
@@ -3548,7 +3549,19 @@ setMethod("getNumPartitions",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' queryName
+#' df <- read.stream("socket", host = "localhost", port = 9999)
+#' wordCounts <- count(group_by(df, "value"))
+#'
+#' # console
+#' q <- write.stream(wordCounts, "console", outputMode = "complete")
+#' # text stream
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
+#' # memory stream
+#' q <- write.stream(wordCounts, "memory", queryName = "outs", outputMode = "complete")
+#' head(sql("SELECT * from outs"))
+#' queryName(q)
+#'
+#' stopQuery(q)
 #' }
 #' @note write.stream since 2.2.0
 #' @note experimental
@@ -3559,7 +3572,7 @@ setMethod("write.stream",
               stop("source should be character, NULL or omitted. It is the datasource specified ",
                    "in 'spark.sql.sources.default' configuration by default.")
             }
-            if (!is.character(outputMode)) {
+            if (!is.null(outputMode) && !is.character(outputMode)) {
               stop("outputMode should be charactor or omitted.")
             }
             if (is.null(source)) {
@@ -3572,7 +3585,6 @@ setMethod("write.stream",
               write <- callJMethod(write, "outputMode", outputMode)
             }
             write <- callJMethod(write, "options", options)
-            # TODO support trigger, partitionBy
             ssq <- handledCallJMethod(write, "start")
             streamingQuery(ssq)
           })
