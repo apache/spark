@@ -436,7 +436,7 @@ class StreamingContext private[streaming] (
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](
       directory, FileInputDStream.defaultFilter: Path => Boolean, newFilesOnly = true, conf)
     val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+      val bytes = v.copyBytes()
       require(bytes.length == recordLength, "Byte array does not have correct length. " +
         s"${bytes.length} did not equal recordLength: $recordLength")
       bytes
