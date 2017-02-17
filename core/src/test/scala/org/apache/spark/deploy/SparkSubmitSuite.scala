@@ -394,9 +394,11 @@ class SparkSubmitSuite
     val args = Seq(
       "--class", LocalClusterExecutorMemoryTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
-      "--master", "local-cluster[2,1,%d]".format(executorMemoryMb),
+      "--master", s"local-cluster[2,1,$executorMemoryMb]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.executor.memory=${executorMemoryMb * 2}", // not used
+      "--conf", "spark.testing.reservedMemory=0", // needed to avoid SPARK-12759
       unusedJar.toString,
       executorMemoryMb.toString)
     runSparkSubmit(args)
