@@ -1224,7 +1224,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Row(false))
   }
 
-  test("SPARK-6785: HiveQuerySuite - Date cast") {
+  ignore("SPARK-6785: HiveQuerySuite - Date cast -- ignored palantir/spark") {
     // new Date(0) == 1970-01-01 00:00:00.0 GMT == 1969-12-31 16:00:00.0 PST
     checkAnswer(
       sql(

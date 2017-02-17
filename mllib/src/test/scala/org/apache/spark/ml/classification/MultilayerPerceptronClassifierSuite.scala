@@ -65,7 +65,8 @@ class MultilayerPerceptronClassifierSuite
     mlpc.setLayers(Array[Int](1, 1))
   }
 
-  test("XOR function learning as binary classification problem with two outputs.") {
+  // palantir/spark
+  ignore("XOR function learning as binary classification problem with two outputs.") {
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
@@ -81,7 +82,7 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
-  test("Test setWeights by training restart") {
+  ignore("Test setWeights by training restart -- ignore palantir/spark") {
     val dataFrame = Seq(
       (Vectors.dense(0.0, 0.0), 0.0),
       (Vectors.dense(0.0, 1.0), 1.0),
@@ -104,7 +105,7 @@ class MultilayerPerceptronClassifierSuite
       "Training should produce the same weights given equal initial weights and number of steps")
   }
 
-  test("3 class classification with 2 hidden layers") {
+  ignore("3 class classification with 2 hidden layers -- ignore palantir/spark") {
     val nPoints = 1000
 
     // The following coefficients are taken from OneVsRestSuite.scala
@@ -162,7 +163,7 @@ class MultilayerPerceptronClassifierSuite
     testDefaultReadWrite(mlp, testParams = true)
   }
 
-  test("read/write: MultilayerPerceptronClassificationModel") {
+  ignore("read/write: MultilayerPerceptronClassificationModel -- ignore palantir/spark") {
     val mlp = new MultilayerPerceptronClassifier().setLayers(Array(2, 3, 2)).setMaxIter(5)
     val mlpModel = mlp.fit(dataset)
     val newMlpModel = testDefaultReadWrite(mlpModel, testParams = true)
@@ -170,7 +171,8 @@ class MultilayerPerceptronClassifierSuite
     assert(newMlpModel.weights === mlpModel.weights)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  // ignore palantir/spark
+  ignore("should support all NumericType labels and not support other types") {
     val layers = Array(3, 2)
     val mpc = new MultilayerPerceptronClassifier().setLayers(layers).setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
