@@ -53,14 +53,11 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
 
   test("write to stream") {
     withTempDir { checkpointDir =>
-      val input = MemoryStream[Int]
+      val input = MemoryStream[String]
       val topic = newTopic()
 
-      spark.udf.register("intCast", (s: Array[Byte]) => ByteBuffer.wrap(s).getInt())
-      spark.udf.register("byteCast", (i: Int) => ByteBuffer.allocate(4).putInt(i).array())
-
-      val writer = input.toDF()
-        .selectExpr("byteCast(value) key", "byteCast(value) value")
+      val writer = input.toDF.map(s => s.get(0).toString.getBytes()).toDF("value")
+        .selectExpr("value as key", "value as value")
         .writeStream
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -75,18 +72,19 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("kafka.metadata.max.age.ms", "1")
+        .option("startingOffsets", "earliest")
         .option("subscribe", topic)
         .option("failOnDataLoss", "false")
         .load()
-        .selectExpr("intCast(key)", "intCast(value)")
-        .as[(Int, Int)]
+        .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+        .as[(String, String)]
 
-      input.addData(1, 2, 3)
+      input.addData("1", "2", "3")
       writer.processAllAvailable()
 
       testStream(reader)(
-        AddData(input, 1, 2, 3), // Add data when stream is stopped
-        CheckAnswer((1, 1), (2, 2), (3, 3)),
+        AddData(input, "1", "2", "3"),
+        CheckAnswer(("1", "1"), ("2", "2"), ("3", "3")),
         StopStream
       )
 

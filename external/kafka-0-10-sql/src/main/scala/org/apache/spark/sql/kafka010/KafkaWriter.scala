@@ -31,7 +31,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{ByteType, DataTypes, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -138,6 +138,8 @@ object KafkaWriter extends Logging {
     var confirmedWrites = 0
     var failedWrites = ListBuffer.empty[Throwable]
 
+    println(s"INPUT SCHEMA ${inputSchema.toString()}")
+
     val producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
     val topicExpression = inputSchema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (defaultTopic == None) {
@@ -178,7 +180,8 @@ object KafkaWriter extends Logging {
         val topic = getTopic(currentRow).get(0, StringType).toString
         val key = getKey(currentRow).getBytes
         val value = getValue(currentRow).getBytes
-        println(s"topic $topic, key ${ByteBuffer.wrap(key).getInt}, value $value")
+        println(s"topic $topic, key ${new String(key)}, " +
+          s"value ${new String(value)}")
         val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
         val future = Future[RecordMetadata] {
           blocking {
