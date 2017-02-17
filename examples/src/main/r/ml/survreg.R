@@ -44,4 +44,3 @@ head(aftPredictions)
 
 sparkR.session.stop()
 
-

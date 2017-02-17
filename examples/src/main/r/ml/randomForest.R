@@ -62,5 +62,4 @@ predictions <- predict(model, test)
 head(predictions)
 # $example off:regression$
 
-
 sparkR.session.stop()

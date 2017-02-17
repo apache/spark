@@ -40,10 +40,5 @@ summary(model)
 predictions <- predict(model, test)
 head(predictions)
 # $example off$
-<<<<<<< HEAD
 
 sparkR.session.stop()
-=======
-sparkR.session.stop()
-
->>>>>>> address review comments add session.stop() and manually tested all files
