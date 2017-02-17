@@ -616,8 +616,11 @@ class CodegenContext {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
-      // We can't know how many byte code will be generated, so use number of bytes as limit
-      if (blockBuilder.length > 60 * 1000) {
+      // We can't know how many bytecode will be generated, so use the length of source code
+      // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
+      // also not be too small, or it will have many function calls (for wide table), see the
+      // results in BenchmarkWideTable.
+      if (blockBuilder.length > 1024) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
       }
