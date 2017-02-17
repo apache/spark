@@ -105,6 +105,17 @@ private[spark] class ParallelCollectionRDD[T: ClassTag](
   override def getPreferredLocations(s: Partition): Seq[String] = {
     locationPrefs.getOrElse(s.index, Nil)
   }
+
+  override def collect(): Array[T] = toArray(data)
+
+  override def take(num: Int): Array[T] = toArray(data.take(num))
+
+  private def toArray(data: Seq[T]): Array[T] = {
+    // We serialize the data and deserialize it back, to simulate the behavior of sending it to
+    // remote executors and collect it back.
+    val ser = sc.env.closureSerializer.newInstance()
+    ser.deserialize[Seq[T]](ser.serialize(data)).toArray
+  }
 }
 
 private object ParallelCollectionRDD {
