@@ -65,8 +65,7 @@ object FileFormatWriter extends Logging {
       val allColumns: Seq[Attribute],
       val dataColumns: Seq[Attribute],
       val partitionColumns: Seq[Attribute],
-      val bucketColumns: Seq[Attribute],
-      val numBuckets: Int,
+      val bucketIdExpression: Option[Expression],
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
       val maxRecordsPerFile: Long)
@@ -111,8 +110,13 @@ object FileFormatWriter extends Logging {
     val allColumns = queryExecution.logical.output
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = queryExecution.logical.output.filterNot(partitionSet.contains)
-    val bucketColumns = bucketSpec.toSeq.flatMap {
-      spec => spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+
+    val bucketIdExpression = bucketSpec.map { spec =>
+      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
+      // guarantee the data distribution is same between shuffle and bucketed data source, which
+      // enables us to only shuffle one side when join a bucketed table and a normal one.
+      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
     }
     val sortColumns = bucketSpec.toSeq.flatMap {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -129,20 +133,13 @@ object FileFormatWriter extends Logging {
       allColumns = allColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
-      bucketColumns = bucketColumns,
-      numBuckets = bucketSpec.map(_.numBuckets).getOrElse(0),
+      bucketIdExpression = bucketIdExpression,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
       maxRecordsPerFile = options.get("maxRecordsPerFile").map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile)
     )
 
-    val bucketIdExpression = bucketSpec.map { spec =>
-      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
-      // guarantee the data distribution is same between shuffle and bucketed data source, which
-      // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
-    }
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
     // the sort order doesn't matter
@@ -225,7 +222,7 @@ object FileFormatWriter extends Logging {
     committer.setupTask(taskAttemptContext)
 
     val writeTask =
-      if (description.partitionColumns.isEmpty && description.numBuckets == 0) {
+      if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
       } else {
         new DynamicPartitionWriteTask(description, taskAttemptContext, committer)
@@ -330,15 +327,6 @@ object FileFormatWriter extends Logging {
     // currentWriter is initialized whenever we see a new key
     private var currentWriter: OutputWriter = _
 
-    private def bucketIdExpression: Option[Expression] = if (desc.numBuckets > 0) {
-      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
-      // guarantee the data distribution is same between shuffle and bucketed data source, which
-      // enables us to only shuffle one side when join a bucketed table and a normal one.
-      Some(HashPartitioning(desc.bucketColumns, desc.numBuckets).partitionIdExpression)
-    } else {
-      None
-    }
-
     /** Expressions that given partition columns build a path string like: col1=val/col2=val/... */
     private def partitionPathExpression: Seq[Expression] = {
       desc.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
@@ -380,8 +368,9 @@ object FileFormatWriter extends Logging {
       }
       partDir.foreach(updatedPartitions.add)
 
-      // If the bucket spec is defined, the bucket column is right after the partition columns
-      val bucketId = if (desc.numBuckets > 0) {
+      // If the bucketId expression is defined, the bucketId column is right after the partition
+      // columns.
+      val bucketId = if (desc.bucketIdExpression.isDefined) {
         BucketingUtils.bucketIdToString(partColsAndBucketId.getInt(desc.partitionColumns.length))
       } else {
         ""
@@ -411,7 +400,7 @@ object FileFormatWriter extends Logging {
 
     override def execute(iter: Iterator[InternalRow]): Set[String] = {
       val getPartitionColsAndBucketId = UnsafeProjection.create(
-        desc.partitionColumns ++ bucketIdExpression, desc.allColumns)
+        desc.partitionColumns ++ desc.bucketIdExpression, desc.allColumns)
 
       // Generates the partition path given the row generated by `getPartitionColsAndBucketId`.
       val getPartPath = UnsafeProjection.create(
