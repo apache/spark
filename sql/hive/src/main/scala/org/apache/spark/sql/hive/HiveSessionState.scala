@@ -223,8 +223,8 @@ object HiveSessionState {
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
         PreprocessTableCreation(sparkSession) ::
-        PreprocessTableInsertion(conf) ::
-        DataSourceAnalysis(conf) ::
+        PreprocessTableInsertion(sqlConf) ::
+        DataSourceAnalysis(sqlConf) ::
         HiveAnalysis :: Nil
 
       override val extendedCheckRules = Seq(PreWriteCheck)
@@ -249,7 +249,6 @@ object HiveSessionState {
           experimentalMethods.extraStrategies ++ Seq(
             FileSourceStrategy,
             DataSourceStrategy,
-            DDLStrategy,
             SpecialLimits,
             InMemoryScans,
             HiveTableScans,
