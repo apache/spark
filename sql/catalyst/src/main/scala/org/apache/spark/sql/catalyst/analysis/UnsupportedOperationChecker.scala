@@ -54,25 +54,12 @@ object UnsupportedOperationChecker {
       subplan.collect { case a: Aggregate if a.isStreaming => a }
     }
 
-    /** Collect all the streaming Deduplications in a sub plan */
-    def collectStreamingDeduplications(subplan: LogicalPlan): Seq[Deduplication] = {
-      subplan.collect { case d: Deduplication => d }
-    }
-
     // Disallow multiple streaming aggregations
     val aggregates = collectStreamingAggregates(plan)
 
     if (aggregates.size > 1) {
       throwError(
         "Multiple streaming aggregations are not supported with " +
-          "streaming DataFrames/Datasets")(plan)
-    }
-
-    // Disallow multiple streaming deduplications
-    val deduplications = collectStreamingDeduplications(plan)
-    if (deduplications.size > 1) {
-      throwError(
-        "Multiple streaming dropDuplicates are not supported with " +
           "streaming DataFrames/Datasets")(plan)
     }
 
@@ -94,7 +81,7 @@ object UnsupportedOperationChecker {
                 s"streaming DataFrames/DataSets without watermark")(plan)
         }
 
-      case InternalOutputModes.Complete if aggregates.isEmpty && deduplications.isEmpty =>
+      case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")(plan)
@@ -127,12 +114,6 @@ object UnsupportedOperationChecker {
             "Distinct aggregations are not supported on streaming DataFrames/Datasets, unless " +
               "it is on aggregated DataFrame/Dataset in Complete output mode. Consider using " +
               "approximate distinct aggregation (e.g. approx_count_distinct() instead of count()).")
-
-          throwErrorIf(
-            outputMode == InternalOutputModes.Complete
-              && collectStreamingDeduplications(subPlan).nonEmpty,
-            "Aggregation on dropDuplicates DataFrame/Dataset in Complete output mode " +
-              "is not supported")
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +

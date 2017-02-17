@@ -163,32 +163,15 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsgs = Seq("Deduplication"))
 
   assertSupportedInStreamingPlan(
-    "Deduplication - Deduplication on streaming relation before aggregation in append mode",
+    "Deduplication - Deduplication on streaming relation before aggregation",
     Aggregate(Seq(attributeWithWatermark), aggExprs("c"), Deduplication(Seq(att), streamRelation)),
     outputMode = Append)
-
-  assertSupportedInStreamingPlan(
-    "Deduplication - Deduplication on streaming relation before aggregation in update mode",
-    Aggregate(Nil, aggExprs("c"), Deduplication(Seq(att), streamRelation)),
-    outputMode = Update)
-
-  assertNotSupportedInStreamingPlan(
-    "Deduplication - Deduplication on streaming relation before aggregation in complete mode",
-    Aggregate(Nil, aggExprs("c"), Deduplication(Seq(att), streamRelation)),
-    outputMode = Complete,
-    expectedMsgs = Seq("dropDuplicates", "aggregation", "complete"))
 
   assertNotSupportedInStreamingPlan(
     "Deduplication - Deduplication on streaming relation after aggregation",
     Deduplication(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("dropDuplicates"))
-
-  assertNotSupportedInStreamingPlan(
-    "Deduplication - Multiple Deduplications on streaming relation",
-    Deduplication(Seq(att), Deduplication(Seq(att), streamRelation)),
-    outputMode = Complete,
-    expectedMsgs = Seq("multiple streaming dropDuplicates"))
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(

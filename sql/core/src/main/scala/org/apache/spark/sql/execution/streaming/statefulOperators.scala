@@ -334,7 +334,6 @@ case class DeduplicationExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
     stateId: Option[OperatorStateId] = None,
-    outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
@@ -344,8 +343,6 @@ case class DeduplicationExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
-    assert(outputMode.nonEmpty,
-      "Incorrect planning in IncrementalExecution, outputMode has not been set")
 
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
@@ -360,56 +357,31 @@ case class DeduplicationExec(
       val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
 
-      outputMode match {
-        // Add new rows and output all rows in the StateStore.
-        case Some(Complete) =>
-          while (iter.hasNext) {
-            val row = iter.next().asInstanceOf[UnsafeRow]
-            val key = getKey(row)
-            val value = store.get(key)
-            if (value.isEmpty) {
-              store.put(key.copy(), row.copy())
-              numUpdatedStateRows += 1
-            } else {
-              // Drop duplicated rows
-            }
-          }
-          store.commit()
-          numTotalStateRows += store.numKeys()
-          store.iterator().map { case (k, v) =>
-            numOutputRows += 1
-            v.asInstanceOf[InternalRow]
-          }
 
-        // Add and output new rows for both Append and Update modes
-        case Some(Append) | Some(Update) =>
-          val baseIterator = watermarkPredicate match {
-            case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
-            case None => iter
-          }
+      val baseIterator = watermarkPredicate match {
+        case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+        case None => iter
+      }
 
-          while (baseIterator.hasNext) {
-            val row = baseIterator.next().asInstanceOf[UnsafeRow]
-            val key = getKey(row)
-            val value = store.get(key)
-            if (value.isEmpty) {
-              store.put(key.copy(), row.copy())
-              numUpdatedStateRows += 1
-            } else {
-              // Drop duplicated rows
-            }
-          }
+      while (baseIterator.hasNext) {
+        val row = baseIterator.next().asInstanceOf[UnsafeRow]
+        val key = getKey(row)
+        val value = store.get(key)
+        if (value.isEmpty) {
+          store.put(key.copy(), row.copy())
+          numUpdatedStateRows += 1
+        } else {
+          // Drop duplicated rows
+        }
+      }
 
-          watermarkPredicate.foreach(f => store.remove(f.eval _))
-          store.commit()
+      watermarkPredicate.foreach(f => store.remove(f.eval _))
+      store.commit()
 
-          numTotalStateRows += store.numKeys()
-          store.updates().filter(_.isInstanceOf[ValueAdded]).map { added =>
-            numOutputRows += 1
-            added.value.asInstanceOf[InternalRow]
-          }
-
-        case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+      numTotalStateRows += store.numKeys()
+      store.updates().filter(_.isInstanceOf[ValueAdded]).map { added =>
+        numOutputRows += 1
+        added.value.asInstanceOf[InternalRow]
       }
     }
   }

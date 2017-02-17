@@ -33,24 +33,7 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     StateStore.stop()
   }
 
-  test("deduplication - complete") {
-    val inputData = MemoryStream[String]
-    val result = inputData.toDS().dropDuplicates()
-
-    testStream(result, Complete)(
-      AddData(inputData, "a"),
-      CheckLastBatch("a"),
-      assertNumStateRows(total = 1, updated = 1),
-      AddData(inputData, "a"),
-      CheckLastBatch("a"),
-      assertNumStateRows(total = 1, updated = 0),
-      AddData(inputData, "b"),
-      CheckLastBatch("a", "b"),
-      assertNumStateRows(total = 2, updated = 1)
-    )
-  }
-
-  test("deduplication - append/update") {
+  test("deduplication") {
     val inputData = MemoryStream[String]
     val result = inputData.toDS().dropDuplicates()
 
@@ -67,24 +50,7 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with columns - complete") {
-    val inputData = MemoryStream[(String, Int)]
-    val result = inputData.toDS().dropDuplicates("_1")
-
-    testStream(result, Complete)(
-      AddData(inputData, "a" -> 1),
-      CheckLastBatch("a" -> 1),
-      assertNumStateRows(total = 1, updated = 1),
-      AddData(inputData, "a" -> 2), // Dropped
-      CheckLastBatch("a" -> 1),
-      assertNumStateRows(total = 1, updated = 0),
-      AddData(inputData, "b" -> 1),
-      CheckLastBatch("a" -> 1, "b" -> 1),
-      assertNumStateRows(total = 2, updated = 1)
-    )
-  }
-
-  test("deduplication with columns - append/update") {
+  test("deduplication with columns") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS().dropDuplicates("_1")
 
@@ -101,7 +67,26 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with watermark - append/update") {
+  test("multiple deduplications") {
+    val inputData = MemoryStream[(String, Int)]
+    val result = inputData.toDS().dropDuplicates().dropDuplicates("_1")
+
+    testStream(result, Append)(
+      AddData(inputData, "a" -> 1),
+      CheckLastBatch("a" -> 1),
+      assertNumStateRows(total = Seq(1L, 1L), updated = Seq(1L, 1L)),
+
+      AddData(inputData, "a" -> 2), // Dropped from the second `dropDuplicates`
+      CheckLastBatch(),
+      assertNumStateRows(total = Seq(1L, 2L), updated = Seq(0L, 1L)),
+
+      AddData(inputData, "b" -> 1),
+      CheckLastBatch("b" -> 1),
+      assertNumStateRows(total = Seq(2L, 3L), updated = Seq(1L, 1L))
+    )
+  }
+
+  test("deduplication with watermark") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
       .withColumn("eventTime", $"value".cast("timestamp"))
@@ -205,6 +190,30 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
       assertNumStateRows(total = Seq(1L, 2L), updated = Seq(1L, 1L)),
       AddData(inputData, "b" -> 1),
       CheckLastBatch("b" -> 1L),
+      assertNumStateRows(total = Seq(2L, 3L), updated = Seq(1L, 1L))
+    )
+  }
+
+  test("deduplication with aggregation - complete") {
+    val inputData = MemoryStream[(String, Int)]
+    val result = inputData.toDS()
+      .dropDuplicates()
+      .groupBy($"_1")
+      .agg(sum($"_2"))
+      .as[(String, Long)]
+
+    testStream(result, Complete)(
+      AddData(inputData, "a" -> 1),
+      CheckLastBatch("a" -> 1L),
+      assertNumStateRows(total = Seq(1L, 1L), updated = Seq(1L, 1L)),
+      AddData(inputData, "a" -> 1), // Dropped
+      CheckLastBatch("a" -> 1L),
+      assertNumStateRows(total = Seq(1L, 1L), updated = Seq(0L, 0L)),
+      AddData(inputData, "a" -> 2),
+      CheckLastBatch("a" -> 3L),
+      assertNumStateRows(total = Seq(1L, 2L), updated = Seq(1L, 1L)),
+      AddData(inputData, "b" -> 1),
+      CheckLastBatch("a" -> 3L, "b" -> 1L),
       assertNumStateRows(total = Seq(2L, 3L), updated = Seq(1L, 1L))
     )
   }
