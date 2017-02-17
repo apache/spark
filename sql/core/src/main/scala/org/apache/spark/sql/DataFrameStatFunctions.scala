@@ -89,8 +89,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @note Rows containing any null or NaN values will be removed before calculation. If
-   *   the dataframe is empty or all rows contain null or NaN, null is returned.
+   * @note null and NaN values will be removed from the numerical column before calculation. If
+   *   the dataframe is empty, or all rows in some column contain null or NaN, null is returned.
    *
    * @since 2.2.0
    */
@@ -98,9 +98,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    // TODO: Update NaN/null handling to keep consistent with the single-column version
     try {
-      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
+      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*), cols,
         probabilities, relativeError).map(_.toArray).toArray
     } catch {
       case e: NoSuchElementException => null

@@ -54,6 +54,8 @@ object StatFunctions extends Logging {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    *
    * @return for each column, returns the requested approximations
+   *
+   * @note null and NaN values will be removed from the numerical column before calculation.
    */
   def multipleApproxQuantiles(
       df: DataFrame,
@@ -78,7 +80,13 @@ object StatFunctions extends Logging {
     def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
       var i = 0
       while (i < summaries.length) {
-        summaries(i) = summaries(i).insert(row.getDouble(i))
+        val item = row(i)
+        if (item != null) {
+          val v = item.asInstanceOf[Double]
+          if (!v.isNaN) {
+            summaries(i) = summaries(i).insert(v)
+          }
+        }
         i += 1
       }
       summaries
