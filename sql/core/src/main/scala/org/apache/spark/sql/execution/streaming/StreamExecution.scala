@@ -295,7 +295,7 @@ class StreamExecution(
         })
         updateStatusMessage("Stopped")
       } else {
-        // `stop()` is already called. Let `finally` finish the rest work.
+        // `stop()` is already called. Let `finally` finish the cleanup.
       }
     } catch {
       case _: InterruptedException if state.get == TERMINATED => // interrupted by stop()
