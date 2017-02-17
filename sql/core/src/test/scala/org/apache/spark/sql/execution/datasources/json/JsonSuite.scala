@@ -1877,7 +1877,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-18352: Handle corrupt documents") {
+  test("SPARK-18352: Handle multi-line corrupt documents (PERMISSIVE)") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val corruptRecordCount = additionalCorruptRecords.count().toInt
@@ -1890,7 +1890,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("wholeFile", true).option("mode", "PERMISSIVE").json(path)
       assert(jsonDF.count() === corruptRecordCount)
       assert(jsonDF.schema === new StructType()
         .add("_corrupt_record", StringType)
@@ -1905,6 +1905,43 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           F.count($"_corrupt_record").as("corrupt"),
           F.count("*").as("count"))
       checkAnswer(counts, Row(1, 4, 6))
+    }
+  }
+
+  test("SPARK-18352: Handle multi-line corrupt documents (FAILFAST)") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val corruptRecordCount = additionalCorruptRecords.count().toInt
+      assert(corruptRecordCount === 5)
+
+      additionalCorruptRecords
+        .toDF("value")
+        // this is the minimum partition count that avoids hash collisions
+        .repartition(corruptRecordCount * 4, F.hash($"value"))
+        .write
+        .text(path)
+
+      val schema = new StructType().add("dummy", StringType)
+
+      // `FAILFAST` mode should throw an exception for corrupt records.
+      val exceptionOne = intercept[SparkException] {
+        spark.read
+          .option("wholeFile", true)
+          .option("mode", "FAILFAST")
+          .json(path)
+          .collect()
+      }
+      assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode"))
+
+      val exceptionTwo = intercept[SparkException] {
+        spark.read
+          .option("wholeFile", true)
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .json(path)
+          .collect()
+      }
+      assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode"))
     }
   }
 }
