@@ -18,7 +18,14 @@
 package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
+import org.json4s._
+import org.json4s.JsonAST.JValue
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -54,5 +61,33 @@ object JacksonUtils {
     }
 
     schema.foreach(field => verifyType(field.name, field.dataType))
+  }
+
+  private def validateStringLiteral(exp: Expression): String = exp match {
+    case Literal(s, StringType) => s.toString
+    case e => throw new AnalysisException("Must be a string literal, but: " + e)
+  }
+
+  def validateSchemaLiteral(exp: Expression): StructType =
+    DataType.fromJson(validateStringLiteral(exp)).asInstanceOf[StructType]
+
+  /**
+   * Convert a literal including a json option string (e.g., '{"mode": "PERMISSIVE", ...}')
+   * to Map-type data.
+   */
+  def validateOptionsLiteral(exp: Expression): Map[String, String] = {
+    val json = validateStringLiteral(exp)
+    parse(json) match {
+      case JObject(options) =>
+        options.map {
+          case (key, JString(value)) =>
+            key -> value
+          case _ =>
+            throw new AnalysisException(
+              s"""The format must be '{"key": "value", ...}', but ${json}""")
+        }.toMap
+      case _ =>
+        Map.empty
+    }
   }
 }

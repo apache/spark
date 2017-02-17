@@ -197,4 +197,44 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       .select(to_json($"struct").as("json"))
     checkAnswer(dfTwo, readBackTwo)
   }
+
+  test("SPARK-19637 Support to_json/from_json in SQL") {
+    // to_json
+    val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
+    checkAnswer(
+      df1.selectExpr("to_json(a)"),
+      Row("""{"_1":1}""") :: Nil)
+
+    val df2 = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    checkAnswer(
+      df2.selectExpr("""to_json(a, '{"timestampFormat": "dd/MM/yyyy HH:mm"}')"""),
+      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+
+    val errMsg1 = intercept[AnalysisException] {
+      df2.selectExpr("""to_json(a, '{"k": [{"k": "v"}]}')""").collect
+    }
+    assert(errMsg1.getMessage.startsWith(
+      "The format must be '{\"key\": \"value\", ...}', but {\"k\": [{\"k\": \"v\"}]}"))
+
+    // from_json
+    val df3 = Seq("""{"a": 1}""").toDS()
+    val schema1 = new StructType().add("a", IntegerType)
+    checkAnswer(
+      df3.selectExpr(s"from_json(value, '${schema1.json}')"),
+      Row(Row(1)) :: Nil)
+
+    val df4 = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
+    val schema2 = new StructType().add("time", TimestampType)
+    checkAnswer(
+      df4.selectExpr(
+        s"""from_json(value, '${schema2.json}', """ +
+           """'{"timestampFormat": "dd/MM/yyyy HH:mm"}')"""),
+      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+
+    val errMsg2 = intercept[AnalysisException] {
+      df4.selectExpr(s"""from_json(value, '${schema2.json}', '{"k": [{"k": "v"}]}')""")
+    }
+    assert(errMsg2.getMessage.startsWith(
+      "The format must be '{\"key\": \"value\", ...}', but {\"k\": [{\"k\": \"v\"}]}"))
+  }
 }

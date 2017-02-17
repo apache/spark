@@ -482,6 +482,15 @@ case class JsonTuple(children: Seq[Expression])
 /**
  * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, schema[, options]) - Return a `StructType` value with the given `jsonStr` and `schema`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":1}', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":true}]}');
+       {"a":1}
+  """)
+// scalastyle:on line.size.limit
 case class JsonToStruct(
     schema: DataType,
     options: Map[String, String],
@@ -492,6 +501,21 @@ case class JsonToStruct(
 
   def this(schema: DataType, options: Map[String, String], child: Expression) =
     this(schema, options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression, schema: Expression) =
+    this(
+      schema = JacksonUtils.validateSchemaLiteral(schema),
+      options = Map.empty[String, String],
+      child = child,
+      timeZoneId = None)
+
+  def this(child: Expression, schema: Expression, options: Expression) =
+    this(
+      schema = JacksonUtils.validateSchemaLiteral(schema),
+      options = JacksonUtils.validateOptionsLiteral(options),
+      child = child,
+      timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = schema match {
     case _: StructType | ArrayType(_: StructType, _) =>
@@ -564,6 +588,13 @@ case class JsonToStruct(
 /**
  * Converts a [[StructType]] to a json output string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, options]) - Return a json string with a given `StructType` value",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       {"a":1,"b":2}
+  """)
 case class StructToJson(
     options: Map[String, String],
     child: Expression,
@@ -572,6 +603,14 @@ case class StructToJson(
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression) = this(Map.empty, child, None)
+  def this(child: Expression, options: Expression) =
+    this(
+      options = JacksonUtils.validateOptionsLiteral(options),
+      child = child,
+      timeZoneId = None)
 
   @transient
   lazy val writer = new CharArrayWriter()
