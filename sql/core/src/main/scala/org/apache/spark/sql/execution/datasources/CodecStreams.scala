@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{OutputStream, OutputStreamWriter}
+import java.io.{InputStream, OutputStream, OutputStreamWriter}
 import java.nio.charset.{Charset, StandardCharsets}
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.compress._
 import org.apache.hadoop.mapreduce.JobContext
@@ -27,6 +28,20 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.util.ReflectionUtils
 
 object CodecStreams {
+  private def getDecompressionCodec(config: Configuration, file: Path): Option[CompressionCodec] = {
+    val compressionCodecs = new CompressionCodecFactory(config)
+    Option(compressionCodecs.getCodec(file))
+  }
+
+  def createInputStream(config: Configuration, file: Path): InputStream = {
+    val fs = file.getFileSystem(config)
+    val inputStream: InputStream = fs.open(file)
+
+    getDecompressionCodec(config, file)
+      .map(codec => codec.createInputStream(inputStream))
+      .getOrElse(inputStream)
+  }
+
   private def getCompressionCodec(
       context: JobContext,
       file: Option[Path] = None): Option[CompressionCodec] = {
