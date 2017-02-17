@@ -128,6 +128,16 @@ private[spark] abstract class PeriodicCheckpointer[T](
   protected def getCheckpointFiles(data: T): Iterable[String]
 
   /**
+   * Call this to unpersist the Dataset.
+   */
+  def unpersistDataSet(): Unit = {
+    while (persistedQueue.nonEmpty) {
+      val dataToUnpersist = persistedQueue.dequeue()
+      unpersist(dataToUnpersist)
+    }
+  }
+
+  /**
    * Call this at the end to delete any remaining checkpoint files.
    */
   def deleteAllCheckpoints(): Unit = {
