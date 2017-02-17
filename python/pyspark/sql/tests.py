@@ -439,6 +439,13 @@ class SQLTests(ReusedPySparkTestCase):
         res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
+    def test_wholefile_json(self):
+        from pyspark.sql.types import StringType
+        people1 = self.spark.read.json("python/test_support/sql/people.json")
+        people_array = self.spark.read.json("python/test_support/sql/people_array.json",
+                                            wholeFile=True)
+        self.assertEqual(people1.collect(), people_array.collect())
+
     def test_udf_with_input_file_name(self):
         from pyspark.sql.functions import udf, input_file_name
         from pyspark.sql.types import StringType

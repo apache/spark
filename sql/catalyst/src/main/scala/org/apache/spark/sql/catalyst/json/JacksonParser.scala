@@ -39,7 +39,6 @@ private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeE
  */
 class JacksonParser(
     schema: StructType,
-    columnNameOfCorruptRecord: String,
     options: JSONOptions) extends Logging {
 
   import JacksonUtils._
@@ -48,69 +47,110 @@ class JacksonParser(
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
-  private type ValueConverter = (JsonParser) => Any
+  private type ValueConverter = JsonParser => AnyRef
 
   // `ValueConverter`s for the root schema for all fields in the schema
-  private val rootConverter: ValueConverter = makeRootConverter(schema)
+  private val rootConverter = makeRootConverter(schema)
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
   private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
 
+  private val corruptFieldIndex = schema.getFieldIndex(options.columnNameOfCorruptRecord)
+  corruptFieldIndex.foreach(idx => require(schema(idx).dataType == StringType))
+
   @transient
-  private[this] var isWarningPrintedForMalformedRecord: Boolean = false
+  private[this] var isWarningPrinted: Boolean = false
+
+  @transient
+  private def printWarningForMalformedRecord(record: () => UTF8String): Unit = {
+    def sampleRecord: String = {
+      if (options.wholeFile) {
+        ""
+      } else {
+        s"Sample record: ${record()}\n"
+      }
+    }
+
+    def footer: String = {
+      s"""Code example to print all malformed records (scala):
+         |===================================================
+         |// The corrupted record exists in column ${options.columnNameOfCorruptRecord}.
+         |val parsedJson = spark.read.json("/path/to/json/file/test.json")
+         |
+       """.stripMargin
+    }
+
+    if (options.permissive) {
+      logWarning(
+        s"""Found at least one malformed record. The JSON reader will replace
+           |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
+           |To find out which corrupted records have been replaced with null, please use the
+           |default inferred schema instead of providing a custom schema.
+           |
+           |${sampleRecord ++ footer}
+           |
+         """.stripMargin)
+    } else if (options.dropMalformed) {
+      logWarning(
+        s"""Found at least one malformed record. The JSON reader will drop
+           |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
+           |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
+           |mode and use the default inferred schema.
+           |
+           |${sampleRecord ++ footer}
+           |
+         """.stripMargin)
+    }
+  }
+
+  @transient
+  private def printWarningIfWholeFile(): Unit = {
+    if (options.wholeFile && corruptFieldIndex.isDefined) {
+      logWarning(
+        s"""Enabling wholeFile mode and defining columnNameOfCorruptRecord may result
+           |in very large allocations or OutOfMemoryExceptions being raised.
+           |
+         """.stripMargin)
+    }
+  }
 
   /**
    * This function deals with the cases it fails to parse. This function will be called
    * when exceptions are caught during converting. This functions also deals with `mode` option.
    */
-  private def failedRecord(record: String): Seq[InternalRow] = {
-    // create a row even if no corrupt record column is present
-    if (options.failFast) {
-      throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: $record")
-    }
-    if (options.dropMalformed) {
-      if (!isWarningPrintedForMalformedRecord) {
-        logWarning(
-          s"""Found at least one malformed records (sample: $record). The JSON reader will drop
-             |all malformed records in current $DROP_MALFORMED_MODE parser mode. To find out which
-             |corrupted records have been dropped, please switch the parser mode to $PERMISSIVE_MODE
-             |mode and use the default inferred schema.
-             |
-             |Code example to print all malformed records (scala):
-             |===================================================
-             |// The corrupted record exists in column ${columnNameOfCorruptRecord}
-             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
-             |
-           """.stripMargin)
-        isWarningPrintedForMalformedRecord = true
-      }
-      Nil
-    } else if (schema.getFieldIndex(columnNameOfCorruptRecord).isEmpty) {
-      if (!isWarningPrintedForMalformedRecord) {
-        logWarning(
-          s"""Found at least one malformed records (sample: $record). The JSON reader will replace
-             |all malformed records with placeholder null in current $PERMISSIVE_MODE parser mode.
-             |To find out which corrupted records have been replaced with null, please use the
-             |default inferred schema instead of providing a custom schema.
-             |
-             |Code example to print all malformed records (scala):
-             |===================================================
-             |// The corrupted record exists in column ${columnNameOfCorruptRecord}.
-             |val parsedJson = spark.read.json("/path/to/json/file/test.json")
-             |
-           """.stripMargin)
-        isWarningPrintedForMalformedRecord = true
-      }
-      emptyRow
-    } else {
-      val row = new GenericInternalRow(schema.length)
-      for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecord)) {
-        require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, UTF8String.fromString(record))
-      }
-      Seq(row)
+  private def failedRecord(record: () => UTF8String): Seq[InternalRow] = {
+    corruptFieldIndex match {
+      case _ if options.failFast =>
+        if (options.wholeFile) {
+          throw new SparkSQLJsonProcessingException("Malformed line in FAILFAST mode")
+        } else {
+          throw new SparkSQLJsonProcessingException(s"Malformed line in FAILFAST mode: ${record()}")
+        }
+
+      case _ if options.dropMalformed =>
+        if (!isWarningPrinted) {
+          printWarningForMalformedRecord(record)
+          isWarningPrinted = true
+        }
+        Nil
+
+      case None =>
+        if (!isWarningPrinted) {
+          printWarningForMalformedRecord(record)
+          isWarningPrinted = true
+        }
+        emptyRow
+
+      case Some(corruptIndex) =>
+        if (!isWarningPrinted) {
+          printWarningIfWholeFile()
+          isWarningPrinted = true
+        }
+        val row = new GenericInternalRow(schema.length)
+        row.update(corruptIndex, record())
+        Seq(row)
     }
   }
 
@@ -119,11 +159,11 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(st: StructType): ValueConverter = {
+  private def makeRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
     val elementConverter = makeConverter(st)
-    val fieldConverters = st.map(_.dataType).map(makeConverter)
-    (parser: JsonParser) => parseJsonToken(parser, st) {
-      case START_OBJECT => convertObject(parser, st, fieldConverters)
+    val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
+      case START_OBJECT => convertObject(parser, st, fieldConverters) :: Nil
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -137,7 +177,15 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-      case START_ARRAY => convertArray(parser, elementConverter)
+      case START_ARRAY =>
+        val array = convertArray(parser, elementConverter)
+        // Here, as we support reading top level JSON arrays and take every element
+        // in such an array as a row, this case is possible.
+        if (array.numElements() == 0) {
+          Nil
+        } else {
+          array.toArray[InternalRow](schema).toSeq
+        }
     }
   }
 
@@ -145,35 +193,35 @@ class JacksonParser(
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema.
    */
-  private[sql] def makeConverter(dataType: DataType): ValueConverter = dataType match {
+  def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Boolean](parser, dataType) {
         case VALUE_TRUE => true
         case VALUE_FALSE => false
       }
 
     case ByteType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Byte](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getByteValue
       }
 
     case ShortType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Short](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getShortValue
       }
 
     case IntegerType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getIntValue
       }
 
     case LongType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_NUMBER_INT => parser.getLongValue
       }
 
     case FloatType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Float](parser, dataType) {
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getFloatValue
 
@@ -193,7 +241,7 @@ class JacksonParser(
       }
 
     case DoubleType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Double](parser, dataType) {
         case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
           parser.getDoubleValue
 
@@ -213,7 +261,7 @@ class JacksonParser(
       }
 
     case StringType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
 
@@ -227,66 +275,71 @@ class JacksonParser(
       }
 
     case TimestampType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING =>
+          val stringValue = parser.getText
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.
-          Try(options.timestampFormat.parse(parser.getText).getTime * 1000L)
-            .getOrElse {
-              // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-              // compatibility.
-              DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
-            }
+          Long.box {
+            Try(options.timestampFormat.parse(stringValue).getTime * 1000L)
+              .getOrElse {
+                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+                // compatibility.
+                DateTimeUtils.stringToTime(stringValue).getTime * 1000L
+              }
+          }
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
       }
 
     case DateType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_STRING =>
           val stringValue = parser.getText
           // This one will lose microseconds parts.
           // See https://issues.apache.org/jira/browse/SPARK-10681.x
-          Try(DateTimeUtils.millisToDays(options.dateFormat.parse(parser.getText).getTime))
-            .getOrElse {
-            // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
-            // compatibility.
-            Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime))
+          Int.box {
+            Try(DateTimeUtils.millisToDays(options.dateFormat.parse(stringValue).getTime))
+              .orElse {
+                // If it fails to parse, then tries the way used in 2.0 and 1.x for backwards
+                // compatibility.
+                Try(DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(stringValue).getTime))
+              }
               .getOrElse {
-              // In Spark 1.5.0, we store the data as number of days since epoch in string.
-              // So, we just convert it to Int.
-              stringValue.toInt
-            }
+                // In Spark 1.5.0, we store the data as number of days since epoch in string.
+                // So, we just convert it to Int.
+                stringValue.toInt
+              }
           }
       }
 
     case BinaryType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[Array[Byte]](parser, dataType) {
         case VALUE_STRING => parser.getBinaryValue
       }
 
     case dt: DecimalType =>
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[Decimal](parser, dataType) {
         case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
           Decimal(parser.getDecimalValue, dt.precision, dt.scale)
       }
 
     case st: StructType =>
-      val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
+      (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
         case START_OBJECT => convertObject(parser, st, fieldConverters)
       }
 
     case at: ArrayType =>
       val elementConverter = makeConverter(at.elementType)
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[ArrayData](parser, dataType) {
         case START_ARRAY => convertArray(parser, elementConverter)
       }
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
-      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+      (parser: JsonParser) => parseJsonToken[MapData](parser, dataType) {
         case START_OBJECT => convertMap(parser, valueConverter)
       }
 
@@ -298,7 +351,7 @@ class JacksonParser(
         // Here, we pass empty `PartialFunction` so that this case can be
         // handled as a failed conversion. It will throw an exception as
         // long as the value is not null.
-        parseJsonToken(parser, dataType)(PartialFunction.empty[JsonToken, Any])
+        parseJsonToken[AnyRef](parser, dataType)(PartialFunction.empty[JsonToken, AnyRef])
   }
 
   /**
@@ -306,14 +359,14 @@ class JacksonParser(
    * to parse the JSON token using given function `f`. If the `f` failed to parse and convert the
    * token, call `failedConversion` to handle the token.
    */
-  private def parseJsonToken(
+  private def parseJsonToken[R >: Null](
       parser: JsonParser,
-      dataType: DataType)(f: PartialFunction[JsonToken, Any]): Any = {
+      dataType: DataType)(f: PartialFunction[JsonToken, R]): R = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
         // There are useless FIELD_NAMEs between START_OBJECT and END_OBJECT tokens
         parser.nextToken()
-        parseJsonToken(parser, dataType)(f)
+        parseJsonToken[R](parser, dataType)(f)
 
       case null | VALUE_NULL => null
 
@@ -325,9 +378,9 @@ class JacksonParser(
    * This function throws an exception for failed conversion, but returns null for empty string,
    * to guard the non string types.
    */
-  private def failedConversion(
+  private def failedConversion[R >: Null](
       parser: JsonParser,
-      dataType: DataType): PartialFunction[JsonToken, Any] = {
+      dataType: DataType): PartialFunction[JsonToken, R] = {
     case VALUE_STRING if parser.getTextLength < 1 =>
       // If conversion is failed, this produces `null` rather than throwing exception.
       // This will protect the mismatch of types.
@@ -348,7 +401,7 @@ class JacksonParser(
   private def convertObject(
       parser: JsonParser,
       schema: StructType,
-      fieldConverters: Seq[ValueConverter]): InternalRow = {
+      fieldConverters: Array[ValueConverter]): InternalRow = {
     val row = new GenericInternalRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
@@ -394,36 +447,30 @@ class JacksonParser(
   }
 
   /**
-   * Parse the string JSON input to the set of [[InternalRow]]s.
+   * Parse the JSON input to the set of [[InternalRow]]s.
+   *
+   * @param recordLiteral an optional function that will be used to generate
+   *   the corrupt record text instead of record.toString
    */
-  def parse(input: String): Seq[InternalRow] = {
-    if (input.trim.isEmpty) {
-      Nil
-    } else {
-      try {
-        Utils.tryWithResource(factory.createParser(input)) { parser =>
-          parser.nextToken()
-          rootConverter.apply(parser) match {
-            case null => failedRecord(input)
-            case row: InternalRow => row :: Nil
-            case array: ArrayData =>
-              // Here, as we support reading top level JSON arrays and take every element
-              // in such an array as a row, this case is possible.
-              if (array.numElements() == 0) {
-                Nil
-              } else {
-                array.toArray[InternalRow](schema)
-              }
-            case _ =>
-              failedRecord(input)
+  def parse[T](
+      record: T,
+      createParser: (JsonFactory, T) => JsonParser,
+      recordLiteral: T => UTF8String): Seq[InternalRow] = {
+    try {
+      Utils.tryWithResource(createParser(factory, record)) { parser =>
+        // a null first token is equivalent to testing for input.trim.isEmpty
+        // but it works on any token stream and not just strings
+        parser.nextToken() match {
+          case null => Nil
+          case _ => rootConverter.apply(parser) match {
+            case null => throw new SparkSQLJsonProcessingException("Root converter returned null")
+            case rows => rows
           }
         }
-      } catch {
-        case _: JsonProcessingException =>
-          failedRecord(input)
-        case _: SparkSQLJsonProcessingException =>
-          failedRecord(input)
       }
+    } catch {
+      case _: JsonProcessingException | _: SparkSQLJsonProcessingException =>
+        failedRecord(() => recordLiteral(record))
     }
   }
 }

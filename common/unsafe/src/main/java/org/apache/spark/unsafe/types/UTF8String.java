@@ -147,7 +147,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     buffer.position(pos + numBytes);
   }
 
-  public void writeTo(OutputStream out) throws IOException {
+  /**
+   * Returns a {@link ByteBuffer} wrapping the base object if it is a byte array
+   * or a copy of the data if the base object is not a byte array.
+   *
+   * Unlike getBytes this will not create a copy the array if this is a slice.
+   */
+  public @Nonnull ByteBuffer getByteBuffer() {
     if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
       final byte[] bytes = (byte[]) base;
 
@@ -160,10 +166,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         throw new ArrayIndexOutOfBoundsException();
       }
 
-      out.write(bytes, (int) arrayOffset, numBytes);
+      return ByteBuffer.wrap(bytes, (int) arrayOffset, numBytes);
     } else {
-      out.write(getBytes());
+      return ByteBuffer.wrap(getBytes());
     }
+  }
+
+  public void writeTo(OutputStream out) throws IOException {
+    final ByteBuffer bb = this.getByteBuffer();
+    assert(bb.hasArray());
+
+    // similar to Utils.writeByteBuffer but without the spark-core dependency
+    out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining());
   }
 
   /**
