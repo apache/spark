@@ -20,9 +20,11 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, QueryTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.{CreateTable, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
@@ -158,5 +160,56 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1) == bottomAggDataSize)
 
     spark.listenerManager.unregister(listener)
+  }
+
+  test("execute callback functions for DataFrameWriter") {
+    val commands = ArrayBuffer.empty[(String, LogicalPlan)]
+    val exceptions = ArrayBuffer.empty[(String, Exception)]
+    val listener = new QueryExecutionListener {
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        exceptions += funcName -> exception
+      }
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        commands += funcName -> qe.logical
+      }
+    }
+    spark.listenerManager.register(listener)
+
+    withTempPath { path =>
+      spark.range(10).write.format("json").save(path.getCanonicalPath)
+      assert(commands.length == 1)
+      assert(commands.head._1 == "save")
+      assert(commands.head._2.isInstanceOf[SaveIntoDataSourceCommand])
+      assert(commands.head._2.asInstanceOf[SaveIntoDataSourceCommand].provider == "json")
+    }
+
+    withTable("tab") {
+      sql("CREATE TABLE tab(i long) using parquet")
+      spark.range(10).write.insertInto("tab")
+      assert(commands.length == 2)
+      assert(commands(1)._1 == "insertInto")
+      assert(commands(1)._2.isInstanceOf[InsertIntoTable])
+      assert(commands(1)._2.asInstanceOf[InsertIntoTable].table
+        .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
+    }
+
+    withTable("tab") {
+      spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
+      assert(commands.length == 3)
+      assert(commands(2)._1 == "saveAsTable")
+      assert(commands(2)._2.isInstanceOf[CreateTable])
+      assert(commands(2)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+    }
+
+    withTable("tab") {
+      sql("CREATE TABLE tab(i long) using parquet")
+      val e = intercept[AnalysisException] {
+        spark.range(10).select($"id", $"id").write.insertInto("tab")
+      }
+      assert(exceptions.length == 1)
+      assert(exceptions.head._1 == "insertInto")
+      assert(exceptions.head._2 == e)
+    }
   }
 }
