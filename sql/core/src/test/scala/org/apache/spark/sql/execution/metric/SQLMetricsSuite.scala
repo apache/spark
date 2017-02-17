@@ -332,24 +332,29 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       spark.read.parquet(dir).createOrReplaceTempView("pqS")
 
       val res3 = InputOutputMetricsHelper.run(
-        spark.range(0, 30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
       )
+      // The query above is executed in the following stages:
+      //   1. sql("select * from pqS")    => (10, 0, 10)
+      //   2. range(30)                   => (30, 0, 30)
+      //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
+      //   4. shuffle & return results    => (0, 300, 0)
       assert(res3 === (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil)
     }
   }
 }
 
 object InputOutputMetricsHelper {
-   private class InputOutputMetricsListener extends SparkListener {
+  private class InputOutputMetricsListener extends SparkListener {
     private case class MetricsResult(
         var recordsRead: Long = 0L,
         var shuffleRecordsRead: Long = 0L,
         var sumMaxOutputRows: Long = 0L)
 
-    private[this] var stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
+    private[this] val stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
 
     def reset(): Unit = {
-      stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
+      stageIdToMetricsResult.clear()
     }
 
     /**
@@ -362,13 +367,14 @@ object InputOutputMetricsHelper {
      *  - sum of the highest values of "number of output rows" metric for all the tasks in the stage
      */
     def getResults(): List[(Long, Long, Long)] = {
-      stageIdToMetricsResult.keySet.toList.sorted.map({ stageId =>
+      stageIdToMetricsResult.keySet.toList.sorted.map { stageId =>
         val res = stageIdToMetricsResult(stageId)
-        (res.recordsRead, res.shuffleRecordsRead, res.sumMaxOutputRows)})
+        (res.recordsRead, res.shuffleRecordsRead, res.sumMaxOutputRows)
+      }
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
-      val res = stageIdToMetricsResult.getOrElseUpdate(taskEnd.stageId, { MetricsResult() })
+      val res = stageIdToMetricsResult.getOrElseUpdate(taskEnd.stageId, MetricsResult())
 
       res.recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
       res.shuffleRecordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
@@ -397,11 +403,14 @@ object InputOutputMetricsHelper {
     val listener = new InputOutputMetricsListener()
     sparkContext.addSparkListener(listener)
 
-    sparkContext.listenerBus.waitUntilEmpty(5000)
-    listener.reset()
-    df.collect()
-    sparkContext.listenerBus.waitUntilEmpty(5000)
-    sparkContext.removeSparkListener(listener)
+    try {
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+      listener.reset()
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+    } finally {
+      sparkContext.removeSparkListener(listener)
+    }
     listener.getResults()
   }
 }
