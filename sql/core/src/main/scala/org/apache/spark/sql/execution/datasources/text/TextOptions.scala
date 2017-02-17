@@ -22,12 +22,12 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs
 /**
  * Options for the Text data source.
  */
-private[text] class TextOptions(@transient private val parameters: CaseInsensitiveMap)
+private[text] class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import TextOptions._
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   /**
    * Compression codec to use.

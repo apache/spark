@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType;
 // col("...") is preferable to df.col("...")
 import static org.apache.spark.sql.functions.callUDF;
 import static org.apache.spark.sql.functions.col;
-// $example off
+// $example off$
 
 public class JavaTokenizerExample {
   public static void main(String[] args) {
@@ -69,9 +69,9 @@ public class JavaTokenizerExample {
         .setOutputCol("words")
         .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 
-    spark.udf().register("countTokens", new UDF1<WrappedArray, Integer>() {
+    spark.udf().register("countTokens", new UDF1<WrappedArray<String>, Integer>() {
       @Override
-      public Integer call(WrappedArray words) {
+      public Integer call(WrappedArray<String> words) {
         return words.size();
       }
     }, DataTypes.IntegerType);

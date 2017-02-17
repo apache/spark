@@ -418,11 +418,11 @@ abstract class LDAModel private[ml] (
    * If this model was produced by EM, then this local representation may be built lazily.
    */
   @Since("1.6.0")
-  protected def oldLocalModel: OldLocalLDAModel
+  private[clustering] def oldLocalModel: OldLocalLDAModel
 
   /** Returns underlying spark.mllib model, which may be local or distributed */
   @Since("1.6.0")
-  protected def getModel: OldLDAModel
+  private[clustering] def getModel: OldLDAModel
 
   private[ml] def getEffectiveDocConcentration: Array[Double] = getModel.docConcentration.toArray
 
@@ -563,7 +563,7 @@ abstract class LDAModel private[ml] (
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
-    @Since("1.6.0") override protected val oldLocalModel: OldLocalLDAModel,
+    @Since("1.6.0") override private[clustering] val oldLocalModel: OldLocalLDAModel,
     sparkSession: SparkSession)
   extends LDAModel(uid, vocabSize, sparkSession) {
 
@@ -573,7 +573,7 @@ class LocalLDAModel private[ml] (
     copyValues(copied, extra).setParent(parent).asInstanceOf[LocalLDAModel]
   }
 
-  override protected def getModel: OldLDAModel = oldLocalModel
+  override private[clustering] def getModel: OldLDAModel = oldLocalModel
 
   @Since("1.6.0")
   override def isDistributed: Boolean = false
@@ -656,14 +656,14 @@ class DistributedLDAModel private[ml] (
     private var oldLocalModelOption: Option[OldLocalLDAModel])
   extends LDAModel(uid, vocabSize, sparkSession) {
 
-  override protected def oldLocalModel: OldLocalLDAModel = {
+  override private[clustering] def oldLocalModel: OldLocalLDAModel = {
     if (oldLocalModelOption.isEmpty) {
       oldLocalModelOption = Some(oldDistributedModel.toLocal)
     }
     oldLocalModelOption.get
   }
 
-  override protected def getModel: OldLDAModel = oldDistributedModel
+  override private[clustering] def getModel: OldLDAModel = oldDistributedModel
 
   /**
    * Convert this distributed model to a local representation.  This discards info about the
