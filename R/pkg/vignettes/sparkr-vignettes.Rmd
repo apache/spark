@@ -469,9 +469,9 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Classification
 
-* Logistic Regression
-
 * Linear Support Vector Machine (SVM) Classifier
+
+* Logistic Regression
 
 * Multilayer Perceptron (MLP)
 
@@ -568,8 +568,8 @@ summary(model)
 
 #### Linear Support Vector Machine (SVM) Classifier
 
-[Linear Support Vector Machine (SVM)](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM) classifier is an SVM classifier with linear kernel.
-This is a binary classifier. Multi-class classification can be achieved by one-vs-the-rest strategy. We use a simple example to show how to use `spark.svmLinear`
+[Linear Support Vector Machine (SVM)](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM) classifier is an SVM classifier with linear kernels.
+This is a binary classifier. We use a simple example to show how to use `spark.svmLinear`
 for binary classification.
 
 ```{r}
@@ -577,7 +577,7 @@ for binary classification.
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 # fit a Linear SVM classifier model
-model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01)
+model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
 summary(model)
 ```
 

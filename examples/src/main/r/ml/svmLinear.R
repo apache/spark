@@ -29,7 +29,7 @@ sparkR.session(appName = "SparkR-ML-svmLinear-example")
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 
-# fit linearSvc model
+# fit Linear SVM model
 model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
 
 # Model summary
