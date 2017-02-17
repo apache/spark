@@ -3537,7 +3537,7 @@ setMethod("getNumPartitions",
 #'
 #' @param df a streaming SparkDataFrame.
 #' @param source a name for external data source.
-#' @param outputMode one of 'append', 'complete', 'update'
+#' @param outputMode one of 'append', 'complete', 'update'.
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
