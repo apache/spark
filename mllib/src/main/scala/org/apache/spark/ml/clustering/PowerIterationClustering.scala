@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.linalg.{Vector}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -27,7 +27,7 @@ import org.apache.spark.mllib.clustering.{PowerIterationClustering => MLlibPower
 import org.apache.spark.mllib.clustering.PowerIterationClustering.Assignment
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 /**
@@ -53,16 +53,10 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
    * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
    */
   @Since("2.2.0")
-  final val initMode = new Param[String](this, "initMode", "The initialization algorithm. " +
-    "Supported options: 'random' and 'degree'.",
-    (value: String) => validateInitMode(value))
-
-  private[spark] def validateInitMode(initMode: String): Boolean = {
-    initMode match {
-      case "random" => true
-      case "degree" => true
-      case _ => false
-    }
+  final val initMode = {
+    val allowedParams = ParamValidators.inArray(Array("random", "degree"))
+    new Param[String](this, "initMode", "The initialization algorithm. " +
+      "Supported options: 'random' and 'degree'.", allowedParams)
   }
 
   /** @group expertGetParam */
@@ -104,7 +98,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 @Since("2.2.0")
 @Experimental
 class PowerIterationClustering private[clustering] (
-                                @Since("2.2.0") override val uid: String)
+    @Since("2.2.0") override val uid: String)
   extends Transformer with PowerIterationClusteringParams with DefaultParamsWritable {
 
   setDefault(
