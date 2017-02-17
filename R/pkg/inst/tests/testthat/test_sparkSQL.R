@@ -725,7 +725,7 @@ test_that("objectFile() works with row serialization", {
   objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
   df <- read.json(jsonPath)
   dfRDD <- toRDD(df)
-  saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
+  saveAsObjectFile(coalesceRDD(dfRDD, 1L), objectPath)
   objectIn <- objectFile(sc, objectPath)
 
   expect_is(objectIn, "RDD")
@@ -868,6 +868,14 @@ test_that("names() colnames() set the column names", {
 
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
+
+  expect_error(names(df) <- NULL, "Invalid column names.")
+  expect_error(names(df) <- c("sepal.length", "sepal_width"),
+               "Column names cannot contain the '.' symbol.")
+  expect_error(names(df) <- c(1, 2), "Invalid column names.")
+  expect_error(names(df) <- c("a"),
+               "Column names must have the same length as the number of columns in the dataset.")
+  expect_error(names(df) <- c("1", NA), "Column names cannot be NA.")
 
   expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
                "Column names cannot contain the '.' symbol.")
@@ -1228,7 +1236,8 @@ test_that("column functions", {
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
   c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
-  c19 <- spark_partition_id()
+  c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
+  c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1297,9 +1306,9 @@ test_that("column functions", {
 
   # Test first(), last()
   df <- read.json(jsonPath)
-  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA_real_)
   expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
-  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age")))[[1]], NA_real_)
   expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
   expect_equal(collect(select(df, last(df$age)))[[1]], 19)
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
@@ -2482,15 +2491,18 @@ test_that("repartition by columns on DataFrame", {
     ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
 
   # repartition by column and number of partitions
-  actual <- repartition(df, 3L, col = df$"a")
+  actual <- repartition(df, 3, col = df$"a")
 
-  # since we cannot access the number of partitions from dataframe, checking
-  # that at least the dimensions are identical
+  # Checking that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 3L)
 
   # repartition by number of partitions
   actual <- repartition(df, 13L)
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 13L)
+
+  expect_equal(getNumPartitions(coalesce(actual, 1L)), 1L)
 
   # a test case with a column and dapply
   schema <-  structType(structField("a", "integer"), structField("avg", "double"))
@@ -2504,6 +2516,25 @@ test_that("repartition by columns on DataFrame", {
 
   # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
+})
+
+test_that("coalesce, repartition, numPartitions", {
+  df <- as.DataFrame(cars, numPartitions = 5)
+  expect_equal(getNumPartitions(df), 5)
+  expect_equal(getNumPartitions(coalesce(df, 3)), 3)
+  expect_equal(getNumPartitions(coalesce(df, 6)), 5)
+
+  df1 <- coalesce(df, 3)
+  expect_equal(getNumPartitions(df1), 3)
+  expect_equal(getNumPartitions(coalesce(df1, 6)), 5)
+  expect_equal(getNumPartitions(coalesce(df1, 4)), 4)
+  expect_equal(getNumPartitions(coalesce(df1, 2)), 2)
+
+  df2 <- repartition(df1, 10)
+  expect_equal(getNumPartitions(df2), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
@@ -2766,6 +2797,44 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
 
   expect_warning(read.json(jsonPath, a = 1, 2, 3, "a"),
                  "Unnamed arguments ignored: 2, 3, a.")
+})
+
+test_that("Collect on DataFrame when NAs exists at the top of a timestamp column", {
+  ldf <- data.frame(col1 = c(0, 1, 2),
+                   col2 = c(as.POSIXct("2017-01-01 00:00:01"),
+                            NA,
+                            as.POSIXct("2017-01-01 12:00:01")),
+                   col3 = c(as.POSIXlt("2016-01-01 00:59:59"),
+                            NA,
+                            as.POSIXlt("2016-01-01 12:01:01")))
+  sdf1 <- createDataFrame(ldf)
+  ldf1 <- collect(sdf1)
+  expect_equal(dtypes(sdf1), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf1$col1), "numeric")
+  expect_equal(class(ldf1$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf1$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with NAs at the top
+  sdf2 <- filter(sdf1, "col1 > 1")
+  ldf2 <- collect(sdf2)
+  expect_equal(dtypes(sdf2), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf2$col1), "numeric")
+  expect_equal(class(ldf2$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf2$col3), c("POSIXct", "POSIXt"))
+
+  # Columns with only NAs, the type will also be cast to PRIMITIVE_TYPE
+  sdf3 <- filter(sdf1, "col1 == 0")
+  ldf3 <- collect(sdf3)
+  expect_equal(dtypes(sdf3), list(c("col1", "double"),
+                                  c("col2", "timestamp"),
+                                  c("col3", "timestamp")))
+  expect_equal(class(ldf3$col1), "numeric")
+  expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
+  expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
 unlink(parquetPath)

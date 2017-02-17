@@ -380,7 +380,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
 
         // Window
-        withDistinct.optionalMap(windows)(withWindows)
+        val withWindow = withDistinct.optionalMap(windows)(withWindows)
+
+        // Hint
+        withWindow.optionalMap(hint)(withHints)
     }
   }
 
@@ -503,6 +506,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       Aggregate(mappedGroupByExpressions, selectExpressions, query)
     }
+  }
+
+  /**
+   * Add a Hint to a logical plan.
+   */
+  private def withHints(
+      ctx: HintContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val stmt = ctx.hintStatement
+    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
   }
 
   /**
@@ -1457,8 +1470,28 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
-    if (STRING == null) structField else structField.withComment(string(STRING))
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    if (STRING != null) {
+      builder.putString("comment", string(STRING))
+    }
+    // Add Hive type string to metadata.
+    dataType match {
+      case p: PrimitiveDataTypeContext =>
+        p.identifier.getText.toLowerCase match {
+          case "varchar" | "char" =>
+            builder.putString(HIVE_TYPE_STRING, dataType.getText.toLowerCase)
+          case _ =>
+        }
+      case _ =>
+    }
+
+    StructField(
+      identifier.getText,
+      typedVisit(dataType),
+      nullable = true,
+      builder.build())
   }
 
   /**

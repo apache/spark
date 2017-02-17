@@ -215,7 +215,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       df.sparkSession,
       className = source,
       partitionColumns = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec,
       options = extraOptions.toMap)
 
     dataSource.write(mode, df)
@@ -265,21 +264,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
-        child = df.logicalPlan,
+        query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false)).toRdd
-  }
-
-  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
-    cols.map(normalize(_, "Partition"))
-  }
-
-  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
-    cols.map(normalize(_, "Bucketing"))
-  }
-
-  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
-    cols.map(normalize(_, "Sorting"))
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
@@ -287,33 +274,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
 
-    for {
-      n <- numBuckets
-    } yield {
+    numBuckets.map { n =>
       require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
-
-      // partitionBy columns cannot be used in bucketBy
-      if (normalizedParCols.nonEmpty &&
-        normalizedBucketColNames.get.toSet.intersect(normalizedParCols.get.toSet).nonEmpty) {
-          throw new AnalysisException(
-            s"bucketBy columns '${bucketColumnNames.get.mkString(", ")}' should not be part of " +
-            s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
-      }
-
-      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
+      BucketSpec(n, bucketColumnNames.get, sortColumnNames.getOrElse(Nil))
     }
-  }
-
-  /**
-   * The given column name may not be equal to any of the existing column names if we were in
-   * case-insensitive context. Normalize the given column name to the real one so that we don't
-   * need to care about case sensitivity afterwards.
-   */
-  private def normalize(columnName: String, columnType: String): String = {
-    val validColumnNames = df.logicalPlan.output.map(_.name)
-    validColumnNames.find(df.sparkSession.sessionState.analyzer.resolver(_, columnName))
-      .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
-        s"existing columns (${validColumnNames.mkString(", ")})"))
   }
 
   private def assertNotBucketed(operation: String): Unit = {
@@ -492,6 +456,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -598,6 +564,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 2.0.0

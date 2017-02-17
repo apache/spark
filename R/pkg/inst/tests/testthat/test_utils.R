@@ -231,10 +231,7 @@ test_that("varargsToStrEnv", {
 test_that("basenameSansExtFromUrl", {
   x <- paste0("http://people.apache.org/~pwendell/spark-nightly/spark-branch-2.1-bin/spark-2.1.1-",
               "SNAPSHOT-2016_12_09_11_08-eb2d9bf-bin/spark-2.1.1-SNAPSHOT-bin-hadoop2.7.tgz")
-  y <- paste0("http://people.apache.org/~pwendell/spark-releases/spark-2.1.0-rc2-bin/spark-2.1.0-",
-              "bin-hadoop2.4-without-hive.tgz")
   expect_equal(basenameSansExtFromUrl(x), "spark-2.1.1-SNAPSHOT-bin-hadoop2.7")
-  expect_equal(basenameSansExtFromUrl(y), "spark-2.1.0-bin-hadoop2.4-without-hive")
   z <- "http://people.apache.org/~pwendell/spark-releases/spark-2.1.0--hive.tar.gz"
   expect_equal(basenameSansExtFromUrl(z), "spark-2.1.0--hive")
 })

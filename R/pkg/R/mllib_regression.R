@@ -182,11 +182,11 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             # coefficients, standard error of coefficients, t value and p value. Otherwise,
             # it will be fitted by local "l-bfgs", we can only provide coefficients.
             if (length(features) == length(coefficients)) {
-              coefficients <- matrix(coefficients, ncol = 1)
+              coefficients <- matrix(unlist(coefficients), ncol = 1)
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
             } else {
-              coefficients <- matrix(coefficients, ncol = 4)
+              coefficients <- matrix(unlist(coefficients), ncol = 4)
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
             }

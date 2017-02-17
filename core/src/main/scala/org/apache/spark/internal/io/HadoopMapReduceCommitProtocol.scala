@@ -163,7 +163,4 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
       tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
     }
   }
-
-  /** Whether we are using a direct output committer */
-  def isDirectOutput(): Boolean = committer.getClass.getSimpleName.contains("Direct")
 }
