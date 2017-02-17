@@ -38,5 +38,7 @@ summary(model)
 
 # Prediction
 predictions <- predict(model, test)
-showDF(predictions)
+head(predictions)
 # $example off$
+
+sparkR.session.stop()

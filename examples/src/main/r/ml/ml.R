@@ -42,7 +42,7 @@ summary(gaussianGLM2)
 
 # Check model prediction
 gaussianPredictions <- predict(gaussianGLM2, gaussianTestDF)
-showDF(gaussianPredictions)
+head(gaussianPredictions)
 
 unlink(modelPath)
 # $example off:read_write$

@@ -38,9 +38,11 @@ summary(model)
 
 # Posterior probabilities
 posterior <- spark.posterior(model, test)
-showDF(posterior)
+head(posterior)
 
 # The log perplexity of the LDA model
 logPerplexity <- spark.perplexity(model, test)
 print(paste0("The upper bound bound on perplexity: ", logPerplexity))
 # $example off$
+
+sparkR.session.stop()

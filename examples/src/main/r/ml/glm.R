@@ -36,7 +36,7 @@ summary(gaussianGLM)
 
 # Prediction
 gaussianPredictions <- predict(gaussianGLM, gaussianTestDF)
-showDF(gaussianPredictions)
+head(gaussianPredictions)
 
 # Fit a generalized linear model with glm (R-compliant)
 gaussianGLM2 <- glm(Sepal_Length ~ Sepal_Width + Species, gaussianDF, family = "gaussian")
@@ -53,5 +53,7 @@ summary(binomialGLM)
 
 # Prediction
 binomialPredictions <- predict(binomialGLM, binomialTestDF)
-showDF(binomialPredictions)
+head(binomialPredictions)
 # $example off$
+
+sparkR.session.stop()
