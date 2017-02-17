@@ -368,9 +368,9 @@ Refer to the [R API docs](api/R/spark.mlp.html) for more details.
 A [support vector machine](https://en.wikipedia.org/wiki/Support_vector_machine) constructs a hyperplane
 or set of hyperplanes in a high- or infinite-dimensional space, which can be used for classification,
 regression, or other tasks. Intuitively, a good separation is achieved by the hyperplane that has
-the largest distance to the nearest training-data point of any class (so-called functional margin),
+the largest distance to the nearest training-data points of any class (so-called functional margin),
 since in general the larger the margin the lower the generalization error of the classifier. LinearSVC
-in Spark ML supports binary calssification with linear SVM. Internally, it optimizes the 
+in Spark ML supports binomial classification with linear SVM. Internally, it optimizes the 
 [Hinge Loss](https://en.wikipedia.org/wiki/Hinge_loss) using OWLQN optimizer.
 
 
@@ -397,13 +397,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearS
 Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.LinearSVC) for more details.
 
 {% include_example python/ml/linearsvc.py %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/spark.linearSVC.html) for more details.
-
-{% include_example r/ml/linearSVC.R %}
 </div>
 
 </div>

@@ -39,7 +39,7 @@ public class JavaLinearSVCExample {
 
     LinearSVC lsvc = new LinearSVC()
       .setMaxIter(10)
-      .setRegParam(0.3);
+      .setRegParam(0.1);
 
     // Fit the model
     LinearSVCModel lsvcModel = lsvc.fit(training);
