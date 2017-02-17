@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -184,6 +184,10 @@ class Dataset[T] private[sql](
     queryExecution.analyzed match {
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
+      case cmd: RunnableCommand =>
+        // Trigger execution.
+        queryExecution.executedPlan.executeCollect()
+        cmd
       case p if hasSideEffects(p) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
       case Union(children) if children.forall(hasSideEffects) =>
