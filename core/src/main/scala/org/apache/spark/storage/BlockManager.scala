@@ -1136,25 +1136,25 @@ private[spark] class BlockManager(
    * @param blockId blockId being replicate
    * @param existingReplicas existing block managers that have a replica
    * @param maxReplicas maximum replicas needed
-   * @return
    */
   def replicateBlock(
-    blockId: BlockId,
-    existingReplicas: Set[BlockManagerId],
-    maxReplicas: Int): Unit = {
+      blockId: BlockId,
+      existingReplicas: Set[BlockManagerId],
+      maxReplicas: Int): Unit = {
     logInfo(s"Pro-actively replicating $blockId")
-    val infoForReplication = blockInfoManager.lockForReading(blockId).map { info =>
+    val blockInfo = blockInfoManager.lockForReading(blockId).foreach { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
-        info.level.useDisk,
-        info.level.useMemory,
-        info.level.useOffHeap,
-        info.level.deserialized,
-        maxReplicas)
-      (data, storageLevel, info.classTag)
-    }
-    infoForReplication.foreach { case (data, storageLevel, classTag) =>
-      replicate(blockId, data, storageLevel, classTag, existingReplicas)
+        useDisk = info.level.useDisk,
+        useMemory = info.level.useMemory,
+        useOffHeap = info.level.useOffHeap,
+        deserialized = info.level.deserialized,
+        replication = maxReplicas)
+      try {
+        replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
+      } finally {
+        releaseLock(blockId)
+      }
     }
   }
 
@@ -1163,11 +1163,11 @@ private[spark] class BlockManager(
    * the block has been replicated.
    */
   private def replicate(
-    blockId: BlockId,
-    data: ChunkedByteBuffer,
-    level: StorageLevel,
-    classTag: ClassTag[_],
-    existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
+      blockId: BlockId,
+      data: ChunkedByteBuffer,
+      level: StorageLevel,
+      classTag: ClassTag[_],
+      existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
 
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val tLevel = StorageLevel(

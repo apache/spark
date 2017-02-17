@@ -204,26 +204,25 @@ class BlockManagerMasterEndpoint(
       val blockId = iterator.next
       val locations = blockLocations.get(blockId)
       locations -= blockManagerId
+      // De-register the block if none of the block managers have it. Otherwise, if pro-active
+      // replication is enabled, and a block is either an RDD or a test block (the latter is used
+      // for unit testing), we send a message to a randomly chosen executor location to replicate
+      // the given block. Note that we ignore other block types (such as broadcast/shuffle blocks
+      // etc.) as replication doesn't make much sense in that context.
       if (locations.size == 0) {
         blockLocations.remove(blockId)
         logWarning(s"No more replicas available for $blockId !")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
-        // only RDD blocks store data that users explicitly cache so we only need to proactively
-        // replicate RDD blocks
-        // broadcast related blocks exist on all executors, so we don't worry about them
-        // we also need to replicate this behavior for test blocks for unit tests
-        // we send a message to a randomly chosen executor location to replicate block
-        // assuming single executor failure, we find out how many replicas existed before failure
+        // As a heursitic, assume single executor failure to find out the number of replicas that
+        // existed before failure
         val maxReplicas = locations.size + 1
-
         val i = (new Random(blockId.hashCode)).nextInt(locations.size)
         val blockLocations = locations.toSeq
         val candidateBMId = blockLocations(i)
-        val blockManager = blockManagerInfo.get(candidateBMId)
-        if(blockManager.isDefined) {
+        blockManagerInfo.get(candidateBMId).foreach { bm =>
           val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
           val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
-          blockManager.get.slaveEndpoint.ask[Boolean](replicateMsg)
+          bm.slaveEndpoint.ask[Boolean](replicateMsg)
         }
       }
     }
