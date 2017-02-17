@@ -67,7 +67,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
  * Preprocess [[CreateTable]], to do some normalization and checking.
  */
 case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private val catalog = sparkSession.sessionState.catalog
+  private def catalog = sparkSession.sessionState.catalog
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if

@@ -188,4 +188,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     forkedSession.stop()
     activeSession.stop()
   }
+
+  test("fork new session and run query on inherited table") {
+    val activeSession = SparkSession.builder().master("local").getOrCreate()
+
+  }
 }
