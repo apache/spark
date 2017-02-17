@@ -181,7 +181,7 @@ setMethod("approxQuantile",
             statFunctions <- callJMethod(x@sdf, "stat")
             quantiles <- callJMethod(statFunctions, "approxQuantile", as.list(cols),
                                      as.list(probabilities), relativeError)
-            if (length(quantiles) == 1) {
+            if (length(cols) == 1) {
               quantiles[[1]]
             } else {
               quantiles
