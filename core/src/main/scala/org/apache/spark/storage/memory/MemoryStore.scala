@@ -163,6 +163,32 @@ private[spark] class MemoryStore(
   /**
    * Attempt to put the given block in memory store as values.
    *
+   * It's possible that it is too large to materialize and store in memory. To avoid
+   * OOM exceptions, this method will gradually unroll the iterator while periodically checking
+   * whether there is enough free memory. If the block is successfully materialized, then the
+   * temporary unroll memory used during the materialization is "transferred" to storage memory,
+   * so we won't acquire more memory than is actually needed to store the block.
+   *
+   * @return in case of success, the estimated size of the stored data. In case of failure, return
+   *         an iterator containing the values of the block. The returned iterator will be backed
+   *         by the combination of the partially-unrolled block and the remaining elements of the
+   *         original input iterator. The caller must either fully consume this iterator or call
+   *         `close()` on it in order to free the storage memory consumed by the partially-unrolled
+   *         block.
+   */
+  def putBytesAsValues[T](
+      blockId: BlockId,
+      bytes: ChunkedByteBuffer,
+      classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+    val values = serializerManager.dataDeserializeStream(blockId, bytes.toInputStream(),
+      maybeEncrypted = false)(classTag)
+
+    putIteratorAsValues(blockId, values, classTag)
+  }
+
+  /**
+   * Attempt to put the given block in memory store as values.
+   *
    * It's possible that the iterator is too large to materialize and store in memory. To avoid
    * OOM exceptions, this method will gradually unroll the iterator while periodically checking
    * whether there is enough free memory. If the block is successfully materialized, then the
@@ -344,7 +370,7 @@ private[spark] class MemoryStore(
     val serializationStream: SerializationStream = {
       val autoPick = !blockId.isInstanceOf[StreamBlockId]
       val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
-      ser.serializeStream(serializerManager.wrapStream(blockId, redirectableStream))
+      ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
     // Request enough memory to begin unrolling
@@ -820,9 +846,10 @@ private[storage] class PartiallySerializedBlock[T](
     verifyNotConsumedAndNotDiscarded()
     consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
+    val _os = serializerManager.wrapForEncryption(os)
+    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), _os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
-    redirectableOutputStream.setOutputStream(os)
+    redirectableOutputStream.setOutputStream(_os)
     while (rest.hasNext) {
       serializationStream.writeObject(rest.next())(classTag)
     }
@@ -844,7 +871,7 @@ private[storage] class PartiallySerializedBlock[T](
     serializationStream.close()
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
     val unrolledIter = serializerManager.dataDeserializeStream(
-      blockId, unrolledBuffer.toInputStream(dispose = true))(classTag)
+      blockId, unrolledBuffer.toInputStream(dispose = true), maybeEncrypted = false)(classTag)
     // The unroll memory will be freed once `unrolledIter` is fully consumed in
     // PartiallyUnrolledIterator. If the iterator is not consumed by the end of the task then any
     // extra unroll memory will automatically be freed by a `finally` block in `Task`.
