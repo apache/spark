@@ -1558,6 +1558,21 @@ class GeneralizedLinearRegressionSuite
   }
 
   test("glm summary: summaryTable") {
+    /*
+      R code:
+
+      A <- matrix(c(0, 1, 2, 3, 2, 5, 7, 11, 13, 3), 5, 2)
+      b <- c(2, 8, 3, 9, 2)
+      df <- as.data.frame(cbind(A, b))
+      model <- glm(formula = "b ~ .",  data = df)
+      summary(model)
+
+      Coefficients:
+                  Estimate Std. Error t value Pr(>|t|)
+      (Intercept)   0.7903     4.0129   0.197    0.862
+      V1            0.2258     2.1153   0.107    0.925
+      V2            0.4677     0.5815   0.804    0.506
+    */
     val dataset = Seq(
       Instance(2.0, 1.0, Vectors.dense(0.0, 5.0)),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
@@ -1588,13 +1603,13 @@ class GeneralizedLinearRegressionSuite
       summaryTable.select("Feature").collect.map(_.getString(0))
         .zip(expectedFeature(idx)).foreach{ x => assert(x._1 === x._2,
         "Feature name mismatch in summaryTable") }
-      assert(Vectors.dense(summaryTable.select("Coefficient").rdd.collect.map(_.getDouble(0)))
+      assert(Vectors.dense(summaryTable.select("Coefficient").collect.map(_.getDouble(0)))
         ~== expectedEstimate(idx) absTol 1E-3, "Coefficient mismatch in summaryTable")
-      assert(Vectors.dense(summaryTable.select("StdError").rdd.collect.map(_.getDouble(0)))
+      assert(Vectors.dense(summaryTable.select("StdError").collect.map(_.getDouble(0)))
         ~== expectedStdError(idx) absTol 1E-3, "Standard error mismatch in summaryTable")
-      assert(Vectors.dense(summaryTable.select("TValue").rdd.collect.map(_.getDouble(0)))
+      assert(Vectors.dense(summaryTable.select("TValue").collect.map(_.getDouble(0)))
         ~== expectedTValue(idx) absTol 1E-3, "TValue mismatch in summaryTable")
-      assert(Vectors.dense(summaryTable.select("PValue").rdd.collect.map(_.getDouble(0)))
+      assert(Vectors.dense(summaryTable.select("PValue").collect.map(_.getDouble(0)))
         ~== expectedPValue(idx) absTol 1E-3, "PValue mismatch in summaryTable")
 
       idx += 1
