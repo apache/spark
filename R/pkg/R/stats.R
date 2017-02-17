@@ -152,15 +152,16 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' Note that rows containing any NA values will be removed before calculation.
 #'
 #' @param x A SparkDataFrame.
-#' @param cols The names of the numerical columns.
+#' @param cols A single column name, or a list of names for multiple columns.
 #' @param probabilities A list of quantile probabilities. Each number must belong to [0, 1].
 #'                      For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
 #' @param relativeError The relative target precision to achieve (>= 0). If set to zero,
 #'                      the exact quantiles are computed, which could be very expensive.
 #'                      Note that values greater than 1 are accepted but give the same result as 1.
-#' @return The approximate quantiles at the given probabilities. The output should be a list,
-#'         and each element in it is a list of numeric values which represents the approximate
-#'         quantiles in corresponding column.
+#' @return The approximate quantiles at the given probabilities. If the input is a single column name,
+#'         the output is a list of approximate quantiles in that column; If the input is
+#'         multiple column names, the output should be a list, and each element in it is a list of
+#'         numeric values which represents the approximate quantiles in corresponding column.
 #'
 #' @rdname approxQuantile
 #' @name approxQuantile
@@ -178,8 +179,13 @@ setMethod("approxQuantile",
                     probabilities = "numeric", relativeError = "numeric"),
           function(x, cols, probabilities, relativeError) {
             statFunctions <- callJMethod(x@sdf, "stat")
-            callJMethod(statFunctions, "approxQuantile", as.list(cols),
-                        as.list(probabilities), relativeError)
+            quantiles <- callJMethod(statFunctions, "approxQuantile", as.list(cols),
+                                     as.list(probabilities), relativeError)
+            if (length(quantiles) == 1) {
+              quantiles[[1]]
+            } else {
+              quantiles
+            }
           })
 
 #' Returns a stratified sample without replacement
