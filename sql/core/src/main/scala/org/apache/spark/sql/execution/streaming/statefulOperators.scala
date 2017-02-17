@@ -330,7 +330,7 @@ case class MapGroupsWithStateExec(
 
 
 /** Physical operator for executing streaming Deduplication. */
-case class DeduplicationExec(
+case class StreamingDeduplicationExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
     stateId: Option[OperatorStateId] = None,

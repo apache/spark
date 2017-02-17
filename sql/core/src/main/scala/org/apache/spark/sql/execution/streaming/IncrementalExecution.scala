@@ -93,11 +93,11 @@ class IncrementalExecution(
               keys,
               Some(stateId),
               child) :: Nil))
-      case DeduplicationExec(keys, child, None, None) =>
+      case StreamingDeduplicationExec(keys, child, None, None) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
 
-        DeduplicationExec(
+        StreamingDeduplicationExec(
           keys,
           child,
           Some(stateId),

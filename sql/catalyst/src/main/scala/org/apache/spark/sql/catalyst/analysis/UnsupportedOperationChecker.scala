@@ -35,9 +35,6 @@ object UnsupportedOperationChecker {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
-      case p: Deduplication =>
-        throwError("Batch queries should not use Deduplication")(p)
-
       case _ =>
     }
   }

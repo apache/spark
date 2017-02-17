@@ -157,11 +157,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsgs = Seq("(map/flatMap)GroupsWithState"))
 
   // Deduplication:  Not supported after a streaming aggregation
-  assertNotSupportedInBatchPlan(
-    "Deduplication - Deduplication on batch relation",
-    Deduplication(Seq(att), batchRelation),
-    expectedMsgs = Seq("Deduplication"))
-
   assertSupportedInStreamingPlan(
     "Deduplication - Deduplication on streaming relation before aggregation",
     Aggregate(Seq(attributeWithWatermark), aggExprs("c"), Deduplication(Seq(att), streamRelation)),

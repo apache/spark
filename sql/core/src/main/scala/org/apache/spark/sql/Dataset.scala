@@ -2006,19 +2006,7 @@ class Dataset[T] private[sql](
       }
       cols
     }
-    if (isStreaming) {
-      Deduplication(groupCols, logicalPlan)
-    } else {
-      val groupColExprIds = groupCols.map(_.exprId)
-      val aggCols = logicalPlan.output.map { attr =>
-        if (groupColExprIds.contains(attr.exprId)) {
-          attr
-        } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)()
-        }
-      }
-      Aggregate(groupCols, aggCols, logicalPlan)
-    }
+    Deduplication(groupCols, logicalPlan)
   }
 
   /**

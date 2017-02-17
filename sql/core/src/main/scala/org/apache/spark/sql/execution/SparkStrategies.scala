@@ -22,6 +22,7 @@ import org.apache.spark.sql.{SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -241,7 +242,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           planLater(child))
 
       case Deduplication(keys, child) =>
-        DeduplicationExec(keys, planLater(child)) :: Nil
+        StreamingDeduplicationExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
     }
@@ -252,6 +253,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case Deduplication(keys, child) =>
+        val keyExprIds = keys.map(_.exprId)
+        val aggCols = child.output.map { attr =>
+          if (keyExprIds.contains(attr.exprId)) {
+            attr
+          } else {
+            Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
+          }
+        }
+        apply(Aggregate(keys, aggCols, child))
+
       case PhysicalAggregation(
           groupingExpressions, aggregateExpressions, resultExpressions, child) =>
 
