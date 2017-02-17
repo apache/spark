@@ -108,15 +108,13 @@ private[r] object GeneralizedLinearRegressionWrapper
       pipeline.stages(1).asInstanceOf[GeneralizedLinearRegressionModel]
     val summary = glm.summary
 
-    val features = summary.featureNames
+    val rFeatures: Array[String] = if (glm.getFitIntercept) {
+      Array("(Intercept)") ++ summary.featureNames
+    } else {
+      summary.featureNames
+    }
 
-    val rFeatures: Array[String] =
-      summary.summaryTable.select("Feature").collect.map(_.getString(0))
-
-    var rCoefficients: Array[Double] =
-      summary.summaryTable.select("Coefficient").collect.map(_.getDouble(0))
-
-    if (summary.isNormalSolver) {
+    val rCoefficients: Array[Double] = if (summary.isNormalSolver) {
       val rCoefficientStandardErrors =
         summary.summaryTable.select("StdError").collect.map(_.getDouble(0))
 
@@ -126,7 +124,14 @@ private[r] object GeneralizedLinearRegressionWrapper
       val rPValues =
         summary.summaryTable.select("PValue").collect.map(_.getDouble(0))
 
-      rCoefficients = rCoefficients ++ rCoefficientStandardErrors ++ rTValues ++ rPValues
+      summary.summaryTable.select("Coefficient").collect.map(_.getDouble(0)) ++
+        rCoefficientStandardErrors ++ rTValues ++ rPValues
+    } else {
+      if (glm.getFitIntercept) {
+        Array(glm.intercept) ++ glm.coefficients.toArray
+      } else {
+        glm.coefficients.toArray
+      }
     }
 
     val rDispersion: Double = summary.dispersion
