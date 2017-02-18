@@ -77,14 +77,7 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  private var isJoinKeysOrderingResolved = false
-
   private def resolveOrderingOfJoinKeys: Unit = {
-    if (isJoinKeysOrderingResolved) {
-      return
-    }
-    isJoinKeysOrderingResolved = true
-
     left.outputPartitioning match {
       case HashPartitioning(expressions, _)
         if expressions.length == leftKeys.length &&
