@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import scala.util.{Failure, Success, Try}
+
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -76,18 +74,12 @@ object JacksonUtils {
    * to Map-type data.
    */
   def validateOptionsLiteral(exp: Expression): Map[String, String] = {
+    implicit val formats = org.json4s.DefaultFormats
     val json = validateStringLiteral(exp)
-    parse(json) match {
-      case JObject(options) =>
-        options.map {
-          case (key, JString(value)) =>
-            key -> value
-          case _ =>
-            throw new AnalysisException(
-              s"""The format must be '{"key": "value", ...}', but ${json}""")
-        }.toMap
-      case _ =>
-        Map.empty
+    Try(parse(json).extract[Map[String, String]]) match {
+      case Success(m) => m
+      case Failure(_) =>
+        throw new AnalysisException(s"""The format must be '{"key": "value", ...}', but ${json}"""")
     }
   }
 }

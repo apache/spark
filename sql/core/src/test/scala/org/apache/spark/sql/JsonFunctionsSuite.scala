@@ -214,7 +214,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("""to_json(a, '{"k": [{"k": "v"}]}')""").collect
     }
     assert(errMsg1.getMessage.startsWith(
-      "The format must be '{\"key\": \"value\", ...}', but {\"k\": [{\"k\": \"v\"}]}"))
+      """The format must be '{"key": "value", ...}', but {"k": [{"k": "v"}]}"""))
 
     // from_json
     val df3 = Seq("""{"a": 1}""").toDS()
@@ -235,6 +235,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df4.selectExpr(s"""from_json(value, '${schema2.json}', '{"k": [{"k": "v"}]}')""")
     }
     assert(errMsg2.getMessage.startsWith(
-      "The format must be '{\"key\": \"value\", ...}', but {\"k\": [{\"k\": \"v\"}]}"))
+      """The format must be '{"key": "value", ...}', but {"k": [{"k": "v"}]}"""))
   }
 }
