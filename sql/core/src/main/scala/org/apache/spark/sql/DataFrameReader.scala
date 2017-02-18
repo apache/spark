@@ -342,7 +342,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads an `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * Loads a `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
    * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
    *
    * Unless the schema is specified using `schema` function, this function goes through the
