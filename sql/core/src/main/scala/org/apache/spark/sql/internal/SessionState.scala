@@ -174,7 +174,7 @@ object SessionState {
     // Interface to start and stop [[StreamingQuery]]s.
     val streamingQueryManager: StreamingQueryManager = new StreamingQueryManager(sparkSession)
 
-    val queryExecution = (plan: LogicalPlan) => new QueryExecution(sparkSession, plan)
+    val queryExecutionCreator = (plan: LogicalPlan) => new QueryExecution(sparkSession, plan)
 
     new SessionState(
       sparkContext,
@@ -185,7 +185,7 @@ object SessionState {
       sqlParser,
       analyzer,
       streamingQueryManager,
-      queryExecution,
+      queryExecutionCreator,
       jarClassLoader)
   }
 

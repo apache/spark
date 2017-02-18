@@ -77,11 +77,11 @@ private[sql] class HiveSessionCatalog(
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
-  def copy(associatedSparkSession: SparkSession): HiveSessionCatalog = {
+  def copy(sparkSession: SparkSession): HiveSessionCatalog = {
     val catalog = new HiveSessionCatalog(
       externalCatalog,
       globalTempViewManager,
-      associatedSparkSession,
+      sparkSession,
       functionResourceLoader,
       functionRegistry,
       conf,

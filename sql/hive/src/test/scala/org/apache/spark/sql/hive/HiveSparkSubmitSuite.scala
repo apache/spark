@@ -862,6 +862,7 @@ object SPARK_18360 {
         schema = new StructType().add("i", "int"),
         provider = Some(DDLUtils.HIVE_PROVIDER))
 
+      /* TODO: SPARK-19540 re-enable this assert
       val newWarehousePath = Utils.createTempDir().getAbsolutePath
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$newWarehousePath")
       hiveClient.createTable(tableMeta, ignoreIfExists = false)
@@ -870,6 +871,7 @@ object SPARK_18360 {
       // location for tables in default database.
       assert(rawTable.storage.locationUri.get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
+      */
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")

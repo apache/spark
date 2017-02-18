@@ -143,67 +143,48 @@ object HiveSessionState {
   }
 
   def apply(
-      associatedSparkSession: SparkSession,
+      sparkSession: SparkSession,
       conf: Option[SQLConf]): HiveSessionState = {
 
-    val sparkContext = associatedSparkSession.sparkContext
+    val initHelper = SessionState(sparkSession, conf)
 
-    val sqlConf = conf.getOrElse(new SQLConf)
-
-    sparkContext.getConf.getAll.foreach { case (k, v) =>
-      sqlConf.setConfString(k, v)
-    }
-
-    val functionRegistry = FunctionRegistry.builtin.copy
-
-    val experimentalMethods = new ExperimentalMethods
-
-    val jarClassLoader: NonClosableMutableURLClassLoader =
-      associatedSparkSession.sharedState.jarClassLoader
-
-    val functionResourceLoader: FunctionResourceLoader =
-      SessionState.createFunctionResourceLoader(sparkContext, jarClassLoader)
-
-    val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
+    val sparkContext = sparkSession.sparkContext
 
     val catalog = new HiveSessionCatalog(
-      associatedSparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
-      associatedSparkSession.sharedState.globalTempViewManager,
-      associatedSparkSession,
-      functionResourceLoader,
-      functionRegistry,
-      sqlConf,
-      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, sqlConf),
-      sqlParser)
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
+      sparkSession.sharedState.globalTempViewManager,
+      sparkSession,
+      SessionState.createFunctionResourceLoader(sparkContext, initHelper.jarClassLoader),
+      initHelper.functionRegistry,
+      initHelper.conf,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, initHelper.conf),
+      initHelper.sqlParser)
 
     // A Hive client used for interacting with the metastore.
     val metadataHive: HiveClient =
-      associatedSparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .newSession()
 
     // An analyzer that uses the Hive metastore.
-    val analyzer: Analyzer = createAnalyzer(associatedSparkSession, catalog, sqlConf)
+    val analyzer: Analyzer = createAnalyzer(sparkSession, catalog, initHelper.conf)
 
-    val streamingQueryManager: StreamingQueryManager =
-      new StreamingQueryManager(associatedSparkSession)
-
-    val queryExecutionCreator = (plan: LogicalPlan) =>
-      new QueryExecution(associatedSparkSession, plan)
-
-    val plannerCreator = createPlannerCreator(associatedSparkSession, sqlConf, experimentalMethods)
+    val plannerCreator = createPlannerCreator(
+      sparkSession,
+      initHelper.conf,
+      initHelper.experimentalMethods)
 
     new HiveSessionState(
       sparkContext,
-      sqlConf,
-      experimentalMethods,
-      functionRegistry,
+      initHelper.conf,
+      initHelper.experimentalMethods,
+      initHelper.functionRegistry,
       catalog,
-      sqlParser,
+      initHelper.sqlParser,
       metadataHive,
       analyzer,
-      streamingQueryManager,
-      queryExecutionCreator,
-      jarClassLoader,
+      initHelper.streamingQueryManager,
+      initHelper.queryExecutionCreator,
+      initHelper.jarClassLoader,
       plannerCreator)
   }
 

@@ -20,15 +20,16 @@ package org.apache.spark.sql
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.test.SharedSQLContext
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite {
+class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
 
   private var initialSession: SparkSession = _
 
-  private lazy val sparkContext: SparkContext = {
+  override lazy val sparkContext: SparkContext = {
     initialSession = SparkSession.builder()
       .master("local")
       .config("spark.ui.enabled", value = false)
@@ -190,7 +191,30 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
   }
 
   test("fork new session and run query on inherited table") {
-    val activeSession = SparkSession.builder().master("local").getOrCreate()
+    import testImplicits._
 
+    def checkTableExists(sparkSession: SparkSession): Unit = {
+      QueryTest.checkAnswer(sql(
+        """
+          |SELECT x.str, COUNT(*)
+          |FROM df x JOIN df y ON x.str = y.str
+          |GROUP BY x.str
+        """.stripMargin),
+        Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+    }
+
+    val activeSession = SparkSession.builder().master("local").getOrCreate()
+    SparkSession.setActiveSession(activeSession)
+
+    Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
+    checkTableExists(activeSession)
+
+    val forkedSession = activeSession.cloneSession()
+    SparkSession.setActiveSession(forkedSession)
+    checkTableExists(forkedSession)
+
+    SparkSession.clearActiveSession()
+    forkedSession.stop()
+    activeSession.stop()
   }
 }
