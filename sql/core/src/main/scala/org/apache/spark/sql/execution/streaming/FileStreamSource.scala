@@ -158,12 +158,28 @@ class FileStreamSource(
   }
 
   /**
+   * If the source has a metadata log indicating which files should be read, then we should use it.
+   * We figure out whether there exists some metadata log only when user gives a non-glob path.
+   */
+  private val sourceHasMetadata: Boolean =
+    !SparkHadoopUtil.get.isGlobPath(new Path(path)) &&
+      FileStreamSink.hasMetadata(Seq(path), sparkSession.sessionState.newHadoopConf())
+
+  /**
    * Returns a list of files found, sorted by their timestamp.
    */
   private def fetchAllFiles(): Seq[(String, Long)] = {
     val startTime = System.nanoTime
-    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
-    val catalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
+    val catalog =
+      if (sourceHasMetadata) {
+        // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
+        // non-glob path
+        new MetadataLogFileIndex(sparkSession, qualifiedBasePath)
+      } else {
+        // `qualifiedBasePath` can contains glob patterns
+        val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
+        new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
+      }
     val files = catalog.allFiles().sortBy(_.getModificationTime)(fileSortOrder).map { status =>
       (status.getPath.toUri.toString, status.getModificationTime)
     }
