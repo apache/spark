@@ -57,21 +57,21 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getJobs(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllJobsResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllJobsResource(ui)
     }
   }
 
   @Path("applications/{appId}/jobs")
   def getJobs(@PathParam("appId") appId: String): AllJobsResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllJobsResource(ui)
     }
   }
 
   @Path("applications/{appId}/jobs/{jobId: \\d+}")
   def getJob(@PathParam("appId") appId: String): OneJobResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new OneJobResource(ui)
     }
   }
@@ -80,21 +80,21 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getJob(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): OneJobResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new OneJobResource(ui)
     }
   }
 
   @Path("applications/{appId}/executors")
   def getExecutors(@PathParam("appId") appId: String): ExecutorListResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new ExecutorListResource(ui)
     }
   }
 
   @Path("applications/{appId}/allexecutors")
   def getAllExecutors(@PathParam("appId") appId: String): AllExecutorListResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllExecutorListResource(ui)
     }
   }
@@ -103,7 +103,7 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getExecutors(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ExecutorListResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new ExecutorListResource(ui)
     }
   }
@@ -112,14 +112,14 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getAllExecutors(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllExecutorListResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllExecutorListResource(ui)
     }
   }
 
   @Path("applications/{appId}/stages")
   def getStages(@PathParam("appId") appId: String): AllStagesResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllStagesResource(ui)
     }
   }
@@ -128,14 +128,14 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getStages(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllStagesResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllStagesResource(ui)
     }
   }
 
   @Path("applications/{appId}/stages/{stageId: \\d+}")
   def getStage(@PathParam("appId") appId: String): OneStageResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new OneStageResource(ui)
     }
   }
@@ -144,14 +144,14 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getStage(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): OneStageResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new OneStageResource(ui)
     }
   }
 
   @Path("applications/{appId}/storage/rdd")
   def getRdds(@PathParam("appId") appId: String): AllRDDResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new AllRDDResource(ui)
     }
   }
@@ -160,14 +160,14 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getRdds(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): AllRDDResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new AllRDDResource(ui)
     }
   }
 
   @Path("applications/{appId}/storage/rdd/{rddId: \\d+}")
   def getRdd(@PathParam("appId") appId: String): OneRDDResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new OneRDDResource(ui)
     }
   }
@@ -176,7 +176,7 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getRdd(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): OneRDDResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new OneRDDResource(ui)
     }
   }
@@ -278,6 +278,11 @@ private[v1] trait ApiRequestContext {
   protected var httpRequest: HttpServletRequest = _
 
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
+
+  def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
+    withSparkUI(appId, attemptId)(f)
+  }
+
 }
 
 private[v1] class ForbiddenException(msg: String) extends WebApplicationException(

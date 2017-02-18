@@ -26,7 +26,7 @@ private[v1] class ApiStreamingApp extends ApiRequestContext {
 
   @Path("applications/{appId}/streaming")
   def getStreamingRoot(@PathParam("appId") appId: String): ApiStreamingRootResource = {
-    uiRoot.withSparkUI(httpRequest, appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new ApiStreamingRootResource(ui)
     }
   }
@@ -35,7 +35,7 @@ private[v1] class ApiStreamingApp extends ApiRequestContext {
   def getStreamingRoot(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ApiStreamingRootResource = {
-    uiRoot.withSparkUI(httpRequest, appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new ApiStreamingRootResource(ui)
     }
   }
