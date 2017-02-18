@@ -145,12 +145,6 @@ public class TransportFrameDecoderSuite {
     testInvalidFrame(8);
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testLargeFrame() throws Exception {
-    // Frame length includes the frame size field, so need to add a few more bytes.
-    testInvalidFrame((long) Integer.MAX_VALUE + 9);
-  }
-
   /**
    * Creates a number of randomly sized frames and feed them to the given decoder, verifying
    * that the frames were read.
