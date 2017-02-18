@@ -112,7 +112,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         }
 
       case Or(cond1, cond2) =>
-        (calculateFilterSelectivity(cond1, update), calculateFilterSelectivity(cond2, update))
+        (calculateFilterSelectivity(cond1, update = false),
+          calculateFilterSelectivity(cond2, update = false))
         match {
           case (Some(p1), Some(p2)) => Some(math.min(1.0, p1 + p2 - (p1 * p2)))
           case (Some(p1), None) => Some(1.0)
