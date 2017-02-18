@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 
-class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
+class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   import testImplicits._
 
@@ -33,7 +33,7 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     StateStore.stop()
   }
 
-  test("deduplication") {
+  test("deduplication with all columns") {
     val inputData = MemoryStream[String]
     val result = inputData.toDS().dropDuplicates()
 
@@ -50,7 +50,7 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with columns") {
+  test("deduplication with some columns") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS().dropDuplicates("_1")
 
@@ -121,7 +121,7 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with aggregation - append") {
+  test("deduplication with aggregation - append mode") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = inputData.toDS()
       .withColumn("eventTime", $"value".cast("timestamp"))
@@ -170,12 +170,13 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with aggregation - update") {
+  test("deduplication with aggregation - update mode") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS()
+      .select($"_1" as "str", $"_2" as "num")
       .dropDuplicates()
-      .groupBy($"_1")
-      .agg(sum($"_2"))
+      .groupBy("str")
+      .agg(sum("num"))
       .as[(String, Long)]
 
     testStream(result, Update)(
@@ -194,12 +195,13 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with aggregation - complete") {
+  test("deduplication with aggregation - complete mode") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS()
+      .select($"_1" as "str", $"_2" as "num")
       .dropDuplicates()
-      .groupBy($"_1")
-      .agg(sum($"_2"))
+      .groupBy("str")
+      .agg(sum("num"))
       .as[(String, Long)]
 
     testStream(result, Complete)(
@@ -218,18 +220,4 @@ class DeduplicationSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  private def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery =
-    AssertOnQuery { q =>
-      val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
-      assert(
-        progressWithData.stateOperators.map(_.numRowsTotal) === total,
-        "incorrect total rows")
-      assert(
-        progressWithData.stateOperators.map(_.numRowsUpdated) === updated,
-        "incorrect updates rows")
-      true
-    }
-
-  private def assertNumStateRows(total: Long, updated: Long): AssertOnQuery =
-    assertNumStateRows(Seq(total), Seq(updated))
 }

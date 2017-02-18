@@ -241,6 +241,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           rewrittenResultExpressions,
           planLater(child))
 
+      case _ => Nil
+    }
+  }
+
+  /**
+   * Used to plan the streaming deduplication operator.
+   */
+  object StreamingDeduplicationStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplication(keys, child) =>
         StreamingDeduplicationExec(keys, planLater(child)) :: Nil
 
@@ -249,9 +258,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
+   * Used to plan the batch deduplication operator.
    */
-  object Aggregation extends Strategy {
+  object DeduplicationStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case Deduplication(keys, child) =>
         val keyExprIds = keys.map(_.exprId)
@@ -262,8 +271,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
           }
         }
-        apply(Aggregate(keys, aggCols, child))
+        Aggregation.apply(Aggregate(keys, aggCols, child))
 
+      case _ => Nil
+    }
+  }
+
+  /**
+   * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
+   */
+  object Aggregation extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
           groupingExpressions, aggregateExpressions, resultExpressions, child) =>
 

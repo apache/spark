@@ -156,6 +156,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Complete,
     expectedMsgs = Seq("(map/flatMap)GroupsWithState"))
 
+  assertSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState on batch relation inside streaming relation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), batchRelation),
+    outputMode = Append
+  )
+
   // Deduplication:  Not supported after a streaming aggregation
   assertSupportedInStreamingPlan(
     "Deduplication - Deduplication on streaming relation before aggregation",
@@ -167,6 +173,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Deduplication(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("dropDuplicates"))
+
+  assertSupportedInStreamingPlan(
+    "Deduplication - Deduplication on batch relation inside streaming relation",
+    Deduplication(Seq(att), batchRelation),
+    outputMode = Append
+  )
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(

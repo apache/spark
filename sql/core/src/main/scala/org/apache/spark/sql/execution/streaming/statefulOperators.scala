@@ -67,10 +67,13 @@ trait StateStoreWriter extends StatefulOperator {
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
 }
 
+/** An operator that supports watermark. */
 trait WatermarkSupport extends SparkPlan {
 
+  /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
 
+  /** The watermark value. */
   def eventTimeWatermark: Option[Long]
 
   /** Generate a predicate that matches data older than the watermark */
@@ -152,8 +155,8 @@ case class StateStoreSaveExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
-      operatorId = getStateId.operatorId,
-      storeVersion = getStateId.batchId,
+      getStateId.operatorId,
+      getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
@@ -268,8 +271,8 @@ case class MapGroupsWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore[InternalRow](
       getStateId.checkpointLocation,
-      operatorId = getStateId.operatorId,
-      storeVersion = getStateId.batchId,
+      getStateId.operatorId,
+      getStateId.batchId,
       groupingAttributes.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
@@ -346,8 +349,8 @@ case class StreamingDeduplicationExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
-      operatorId = getStateId.operatorId,
-      storeVersion = getStateId.batchId,
+      getStateId.operatorId,
+      getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
@@ -356,7 +359,6 @@ case class StreamingDeduplicationExec(
       val numOutputRows = longMetric("numOutputRows")
       val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-
 
       val baseIterator = watermarkPredicate match {
         case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))

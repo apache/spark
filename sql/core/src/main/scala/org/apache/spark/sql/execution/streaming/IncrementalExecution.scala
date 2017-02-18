@@ -45,6 +45,7 @@ class IncrementalExecution(
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
     sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
+    sparkSession.sessionState.planner.StreamingDeduplicationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.
