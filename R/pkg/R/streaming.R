@@ -158,7 +158,7 @@ setMethod("isActive",
 
 #' awaitTermination
 #'
-#' Waits for the termination of the query, either by \code{stop} or by an error.
+#' Waits for the termination of the query, either by \code{stopQuery} or by an error.
 #'
 #' If the query has terminated, then all subsequent calls to this method will return TRUE
 #' immediately.
