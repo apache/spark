@@ -133,9 +133,6 @@ setMethod("schema",
 #'
 #' Print the logical and physical Catalyst plans to the console for debugging.
 #'
-#' @param x a SparkDataFrame.
-#' @param extended Logical. If extended is FALSE, explain() only prints the physical plan.
-#' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
 #' @aliases explain,SparkDataFrame-method
 #' @rdname explain
@@ -3516,6 +3513,33 @@ setMethod("getNumPartitions",
             callJMethod(callJMethod(x@sdf, "rdd"), "getNumPartitions")
           })
 
+#' isStreaming
+#'
+#' Returns TRUE if this SparkDataFrame contains one or more sources that continuously return data
+#' as it arrives.
+#'
+#' @param x A SparkDataFrame
+#' @return TRUE if this SparkDataFrame is from a streaming source
+#' @family SparkDataFrame functions
+#' @aliases isStreaming,SparkDataFrame-method
+#' @rdname isStreaming
+#' @name isStreaming
+#' @seealso \link{read.stream} \link{write.stream}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- read.stream("socket", host = "localhost", port = 9999)
+#' isStreaming(df)
+#' }
+#' @note isStreaming since 2.2.0
+#' @note experimental
+setMethod("isStreaming",
+          signature(x = "SparkDataFrame"),
+          function(x) {
+            callJMethod(x@sdf, "isStreaming")
+          })
+
 #' Write the streaming SparkDataFrame to a data source.
 #'
 #' The data source is specified by the \code{source} and a set of options (...).
@@ -3550,6 +3574,7 @@ setMethod("getNumPartitions",
 #'\dontrun{
 #' sparkR.session()
 #' df <- read.stream("socket", host = "localhost", port = 9999)
+#' isStreaming(df)
 #' wordCounts <- count(group_by(df, "value"))
 #'
 #' # console
@@ -3579,7 +3604,7 @@ setMethod("write.stream",
               source <- getDefaultSqlSource()
             }
             options <- varargsToStrEnv(...)
-            write <- callJMethod(df@sdf, "writeStream")
+            write <- handledCallJMethod(df@sdf, "writeStream")
             write <- callJMethod(write, "format", source)
             if (!is.null(outputMode)) {
               write <- callJMethod(write, "outputMode", outputMode)

@@ -960,6 +960,8 @@ read.jdbc <- function(url, tableName,
 #' sparkR.session()
 #' df <- read.stream("socket", host = "localhost", port = 9999)
 #' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
+#'
+#' df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
 #' }
 #' @name read.stream
 #' @note read.stream since 2.2.0

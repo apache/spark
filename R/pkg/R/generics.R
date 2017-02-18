@@ -539,6 +539,9 @@ setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
 #' @rdname explain
 #' @export
+#' @param x a SparkDataFrame or a StreamingQuery.
+#' @param extended Logical. If extended is FALSE, prints only the physical plan.
+#' @param ... further arguments to be passed to or from other methods.
 setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 
 #' @rdname except
@@ -576,6 +579,10 @@ setGeneric("intersect", function(x, y) { standardGeneric("intersect") })
 #' @rdname isLocal
 #' @export
 setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
+
+#' @rdname isStreaming
+#' @export
+setGeneric("isStreaming", function(x) { standardGeneric("isStreaming") })
 
 #' @rdname limit
 #' @export

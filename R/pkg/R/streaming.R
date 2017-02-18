@@ -51,7 +51,7 @@ setMethod("show", "StreamingQuery",
           function(object) {
             name <- callJMethod(object@ssq, "name")
             if (!is.null(name)) {
-              cat("StreamingQuery", name, "\n")
+              cat("StreamingQuery '", name, "'\n")
             } else {
               cat("StreamingQuery", "\n")
             }
@@ -69,6 +69,7 @@ setMethod("show", "StreamingQuery",
 #' @name queryName
 #' @aliases queryName,StreamingQuery-method
 #' @family StreamingQuery methods
+#' @seealso \link{write.stream}
 #' @export
 #' @examples
 #' \dontrun{ queryName(sq) }
@@ -80,12 +81,6 @@ setMethod("queryName",
             callJMethod(x@ssq, "name")
           })
 
-#' explain
-#'
-#' Prints the physical plan to the console for debugging purposes.
-#'
-#' @param x a StreamingQuery.
-#' @param extended Logical. If extended is FALSE, prints only the physical plan.
 #' @rdname explain
 #' @name explain
 #' @aliases explain,StreamingQuery-method
