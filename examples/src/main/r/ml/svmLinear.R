@@ -16,31 +16,27 @@
 #
 
 # To run this example use
-# ./bin/spark-submit examples/src/main/r/ml/survreg.R
+# ./bin/spark-submit examples/src/main/r/ml/svmLinear.R
 
 # Load SparkR library into your R session
 library(SparkR)
 
 # Initialize SparkSession
-sparkR.session(appName = "SparkR-ML-survreg-example")
+sparkR.session(appName = "SparkR-ML-svmLinear-example")
 
 # $example on$
-# Use the ovarian dataset available in R survival package
-library(survival)
+# load training data
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
 
-# Fit an accelerated failure time (AFT) survival regression model with spark.survreg
-ovarianDF <- suppressWarnings(createDataFrame(ovarian))
-aftDF <- ovarianDF
-aftTestDF <- ovarianDF
-aftModel <- spark.survreg(aftDF, Surv(futime, fustat) ~ ecog_ps + rx)
+# fit Linear SVM model
+model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
 
 # Model summary
-summary(aftModel)
+summary(model)
 
 # Prediction
-aftPredictions <- predict(aftModel, aftTestDF)
-head(aftPredictions)
+prediction <- predict(model, training)
+showDF(prediction)
 # $example off$
-
 sparkR.session.stop()
-
