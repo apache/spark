@@ -17,7 +17,7 @@
 
 package org.apache.spark.network
 
-import java.io.Closeable
+import java.io.{Closeable, File}
 import java.nio.ByteBuffer
 
 import scala.concurrent.{Future, Promise}
@@ -67,7 +67,8 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       port: Int,
       execId: String,
       blockIds: Array[String],
-      listener: BlockFetchingListener): Unit
+      listener: BlockFetchingListener,
+      shuffleFiles: Array[File]): Unit
 
   /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
@@ -100,7 +101,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           ret.flip()
           result.success(new NioManagedBuffer(ret))
         }
-      })
+      }, shuffleFiles = null)
     ThreadUtils.awaitResult(result.future, Duration.Inf)
   }
 

@@ -520,6 +520,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td>200 * 1024 * 1024</td>
+  <td>
+    The blocks of a shuffle request will be fetched to disk when size of the request is above
+    this threshold. This is to avoid a giant request takes too much memory.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -963,12 +971,12 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.enabled</code></td>
   <td>false</td>
   <td>
-    If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
+    If true, Spark will attempt to use off-heap memory for certain operations(e.g. sort, aggregate, etc. However, the buffer used for fetching shuffle blocks is always off-heap). If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
   </td>
 </tr>
 <tr>
   <td><code>spark.memory.offHeap.size</code></td>
-  <td>0</td>
+  <td>384 * 1024 * 1024</td>
   <td>
     The absolute amount of memory in bytes which can be used for off-heap allocation.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.

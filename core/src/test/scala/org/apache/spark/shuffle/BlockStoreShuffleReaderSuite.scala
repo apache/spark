@@ -19,10 +19,15 @@ package org.apache.spark.shuffle
 
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.nio.ByteBuffer
+import java.util.Properties
 
+import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 
 import org.apache.spark._
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.{BlockManager, BlockManagerId, ShuffleBlockId}
@@ -126,11 +131,20 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
         .set("spark.shuffle.compress", "false")
         .set("spark.shuffle.spill.compress", "false"))
 
+    val taskMemoryManager = mock(classOf[TaskMemoryManager])
+    when(taskMemoryManager.acquireExecutionMemory(any(), any()))
+      .thenAnswer(new Answer[Long] {
+        override def answer(invocation: InvocationOnMock): Long = {
+          invocation.getArguments()(0).asInstanceOf[Long]
+        }
+      })
+    val tc = new TaskContextImpl(0, 0, 0, 0, taskMemoryManager, new Properties, null)
+
     val shuffleReader = new BlockStoreShuffleReader(
       shuffleHandle,
       reduceId,
       reduceId + 1,
-      TaskContext.empty(),
+      tc,
       serializerManager,
       blockManager,
       mapOutputTracker)
