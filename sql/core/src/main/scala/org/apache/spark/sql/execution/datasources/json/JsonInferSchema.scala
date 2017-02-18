@@ -21,7 +21,7 @@ import java.util.Comparator
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.Dataset
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
@@ -36,13 +36,14 @@ private[sql] object JsonInferSchema {
    *   2. Merge types by choosing the lowest type necessary to cover equal keys
    *   3. Replace any remaining null fields with string, the top type
    */
-  def infer(
-      json: Dataset[String],
-      columnNameOfCorruptRecord: String,
-      configOptions: JSONOptions): StructType = {
+  def infer[T](
+      json: RDD[T],
+      configOptions: JSONOptions,
+      createParser: (JsonFactory, T) => JsonParser): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
     val shouldHandleCorruptRecord = configOptions.permissive
+    val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
     val schemaData = if (configOptions.samplingRatio > 0.99) {
       json
     } else {
@@ -50,12 +51,12 @@ private[sql] object JsonInferSchema {
     }
 
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.rdd.mapPartitions { iter =>
+    val rootType = schemaData.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
         try {
-          Utils.tryWithResource(factory.createParser(row)) { parser =>
+          Utils.tryWithResource(createParser(factory, row)) { parser =>
             parser.nextToken()
             Some(inferField(parser, configOptions))
           }
@@ -79,7 +80,7 @@ private[sql] object JsonInferSchema {
 
   private[this] val structFieldComparator = new Comparator[StructField] {
     override def compare(o1: StructField, o2: StructField): Int = {
-      o1.name.compare(o2.name)
+      o1.name.compareTo(o2.name)
     }
   }
 

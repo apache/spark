@@ -58,12 +58,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (greater or equal to 0).
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
    *
-   * @note NaN values will be removed from the numerical column before calculation
+   * @note null and NaN values will be removed from the numerical column before calculation. If
+   *   the dataframe is empty or all rows contain null or NaN, null is returned.
    *
    * @since 2.0.0
    */
@@ -71,27 +72,25 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df.select(col).na.drop(),
-      Seq(col), probabilities, relativeError).head.toArray
+    val res = approxQuantile(Array(col), probabilities, relativeError)
+    Option(res).map(_.head).orNull
   }
 
   /**
    * Calculates the approximate quantiles of numerical columns of a DataFrame.
-   * @see [[DataFrameStatsFunctions.approxQuantile(col:Str* approxQuantile]] for
-   *     detailed description.
+   * @see `approxQuantile(col:Str* approxQuantile)` for detailed description.
    *
-   * Note that rows containing any null or NaN values values will be removed before
-   * calculation.
    * @param cols the names of the numerical columns
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (>= 0).
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @note Rows containing any NaN values will be removed before calculation
+   * @note Rows containing any null or NaN values will be removed before calculation. If
+   *   the dataframe is empty or all rows contain null or NaN, null is returned.
    *
    * @since 2.2.0
    */
@@ -99,8 +98,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
-    StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
-      probabilities, relativeError).map(_.toArray).toArray
+    // TODO: Update NaN/null handling to keep consistent with the single-column version
+    try {
+      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
+        probabilities, relativeError).map(_.toArray).toArray
+    } catch {
+      case e: NoSuchElementException => null
+    }
   }
 
 
@@ -112,7 +116,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       probabilities: List[Double],
       relativeError: Double): java.util.List[java.util.List[Double]] = {
     approxQuantile(cols.toArray, probabilities.toArray, relativeError)
-        .map(_.toList.asJava).toList.asJava
+      .map(_.toList.asJava).toList.asJava
   }
 
   /**
