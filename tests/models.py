@@ -649,3 +649,29 @@ class TaskInstanceTest(unittest.TestCase):
                                       key=key,
                                       include_prior_dates=True),
                          value)
+
+    def test_post_execute_hook(self):
+        """
+        Test that post_execute hook is called with the Operator's result.
+        The result ('error') will cause an error to be raised and trapped.
+        """
+
+        class TestError(Exception):
+            pass
+
+        class TestOperator(PythonOperator):
+            def post_execute(self, context, result):
+                if result == 'error':
+                    raise TestError('expected error.')
+
+        dag = models.DAG(dag_id='test_post_execute_dag')
+        task = TestOperator(
+            task_id='test_operator',
+            dag=dag,
+            python_callable=lambda: 'error',
+            owner='airflow',
+            start_date=datetime.datetime(2017, 2, 1))
+        ti = TI(task=task, execution_date=datetime.datetime.now())
+
+        with self.assertRaises(TestError):
+            ti.run()

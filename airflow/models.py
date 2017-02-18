@@ -1374,7 +1374,22 @@ class TaskInstance(Base):
                 if result is not None:
                     self.xcom_push(key=XCOM_RETURN_KEY, value=result)
 
-                task_copy.post_execute(context=context)
+                # TODO remove deprecated behavior in Airflow 2.0
+                try:
+                    task_copy.post_execute(context=context, result=result)
+                except TypeError as e:
+                    if 'unexpected keyword argument' in str(e):
+                        warnings.warn(
+                            'BaseOperator.post_execute() now takes two '
+                            'arguments, `context` and `result`, but "{}" only '
+                            'expected one. This behavior is deprecated and '
+                            'will be removed in a future version of '
+                            'Airflow.'.format(self.task_id),
+                            category=DeprecationWarning)
+                        task_copy.post_execute(context=context)
+                    else:
+                        raise
+
                 Stats.incr('operator_successes_{}'.format(
                     self.task.__class__.__name__), 1, 1)
             self.state = State.SUCCESS
@@ -2154,8 +2169,7 @@ class BaseOperator(object):
 
     def pre_execute(self, context):
         """
-        This is triggered right before self.execute, it's mostly a hook
-        for people deriving operators.
+        This hook is triggered right before self.execute() is called.
         """
         pass
 
@@ -2168,10 +2182,11 @@ class BaseOperator(object):
         """
         raise NotImplementedError()
 
-    def post_execute(self, context):
+    def post_execute(self, context, result=None):
         """
-        This is triggered right after self.execute, it's mostly a hook
-        for people deriving operators.
+        This hook is triggered right after self.execute() is called.
+        It is passed the execution context and any results returned by the
+        operator.
         """
         pass
 
