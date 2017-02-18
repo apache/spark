@@ -97,37 +97,27 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
    *               for subsequent conditions
    * @return a double value to show the percentage of rows meeting a given condition.
-   *         Returns 1.0 (a conservative filter estimate) if a condition is not supported.
+   *         It returns None if the condition is not supported.
    */
   def calculateFilterSelectivity(condition: Expression, update: Boolean = true): Option[Double] = {
 
     condition match {
       case And(cond1, cond2) =>
-        val p1 = calculateFilterSelectivity(cond1, update)
-        val p2 = calculateFilterSelectivity(cond2, update)
-        p1 match {
-          case Some(percent1) => p2 match {
-            case Some(percent2) => Some(percent1 * percent2)
-            case None => Some(percent1)
-          }
-          case None => p2 match {
-            case Some(percent2) => Some(percent2)
-            case None => None
-          }
+        (calculateFilterSelectivity(cond1, update), calculateFilterSelectivity(cond2, update))
+        match {
+          case (Some(p1), Some(p2)) => Some(p1 * p2)
+          case (Some(p1), None) => Some(p1)
+          case (None, Some(p2)) => Some(p2)
+          case (None, None) => None
         }
 
       case Or(cond1, cond2) =>
-        val p1 = calculateFilterSelectivity(cond1, update = false)
-        val p2 = calculateFilterSelectivity(cond2, update = false)
-        p1 match {
-          case Some(percent1) => p2 match {
-            case Some(percent2) => Some(math.min(1.0, percent1 + percent2 - (percent1 * percent2)))
-            case None => Some(1.0)
-          }
-          case None => p2 match {
-            case Some(percent2) => Some(1.0)
-            case None => None
-          }
+        (calculateFilterSelectivity(cond1, update), calculateFilterSelectivity(cond2, update))
+        match {
+          case (Some(p1), Some(p2)) => Some(math.min(1.0, p1 + p2 - (p1 * p2)))
+          case (Some(p1), None) => Some(1.0)
+          case (None, Some(p2)) => Some(1.0)
+          case (None, None) => None
         }
 
       case Not(cond) => calculateFilterSelectivity(cond, update = false) match {
@@ -135,6 +125,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         // for not-supported condition, set filter selectivity to a conservative estimate 100%
         case None => None
       }
+
       case _ =>
         calculateSingleCondition(condition, update)
     }
