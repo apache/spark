@@ -1603,7 +1603,7 @@ private class LogisticAggregator(
    */
   def merge(other: LogisticAggregator): this.type = {
     require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
-      s"LeastSquaresAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
+      s"LogisticAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
