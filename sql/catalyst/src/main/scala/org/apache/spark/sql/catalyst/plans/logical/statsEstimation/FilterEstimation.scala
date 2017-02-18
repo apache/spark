@@ -30,9 +30,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * @param catalystConf a configuration showing if CBO is enabled
- */
 case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Logging {
 
   /**
@@ -63,7 +60,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     mutableColStats = mutable.Map(stats.attributeStats.map(kv => (kv._1.exprId, kv._2)).toSeq: _*)
 
     // estimate selectivity of this filter predicate
-    val filterSelectivity: Double = calculateConditions(plan.condition)
+    val filterSelectivity: Double = calculateFilterSelectivity(plan.condition) match {
+      case Some(percent) => percent
+      // for not-supported condition, set filter selectivity to a conservative estimate 100%
+      case None => 1.0
+    }
 
     // attributeStats has mapping Attribute-to-ColumnStat.
     // mutableColStats has mapping ExprId-to-ColumnStat.
@@ -77,9 +78,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
     val filteredRowCount: BigInt =
       EstimationUtils.ceil(BigDecimal(stats.rowCount.get) * filterSelectivity)
-    val filteredSizeInBytes: BigInt = EstimationUtils.ceil(BigDecimal(
-        EstimationUtils.getOutputSize(plan.output, filteredRowCount, newColStats)
-    ))
+    val filteredSizeInBytes =
+      EstimationUtils.getOutputSize(plan.output, filteredRowCount, newColStats)
 
     Some(stats.copy(sizeInBytes = filteredSizeInBytes, rowCount = Some(filteredRowCount),
       attributeStats = newColStats))
@@ -99,29 +99,44 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @return a double value to show the percentage of rows meeting a given condition.
    *         Returns 1.0 (a conservative filter estimate) if a condition is not supported.
    */
-  def calculateConditions(condition: Expression, update: Boolean = true): Double = {
+  def calculateFilterSelectivity(condition: Expression, update: Boolean = true): Option[Double] = {
 
     condition match {
       case And(cond1, cond2) =>
-        val p1 = calculateConditions(cond1, update)
-        val p2 = calculateConditions(cond2, update)
-        p1 * p2
+        val p1 = calculateFilterSelectivity(cond1, update)
+        val p2 = calculateFilterSelectivity(cond2, update)
+        p1 match {
+          case Some(percent1) => p2 match {
+            case Some(percent2) => Some(percent1 * percent2)
+            case None => Some(percent1)
+          }
+          case None => p2 match {
+            case Some(percent2) => Some(percent2)
+            case None => None
+          }
+        }
 
       case Or(cond1, cond2) =>
-        val p1 = calculateConditions(cond1, update = false)
-        val p2 = calculateConditions(cond2, update = false)
-        math.min(1.0, p1 + p2 - (p1 * p2))
+        val p1 = calculateFilterSelectivity(cond1, update = false)
+        val p2 = calculateFilterSelectivity(cond2, update = false)
+        p1 match {
+          case Some(percent1) => p2 match {
+            case Some(percent2) => Some(math.min(1.0, percent1 + percent2 - (percent1 * percent2)))
+            case None => Some(1.0)
+          }
+          case None => p2 match {
+            case Some(percent2) => Some(1.0)
+            case None => None
+          }
+        }
 
-      case Not(cond) => calculateSingleCondition(cond, update = false) match {
-        case Some(percent) => 1.0 - percent
+      case Not(cond) => calculateFilterSelectivity(cond, update = false) match {
+        case Some(percent) => Some(1.0 - percent)
         // for not-supported condition, set filter selectivity to a conservative estimate 100%
-        case None => 1.0
+        case None => None
       }
-      case _ => calculateSingleCondition(condition, update) match {
-        case Some(percent) => percent
-        // for not-supported condition, set filter selectivity to a conservative estimate 100%
-        case None => 1.0
-      }
+      case _ =>
+        calculateSingleCondition(condition, update)
     }
   }
 
@@ -167,7 +182,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case op @ GreaterThanOrEqual(l: Literal, ar: AttributeReference) =>
         evaluateBinary(LessThanOrEqual(ar, l), ar, l, update)
 
-      case In(ar: AttributeReference, expList) if !expList.exists(!_.isInstanceOf[Literal]) =>
+      case In(ar: AttributeReference, expList)
+        if expList.forall(e => e.isInstanceOf[Literal]) =>
         // Expression [In (value, seq[Literal])] will be replaced with optimized version
         // [InSet (value, HashSet[Literal])] in Optimizer, but only for list.size > 10.
         // Here we convert In into InSet anyway, because they share the same processing logic.
@@ -177,21 +193,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case InSet(ar: AttributeReference, set) =>
         evaluateInSet(ar, set, update)
 
-      // It's difficult to estimate IsNull after outer joins.  Hence,
-      // we support IsNull and IsNotNull only when the child is a leaf node (table).
       case IsNull(ar: AttributeReference) =>
-        if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(ar, isNull = true, update)
-        } else {
-          None
-        }
+        evaluateIsNull(ar, isNull = true, update)
 
       case IsNotNull(ar: AttributeReference) =>
-        if (plan.child.isInstanceOf[LeafNode ]) {
-          evaluateIsNull(ar, isNull = false, update)
-        } else {
-          None
-        }
+        evaluateIsNull(ar, isNull = false, update)
 
       case _ =>
         // TODO: it's difficult to support string operators without advanced statistics.
@@ -209,7 +215,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param isNull set to true for "IS NULL" condition.  set to false for "IS NOT NULL" condition
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return an optional double value to show the percentage of rows meeting a given condition
    *         It returns None if no statistics collected for a given column.
    */
   def evaluateIsNull(
@@ -255,7 +261,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return an optional double value to show the percentage of rows meeting a given condition
     *         It returns None if no statistics exists for a given column or wrong value.
    */
   def evaluateBinary(
@@ -285,48 +291,34 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   }
 
   /**
-   * This method converts a numeric or Literal value of numeric type to a BigDecimal value.
+   * This method converts a Literal value of numeric type to a BigDecimal value.
    * In order to avoid type casting error such as Java int to Java long, we need to
    * convert a numeric integer value to String, and then convert it to long,
    * and then convert it to BigDecimal.
    *
    * @param attrDataType the column data type
    * @param litValue the literal value
-   * @param litDataType the data type of literal value
    * @return a BigDecimal value
    */
   def numericLiteralToBigDecimal(
        attrDataType: DataType,
-       litValue: Any,
-       litDataType: DataType)
+       litValue: Any)
     : BigDecimal = {
     attrDataType match {
       case _: IntegralType =>
-        BigDecimal(java.lang.Long.valueOf(litValue.toString))
+        BigDecimal(litValue.toString)
 
       case _: FractionalType =>
         BigDecimal(litValue.toString.toDouble)
 
       case DateType =>
-        val dateLiteral = litDataType match {
-          case DateType =>
-            DateTimeUtils.fromJavaDate(litValue.asInstanceOf[Date]).toString
-          case StringType =>
-            DateTimeUtils.stringToDate(litValue.asInstanceOf[UTF8String])
-              .getOrElse(0).toString
-          case _ => litValue.toString
-        }
+        val dateLiteral =
+          DateTimeUtils.fromJavaDate(litValue.asInstanceOf[Date]).toString
         BigDecimal(java.lang.Long.valueOf(dateLiteral))
 
       case TimestampType =>
-        val tsLiteral = litDataType match {
-          case TimestampType =>
-            DateTimeUtils.fromJavaTimestamp(litValue.asInstanceOf[Timestamp]).toString
-          case StringType =>
-            DateTimeUtils.stringToTimestamp(litValue.asInstanceOf[UTF8String])
-                .getOrElse(0).toString
-          case _ => litValue.toString
-        }
+        val tsLiteral =
+          DateTimeUtils.fromJavaTimestamp(litValue.asInstanceOf[Timestamp]).toString
         BigDecimal(java.lang.Long.valueOf(tsLiteral))
     }
   }
@@ -339,7 +331,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return an optional double value to show the percentage of rows meeting a given condition
    */
   def evaluateEqualTo(
       attrRef: AttributeReference,
@@ -395,7 +387,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param hSet a set of literal values
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return an optional double value to show the percentage of rows meeting a given condition
    *         It returns None if no statistics exists for a given column.
    */
 
@@ -412,71 +404,49 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val aColStat = mutableColStats(attrRef.exprId)
     val ndv = aColStat.distinctCount
     val aType = attrRef.dataType
+    var newNdv: Long = 0
 
     // use [min, max] to filter the original hSet
-    val validQuerySet = aType match {
+    aType match {
       case _: NumericType | DateType | TimestampType =>
         val statsRange =
           Range(aColStat.min, aColStat.max, aType).asInstanceOf[NumericRange]
-        val hSetMap = hSet.map(e =>
-            if (e.isInstanceOf[String]) {
-              val utf8String = UTF8String.fromString(e.asInstanceOf[String])
-              numericLiteralToBigDecimal(aType, utf8String, StringType)
-            } else {
-              numericLiteralToBigDecimal(aType, e, aType)
-            })
-        hSetMap.filter(e => e >= statsRange.min && e <= statsRange.max)
+
+        // To faciliate finding the min and max values in hSet, we map hSet values to BigDecimal.
+        // Using hSetBigdec, we can find the min and max values quickly in the ordered hSetBigdec.
+        // We use hSetBigdecToAnyMap to help us find the original hSet value.
+        val hSetBigdecToAnyMap: Map[BigDecimal, Any] =
+          hSet.map(e => numericLiteralToBigDecimal(aType, e) -> e).toMap
+        val hSetBigdec = hSet.map(e => numericLiteralToBigDecimal(aType, e))
+        val validQuerySet = hSetBigdec.filter(e => e >= statsRange.min && e <= statsRange.max)
+
+        if (validQuerySet.isEmpty) {
+          return Some(0.0)
+        }
+
+        val newMax = Some(hSetBigdecToAnyMap(validQuerySet.max))
+        val newMin = Some(hSetBigdecToAnyMap(validQuerySet.min))
+        // newNdv should not be greater than the old ndv.  For example, column has only 2 values
+        // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
+        newNdv = math.min(validQuerySet.size.toLong, ndv.longValue())
+        if (update) {
+          val newStats = aColStat.copy(distinctCount = newNdv, min = newMin,
+                max = newMax, nullCount = 0)
+          mutableColStats += (attrRef.exprId -> newStats)
+        }
 
       // We assume the whole set since there is no min/max information for String/Binary type
-      case StringType | BinaryType => hSet
-    }
-    if (validQuerySet.isEmpty) {
-      return Some(0.0)
-    }
-
-    // newNdv should be no greater than the old ndv.  For example, column has only 2 values
-    // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
-    val newNdv = math.min(validQuerySet.size.toLong, ndv.longValue())
-    val(newMax, newMin) = aType match {
-      case _: NumericType =>
-        val tmpSet: Set[Double] = validQuerySet.map(e => e.toString.toDouble)
-        (Some(tmpSet.max), Some(tmpSet.min))
-      case DateType =>
-        if (hSet.forall(e => e.isInstanceOf[String])) {
-          val dateMax = Date.valueOf(hSet.asInstanceOf[Set[String]].max)
-          val dateMin = Date.valueOf(hSet.asInstanceOf[Set[String]].min)
-          (Some(dateMax), Some(dateMin))
-        } else {
-          val tmpSet: Set[Long] = validQuerySet.map(e => e.toString.toLong)
-          (Some(tmpSet.max), Some(tmpSet.min))
+      case StringType | BinaryType =>
+        newNdv = math.min(hSet.size.toLong, ndv.longValue())
+        if (update) {
+          val newStats = aColStat.copy(distinctCount = newNdv, nullCount = 0)
+          mutableColStats += (attrRef.exprId -> newStats)
         }
-      case TimestampType =>
-        if (hSet.forall(e => e.isInstanceOf[String])) {
-          val dateMax = Timestamp.valueOf(hSet.asInstanceOf[Set[String]].max)
-          val dateMin = Timestamp.valueOf(hSet.asInstanceOf[Set[String]].min)
-          (Some(dateMax), Some(dateMin))
-        } else {
-          val tmpSet: Set[Long] = validQuerySet.map(e => e.toString.toLong)
-          (Some(tmpSet.max), Some(tmpSet.min))
-        }
-      case _ =>
-        (None, None)
-    }
-
-    if (update) {
-      val newStats = attrRef.dataType match {
-        case _: NumericType | DateType | TimestampType =>
-          aColStat.copy(distinctCount = newNdv, min = newMin,
-            max = newMax, nullCount = 0)
-        case StringType | BinaryType =>
-          aColStat.copy(distinctCount = newNdv, nullCount = 0)
-      }
-      mutableColStats += (attrRef.exprId -> newStats)
     }
 
     // return the filter selectivity.  Without advanced statistics such as histograms,
     // we have to assume uniform distribution.
-    Some(math.min(1.0, validQuerySet.size / ndv.toDouble))
+    Some(math.min(1.0, newNdv.toDouble / ndv.toDouble))
   }
 
   /**
@@ -488,7 +458,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
    *               for subsequent conditions
-   * @return a doube value to show the percentage of rows meeting a given condition
+   * @return an optional double value to show the percentage of rows meeting a given condition
    */
   def evaluateBinaryForNumeric(
       op: BinaryComparison,
@@ -504,7 +474,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
 
     val literalValueBD =
-      numericLiteralToBigDecimal(attrRef.dataType, literal.value, literal.dataType)
+      numericLiteralToBigDecimal(attrRef.dataType, literal.value)
 
     // determine the overlapping degree between predicate range and column's range
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {

@@ -53,22 +53,23 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val childColStatTimestamp = ColumnStat(distinctCount = 10, min = Some(tsMin), max = Some(tsMax),
     nullCount = 0, avgLen = 8, maxLen = 8)
 
-  // Fourth column cdate has 10 values from 0.20 through 2.00 at increment of 0.2.
+  // Fourth column cdecimal has 10 values from 0.20 through 2.00 at increment of 0.2.
   val decMin = new java.math.BigDecimal("0.200000000000000000")
   val decMax = new java.math.BigDecimal("2.000000000000000000")
   val arDecimal = AttributeReference("cdecimal", DecimalType(12, 2))()
   val childColStatDecimal = ColumnStat(distinctCount = 10, min = Some(decMin), max = Some(decMax),
     nullCount = 0, avgLen = 8, maxLen = 8)
 
-  // Fifth column cfloat has 10 float values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
-  val arFloat = AttributeReference("cfloat", FloatType)()
-  val childColStatFloat = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
-    nullCount = 0, avgLen = 4, maxLen = 4)
-
-  // Sixth column cdouble has 10 double values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
-  val arDouble = AttributeReference("cdouble", FloatType)()
+  // Fifth column cdouble has 10 double values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
+  val arDouble = AttributeReference("cdouble", DoubleType)()
   val childColStatDouble = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
     nullCount = 0, avgLen = 8, maxLen = 8)
+
+  // Sixth column cstring has 10 String values:
+  // "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"
+  val arString = AttributeReference("cstring", StringType)()
+  val childColStatString = ColumnStat(distinctCount = 10, min = None, max = None,
+    nullCount = 0, avgLen = 2, maxLen = 2)
 
   test("cint = 2") {
     validateEstimatedStats(
@@ -241,10 +242,11 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cdate IN ('2017-01-03', '2017-01-04', '2017-01-05')") {
     val d20170103 = Date.valueOf("2017-01-03")
+    val d20170104 = Date.valueOf("2017-01-04")
     val d20170105 = Date.valueOf("2017-01-05")
     validateEstimatedStats(
       arDate,
-      Filter(InSet(arDate, Set("2017-01-03", "2017-01-04", "2017-01-05")),
+      Filter(InSet(arDate, Set(d20170103, d20170104, d20170105)),
         childStatsTestPlan(Seq(arDate))),
       ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
         nullCount = 0, avgLen = 4, maxLen = 4),
@@ -300,16 +302,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     )
   }
 
-  test("cfloat < 3.0") {
-    validateEstimatedStats(
-      arFloat,
-      Filter(LessThan(arFloat, Literal(3.0)), childStatsTestPlan(Seq(arFloat))),
-      ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      Some(3L)
-    )
-  }
-
   test("cdouble < 3.0") {
     validateEstimatedStats(
       arDouble,
@@ -317,6 +309,27 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
         nullCount = 0, avgLen = 8, maxLen = 8),
       Some(3L)
+    )
+  }
+
+  test("cstring = 'A2'") {
+    validateEstimatedStats(
+      arString,
+      Filter(EqualTo(arString, Literal("A2")), childStatsTestPlan(Seq(arString))),
+      ColumnStat(distinctCount = 1, min = None, max = None,
+        nullCount = 0, avgLen = 2, maxLen = 2),
+      Some(1L)
+    )
+  }
+
+  // There is no min/max statistics for String type.  We estimate 10 rows returned.
+  test("cstring < 'A2'") {
+    validateEstimatedStats(
+      arString,
+      Filter(LessThan(arString, Literal("A2")), childStatsTestPlan(Seq(arString))),
+      ColumnStat(distinctCount = 10, min = None, max = None,
+        nullCount = 0, avgLen = 2, maxLen = 2),
+      Some(10L)
     )
   }
 
@@ -350,8 +363,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         arDate -> childColStatDate,
         arTimestamp -> childColStatTimestamp,
         arDecimal -> childColStatDecimal,
-        arFloat -> childColStatFloat,
-        arDouble -> childColStatDouble
+        arDouble -> childColStatDouble,
+        arString -> childColStatString
       ))
     )
   }
