@@ -26,12 +26,21 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[sql] class CSVOptions(
-    @transient private val parameters: CaseInsensitiveMap[String], defaultTimeZoneId: String)
+private[csv] class CSVOptions(
+    @transient private val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
-  def this(parameters: Map[String, String], defaultTimeZoneId: String) =
-    this(CaseInsensitiveMap(parameters), defaultTimeZoneId)
+  def this(
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+      this(
+        CaseInsensitiveMap(parameters),
+        defaultTimeZoneId,
+        defaultColumnNameOfCorruptRecord)
+  }
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -95,7 +104,8 @@ private[sql] class CSVOptions(
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
-  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+  val columnNameOfCorruptRecord =
+    parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
   val nullValue = parameters.getOrElse("nullValue", "")
 

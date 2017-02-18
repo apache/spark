@@ -101,11 +101,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val columnNameOfCorruptRecord = csvOptions.columnNameOfCorruptRecord.getOrElse(sparkSession
-      .sessionState.conf.columnNameOfCorruptRecord)
-    val shouldHandleCorruptRecord = csvOptions.permissive && requiredSchema.exists { f =>
-      f.name == columnNameOfCorruptRecord && f.dataType == StringType && f.nullable
-    }
+    val parsedOptions = new CSVOptions(
+      options,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     (file: PartitionedFile) => {
       val lines = {
@@ -126,11 +125,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       }
 
       val filteredLines = CSVUtils.filterCommentAndEmpty(linesWithoutHeader, csvOptions)
-      val parser = if (shouldHandleCorruptRecord) {
-        new UnivocityParser(dataSchema, requiredSchema, csvOptions, Some(columnNameOfCorruptRecord))
-      } else {
-        new UnivocityParser(dataSchema, requiredSchema, csvOptions)
-      }
+      val parser = new UnivocityParser(dataSchema, requiredSchema, parsedOptions)
       filteredLines.flatMap(parser.parse)
     }
   }
