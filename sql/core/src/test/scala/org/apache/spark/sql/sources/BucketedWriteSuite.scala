@@ -20,18 +20,18 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.test.SharedSQLContext
 
-class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class BucketedWriteSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  val fileFormatsToTest = Seq("parquet", "json")
 
   test("bucketed by non-existing column") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
@@ -72,11 +72,13 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     assert(e.getMessage == "'insertInto' does not support bucketing right now;")
   }
 
-  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+  private lazy val df = {
+    (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+  }
 
   def tableDir: File = {
     val identifier = spark.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
-    new File(URI.create(hiveContext.sessionState.catalog.hiveDefaultTableFilePath(identifier)))
+    new File(URI.create(spark.sessionState.catalog.defaultTablePath(identifier)))
   }
 
   /**
@@ -137,7 +139,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   }
 
   test("write bucketed data") {
-    for (source <- Seq("parquet", "json", "orc")) {
+    for (source <- fileFormatsToTest) {
       withTable("bucketed_table") {
         df.write
           .format(source)
@@ -153,7 +155,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   }
 
   test("write bucketed data with sortBy") {
-    for (source <- Seq("parquet", "json", "orc")) {
+    for (source <- fileFormatsToTest) {
       withTable("bucketed_table") {
         df.write
           .format(source)
@@ -186,7 +188,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   }
 
   test("write bucketed data without partitionBy") {
-    for (source <- Seq("parquet", "json", "orc")) {
+    for (source <- fileFormatsToTest) {
       withTable("bucketed_table") {
         df.write
           .format(source)
@@ -199,7 +201,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   }
 
   test("write bucketed data without partitionBy with sortBy") {
-    for (source <- Seq("parquet", "json", "orc")) {
+    for (source <- fileFormatsToTest) {
       withTable("bucketed_table") {
         df.write
           .format(source)
@@ -215,7 +217,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   test("write bucketed data with bucketing disabled") {
     // The configuration BUCKETING_ENABLED does not affect the writing path
     withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
-      for (source <- Seq("parquet", "json", "orc")) {
+      for (source <- fileFormatsToTest) {
         withTable("bucketed_table") {
           df.write
             .format(source)
