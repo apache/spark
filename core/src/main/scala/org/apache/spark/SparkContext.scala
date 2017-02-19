@@ -605,7 +605,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Some(Utils.getThreadDump())
       } else {
         val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>

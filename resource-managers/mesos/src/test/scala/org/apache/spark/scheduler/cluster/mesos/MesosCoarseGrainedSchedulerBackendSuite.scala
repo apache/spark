@@ -442,7 +442,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.stop()
     // Any method of the backend involving sending messages to the driver endpoint should not
     // be called after the backend is stopped.
-    verify(driverEndpoint, never()).askWithRetry(isA(classOf[RemoveExecutor]))(any[ClassTag[_]])
+    verify(driverEndpoint, never()).askSync(isA(classOf[RemoveExecutor]))(any[ClassTag[_]])
   }
 
   test("mesos supports spark.executor.uri") {

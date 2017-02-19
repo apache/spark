@@ -432,7 +432,7 @@ class MasterSuite extends SparkFunSuite
     val master = makeMaster()
     master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
     eventually(timeout(10.seconds)) {
-      val masterState = master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
       assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
     }
 

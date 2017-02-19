@@ -372,7 +372,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     try {
       if (driverEndpoint != null) {
         logInfo("Shutting down all executors")
-        driverEndpoint.askWithRetry[Boolean](StopExecutors)
+        driverEndpoint.askSync[Boolean](StopExecutors)
       }
     } catch {
       case e: Exception =>
@@ -384,7 +384,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     stopExecutors()
     try {
       if (driverEndpoint != null) {
-        driverEndpoint.askWithRetry[Boolean](StopDriver)
+        driverEndpoint.askSync[Boolean](StopDriver)
       }
     } catch {
       case e: Exception =>
