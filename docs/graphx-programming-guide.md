@@ -708,7 +708,9 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note calls to graph.cache have been removed):
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, graph and 
+messages are periodically checkpoint and the checkpoint interval is set by
+"spark.graphx.pregel.checkpointInterval"):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -720,25 +722,53 @@ class GraphOps[VD, ED] {
        sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
        mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
-    // Receive the initial message at each vertex
-    var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
+    val checkpointInterval = graph.vertices.sparkContext.getConf
+      .getInt("spark.graphx.pregel.checkpointInterval", 10)
+    var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg))
+    val graphCheckpointer = new PeriodicGraphCheckpointer[VD, ED](
+      checkpointInterval, graph.vertices.sparkContext)
+    graphCheckpointer.update(g)
+
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
+    val messageCheckpointer = new PeriodicRDDCheckpointer[(VertexId, A)](
+      checkpointInterval, graph.vertices.sparkContext)
+    messageCheckpointer.update(messages.asInstanceOf[RDD[(VertexId, A)]])
     var activeMessages = messages.count()
-    // Loop until no messages remain or maxIterations is achieved
+
+    // Loop
+    var prevG: Graph[VD, ED] = null
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages and update the vertices.
-      g = g.joinVertices(messages)(vprog).cache()
+      prevG = g
+      g = g.joinVertices(messages)(vprog)
+      graphCheckpointer.update(g)
+
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
-      // messages so it can be materialized on the next line, allowing us to uncache the previous
-      // iteration.
-      messages = g.mapReduceTriplets(
-        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
+      // and periodic checkpoint messages so it can be materialized on the next line, and avoid
+      // to have a long lineage chain.
+      messages = GraphXUtils.mapReduceTriplets(
+        g, sendMsg, mergeMsg, Some((oldMessages, activeDirection)))
+      // The call to count() materializes `messages` and the vertices of `g`. This hides oldMessages
+      // (depended on by the vertices of g) and the vertices of prevG (depended on by oldMessages
+      // and the vertices of g).
+      messageCheckpointer.update(messages.asInstanceOf[RDD[(VertexId, A)]])
       activeMessages = messages.count()
+
+      logInfo("Pregel finished iteration " + i)
+
+      // Unpersist the RDDs hidden by newly-materialized RDDs
+      oldMessages.unpersist(blocking = false)
+      prevG.unpersistVertices(blocking = false)
+      prevG.edges.unpersist(blocking = false)
+      // count the iteration
       i += 1
     }
+    messageCheckpointer.unpersistDataSet()
+    graphCheckpointer.deleteAllCheckpoints()
+    messageCheckpointer.deleteAllCheckpoints()
     g
   }
 }
