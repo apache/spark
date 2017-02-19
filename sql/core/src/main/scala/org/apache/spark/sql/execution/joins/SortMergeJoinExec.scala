@@ -77,42 +77,35 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  private def resolveOrderingOfJoinKeys: Unit = {
+  private def resolveOrderingOfJoinKeys(): Unit = {
+    def reorder(expectedOrderOfKeys: Seq[Expression],
+                currentOrderOfKeys: Seq[Expression]): Unit = {
+      val leftKeysBuffer = ArrayBuffer[Expression]()
+      val rightKeysBuffer = ArrayBuffer[Expression]()
+
+      expectedOrderOfKeys.foreach(expression => {
+        val index = currentOrderOfKeys.indexWhere(e => e.semanticEquals(expression))
+
+        leftKeysBuffer.append(leftKeys(index))
+        rightKeysBuffer.append(rightKeys(index))
+      })
+
+      leftKeys = leftKeysBuffer
+      rightKeys = rightKeysBuffer
+    }
+
     left.outputPartitioning match {
-      case HashPartitioning(expressions, _)
-        if expressions.length == leftKeys.length &&
-          leftKeys.forall(x => expressions.exists(_.semanticEquals(x))) =>
-
-        val leftKeysBuffer = ArrayBuffer[Expression]()
-        val rightKeysBuffer = ArrayBuffer[Expression]()
-
-        expressions.foreach(expression => {
-          val index = leftKeys.indexWhere(e => e.semanticEquals(expression))
-
-          leftKeysBuffer.append(leftKeys(index))
-          rightKeysBuffer.append(rightKeys(index))
-        })
-
-        leftKeys = leftKeysBuffer
-        rightKeys = rightKeysBuffer
+      case HashPartitioning(leftExpressions, _)
+        if leftExpressions.length == leftKeys.length &&
+          leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
+        reorder(leftExpressions, leftKeys)
 
       case _ => right.outputPartitioning match {
-        case HashPartitioning(expressions, _)
-          if expressions.length == rightKeys.length &&
-            rightKeys.forall(x => expressions.exists(_.semanticEquals(x))) =>
+        case HashPartitioning(rightExpressions, _)
+          if rightExpressions.length == rightKeys.length &&
+            rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
 
-          val leftKeysBuffer = ArrayBuffer[Expression]()
-          val rightKeysBuffer = ArrayBuffer[Expression]()
-
-          expressions.foreach(expression => {
-            val index = rightKeys.indexWhere(e => e.semanticEquals(expression))
-
-            leftKeysBuffer.append(leftKeys(index))
-            rightKeysBuffer.append(rightKeys(index))
-          })
-
-          leftKeys = leftKeysBuffer
-          rightKeys = rightKeysBuffer
+          reorder(rightExpressions, rightKeys)
 
         case _ => // do nothing
       }
@@ -120,7 +113,7 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    resolveOrderingOfJoinKeys
+    resolveOrderingOfJoinKeys()
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
   }
 
