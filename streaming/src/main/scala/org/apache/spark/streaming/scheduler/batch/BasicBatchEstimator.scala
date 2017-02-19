@@ -39,7 +39,7 @@ class BasicBatchEstimator(conf: SparkConf)
     conf.get("spark.streaming.BatchEstimator", "basic") match {
       case "basic" =>
         val batchinfo = conf.get(
-          "spark.streaming.BatchEstimator.basic.batchList", "2,3,4,5,6")
+          "spark.streaming.BatchEstimator.basic.batchList", "0")
         val batchStr = batchinfo.split(",")
         length = batchStr.length
         batchList = new Array[Long](length)

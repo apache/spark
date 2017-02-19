@@ -61,5 +61,5 @@ object BatchEstimator extends Logging{
     conf.getBoolean("spark.streaming.DefaultBatchInterval.enabled", false)
 
   def isBasicBatchIntervalEnabled(conf: SparkConf): Boolean =
-    conf.getBoolean("spark.streaming.BasicBatchInterval.enabled", true)
+    conf.getBoolean("spark.streaming.BasicBatchInterval.enabled", false)
 }

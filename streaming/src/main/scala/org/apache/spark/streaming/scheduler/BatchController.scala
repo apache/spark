@@ -99,7 +99,7 @@ object BatchController {
     // is the dynamic batch interval enabled
     var isEnable: Boolean = false
     def isDynamicBatchIntervalEnabled(conf: SparkConf): Boolean =
-      conf.getBoolean("spark.streaming.dynamicBatchInterval.enabled", true)
+      conf.getBoolean("spark.streaming.dynamicBatchInterval.enabled", false)
 
     def getBatchIntervalEnabled(): Boolean = isEnable
     def setBatchIntervalEnabled(enabled: Boolean): Unit = {
