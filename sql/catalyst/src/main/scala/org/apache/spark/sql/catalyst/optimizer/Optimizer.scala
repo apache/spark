@@ -574,18 +574,30 @@ object CollapseProject extends Rule[LogicalPlan] {
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Case 1
-    case Repartition(numPartitions, shuffle, Repartition(_, shuffleChild, child))
-        if shuffle == shuffleChild || shuffle =>
-      Repartition(numPartitions, shuffle, child)
+    case r @ Repartition(numPartitions, shuffle, child @ Repartition(_, _, grandChild)) =>
+      (shuffle, child.shuffle) match {
+        case (true, true) | (true, false) | (false, false) =>
+          Repartition(numPartitions, shuffle, grandChild)
+        case (false, true) if numPartitions >= child.numPartitions =>
+          child
+        case _ =>
+          r
+      }
     // Case 2
-    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
-      RepartitionByExpression(exprs, child, numPartitions)
+    case RepartitionByExpression(exprs, RepartitionByExpression(_, grandChild, _), numPartitions) =>
+      RepartitionByExpression(exprs, grandChild, numPartitions)
     // Case 3
-    case Repartition(numPartitions, shuffle, r: RepartitionByExpression) if shuffle =>
-      r.copy(numPartitions = Some(numPartitions))
+    case r @ Repartition(numPartitions, shuffle, child: RepartitionByExpression) =>
+      if (shuffle) {
+        child.copy(numPartitions = Some(numPartitions))
+      } else if (numPartitions >= child.numPartitions.get) {
+        r
+      } else {
+        r
+      }
     // Case 4
-    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
-      RepartitionByExpression(exprs, child, numPartitions)
+    case RepartitionByExpression(exprs, Repartition(_, _, grandChild), numPartitions) =>
+      RepartitionByExpression(exprs, grandChild, numPartitions)
   }
 }
 

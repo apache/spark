@@ -840,6 +840,8 @@ case class RepartitionByExpression(
     case None => // Ok
   }
 
+  override lazy val resolved: Boolean = super.resolved && numPartitions.nonEmpty
+
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
