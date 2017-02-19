@@ -722,6 +722,7 @@ class GraphOps[VD, ED] {
        sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
        mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
+    // Receive the initial message at each vertex
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg))
     val graphCheckpointer = new PeriodicGraphCheckpointer[VD, ED](
       checkpointInterval, graph.vertices.sparkContext)
@@ -733,15 +734,12 @@ class GraphOps[VD, ED] {
       checkpointInterval, graph.vertices.sparkContext)
     messageCheckpointer.update(messages.asInstanceOf[RDD[(VertexId, A)]])
     var activeMessages = messages.count()
-
     // Loop until no messages remain or maxIterations is achieved
-    var prevG: Graph[VD, ED] = null
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages and update the vertices.
       g = g.joinVertices(messages)(vprog)
       graphCheckpointer.update(g)
-
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
       // and periodic checkpoint messages so it can be materialized on the next line, and avoid
