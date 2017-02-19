@@ -11,6 +11,15 @@ assists people when migrating to a new version.
 
 A new DaskExecutor allows Airflow tasks to be run in Dask Distributed clusters.
 
+### Deprecated Features
+These features are marked for deprecation. They may still work (and raise a `DeprecationWarning`), but are no longer
+supported and will be removed entirely in Airflow 2.0
+
+- `post_execute()` hooks now take two arguments, `context` and `result`
+  (AIRFLOW-886)
+
+  Previously, post_execute() only took one argument, `context`.
+
 ## Airflow 1.8
 
 ### Database
