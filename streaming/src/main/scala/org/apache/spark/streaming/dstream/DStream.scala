@@ -24,15 +24,13 @@ import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
-
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.SparkHadoopWriterUtils
-import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
+import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
-import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.scheduler.{BatchController, Job}
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{CallSite, Utils}
 
@@ -69,13 +67,13 @@ abstract class DStream[T: ClassTag] (
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================
 
-  /** Time interval after which the DStream generates an RDD */
+  /** Time interval after which the DStream generates a RDD */
   def slideDuration: Duration
 
   /** List of parent DStreams on which this DStream depends on */
   def dependencies: List[DStream[_]]
 
-  /** Method that generates an RDD for the given time */
+  /** Method that generates a RDD for the given time */
   def compute(validTime: Time): Option[RDD[T]]
 
   // =======================================================================
@@ -311,7 +309,9 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new SparkException (this + " has not been initialized")
-    } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
+    } else if (time <= zeroTime ||
+      ! ((time - zeroTime).isMultipleOf(slideDuration) ||
+        BatchController.getBatchIntervalEnabled())) {
       logInfo(s"Time $time is invalid as zeroTime is $zeroTime" +
         s" , slideDuration is $slideDuration and difference is ${time - zeroTime}")
       false
@@ -338,7 +338,7 @@ abstract class DStream[T: ClassTag] (
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
           // compute() might cause Spark jobs to be launched.
-          SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
+          PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
             compute(time)
           }
         }
