@@ -35,27 +35,35 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
   public void testTypedAggregationAverage() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.avg(v -> (double)(v._2() * 2)));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 6.0)), agged.collectAsList());
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 6.0)),
+        agged.collectAsList());
   }
 
   @Test
   public void testTypedAggregationCount() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.count(v -> v));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 2L), tuple2("b", 1L)), agged.collectAsList());
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 2L), new Tuple2<>("b", 1L)),
+        agged.collectAsList());
   }
 
   @Test
   public void testTypedAggregationSumDouble() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.sum(v -> (double)v._2()));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 3.0)), agged.collectAsList());
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 3.0)),
+        agged.collectAsList());
   }
 
   @Test
   public void testTypedAggregationSumLong() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.sumLong(v -> (long)v._2()));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3L), tuple2("b", 3L)), agged.collectAsList());
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3L), new Tuple2<>("b", 3L)),
+        agged.collectAsList());
   }
 }
