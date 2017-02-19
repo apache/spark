@@ -70,6 +70,10 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
         sparkListenerBus.post(s)
         // post to local listeners to trigger callbacks
         postToAll(s)
+      case t: QueryTerminatedEvent =>
+        // run all the listeners synchronized before removing the id from the list
+        postToAll(t)
+        activeQueryRunIds.synchronized { activeQueryRunIds -= t.runId }
       case _ =>
         sparkListenerBus.post(event)
     }
@@ -112,7 +116,6 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
       case queryTerminated: QueryTerminatedEvent =>
         if (shouldReport(queryTerminated.runId)) {
           listener.onQueryTerminated(queryTerminated)
-          activeQueryRunIds.synchronized { activeQueryRunIds -= queryTerminated.runId }
         }
       case _ =>
     }
