@@ -217,7 +217,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
-      newCommandBuilder(Collections.<String>emptyList());
+      newCommandBuilder(Collections.emptyList());
     launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
       System.getProperty("spark.test.home"));
     launcher.master = "yarn";

@@ -24,7 +24,6 @@ import scala.Tuple2;
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
@@ -41,7 +40,9 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
 
     Dataset<Tuple2<String, Integer>> agged = grouped.agg(new IntSumOf().toColumn());
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3), new Tuple2<>("b", 3)),
+        agged.collectAsList());
 
     Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(new IntSumOf().toColumn())
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
@@ -87,48 +88,36 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
   @Test
   public void testTypedAggregationAverage() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.avg(
-      new MapFunction<Tuple2<String, Integer>, Double>() {
-        public Double call(Tuple2<String, Integer> value) throws Exception {
-          return (double)(value._2() * 2);
-        }
-      }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 6.0)), agged.collectAsList());
+    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.avg(value -> (double)(value._2() * 2)));
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 6.0)),
+        agged.collectAsList());
   }
 
   @Test
   public void testTypedAggregationCount() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.count(
-      new MapFunction<Tuple2<String, Integer>, Object>() {
-        public Object call(Tuple2<String, Integer> value) throws Exception {
-          return value;
-        }
-      }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 2), tuple2("b", 1)), agged.collectAsList());
+    Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.count(value -> value));
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 2L), new Tuple2<>("b", 1L)),
+        agged.collectAsList());
   }
 
   @Test
   public void testTypedAggregationSumDouble() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.sum(
-      new MapFunction<Tuple2<String, Integer>, Double>() {
-        public Double call(Tuple2<String, Integer> value) throws Exception {
-          return (double)value._2();
-        }
-      }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 3.0)), agged.collectAsList());
+    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.sum(value -> (double) value._2()));
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 3.0)),
+        agged.collectAsList());
   }
 
   @Test
   public void testTypedAggregationSumLong() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.sumLong(
-      new MapFunction<Tuple2<String, Integer>, Long>() {
-        public Long call(Tuple2<String, Integer> value) throws Exception {
-          return (long)value._2();
-        }
-      }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+    Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.sumLong(value -> (long) value._2()));
+    Assert.assertEquals(
+        Arrays.asList(new Tuple2<>("a", 3L), new Tuple2<>("b", 3L)),
+        agged.collectAsList());
   }
 }

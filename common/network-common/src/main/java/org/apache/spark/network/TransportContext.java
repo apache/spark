@@ -17,9 +17,9 @@
 
 package org.apache.spark.network;
 
+import java.util.ArrayList;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -100,7 +100,7 @@ public class TransportContext {
   }
 
   public TransportClientFactory createClientFactory() {
-    return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
+    return createClientFactory(new ArrayList<>());
   }
 
   /** Create a server which will attempt to bind to a specific port. */
@@ -120,7 +120,7 @@ public class TransportContext {
   }
 
   public TransportServer createServer() {
-    return createServer(0, Lists.<TransportServerBootstrap>newArrayList());
+    return createServer(0, new ArrayList<>());
   }
 
   public TransportChannelHandler initializePipeline(SocketChannel channel) {

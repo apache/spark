@@ -30,7 +30,6 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -95,12 +94,7 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = jsc.parallelize(personList).map(
-      new Function<Person, Row>() {
-        @Override
-        public Row call(Person person) throws Exception {
-          return RowFactory.create(person.getName(), person.getAge());
-        }
-      });
+        person -> RowFactory.create(person.getName(), person.getAge()));
 
     List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
@@ -131,12 +125,7 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = jsc.parallelize(personList).map(
-        new Function<Person, Row>() {
-          @Override
-          public Row call(Person person) {
-            return RowFactory.create(person.getName(), person.getAge());
-          }
-        });
+        person -> RowFactory.create(person.getName(), person.getAge()));
 
     List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("", DataTypes.StringType, false));
@@ -146,12 +135,7 @@ public class JavaApplySchemaSuite implements Serializable {
     Dataset<Row> df = spark.createDataFrame(rowRDD, schema);
     df.createOrReplaceTempView("people");
     List<String> actual = spark.sql("SELECT * FROM people").toJavaRDD()
-      .map(new Function<Row, String>() {
-        @Override
-        public String call(Row row) {
-          return row.getString(0) + "_" + row.get(1);
-        }
-      }).collect();
+      .map(row -> row.getString(0) + "_" + row.get(1)).collect();
 
     List<String> expected = new ArrayList<>(2);
     expected.add("Michael_29");

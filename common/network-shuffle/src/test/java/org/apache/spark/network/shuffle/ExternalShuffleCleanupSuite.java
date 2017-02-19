@@ -60,12 +60,10 @@ public class ExternalShuffleCleanupSuite {
   public void cleanupUsesExecutor() throws IOException {
     TestShuffleDataContext dataContext = createSomeData();
 
-    final AtomicBoolean cleanupCalled = new AtomicBoolean(false);
+    AtomicBoolean cleanupCalled = new AtomicBoolean(false);
 
     // Executor which does nothing to ensure we're actually using it.
-    Executor noThreadExecutor = new Executor() {
-      @Override public void execute(Runnable runnable) { cleanupCalled.set(true); }
-    };
+    Executor noThreadExecutor = runnable -> cleanupCalled.set(true);
 
     ExternalShuffleBlockResolver manager =
       new ExternalShuffleBlockResolver(conf, null, noThreadExecutor);

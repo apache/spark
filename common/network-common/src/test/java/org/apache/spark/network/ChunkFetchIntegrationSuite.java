@@ -20,6 +20,7 @@ package org.apache.spark.network;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -29,7 +30,6 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
 import org.junit.AfterClass;
@@ -179,49 +179,49 @@ public class ChunkFetchIntegrationSuite {
 
   @Test
   public void fetchBufferChunk() throws Exception {
-    FetchResult res = fetchChunks(Lists.newArrayList(BUFFER_CHUNK_INDEX));
-    assertEquals(res.successChunks, Sets.newHashSet(BUFFER_CHUNK_INDEX));
+    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX));
+    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
-    assertBufferListsEqual(res.buffers, Lists.newArrayList(bufferChunk));
+    assertBufferListsEqual(Arrays.asList(bufferChunk), res.buffers);
     res.releaseBuffers();
   }
 
   @Test
   public void fetchFileChunk() throws Exception {
-    FetchResult res = fetchChunks(Lists.newArrayList(FILE_CHUNK_INDEX));
-    assertEquals(res.successChunks, Sets.newHashSet(FILE_CHUNK_INDEX));
+    FetchResult res = fetchChunks(Arrays.asList(FILE_CHUNK_INDEX));
+    assertEquals(Sets.newHashSet(FILE_CHUNK_INDEX), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
-    assertBufferListsEqual(res.buffers, Lists.newArrayList(fileChunk));
+    assertBufferListsEqual(Arrays.asList(fileChunk), res.buffers);
     res.releaseBuffers();
   }
 
   @Test
   public void fetchNonExistentChunk() throws Exception {
-    FetchResult res = fetchChunks(Lists.newArrayList(12345));
+    FetchResult res = fetchChunks(Arrays.asList(12345));
     assertTrue(res.successChunks.isEmpty());
-    assertEquals(res.failedChunks, Sets.newHashSet(12345));
+    assertEquals(Sets.newHashSet(12345), res.failedChunks);
     assertTrue(res.buffers.isEmpty());
   }
 
   @Test
   public void fetchBothChunks() throws Exception {
-    FetchResult res = fetchChunks(Lists.newArrayList(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
-    assertEquals(res.successChunks, Sets.newHashSet(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
+    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX));
+    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX, FILE_CHUNK_INDEX), res.successChunks);
     assertTrue(res.failedChunks.isEmpty());
-    assertBufferListsEqual(res.buffers, Lists.newArrayList(bufferChunk, fileChunk));
+    assertBufferListsEqual(Arrays.asList(bufferChunk, fileChunk), res.buffers);
     res.releaseBuffers();
   }
 
   @Test
   public void fetchChunkAndNonExistent() throws Exception {
-    FetchResult res = fetchChunks(Lists.newArrayList(BUFFER_CHUNK_INDEX, 12345));
-    assertEquals(res.successChunks, Sets.newHashSet(BUFFER_CHUNK_INDEX));
-    assertEquals(res.failedChunks, Sets.newHashSet(12345));
-    assertBufferListsEqual(res.buffers, Lists.newArrayList(bufferChunk));
+    FetchResult res = fetchChunks(Arrays.asList(BUFFER_CHUNK_INDEX, 12345));
+    assertEquals(Sets.newHashSet(BUFFER_CHUNK_INDEX), res.successChunks);
+    assertEquals(Sets.newHashSet(12345), res.failedChunks);
+    assertBufferListsEqual(Arrays.asList(bufferChunk), res.buffers);
     res.releaseBuffers();
   }
 
-  private void assertBufferListsEqual(List<ManagedBuffer> list0, List<ManagedBuffer> list1)
+  private static void assertBufferListsEqual(List<ManagedBuffer> list0, List<ManagedBuffer> list1)
       throws Exception {
     assertEquals(list0.size(), list1.size());
     for (int i = 0; i < list0.size(); i ++) {
@@ -229,7 +229,8 @@ public class ChunkFetchIntegrationSuite {
     }
   }
 
-  private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
+  private static void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1)
+      throws Exception {
     ByteBuffer nio0 = buffer0.nioByteBuffer();
     ByteBuffer nio1 = buffer1.nioByteBuffer();
 
