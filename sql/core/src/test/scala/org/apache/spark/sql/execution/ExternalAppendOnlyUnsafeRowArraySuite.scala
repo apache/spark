@@ -28,25 +28,20 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSparkContext {
   private val random = new java.util.Random()
 
-  private def createSparkConf(): SparkConf = {
-    val conf = new SparkConf(false)
-    // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
-    // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
-    conf.set("spark.serializer.objectStreamReset", "1")
-    conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
-    conf
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sc = new SparkContext("local", "test", new SparkConf())
+    val taskContext = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
+    TaskContext.setTaskContext(taskContext)
   }
+
+  override def afterAll(): Unit = TaskContext.unset()
 
   private def withExternalArray(spillThreshold: Int)
                                (f: ExternalAppendOnlyUnsafeRowArray => Unit): Unit = {
-    sc = new SparkContext("local", "test", createSparkConf())
-    val taskContext = MemoryTestingUtils.fakeTaskContext(SparkEnv.get)
-    TaskContext.setTaskContext(taskContext)
     val array = new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
-
     try f(array) finally {
       array.clear()
-      sc.stop()
     }
   }
 
