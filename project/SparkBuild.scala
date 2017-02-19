@@ -234,7 +234,9 @@ object SparkBuild extends PomBuild {
     },
 
     javacJVMVersion := "1.8",
-    scalacJVMVersion := "1.8",
+    // SBT Scala 2.10 build still doesn't support Java 8, because scalac 2.10 doesn't, but,
+    // it also doesn't touch Java 8 code and it's OK to emit Java 7 bytecode in this case
+    scalacJVMVersion := (if (System.getProperty("scala-2.10") == "true") "1.7" else "1.8"),
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
