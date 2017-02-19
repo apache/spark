@@ -23,8 +23,8 @@ context("Structured Streaming")
 
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
-jsonSubDir <- "sparkr-test/json/"
-jsonDir <- paste0(tempdir(), "/", jsonSubDir)
+jsonSubDir <- file.path("sparkr-test", "json")
+jsonDir <- file.path(tempdir(), jsonSubDir)
 dir.create(jsonDir, recursive = TRUE)
 
 mockLines <- c("{\"name\":\"Michael\"}",
@@ -77,12 +77,36 @@ test_that("print from explain, lastProgress, status, isActive", {
   stopQuery(q)
 })
 
+test_that("Stream other format", {
+  parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
+  df <- read.df(jsonPath, "json", schema)
+  write.df(df, parquetPath, "parquet", "overwrite")
+
+  df <- read.stream(path = parquetPath, schema = schema)
+  expect_true(isStreaming(df))
+  counts <- count(group_by(df, "name"))
+  q <- write.stream(counts, "memory", queryName = "people3", outputMode = "complete")
+
+  expect_false(awaitTermination(q, 5 * 1000))
+  expect_equal(head(sql("SELECT count(*) FROM people3"))[[1]], 3)
+
+  expect_equal(queryName(q), "people3")
+  expect_true(any(grepl("\"description\" : \"FileStreamSource[[:print:]]+parquet",
+              capture.output(lastProgress(q)))))
+  expect_true(isActive(q))
+
+  stopQuery(q)
+  expect_true(awaitTermination(q, 1))
+  expect_false(isActive(q))
+
+  unlink(parquetPath)
+})
+
 test_that("Non-streaming DataFrame", {
   c <- as.DataFrame(cars)
   expect_false(isStreaming(c))
 
-  expect_error(tryCatch(write.stream(c, "memory", queryName = "people", outputMode = "complete"),
-               error = function(e) { stop(e) }),
+  expect_error(write.stream(c, "memory", queryName = "people", outputMode = "complete"),
                paste0(".*(writeStream : analysis error - 'writeStream' can be called only on ",
                       "streaming Dataset/DataFrame).*"))
 })
@@ -90,10 +114,30 @@ test_that("Non-streaming DataFrame", {
 test_that("Unsupported operation", {
   # memory sink without aggregation
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
-  expect_error(tryCatch(write.stream(df, "memory", queryName = "people", outputMode = "complete"),
-               error = function(e) { stop(e) }),
+  expect_error(write.stream(df, "memory", queryName = "people", outputMode = "complete"),
                paste0(".*(start : analysis error - Complete output mode not supported when there ",
                       "are no streaming aggregations on streaming DataFrames/Datasets).*"))
+})
+
+test_that("Terminated by error", {
+  df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = -1)
+  counts <- count(group_by(df, "name"))
+  # This would not fail before returning with a StreamingQuery,
+  # but could dump error log at just about the same time
+  expect_error(q <- write.stream(counts, "memory", queryName = "people4", outputMode = "complete"),
+               NA)
+
+  expect_error(awaitTermination(q, 1),
+               paste0(".*(awaitTermination : streaming query error - Invalid value '-1' for option",
+                      " 'maxFilesPerTrigger', must be a positive integer).*"))
+
+  expect_true(any(grepl("\"message\" : \"Terminated with exception: Invalid value",
+              capture.output(status(q)))))
+  expect_true(any(grepl("Streaming query has no progress", capture.output(lastProgress(q)))))
+  expect_equal(queryName(q), "people4")
+  expect_false(isActive(q))
+
+  stopQuery(q)
 })
 
 unlink(jsonPath)

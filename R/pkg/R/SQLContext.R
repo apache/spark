@@ -947,7 +947,8 @@ read.jdbc <- function(url, tableName,
 #' "spark.sql.sources.default" will be used.
 #'
 #' @param source The name of external data source
-#' @param schema The data schema defined in structType
+#' @param schema The data schema defined in structType, this is required for file-based streaming
+#'               data source
 #' @param ... additional external data source specific named options, for instance \code{path} for
 #'        file-based streaming data source
 #' @return SparkDataFrame

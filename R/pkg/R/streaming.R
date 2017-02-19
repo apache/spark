@@ -51,7 +51,7 @@ setMethod("show", "StreamingQuery",
           function(object) {
             name <- callJMethod(object@ssq, "name")
             if (!is.null(name)) {
-              cat("StreamingQuery '", name, "'\n")
+              cat(paste0("StreamingQuery '", name, "'\n"))
             } else {
               cat("StreamingQuery", "\n")
             }
@@ -112,7 +112,12 @@ setMethod("explain",
 setMethod("lastProgress",
           signature(x = "StreamingQuery"),
           function(x) {
-            cat(callJMethod(callJMethod(x@ssq, "lastProgress"), "toString"), "\n")
+            p <- callJMethod(x@ssq, "lastProgress")
+            if (is.null(p)) {
+              cat("Streaming query has no progress")
+            } else {
+              cat(callJMethod(p, "toString"), "\n")
+            }
           })
 
 #' status
@@ -178,14 +183,7 @@ setMethod("isActive",
 setMethod("awaitTermination",
           signature(x = "StreamingQuery"),
           function(x, timeout) {
-            tryCatch(callJMethod(x@ssq, "awaitTermination", as.integer(timeout)),
-                    error = function(e) {
-                      if (any(grep("StreamingQueryException", as.character(e)))) {
-                        stop("Query has terminated with an error")
-                      } else {
-                        stop(paste0("Unknown error: ", as.character(e)))
-                      }
-                    })
+            handledCallJMethod(x@ssq, "awaitTermination", as.integer(timeout))
           })
 
 #' stopQuery
