@@ -271,7 +271,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
-    addPermGenSizeOpt(cmd);
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
@@ -405,49 +404,65 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     @Override
     protected boolean handle(String opt, String value) {
-      if (opt.equals(MASTER)) {
-        master = value;
-      } else if (opt.equals(DEPLOY_MODE)) {
-        deployMode = value;
-      } else if (opt.equals(PROPERTIES_FILE)) {
-        propertiesFile = value;
-      } else if (opt.equals(DRIVER_MEMORY)) {
-        conf.put(SparkLauncher.DRIVER_MEMORY, value);
-      } else if (opt.equals(DRIVER_JAVA_OPTIONS)) {
-        conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
-      } else if (opt.equals(DRIVER_LIBRARY_PATH)) {
-        conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
-      } else if (opt.equals(DRIVER_CLASS_PATH)) {
-        conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
-      } else if (opt.equals(CONF)) {
-        String[] setConf = value.split("=", 2);
-        checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-        conf.put(setConf[0], setConf[1]);
-      } else if (opt.equals(CLASS)) {
-        // The special classes require some special command line handling, since they allow
-        // mixing spark-submit arguments with arguments that should be propagated to the shell
-        // itself. Note that for this to work, the "--class" argument must come before any
-        // non-spark-submit arguments.
-        mainClass = value;
-        if (specialClasses.containsKey(value)) {
-          allowsMixedArguments = true;
-          appResource = specialClasses.get(value);
-        }
-      } else if (opt.equals(KILL_SUBMISSION) || opt.equals(STATUS)) {
-        isAppResourceReq = false;
-        sparkArgs.add(opt);
-        sparkArgs.add(value);
-      } else if (opt.equals(HELP) || opt.equals(USAGE_ERROR)) {
-        isAppResourceReq = false;
-        sparkArgs.add(opt);
-      } else if (opt.equals(VERSION)) {
-        isAppResourceReq = false;
-        sparkArgs.add(opt);
-      } else {
-        sparkArgs.add(opt);
-        if (value != null) {
+      switch (opt) {
+        case MASTER:
+          master = value;
+          break;
+        case DEPLOY_MODE:
+          deployMode = value;
+          break;
+        case PROPERTIES_FILE:
+          propertiesFile = value;
+          break;
+        case DRIVER_MEMORY:
+          conf.put(SparkLauncher.DRIVER_MEMORY, value);
+          break;
+        case DRIVER_JAVA_OPTIONS:
+          conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
+          break;
+        case DRIVER_LIBRARY_PATH:
+          conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
+          break;
+        case DRIVER_CLASS_PATH:
+          conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
+          break;
+        case CONF:
+          String[] setConf = value.split("=", 2);
+          checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
+          conf.put(setConf[0], setConf[1]);
+          break;
+        case CLASS:
+          // The special classes require some special command line handling, since they allow
+          // mixing spark-submit arguments with arguments that should be propagated to the shell
+          // itself. Note that for this to work, the "--class" argument must come before any
+          // non-spark-submit arguments.
+          mainClass = value;
+          if (specialClasses.containsKey(value)) {
+            allowsMixedArguments = true;
+            appResource = specialClasses.get(value);
+          }
+          break;
+        case KILL_SUBMISSION:
+        case STATUS:
+          isAppResourceReq = false;
+          sparkArgs.add(opt);
           sparkArgs.add(value);
-        }
+          break;
+        case HELP:
+        case USAGE_ERROR:
+          isAppResourceReq = false;
+          sparkArgs.add(opt);
+          break;
+        case VERSION:
+          isAppResourceReq = false;
+          sparkArgs.add(opt);
+          break;
+        default:
+          sparkArgs.add(opt);
+          if (value != null) {
+            sparkArgs.add(value);
+          }
+          break;
       }
       return true;
     }

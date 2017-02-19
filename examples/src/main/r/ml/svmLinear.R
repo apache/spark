@@ -15,13 +15,28 @@
 # limitations under the License.
 #
 
-# Set everything to be logged to the file target/unit-tests.log
-log4j.rootCategory=INFO, file
-log4j.appender.file=org.apache.log4j.FileAppender
-log4j.appender.file.append=true
-log4j.appender.file.file=target/unit-tests.log
-log4j.appender.file.layout=org.apache.log4j.PatternLayout
-log4j.appender.file.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/ml/svmLinear.R
 
-# Ignore messages below warning level from Jetty, because it's a bit verbose
-log4j.logger.org.spark_project.jetty=WARN
+# Load SparkR library into your R session
+library(SparkR)
+
+# Initialize SparkSession
+sparkR.session(appName = "SparkR-ML-svmLinear-example")
+
+# $example on$
+# load training data
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+
+# fit Linear SVM model
+model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
+
+# Model summary
+summary(model)
+
+# Prediction
+prediction <- predict(model, training)
+showDF(prediction)
+# $example off$
+sparkR.session.stop()

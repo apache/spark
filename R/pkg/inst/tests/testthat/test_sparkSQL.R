@@ -725,7 +725,7 @@ test_that("objectFile() works with row serialization", {
   objectPath <- tempfile(pattern = "spark-test", fileext = ".tmp")
   df <- read.json(jsonPath)
   dfRDD <- toRDD(df)
-  saveAsObjectFile(coalesce(dfRDD, 1L), objectPath)
+  saveAsObjectFile(coalesceRDD(dfRDD, 1L), objectPath)
   objectIn <- objectFile(sc, objectPath)
 
   expect_is(objectIn, "RDD")
@@ -1236,7 +1236,7 @@ test_that("column functions", {
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
   c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
   c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
-  c19 <- spark_partition_id()
+  c19 <- spark_partition_id() + coalesce(c) + coalesce(c1, c2, c3)
   c20 <- to_timestamp(c) + to_timestamp(c, "yyyy") + to_date(c, "yyyy")
 
   # Test if base::is.nan() is exposed
@@ -2222,11 +2222,19 @@ test_that("sampleBy() on a DataFrame", {
 })
 
 test_that("approxQuantile() on a DataFrame", {
-  l <- lapply(c(0:99), function(i) { i })
-  df <- createDataFrame(l, "key")
-  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
-  expect_equal(quantiles[[1]], 50)
-  expect_equal(quantiles[[2]], 80)
+  l <- lapply(c(0:99), function(i) { list(i, 99 - i) })
+  df <- createDataFrame(l, list("a", "b"))
+  quantiles <- approxQuantile(df, "a", c(0.5, 0.8), 0.0)
+  expect_equal(quantiles, list(50, 80))
+  quantiles2 <- approxQuantile(df, c("a", "b"), c(0.5, 0.8), 0.0)
+  expect_equal(quantiles2[[1]], list(50, 80))
+  expect_equal(quantiles2[[2]], list(50, 80))
+
+  dfWithNA <- createDataFrame(data.frame(a = c(NA, 30, 19, 11, 28, 15),
+                                         b = c(-30, -19, NA, -11, -28, -15)))
+  quantiles3 <- approxQuantile(dfWithNA, c("a", "b"), c(0.5), 0.0)
+  expect_equal(quantiles3[[1]], list(28))
+  expect_equal(quantiles3[[2]], list(-15))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -2491,15 +2499,18 @@ test_that("repartition by columns on DataFrame", {
     ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
 
   # repartition by column and number of partitions
-  actual <- repartition(df, 3L, col = df$"a")
+  actual <- repartition(df, 3, col = df$"a")
 
-  # since we cannot access the number of partitions from dataframe, checking
-  # that at least the dimensions are identical
+  # Checking that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 3L)
 
   # repartition by number of partitions
   actual <- repartition(df, 13L)
   expect_identical(dim(df), dim(actual))
+  expect_equal(getNumPartitions(actual), 13L)
+
+  expect_equal(getNumPartitions(coalesce(actual, 1L)), 1L)
 
   # a test case with a column and dapply
   schema <-  structType(structField("a", "integer"), structField("avg", "double"))
@@ -2513,6 +2524,25 @@ test_that("repartition by columns on DataFrame", {
 
   # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
+})
+
+test_that("coalesce, repartition, numPartitions", {
+  df <- as.DataFrame(cars, numPartitions = 5)
+  expect_equal(getNumPartitions(df), 5)
+  expect_equal(getNumPartitions(coalesce(df, 3)), 3)
+  expect_equal(getNumPartitions(coalesce(df, 6)), 5)
+
+  df1 <- coalesce(df, 3)
+  expect_equal(getNumPartitions(df1), 3)
+  expect_equal(getNumPartitions(coalesce(df1, 6)), 5)
+  expect_equal(getNumPartitions(coalesce(df1, 4)), 4)
+  expect_equal(getNumPartitions(coalesce(df1, 2)), 2)
+
+  df2 <- repartition(df1, 10)
+  expect_equal(getNumPartitions(df2), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
