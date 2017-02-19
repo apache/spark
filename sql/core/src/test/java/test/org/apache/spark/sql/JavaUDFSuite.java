@@ -27,7 +27,6 @@ import org.junit.Test;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.api.java.UDF2;
 import org.apache.spark.sql.types.DataTypes;
 
@@ -54,16 +53,7 @@ public class JavaUDFSuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void udf1Test() {
-    // With Java 8 lambdas:
-    // sqlContext.registerFunction(
-    //   "stringLengthTest", (String str) -> str.length(), DataType.IntegerType);
-
-    spark.udf().register("stringLengthTest", new UDF1<String, Integer>() {
-      @Override
-      public Integer call(String str) {
-        return str.length();
-      }
-    }, DataTypes.IntegerType);
+    spark.udf().register("stringLengthTest", (String str) -> str.length(), DataTypes.IntegerType);
 
     Row result = spark.sql("SELECT stringLengthTest('test')").head();
     Assert.assertEquals(4, result.getInt(0));
@@ -72,18 +62,8 @@ public class JavaUDFSuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void udf2Test() {
-    // With Java 8 lambdas:
-    // sqlContext.registerFunction(
-    //   "stringLengthTest",
-    //   (String str1, String str2) -> str1.length() + str2.length,
-    //   DataType.IntegerType);
-
-    spark.udf().register("stringLengthTest", new UDF2<String, String, Integer>() {
-      @Override
-      public Integer call(String str1, String str2) {
-        return str1.length() + str2.length();
-      }
-    }, DataTypes.IntegerType);
+    spark.udf().register("stringLengthTest",
+        (String str1, String str2) -> str1.length() + str2.length(), DataTypes.IntegerType);
 
     Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
     Assert.assertEquals(9, result.getInt(0));
@@ -91,8 +71,8 @@ public class JavaUDFSuite implements Serializable {
 
   public static class StringLengthTest implements UDF2<String, String, Integer> {
     @Override
-    public Integer call(String str1, String str2) throws Exception {
-      return new Integer(str1.length() + str2.length());
+    public Integer call(String str1, String str2) {
+      return str1.length() + str2.length();
     }
   }
 
@@ -113,12 +93,7 @@ public class JavaUDFSuite implements Serializable {
   @SuppressWarnings("unchecked")
   @Test
   public void udf4Test() {
-    spark.udf().register("inc", new UDF1<Long, Long>() {
-      @Override
-      public Long call(Long i) {
-        return i + 1;
-      }
-    }, DataTypes.LongType);
+    spark.udf().register("inc", (Long i) -> i + 1, DataTypes.LongType);
 
     spark.range(10).toDF("x").createOrReplaceTempView("tmp");
     // This tests when Java UDFs are required to be the semantically same (See SPARK-9435).
