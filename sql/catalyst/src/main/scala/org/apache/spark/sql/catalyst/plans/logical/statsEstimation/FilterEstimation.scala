@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Logging {
 
@@ -112,9 +111,10 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         }
 
       case Or(cond1, cond2) =>
-        (calculateFilterSelectivity(cond1, update = false),
-          calculateFilterSelectivity(cond2, update = false))
-        match {
+        // For ease of debugging, we compute percent1 and percent2 in 2 statements.
+        val percent1 = calculateFilterSelectivity(cond1, update = false)
+        val percent2 = calculateFilterSelectivity(cond2, update = false)
+        (percent1, percent2) match {
           case (Some(p1), Some(p2)) => Some(math.min(1.0, p1 + p2 - (p1 * p2)))
           case (Some(p1), None) => Some(1.0)
           case (None, Some(p2)) => Some(1.0)
