@@ -280,7 +280,7 @@ private[v1] trait ApiRequestContext {
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
 
   def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
-    withSparkUI(appId, attemptId)(f)
+    uiRoot.withSparkUI(httpRequest, appId, attemptId)(f)
   }
 
 }
