@@ -845,7 +845,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
  * If `numPartitions` is not specified, the number of partitions will be the number set by
- * `spark.sql.shuffle.partitions`.
+ * `spark.sql.shuffle.partitions` in Analyzer.
  */
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
@@ -856,6 +856,9 @@ case class RepartitionByExpression(
     case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
     case None => // Ok
   }
+
+  override lazy val resolved: Boolean =
+    expressions.forall(_.resolved) && childrenResolved && numPartitions.isDefined
 
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output

@@ -21,11 +21,12 @@ import java.util.TimeZone
 
 import org.scalatest.ShouldMatchers
 
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -172,6 +173,16 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
+  }
+
+  test("resolve RepartitionByExpression") {
+    checkAnalysis(
+      CatalystSqlParser.parsePlan("SELECT * FROM table DISTRIBUTE BY a"),
+      RepartitionByExpression(
+        Seq("a".attr),
+        testRelation.select('a),
+        numPartitions = Some(conf.numShufflePartitions)).analyze,
+      caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {

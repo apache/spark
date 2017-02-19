@@ -121,6 +121,7 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
+      ResolveRepartitionByExpression,
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
@@ -1739,6 +1740,16 @@ class Analyzer(
           s"output by the UDTF expected ${elementAttrs.size} aliases but got " +
           s"${names.mkString(",")} ")
       }
+    }
+  }
+
+  /**
+   * Sets numPartitions of RepartitionByExpression by `spark.sql.shuffle.partitions`, if empty.
+   */
+  object ResolveRepartitionByExpression extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case r: RepartitionByExpression if r.numPartitions.isEmpty =>
+        r.copy(numPartitions = Some(conf.numShufflePartitions))
     }
   }
 
