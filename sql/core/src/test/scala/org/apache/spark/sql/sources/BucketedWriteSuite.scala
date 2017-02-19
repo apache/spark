@@ -26,12 +26,22 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
-class BucketedWriteSuite extends QueryTest with SharedSQLContext {
+class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSQLContext {
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+  }
+
+  override protected def fileFormatsToTest: Seq[String] = Seq("parquet", "json")
+}
+
+abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
-  val fileFormatsToTest = Seq("parquet", "json")
+  protected def fileFormatsToTest: Seq[String]
 
   test("bucketed by non-existing column") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
