@@ -208,7 +208,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected, testRelation),
+          numPartitions = Some(conf.numShufflePartitions)))
     checkAnalysis(plan, expected)
   }
 
