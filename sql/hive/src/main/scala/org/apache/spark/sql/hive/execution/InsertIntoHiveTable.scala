@@ -228,13 +228,16 @@ case class InsertIntoHiveTable(
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
 
     if (isCompressed) {
-      // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
-      // and "mapred.output.compression.type" have no impact on ORC because it uses table properties
-      // to store compression information.
-      hadoopConf.set("mapred.output.compress", "true")
+      // Please note that isCompressed, "mapreduce.output.fileoutputformat.compress",
+      // "mapreduce.output.fileoutputformat.compress.codec", and
+      // "mapreduce.output.fileoutputformat.compress.type"
+      // have no impact on ORC because it uses table properties to store compression information.
+      hadoopConf.set("mapreduce.output.fileoutputformat.compress", "true")
       fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(hadoopConf.get("mapred.output.compression.codec"))
-      fileSinkConf.setCompressType(hadoopConf.get("mapred.output.compression.type"))
+      fileSinkConf.setCompressCodec(hadoopConf
+        .get("mapreduce.output.fileoutputformat.compress.codec"))
+      fileSinkConf.setCompressType(hadoopConf
+        .get("mapreduce.output.fileoutputformat.compress.type"))
     }
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)

@@ -269,8 +269,8 @@ case class LoadDataCommand(
         } else {
           // Follow Hive's behavior:
           // If no schema or authority is provided with non-local inpath,
-          // we will use hadoop configuration "fs.default.name".
-          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.default.name")
+          // we will use hadoop configuration "fs.defaultFS".
+          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
           val defaultFS = if (defaultFSConf == null) {
             new URI("")
           } else {

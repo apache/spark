@@ -1724,8 +1724,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
-        self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
-                                lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
+        self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapreduce.job.reduces",
+                                lambda: self.spark.sql("SET mapreduce.job.reduces=-1"))
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
                                 lambda: df.select(sha2(df.a, 1024)).collect())
