@@ -23,7 +23,6 @@ import java.util.Arrays;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.classification.LogisticRegressionModel;
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
 import org.apache.spark.mllib.linalg.Vector;
@@ -50,12 +49,8 @@ public class JavaLBFGSExample {
     JavaRDD<LabeledPoint> test = data.subtract(trainingInit);
 
     // Append 1 into the training data as intercept.
-    JavaRDD<Tuple2<Object, Vector>> training = data.map(
-      new Function<LabeledPoint, Tuple2<Object, Vector>>() {
-        public Tuple2<Object, Vector> call(LabeledPoint p) {
-          return new Tuple2<Object, Vector>(p.label(), MLUtils.appendBias(p.features()));
-        }
-      });
+    JavaPairRDD<Object, Vector> training = data.mapToPair(p ->
+      new Tuple2<>(p.label(), MLUtils.appendBias(p.features())));
     training.cache();
 
     // Run training algorithm to build the model.
@@ -77,7 +72,7 @@ public class JavaLBFGSExample {
     Vector weightsWithIntercept = result._1();
     double[] loss = result._2();
 
-    final LogisticRegressionModel model = new LogisticRegressionModel(
+    LogisticRegressionModel model = new LogisticRegressionModel(
       Vectors.dense(Arrays.copyOf(weightsWithIntercept.toArray(), weightsWithIntercept.size() - 1)),
       (weightsWithIntercept.toArray())[weightsWithIntercept.size() - 1]);
 
@@ -85,13 +80,8 @@ public class JavaLBFGSExample {
     model.clearThreshold();
 
     // Compute raw scores on the test set.
-    JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
-      new Function<LabeledPoint, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(LabeledPoint p) {
-          Double score = model.predict(p.features());
-          return new Tuple2<Object, Object>(score, p.label());
-        }
-      });
+    JavaPairRDD<Object, Object> scoreAndLabels = test.mapToPair(p ->
+      new Tuple2<>(model.predict(p.features()), p.label()));
 
     // Get evaluation metrics.
     BinaryClassificationMetrics metrics =
@@ -99,8 +89,9 @@ public class JavaLBFGSExample {
     double auROC = metrics.areaUnderROC();
 
     System.out.println("Loss of each step in training process");
-    for (double l : loss)
+    for (double l : loss) {
       System.out.println(l);
+    }
     System.out.println("Area under ROC = " + auROC);
     // $example off$
 

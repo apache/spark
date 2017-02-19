@@ -19,8 +19,6 @@ package org.apache.spark.examples;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.sql.SparkSession;
 
 import java.util.ArrayList;
@@ -49,19 +47,11 @@ public final class JavaSparkPi {
 
     JavaRDD<Integer> dataSet = jsc.parallelize(l, slices);
 
-    int count = dataSet.map(new Function<Integer, Integer>() {
-      @Override
-      public Integer call(Integer integer) {
-        double x = Math.random() * 2 - 1;
-        double y = Math.random() * 2 - 1;
-        return (x * x + y * y <= 1) ? 1 : 0;
-      }
-    }).reduce(new Function2<Integer, Integer, Integer>() {
-      @Override
-      public Integer call(Integer integer, Integer integer2) {
-        return integer + integer2;
-      }
-    });
+    int count = dataSet.map(integer -> {
+      double x = Math.random() * 2 - 1;
+      double y = Math.random() * 2 - 1;
+      return (x * x + y * y <= 1) ? 1 : 0;
+    }).reduce((integer, integer2) -> integer + integer2);
 
     System.out.println("Pi is roughly " + 4.0 * count / n);
 

@@ -69,20 +69,17 @@ public class JavaTokenizerExample {
         .setOutputCol("words")
         .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 
-    spark.udf().register("countTokens", new UDF1<WrappedArray<String>, Integer>() {
-      @Override
-      public Integer call(WrappedArray<String> words) {
-        return words.size();
-      }
-    }, DataTypes.IntegerType);
+    spark.udf().register("countTokens", (WrappedArray<?> words) -> words.size(), DataTypes.IntegerType);
 
     Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
     tokenized.select("sentence", "words")
-        .withColumn("tokens", callUDF("countTokens", col("words"))).show(false);
+        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .show(false);
 
     Dataset<Row> regexTokenized = regexTokenizer.transform(sentenceDataFrame);
     regexTokenized.select("sentence", "words")
-        .withColumn("tokens", callUDF("countTokens", col("words"))).show(false);
+        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .show(false);
     // $example off$
 
     spark.stop();
