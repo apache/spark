@@ -101,7 +101,7 @@ private[yarn] class YarnAllocator(
    * @see SPARK-12864
    */
   private var executorIdCounter: Int =
-    driverRef.askWithRetry[Int](RetrieveLastAllocatedExecutorId)
+    driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
   // Queue to store the timestamp of failed executors
   private val failedExecutorsTimeStamps = new Queue[Long]()

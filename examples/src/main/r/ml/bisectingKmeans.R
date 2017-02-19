@@ -40,3 +40,5 @@ summary(fitted.model)
 fitted <- predict(model, df)
 head(select(fitted, "Sepal_Length", "prediction"))
 # $example off$
+
+sparkR.session.stop()

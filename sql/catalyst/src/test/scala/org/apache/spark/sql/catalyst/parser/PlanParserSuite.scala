@@ -505,7 +505,13 @@ class PlanParserSuite extends PlanTest {
     val m2 = intercept[ParseException] {
       parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
     }.getMessage
-    assert(m2.contains("no viable alternative at input"))
+    assert(m2.contains("mismatched input '.' expecting {')', ','}"))
+
+    // Disallow space as the delimiter.
+    val m3 = intercept[ParseException] {
+      parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
+    }.getMessage
+    assert(m3.contains("mismatched input 'b' expecting {')', ','}"))
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
@@ -524,7 +530,7 @@ class PlanParserSuite extends PlanTest {
       Hint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
 
     comparePlans(
-      parsePlan("SELECT /*+ INDEX(t emp_job_ix) */ * FROM t"),
+      parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
       Hint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
 
     comparePlans(

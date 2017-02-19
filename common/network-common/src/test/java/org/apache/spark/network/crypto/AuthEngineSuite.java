@@ -18,10 +18,8 @@
 package org.apache.spark.network.crypto;
 
 import java.util.Arrays;
-import java.util.Map;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.collect.ImmutableMap;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
