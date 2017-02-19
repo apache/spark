@@ -1674,7 +1674,8 @@ class OutputFormatTests(ReusedPySparkTestCase):
                  "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
                  "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
                  "mapreduce.job.output.value.class": "org.apache.hadoop.io.IntWritable",
-                 "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/newdataset"}
+                 "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/newdataset"
+                 }
         rdd.saveAsNewAPIHadoopDataset(conf5)
         result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)
