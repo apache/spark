@@ -207,14 +207,13 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val df2 = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     checkAnswer(
-      df2.selectExpr("""to_json(a, '{"timestampFormat": "dd/MM/yyyy HH:mm"}')"""),
+      df2.selectExpr("to_json(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
 
     val errMsg1 = intercept[AnalysisException] {
-      df2.selectExpr("""to_json(a, '{"k": [{"k": "v"}]}')""").collect
+      df2.selectExpr("to_json(a, named_struct('a', 1))")
     }
-    assert(errMsg1.getMessage.startsWith(
-      """The format must be '{"key": "value", ...}', but {"k": [{"k": "v"}]}"""))
+    assert(errMsg1.getMessage.startsWith("Must use a map() function for options"))
 
     // from_json
     val df3 = Seq("""{"a": 1}""").toDS()
@@ -227,14 +226,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val schema2 = new StructType().add("time", TimestampType)
     checkAnswer(
       df4.selectExpr(
-        s"""from_json(value, '${schema2.json}', """ +
-           """'{"timestampFormat": "dd/MM/yyyy HH:mm"}')"""),
+        s"from_json(value, '${schema2.json}', map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
       Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
 
     val errMsg2 = intercept[AnalysisException] {
-      df4.selectExpr(s"""from_json(value, '${schema2.json}', '{"k": [{"k": "v"}]}')""")
+      df4.selectExpr(s"from_json(value, 1)")
     }
-    assert(errMsg2.getMessage.startsWith(
-      """The format must be '{"key": "value", ...}', but {"k": [{"k": "v"}]}"""))
+    assert(errMsg2.getMessage.startsWith("Must be a string literal, but:"))
+    val errMsg3 = intercept[AnalysisException] {
+      df4.selectExpr(s"""from_json(value, '{"a": 1}')""")
+    }
+    assert(errMsg3.getMessage.startsWith("Illegal json string for representing a schema:"))
+    val errMsg4 = intercept[AnalysisException] {
+      df4.selectExpr(s"from_json(value, '${schema2.json}', named_struct('a', 1))")
+    }
+    assert(errMsg4.getMessage.startsWith("Must use a map() function for options"))
   }
 }

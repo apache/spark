@@ -489,6 +489,8 @@ case class JsonTuple(children: Seq[Expression])
     Examples:
       > SELECT _FUNC_('{"a":1}', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":true}]}');
        {"a":1}
+      > SELECT _FUNC_('{"time":"26/08/2015"}', '{"type":"struct", "fields":[{"name":"time", "type":"timestamp", "nullable":true}]}', map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"2015-08-26 00:00:00.0"}
   """)
 // scalastyle:on line.size.limit
 case class JsonToStruct(
@@ -513,7 +515,7 @@ case class JsonToStruct(
   def this(child: Expression, schema: Expression, options: Expression) =
     this(
       schema = JacksonUtils.validateSchemaLiteral(schema),
-      options = JacksonUtils.validateOptionsLiteral(options),
+      options = JacksonUtils.validateMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -588,13 +590,17 @@ case class JsonToStruct(
 /**
  * Converts a [[StructType]] to a json output string.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
   extended = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        {"a":1,"b":2}
+      > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"26/08/2015"}
   """)
+// scalastyle:on line.size.limit
 case class StructToJson(
     options: Map[String, String],
     child: Expression,
@@ -608,7 +614,7 @@ case class StructToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = JacksonUtils.validateOptionsLiteral(options),
+      options = JacksonUtils.validateMapData(options),
       child = child,
       timeZoneId = None)
 

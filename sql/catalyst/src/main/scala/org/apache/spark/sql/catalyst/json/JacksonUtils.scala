@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
-import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateMap, Expression, Literal}
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -61,11 +61,6 @@ object JacksonUtils {
     schema.foreach(field => verifyType(field.name, field.dataType))
   }
 
-  private def validateStringLiteral(exp: Expression): String = exp match {
-    case Literal(s, StringType) => s.toString
-    case e => throw new AnalysisException(s"Must be a string literal, but: $e")
-  }
-
   def strToStructType(schemaAsJson: String): StructType = Try {
     DataType.fromJson(schemaAsJson).asInstanceOf[StructType]
   }.getOrElse {
@@ -73,18 +68,19 @@ object JacksonUtils {
       s"""Illegal json string for representing a schema: $schemaAsJson"""")
   }
 
-  def validateSchemaLiteral(exp: Expression): StructType =
-    strToStructType(validateStringLiteral(exp))
+  def validateSchemaLiteral(exp: Expression): StructType = exp match {
+    case Literal(s, StringType) => strToStructType(s.toString)
+    case e => throw new AnalysisException(s"Must be a string literal, but: $e")
+  }
 
-  /**
-   * Convert a literal including a json option string (e.g., '{"mode": "PERMISSIVE", ...}')
-   * to Map-type data.
-   */
-  def validateOptionsLiteral(exp: Expression): Map[String, String] = {
-    implicit val formats = org.json4s.DefaultFormats
-    val json = validateStringLiteral(exp)
-    Try(parse(json).extract[Map[String, String]]).getOrElse {
-      throw new AnalysisException(s"""The format must be '{"key": "value", ...}', but ${json}"""")
-    }
+  /** Convert a map literal to Map-type data. */
+  def validateMapData(exp: Expression): Map[String, String] = exp match {
+    case m: CreateMap => m.dataType.acceptsType(MapType(StringType, StringType, false))
+      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
+      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
+        key.toString -> value.toString
+      }.toMap
+    case _ =>
+      throw new AnalysisException("Must use a map() function for options")
   }
 }
