@@ -22,16 +22,22 @@ import javax.ws.rs.core.MediaType
 import org.apache.spark.ui.SparkUI
 
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class EnvironmentResource(ui: SparkUI) {
+private[v1] class ApplicationEnvironmentResource(ui: SparkUI) {
 
   @GET
-  def getEnvironmentInfo(): EnvironmentInfo = {
+  def getEnvironmentInfo(): ApplicationEnvironmentInfo = {
     val listener = ui.environmentListener
     listener.synchronized {
-      new EnvironmentInfo(
+      val jvmInfo = Map(listener.jvmInformation: _*)
+      val runtime = new RuntimeInfo(
+        jvmInfo("Java Version"),
+        jvmInfo("Java Home"),
+        jvmInfo("Scala Version"))
+
+      new ApplicationEnvironmentInfo(
+        runtime,
         listener.sparkProperties,
         listener.systemProperties,
-        listener.jvmInformation,
         listener.classpathEntries)
     }
   }

@@ -253,8 +253,13 @@ class AccumulableInfo private[spark](
 class VersionInfo private[spark](
   val spark: String)
 
-class EnvironmentInfo private[spark] (
-    var jvmInformation: Seq[(String, String)],
-    var sparkProperties: Seq[(String, String)],
-    var systemProperties: Seq[(String, String)],
-    var classpathEntries: Seq[(String, String)])
+class ApplicationEnvironmentInfo private[spark] (
+    val runtime: RuntimeInfo,
+    val sparkProperties: Seq[(String, String)],
+    val systemProperties: Seq[(String, String)],
+    val classpathEntries: Seq[(String, String)])
+
+class RuntimeInfo private[spark](
+    val javaVersion: String,
+    val javaHome: String,
+    val scalaVersion: String)
