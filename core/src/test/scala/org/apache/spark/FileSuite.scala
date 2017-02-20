@@ -252,7 +252,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val inRdd = sc.binaryFiles(outFile.getAbsolutePath)
     val (infile, indata) = inRdd.collect().head
     // Make sure the name and array match
-    assert(infile.contains(outFileName)) // a prefix may get added
+    assert(infile.contains(outFile.getAbsolutePath)) // a prefix may get added
     assert(indata.toArray === testOutput)
   }
 
