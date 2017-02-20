@@ -63,7 +63,7 @@ object JacksonUtils {
 
   private def validateStringLiteral(exp: Expression): String = exp match {
     case Literal(s, StringType) => s.toString
-    case e => throw new AnalysisException("Must be a string literal, but: " + e)
+    case e => throw new AnalysisException(s"Must be a string literal, but: $e")
   }
 
   def validateSchemaLiteral(exp: Expression): StructType =
@@ -76,10 +76,8 @@ object JacksonUtils {
   def validateOptionsLiteral(exp: Expression): Map[String, String] = {
     implicit val formats = org.json4s.DefaultFormats
     val json = validateStringLiteral(exp)
-    Try(parse(json).extract[Map[String, String]]) match {
-      case Success(m) => m
-      case Failure(_) =>
-        throw new AnalysisException(s"""The format must be '{"key": "value", ...}', but ${json}"""")
+    Try(parse(json).extract[Map[String, String]]).getOrElse {
+      throw new AnalysisException(s"""The format must be '{"key": "value", ...}', but ${json}"""")
     }
   }
 }

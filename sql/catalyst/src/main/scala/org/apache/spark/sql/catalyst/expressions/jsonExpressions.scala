@@ -484,7 +484,7 @@ case class JsonTuple(children: Seq[Expression])
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, schema[, options]) - Return a `StructType` value with the given `jsonStr` and `schema`.",
+  usage = "_FUNC_(jsonStr, schema[, options]) - Return a struct value with the given `jsonStr` and `schema`.",
   extended = """
     Examples:
       > SELECT _FUNC_('{"a":1}', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":true}]}');
@@ -589,7 +589,7 @@ case class JsonToStruct(
  * Converts a [[StructType]] to a json output string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, options]) - Return a json string with a given `StructType` value",
+  usage = "_FUNC_(expr[, options]) - Return a json string with a given struct value",
   extended = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
