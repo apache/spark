@@ -84,7 +84,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
           // Verify whether all the elements received are as expected
           // (whether the elements were received one in each interval is not verified)
-          val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
+          val output = outputQueue.asScala.flatten.toArray
           assert(output.length === expectedOutput.size)
           for (i <- output.indices) {
             assert(output(i) === expectedOutput(i))
@@ -155,14 +155,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         // not enough to trigger a batch
         clock.advance(batchDuration.milliseconds / 2)
 
-        val input = Seq(1, 2, 3, 4, 5)
-        input.foreach { i =>
+        val numCopies = 3
+        val input = Array[Byte](1, 2, 3, 4, 5)
+        for (i <- 0 until numCopies) {
           Thread.sleep(batchDuration.milliseconds)
           val file = new File(testDir, i.toString)
-          Files.write(Array[Byte](i.toByte), file)
+          Files.write(input.map(b => (b + i).toByte), file)
           assert(file.setLastModified(clock.getTimeMillis()))
           assert(file.lastModified === clock.getTimeMillis())
-          logInfo("Created file " + file)
+          logInfo(s"Created file $file")
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
           clock.advance(batchDuration.milliseconds)
@@ -170,10 +171,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
             assert(batchCounter.getNumCompletedBatches === i)
           }
         }
-
-        val expectedOutput = input.map(i => i.toByte)
-        val obtainedOutput = outputQueue.asScala.flatten.toList.map(i => i(0).toByte)
-        assert(obtainedOutput.toSeq === expectedOutput)
+        val obtainedOutput = outputQueue.asScala.map(_.flatten).toSeq
+        for (i <- obtainedOutput.indices) {
+          assert(obtainedOutput(i) === input.map(b => (b + i).toByte))
+        }
       }
     } finally {
       if (testDir != null) Utils.deleteRecursively(testDir)
@@ -258,7 +259,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val testReceiver = new MultiThreadTestReceiver(numThreads, numRecordsPerThread)
     MultiThreadTestReceiver.haveAllThreadsFinished = false
     val outputQueue = new ConcurrentLinkedQueue[Seq[Long]]
-    def output: Iterable[Long] = outputQueue.asScala.flatMap(x => x)
+    def output: Iterable[Long] = outputQueue.asScala.flatten
 
     // set up the network stream using the test receiver
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
