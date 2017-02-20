@@ -79,7 +79,6 @@ case class NGrams(child: Expression,
 
   override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
     val genericArrayData: GenericArrayData = child.eval(inputRow).asInstanceOf[GenericArrayData]
-    // Ignore empty rows, for example: percentile_approx(null)
     val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toList
     if (values != null) {
       val nGrams = getNGrams(values, n)
@@ -144,9 +143,6 @@ object NGrams {
         currentFrequency += 1
       }
       ngramFrequencyMap.update(ng, currentFrequency)
-      //    if (ngramMap.size > k * accuracy * 2) {
-      //      trim(false)
-      //    }
     }
 
     def merge(other: NGramBuffer): Unit = {
@@ -166,48 +162,12 @@ object NGrams {
   }
   class NGramBufferSerializer {
 
-//    private final def length(nGramBuffer: NGramBuffer): Int = {
-//      Ints.BYTES * 3 + nGramBuffer.ngramFrequencyMap.iterator.map(_._1).reduce(_.length + _.length) *
-//        Chars.BYTES + nGramBuffer.ngramFrequencyMap.size * Doubles.BYTES
-//
-//    }
-
     final def serialize(obj: NGramBuffer): Array[Byte] = {
-//      val buffer = ByteBuffer.wrap(new Array(length(obj)))
-//      buffer.putInt(obj.n)
-//      buffer.putInt(obj.k)
-//      buffer.putInt(obj.accuracy)
-//
-//      var i = (List[String], Double)
-//      obj.ngramFrequencyMap.iterator.foreach((keyValuePair: (List[String], Double)) => {
-//        val key = keyValuePair._1
-//        val value = keyValuePair._2
-//        key.foreach(str => buffer.put(str.getBytes()))
-//        buffer.putDouble(value)
-//      })
-//      buffer.array()
       NGrams.kryoSerializer.newInstance().serialize[NGramBuffer](obj).array()
     }
 
     final def deserialize(bytes: Array[Byte]): NGramBuffer = {
       NGrams.kryoSerializer.newInstance().deserialize[NGramBuffer](ByteBuffer.wrap(bytes))
-
-      //      val buffer = ByteBuffer.wrap(bytes)
-//      val n = buffer.getInt()
-//      val k = buffer.getInt()
-//      val accuracy = buffer.getInt()
-//
-//      buffer.get()
-//      var i = 0
-//      while (i < sampledLength) {
-//        val value = buffer.getDouble()
-//        val g = buffer.getInt()
-//        val delta = buffer.getInt()
-//        sampled(i) = Stats(value, g, delta)
-//        i += 1
-//      }
-//      val summary = new QuantileSummaries(compressThreshold, relativeError, sampled, count)
-//      new PercentileDigest(summary, isCompressed = true)
     }
   }
 
