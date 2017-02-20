@@ -364,8 +364,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
     upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
 
-    val left = UnresolvedRelation(TableIdentifier("left"), None)
-    val right = UnresolvedRelation(TableIdentifier("right"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"))
+    val right = UnresolvedRelation(TableIdentifier("right"))
 
     checkAnswer(
       left.join(right, $"left.N" === $"right.N", "full"),

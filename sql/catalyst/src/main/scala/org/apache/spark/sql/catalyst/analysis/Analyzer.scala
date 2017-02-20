@@ -180,12 +180,8 @@ class Analyzer(
     def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
       plan transformDown {
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
-            .map(_._2).map { relation =>
-              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
-              withAlias.getOrElse(relation)
-            }
-          substituted.getOrElse(u)
+          cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
+            .map(_._2).getOrElse(u)
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
@@ -623,7 +619,7 @@ class Analyzer(
       val tableIdentWithDb = u.tableIdentifier.copy(
         database = u.tableIdentifier.database.orElse(defaultDatabase))
       try {
-        catalog.lookupRelation(tableIdentWithDb, u.alias)
+        catalog.lookupRelation(tableIdentWithDb)
       } catch {
         case _: NoSuchTableException =>
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")

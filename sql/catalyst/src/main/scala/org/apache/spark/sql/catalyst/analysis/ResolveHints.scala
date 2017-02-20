@@ -54,10 +54,8 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case r: UnresolvedRelation =>
-            val alias = r.alias.getOrElse(r.tableIdentifier.table)
-            if (toBroadcast.exists(resolver(_, alias))) BroadcastHint(plan) else plan
-
+          case u: UnresolvedRelation if toBroadcast.exists(resolver(_, u.tableIdentifier.table)) =>
+            BroadcastHint(plan)
           case r: SubqueryAlias if toBroadcast.exists(resolver(_, r.alias)) =>
             BroadcastHint(plan)
 

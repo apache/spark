@@ -179,7 +179,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     InsertIntoTable(
-      UnresolvedRelation(tableIdent, None),
+      UnresolvedRelation(tableIdent),
       partitionKeys,
       query,
       ctx.OVERWRITE != null,
@@ -645,17 +645,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * }}}
    */
   override def visitTable(ctx: TableContext): LogicalPlan = withOrigin(ctx) {
-    UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier), None)
+    UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val table = UnresolvedRelation(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.strictIdentifier).map(_.getText))
-    table.optionalMap(ctx.sample)(withSample)
+    val table = UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
+
+    val tableWithAlias = Option(ctx.strictIdentifier).map(_.getText) match {
+      case Some(strictIdentifier) =>
+        SubqueryAlias(strictIdentifier, table, None)
+      case _ => table
+    }
+    tableWithAlias.optionalMap(ctx.sample)(withSample)
   }
 
   /**
