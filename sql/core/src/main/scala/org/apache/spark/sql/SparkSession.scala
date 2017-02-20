@@ -947,7 +947,7 @@ object SparkSession {
   /**
    * Returns the default SparkSession that is returned by the builder.
    *
-   * @return
+   * @since 2.2.0
    */
   def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
 
