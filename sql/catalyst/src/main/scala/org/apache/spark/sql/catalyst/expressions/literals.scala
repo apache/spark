@@ -33,6 +33,7 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import org.json4s.JsonAST._
 
@@ -154,10 +155,12 @@ object Literal {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 
-  def create[T : TypeTag](v: T): Literal = {
+  def create[T : TypeTag](v: T): Literal = Try {
     val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
     val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
     Literal(convert(v), dataType)
+  }.getOrElse {
+    Literal(v)
   }
 
   /**
