@@ -31,32 +31,41 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
+
 /**
- * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
+ * Trait for string order type (default: "freq_desc").
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
-    with HasHandleInvalid {
+private[ml] trait HasStringOrderType extends Params {
 
   /**
-    * Param for the type of ordering used for assigning index to values of input column.
+    * Param for the method used to order values of input column. The first value after ordering
+    * is assigned an index of 0.
     * Supported options:
-    *   - "freq_desc": in decreasing order by frequency of values (most frequent value indexed 0)
+    *   - "freq_desc": in descending order by frequency of values (most frequent value indexed 0)
     *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
-    *   - "alphabet_desc": in alphabetically decreasing order
+    *   - "alphabet_desc": in alphabetically descending order
     *   - "alphabet_asc": in alphabetically ascending order
     * Default is "freq_desc".
     *
     * @group param
     */
   @Since("2.2.0")
-  final val orderType: Param[String] = new Param(this, "orderTpe",
+  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
     "The type of ordering used for assigning index to values of input column. " +
-      s"Supported options: ${supportedOrderType.mkString(", ")}.",
-    (value: String) => supportedOrderType.contains(value.toLowerCase))
+      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    (value: String) => StringIndexer.supportedStringOrderType.contains(value.toLowerCase))
 
   /** @group getParam */
   @Since("2.2.0")
-  def getOrderType: String = $(orderType)
+  def getStringOrderType: String = $(stringOrderType)
+}
+
+
+/**
+ * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
+ */
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
+    with HasHandleInvalid with HasStringOrderType {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -74,8 +83,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     StructType(outputFields)
   }
 
-  private val supportedOrderType: Array[String] =
-    Array("freq_desc", "freq_asc", "alphabet_desc", "alphabet_asc")
 }
 
 /**
@@ -109,8 +116,8 @@ class StringIndexer @Since("1.4.0") (
 
   /** @group setParam */
   @Since("2.2.0")
-  def setOrderType(value: String): this.type = set(orderType, value)
-  setDefault(orderType, "freq_desc")
+  def setStringOrderType(value: String): this.type = set(stringOrderType, value)
+  setDefault(stringOrderType, "freq_desc")
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
@@ -119,7 +126,7 @@ class StringIndexer @Since("1.4.0") (
     val values = dataset.select(col($(inputCol)).cast(StringType))
       .rdd.map(_.getString(0))
 
-    val labels = $(orderType) match {
+    val labels = $(stringOrderType) match {
       case "freq_asc" => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
       case "alphabet_desc" => values.distinct.collect.sortWith(_ > _)
       case "alphabet_asc" => values.distinct.collect.sortWith(_ < _)
@@ -143,6 +150,10 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
+
+
+  private[ml] val supportedStringOrderType: Array[String] =
+    Array("freq_desc", "freq_asc", "alphabet_desc", "alphabet_asc")
 }
 
 /**

@@ -35,7 +35,8 @@ import org.apache.spark.sql.types._
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
  */
-private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
+private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol
+  with HasStringOrderType {
 
   protected def hasLabelCol(schema: StructType): Boolean = {
     schema.map(_.name).contains($(labelCol))
@@ -125,6 +126,11 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.1.0")
   def setForceIndexLabel(value: Boolean): this.type = set(forceIndexLabel, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setStringOrderType(value: String): this.type = set(stringOrderType, value)
+  setDefault(stringOrderType, "freq_desc")
+
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
     require(isDefined(formula), "Formula must be defined first.")
@@ -155,6 +161,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           encoderStages += new StringIndexer()
             .setInputCol(term)
             .setOutputCol(indexCol)
+            .setStringOrderType($(stringOrderType))
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _ =>
