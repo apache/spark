@@ -1019,6 +1019,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
   }
 
+  test("SET mapreduce.job.reduces automatically converted to spark.sql.shuffle.partitions") {
+    spark.sessionState.conf.clear()
+    val numReduces = 20
+    val before = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
+    sql(s"SET mapreduce.job.reduces=${numReduces.toString}")
+    val after = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
+    assert(before != after)
+    assert(numReduces === after)
+    intercept[IllegalArgumentException](sql(s"SET mapreduce.job.reduces=-1"))
+    spark.sessionState.conf.clear()
+  }
+
   test("apply schema") {
     val schema1 = StructType(
       StructField("f1", IntegerType, false) ::
