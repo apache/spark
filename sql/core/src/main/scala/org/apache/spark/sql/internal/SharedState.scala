@@ -61,7 +61,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       // When neither spark.sql.warehouse.dir nor hive.metastore.warehouse.dir is set,
       // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
       val sparkWarehouseDir = sparkContext.conf.get(WAREHOUSE_PATH)
-      sparkContext.conf.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
+      sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
       sparkWarehouseDir
     }
 
