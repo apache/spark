@@ -74,7 +74,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }
-
 }
 
 /**
