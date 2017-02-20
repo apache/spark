@@ -32,7 +32,6 @@ class StringIndexerSuite
   import testImplicits._
 
   test("params") {
-
     ParamsSuite.checkParams(new StringIndexer)
     val model = new StringIndexerModel("indexer", Array("a", "b"))
     val modelWithoutUid = new StringIndexerModel(Array("a", "b"))
