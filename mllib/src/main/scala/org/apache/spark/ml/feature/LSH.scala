@@ -81,7 +81,8 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   protected[ml] def keyDistance(x: Vector, y: Vector): Double
 
   /**
-   * Calculate the distance between two different hash Vectors.
+   * Calculate the distance between two different hashes, which is equivalent to the number of
+   * steps between a pair of hashes in step-wise multi-probe method.
    *
    * @param x One of the hash vector.
    * @param y Another hash vector.
@@ -100,12 +101,43 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
   }
 
   // TODO: Fix the MultiProbe NN Search in SPARK-18454
+  /**
+   * Given a large dataset and an item, approximately find at most k items which have the closest
+   * distance to the item. If the [[outputCol]] is missing, the method will transform the data; if
+   * the [[outputCol]] exists, it will use the [[outputCol]]. This allows caching of the
+   * transformed data when necessary.
+   *
+   * The following two methods are implemented.
+   *  - Single-probe method: Probe only one hash bucket for each hash table.
+   *  - Multi-probe method: Probe multiple hash buckets for each hash table using step-wise probing
+   *  sequence. Use approxQuantile to estimate number of hash buckets to probe. This method can
+   *  achieve good search quality without having a large number of hash tables.
+   *
+   * References:
+   * Lv, Qin, et al. "Multi-probe LSH: efficient indexing for high-dimensional similarity search."
+   * Proceedings of the 33rd international conference on Very large data bases. VLDB Endowment,
+   * 2007.
+   *
+   * @note This method is experimental and will likely change behavior in the next release.
+   *
+   * @param dataset The dataset to search for nearest neighbors of the key.
+   * @param key Feature vector representing the item to search for.
+   * @param numNearestNeighbors The maximum number of nearest neighbors.
+   * @param singleProbe If true, use single-probe method; else use multi-probe method.
+   * @param distCol Output column for storing the distance between each result row and the key.
+   * @param relativeError The relative target precision for approxQuantile in multiProbe method.
+   *                      Decreasing relativeError will lead to higher accuracy, at the expense of
+   *                      longer running time.
+   * @return A dataset containing at most k items closest to the key. A column "distCol" is added
+   *         to show the distance between each row and the key.
+   */
   private[feature] def approxNearestNeighbors(
       dataset: Dataset[_],
       key: Vector,
       numNearestNeighbors: Int,
       singleProbe: Boolean,
-      distCol: String): Dataset[_] = {
+      distCol: String,
+      relativeError: Double): Dataset[_] = {
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
@@ -132,19 +164,31 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       val hashDistCol = hashDistUDF(col($(outputCol)))
 
       // Compute threshold to get exact k elements.
-      // TODO: SPARK-18409: Use approxQuantile to get the threshold
-      val modelDatasetSortedByHash = modelDataset.sort(hashDistCol).limit(numNearestNeighbors)
-      val thresholdDataset = modelDatasetSortedByHash.select(max(hashDistCol))
-      val hashThreshold = thresholdDataset.take(1).head.getDouble(0)
+      val quantile = numNearestNeighbors.toDouble / modelDataset.count()
+      val modelDatasetWithDist = modelDataset.withColumn(distCol, hashDistCol)
+      val hashThreshold = modelDatasetWithDist.stat
+        .approxQuantile(distCol, Array(quantile), relativeError)
 
       // Filter the dataset where the hash value is less than the threshold.
-      modelDataset.filter(hashDistCol <= hashThreshold)
+      modelDataset.filter(hashDistCol <= hashThreshold(0))
     }
 
     // Get the top k nearest neighbor by their distance to the key
     val keyDistUDF = udf((x: Vector) => keyDistance(x, key), DataTypes.DoubleType)
     val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
     modelSubsetWithDistCol.sort(distCol).limit(numNearestNeighbors)
+  }
+
+  /**
+   * Overloaded method for approxNearestNeighbors. Use 0.05 as default relativeError.
+   */
+  private[feature] def approxNearestNeighbors(
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int,
+      singleProbe: Boolean,
+      distCol: String): Dataset[_] = {
+    approxNearestNeighbors(dataset, key, numNearestNeighbors, singleProbe, distCol, 0.05)
   }
 
   /**
@@ -163,10 +207,10 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
    *         to show the distance between each row and the key.
    */
   def approxNearestNeighbors(
-    dataset: Dataset[_],
-    key: Vector,
-    numNearestNeighbors: Int,
-    distCol: String): Dataset[_] = {
+      dataset: Dataset[_],
+      key: Vector,
+      numNearestNeighbors: Int,
+      distCol: String): Dataset[_] = {
     approxNearestNeighbors(dataset, key, numNearestNeighbors, true, distCol)
   }
 
