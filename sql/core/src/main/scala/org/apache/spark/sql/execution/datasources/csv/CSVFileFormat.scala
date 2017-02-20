@@ -128,20 +128,21 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: CSVOptions,
       inputPaths: Seq[FileStatus]): Dataset[String] = {
+    val pathValues = inputPaths.map(_.getPath().toString)
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
       // Fix for SPARK-19340. resolveRelation replaces with createHadoopRelation
       // to avoid pattern resolution for already resolved file path
       sparkSession.baseRelationToDataFrame(
         DataSource.apply(
           sparkSession,
-          paths = inputPaths.map(_.getPath().toString),
+          paths = pathValues,
           className = classOf[TextFileFormat].getName
         ).createHadoopRelation(new TextFileFormat, inputPaths.map(_.getPath).toArray))
         .select("value").as[String](Encoders.STRING)
     } else {
       val charset = options.charset
       val rdd = sparkSession.sparkContext
-        .hadoopFile[LongWritable, Text, TextInputFormat](inputPaths.mkString(","))
+        .hadoopFile[LongWritable, Text, TextInputFormat](pathValues.mkString(","))
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
       sparkSession.createDataset(rdd)(Encoders.STRING)
     }
