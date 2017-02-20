@@ -28,27 +28,16 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules,
-FPGrowth => MLlibFPGrowth}
+  FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
  * Common params for FPGrowth and FPGrowthModel
  */
 private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPredictionCol {
-
-  /**
-   * Validates and transforms the input schema.
-   * @param schema input schema
-   * @return output schema
-   */
-  protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val inputType = schema($(featuresCol)).dataType
-    require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType, but got $inputType.")
-    SchemaUtils.appendColumn(schema, $(predictionCol), schema($(featuresCol)).dataType)
-  }
 
   /**
    * Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears
@@ -67,7 +56,8 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   def getMinSupport: Double = $(minSupport)
 
   /**
-   * Number of partitions used by parallel FP-growth
+   * Number of partitions (>=1) used by parallel FP-growth. By default the param is not set, and
+   * partition number of the input dataset is used.
    * @group expertParam
    */
   @Since("2.2.0")
@@ -79,7 +69,8 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   def getNumPartitions: Int = $(numPartitions)
 
   /**
-   * minimal confidence for generating Association Rule
+   * Minimal confidence for generating Association Rule.
+   * Note that minConfidence has no effect during fitting.
    * Default: 0.8
    * @group param
    */
@@ -93,6 +84,18 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   @Since("2.2.0")
   def getMinConfidence: Double = $(minConfidence)
 
+  /**
+   * Validates and transforms the input schema.
+   * @param schema input schema
+   * @return output schema
+   */
+  @Since("2.2.0")
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    val inputType = schema($(featuresCol)).dataType
+    require(inputType.isInstanceOf[ArrayType],
+      s"The input column must be ArrayType, but got $inputType.")
+    SchemaUtils.appendColumn(schema, $(predictionCol), schema($(featuresCol)).dataType)
+  }
 }
 
 /**
@@ -120,7 +123,7 @@ class FPGrowth @Since("2.2.0") (
   def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
   /** @group setParam
-   *  minConfidence has not effect during fitting.
+   *  Note that minConfidence has no effect during fitting.
    */
   @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
@@ -133,22 +136,22 @@ class FPGrowth @Since("2.2.0") (
   @Since("2.2.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  @Since("2.2.0")
   override def fit(dataset: Dataset[_]): FPGrowthModel = {
+    transformSchema(dataset.schema, logging = true)
     genericFit(dataset)
   }
 
   private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
-    val data = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[T](0).toArray)
-    val parentModel = new MLlibFPGrowth().setMinSupport($(minSupport)).run(data)
-    val rows = parentModel.freqItemsets
-      .map(f => (f.items, f.freq))
-      .map(cols => Row(cols._1, cols._2))
+    val data = dataset.select($(featuresCol))
+    val items = data.where(col($(featuresCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
+    val parentModel = new MLlibFPGrowth().setMinSupport($(minSupport)).run(items)
+    val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
 
-    val dt = dataset.schema($(featuresCol)).dataType
-    val fields = Array(StructField("items", dt, nullable = false),
-      StructField("freq", LongType, nullable = false))
-    val schema = StructType(fields)
-    val frequentItems = dataset.sparkSession.createDataFrame(rows, schema).toDF("items", "freq")
+    val schema = StructType(Seq(
+      StructField("items", dataset.schema($(featuresCol)).dataType, nullable = false),
+      StructField("freq", LongType, nullable = false)))
+    val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
     copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
   }
 
@@ -157,6 +160,7 @@ class FPGrowth @Since("2.2.0") (
     validateAndTransformSchema(schema)
   }
 
+  @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowth = defaultCopy(extra)
 }
 
@@ -178,7 +182,7 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 @Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    val freqItemsets: DataFrame)
+    private val freqItemsets: DataFrame)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -193,7 +197,7 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-   /**
+  /**
    * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
    * with three fields, "antecedent", "consequent" and "confidence", where "antecedent" and
    * "consequent" are Array[String] and "confidence" is Double.
@@ -201,7 +205,7 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   @transient lazy val getAssociationRules: DataFrame = {
     val freqItems = getFreqItemsets
-    AssocaitionRules.getAssocationRulesFromFP(freqItems, "items", "freq", $(minConfidence))
+    AssociationRules.getAssociationRulesFromFP(freqItems, "items", "freq", $(minConfidence))
   }
 
   /**
@@ -210,35 +214,45 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   @transient val getFreqItemsets: DataFrame = freqItemsets
 
+  /**
+   * The transform method first generates the association rules according to the frequent itemsets.
+   * Then for each association rule, it will examine the input items against antecedents and
+   * summarize the consequents as prediction.
+   */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     genericTransform(dataset, getAssociationRules)
   }
 
   private def genericTransform[T](dataset: Dataset[_], associationRules: DataFrame): DataFrame = {
-    // use unique id to perform the join and aggregateByKey
-    val itemsRDD = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[T](0))
-      .distinct().zipWithUniqueId().map(_.swap).cache()
+    // use index to perform the join and aggregateByKey, and keep the original order after join.
+    val indexToItems = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[T](0))
+      .zipWithIndex().map(_.swap).cache()
     val rulesRDD = associationRules.rdd.map(r => (r.getSeq[T](0), r.getSeq[T](1)))
 
-    val itemsWithConsequents = itemsRDD.cartesian(rulesRDD).map {
+    val indexToConsequents = indexToItems.cartesian(rulesRDD).map {
       case ((id, items), (antecedent, consequent)) =>
-        val itemSet = items.toSet
-        val consequents = if (antecedent.forall(itemSet.contains(_))) consequent else Seq.empty
+        val consequents = if (items != null) {
+          val itemSet = items.toSet
+          if (antecedent.forall(itemSet.contains)) {
+            consequent.filterNot(itemSet.contains)
+          } else {
+            Seq.empty
+          }
+        } else {
+          Seq.empty
+        }
         (id, consequents)
-    }.aggregateByKey(new ArrayBuffer[T])(
-      (ar, seq) => ar ++= seq, (ar, seq) => ar ++= seq)
+    }.aggregateByKey(new ArrayBuffer[T])((ar, seq) => ar ++= seq, (ar, seq) => ar ++= seq)
+     .map { case (index, cons) => (index, cons.distinct) }
 
-    val mappingRDD = itemsRDD.join(itemsWithConsequents)
-      .map { case (id, (items, consequent)) => (items, consequent) }
-      .map (cols => Row(cols._1, cols._2))
-    val dt = dataset.schema($(featuresCol)).dataType
-    val fields = Array($(featuresCol), $(predictionCol))
-      .map(fieldName => StructField(fieldName, dt, nullable = true))
-    val schema = StructType(fields)
-    val mapping = dataset.sparkSession.createDataFrame(mappingRDD, schema)
-
-    dataset.join(mapping, $(featuresCol))
+    val rowAndConsequents = dataset.toDF().rdd.zipWithIndex().map(_.swap)
+      .join(indexToConsequents).sortByKey(ascending = true, dataset.rdd.getNumPartitions)
+      .map(_._2).map(t => Row.merge(t._1, Row(t._2)))
+    val mergedSchema = dataset.schema.add(StructField($(predictionCol),
+      dataset.schema($(featuresCol)).dataType, dataset.schema($(featuresCol)).nullable))
+    dataset.sparkSession.createDataFrame(rowAndConsequents, mergedSchema)
   }
 
   @Since("2.2.0")
@@ -256,6 +270,7 @@ class FPGrowthModel private[ml] (
   override def write: MLWriter = new FPGrowthModel.FPGrowthModelWriter(this)
 }
 
+@Since("2.2.0")
 object FPGrowthModel extends MLReadable[FPGrowthModel] {
   @Since("2.2.0")
   override def read: MLReader[FPGrowthModel] = new FPGrowthModelReader
@@ -291,7 +306,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   }
 }
 
-private[fpm] object AssocaitionRules {
+private[fpm] object AssociationRules {
 
   /**
    * Computes the association rules with confidence above minConfidence.
@@ -303,8 +318,7 @@ private[fpm] object AssocaitionRules {
    * @return a DataFrame("antecedent", "consequent", "confidence") containing the association
    *         rules.
    */
-  @Since("2.2.0")
-  def getAssocationRulesFromFP[T: ClassTag](dataset: Dataset[_],
+  def getAssociationRulesFromFP[T: ClassTag](dataset: Dataset[_],
         itemsCol: String = "items",
         freqCol: String = "freq",
         minConfidence: Double = 0.8): DataFrame = {
@@ -317,11 +331,11 @@ private[fpm] object AssocaitionRules {
       .map(r => Row(r.antecedent, r.consequent, r.confidence))
 
     val dt = dataset.schema(itemsCol).dataType
-    val fields = Array("antecedent", "consequent")
-      .map(fieldName => StructField(fieldName, dt, nullable = false)) ++
-      Seq(StructField("confidence", DoubleType, nullable = false))
-    val schema = StructType(fields)
-    val mapping = dataset.sparkSession.createDataFrame(rows, schema)
-    mapping
+    val schema = StructType(Seq(
+      StructField("antecedent", dt, nullable = false),
+      StructField("consequent", dt, nullable = false),
+      StructField("confidence", DoubleType, nullable = false)))
+    val rules = dataset.sparkSession.createDataFrame(rows, schema)
+    rules
   }
 }
