@@ -30,11 +30,13 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.service.Service.STATE
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.YarnClientApplication
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito._
@@ -42,6 +44,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
@@ -225,6 +228,74 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
+  }
+
+  test("Dynamic set spark.dynamicAllocation.maxExecutors if dynamicAllocation enabled") {
+    val numNodeManagers = 4
+    val conf = new YarnConfiguration
+    val yarnCluster = new MiniYARNCluster(classOf[ClientSuite].getName, numNodeManagers, 1, 1)
+    yarnCluster.init(conf)
+    yarnCluster.start()
+    assert(null != yarnCluster)
+    assert(STATE.STARTED == yarnCluster.getServiceState)
+
+    val args = new ClientArguments(Array())
+    // dynamicAllocation enabled
+    val sparkConfEnabled = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+    val clientEnabled = new Client(args, yarnCluster.getConfig, sparkConfEnabled)
+    assert(null != clientEnabled)
+
+    val nodeManagerCores =
+      clientEnabled.hadoopConf.get("yarn.nodemanager.resource.cpu-vcores").toInt
+    assert(8 == nodeManagerCores)
+
+    assert(Int.MaxValue == clientEnabled.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientEnabled.init()
+    assert(numNodeManagers * nodeManagerCores ==
+      clientEnabled.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientEnabled.stop()
+
+    // dynamicAllocation disabled
+    val sparkConfDisabled = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "false")
+    val clientDisabled = new Client(args, yarnCluster.getConfig, sparkConfDisabled)
+    assert(null != clientDisabled)
+
+    assert(Int.MaxValue == clientDisabled.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientDisabled.init()
+    assert(Int.MaxValue == clientDisabled.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientDisabled.stop()
+
+    // dynamicAllocation enabled and user set spark.dynamicAllocation.maxExecutors
+    val maxExecutors = 10
+    val sparkConfSetMaxExes = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set(DYN_ALLOCATION_MAX_EXECUTORS.key, maxExecutors.toString)
+    val clientEnabledSetMaxExes = new Client(args, yarnCluster.getConfig, sparkConfSetMaxExes)
+    assert(null != clientEnabledSetMaxExes)
+
+    assert(maxExecutors == clientEnabledSetMaxExes.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientEnabledSetMaxExes.init()
+    assert(maxExecutors ==  clientEnabledSetMaxExes.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientEnabledSetMaxExes.stop()
+
+    // dynamicAllocation enabled and user set spark.executor.cores
+    val executorCores = 3
+    val sparkConfSetCores = new SparkConf()
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.executor.cores", executorCores.toString)
+    val clientEnabledSetCores = new Client(args, yarnCluster.getConfig, sparkConfSetCores)
+    assert(null != clientEnabledSetCores)
+
+    assert(Int.MaxValue == clientEnabledSetCores.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientEnabledSetCores.init()
+    // (8 / 3) * 4 = 8
+    val expectNumExecutors = (nodeManagerCores / executorCores) * numNodeManagers
+    assert(expectNumExecutors ==  clientEnabledSetCores.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    clientEnabledSetCores.stop()
+
+    yarnCluster.stop()
   }
 
   test("spark.yarn.jars with multiple paths and globs") {
