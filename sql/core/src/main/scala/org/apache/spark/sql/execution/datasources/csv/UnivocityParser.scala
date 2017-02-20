@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -45,15 +46,15 @@ private[csv] class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val shouldHandleCorruptRecord = options.permissive && requiredSchema.exists { f =>
-    f.name == options.columnNameOfCorruptRecord && f.dataType == StringType && f.nullable
+  private val corruptFieldIndex = schema.getFieldIndex(options.columnNameOfCorruptRecord)
+  corruptFieldIndex.foreach { corrFieldIndex =>
+    require(schema(corrFieldIndex).dataType == StringType,
+      "A field for corrupt records must have a string type")
+    require(schema(corrFieldIndex).nullable, "A field for corrupt must be nullable")
   }
 
-  private val inputSchema = if (shouldHandleCorruptRecord) {
-    StructType(schema.filter(_.name != options.columnNameOfCorruptRecord))
-  } else {
-    schema
-  }
+  private val inputSchema = StructType(schema.filter(_.name != options.columnNameOfCorruptRecord))
+  CSVUtils.verifySchema(inputSchema)
 
   private val valueConverters =
     inputSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
@@ -64,9 +65,6 @@ private[csv] class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val corruptIndex =
-    requiredSchema.getFieldIndex(options.columnNameOfCorruptRecord).getOrElse(-1)
-
   private val indexArr: Array[(Int, Int)] = {
     val fields = if (options.dropMalformed) {
       // If `dropMalformed` is enabled, then it needs to parse all the values
@@ -75,7 +73,12 @@ private[csv] class UnivocityParser(
     } else {
       requiredSchema
     }
-    fields.zipWithIndex.filter { case (_, i) => i != corruptIndex }.map { case (f, i) =>
+    val fieldsWithIndexes = fields.zipWithIndex
+    corruptFieldIndex.map { case corrFieldIndex =>
+      fieldsWithIndexes.filter { case (_, i) => i != corrFieldIndex }
+    }.getOrElse {
+      fieldsWithIndexes
+    }.map { case (f, i) =>
       (inputSchema.indexOf(f), i)
     }.toArray
   }
@@ -162,8 +165,6 @@ private[csv] class UnivocityParser(
 
     case udt: UserDefinedType[_] => (datum: String) =>
       makeConverter(name, udt.sqlType, nullable, options)
-
-    case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
   }
 
   private def nullSafeDatum(
@@ -187,8 +188,10 @@ private[csv] class UnivocityParser(
    * the record is malformed).
    */
   def parse(input: String): Option[InternalRow] = {
-    convertWithParseMode(parser.parseLine(input)) { tokens =>
-      indexArr.foreach { case (pos, i) =>
+    parseWithMode(input) { tokens =>
+      var i: Int = 0
+      while (i < indexArr.length) {
+        val (pos, _) = indexArr(i)
         // It anyway needs to try to parse since it decides if this row is malformed
         // or not after trying to cast in `DROPMALFORMED` mode even if the casted
         // value is not stored in the row.
@@ -196,13 +199,15 @@ private[csv] class UnivocityParser(
         if (i < requiredSchema.length) {
           row(i) = value
         }
+        i += 1
       }
       row
     }
   }
 
-  private def convertWithParseMode(
-      tokens: Array[String])(convert: Array[String] => InternalRow): Option[InternalRow] = {
+  private def parseWithMode(input: String)(convert: Array[String] => InternalRow)
+    : Option[InternalRow] = {
+    val tokens = parser.parseLine(input)
     if (options.dropMalformed && inputSchema.length != tokens.length) {
       if (numMalformedRecords < options.maxMalformedLogPerPartition) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")
@@ -218,9 +223,6 @@ private[csv] class UnivocityParser(
       throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
         s"${tokens.mkString(options.delimiter.toString)}")
     } else {
-      if (options.permissive && shouldHandleCorruptRecord) {
-        row.setNullAt(corruptIndex)
-      }
       val checkedTokens = if (options.permissive && inputSchema.length > tokens.length) {
         tokens ++ new Array[String](inputSchema.length - tokens.length)
       } else if (options.permissive && inputSchema.length < tokens.length) {
@@ -232,11 +234,9 @@ private[csv] class UnivocityParser(
       try {
         Some(convert(checkedTokens))
       } catch {
-        // We only catch exceptions about malformed values here and pass over other exceptions
-        // (e.g., SparkException about unsupported types).
-        case _: NumberFormatException | _: IllegalArgumentException
-            if options.permissive && shouldHandleCorruptRecord =>
-          row(corruptIndex) = UTF8String.fromString(tokens.mkString(options.delimiter.toString))
+        case NonFatal(e) if options.permissive =>
+          val row = new GenericInternalRow(requiredSchema.length)
+          corruptFieldIndex.map(row(_) = UTF8String.fromString(input))
           Some(row)
         case NonFatal(e) if options.dropMalformed =>
           if (numMalformedRecords < options.maxMalformedLogPerPartition) {

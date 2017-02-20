@@ -303,8 +303,9 @@ class DataFrameReader(OptionUtils):
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None):
+            negativeInf=None, columnNameOfCorruptRecord=None, dateFormat=None,
+            timestampFormat=None, maxColumns=None, maxCharsPerColumn=None,
+            maxMalformedLogPerPartition=None, mode=None, timeZone=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -367,9 +368,17 @@ class DataFrameReader(OptionUtils):
                          If None is set, it uses the default value, session local timezone.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
-                    When a schema is set by user, it sets ``null`` for extra fields.
+                    If users set a string-type field named ``columnNameOfCorruptRecord`` in a
+                    user-specified ``schema``, it puts the malformed string into the field. When
+                    a ``schema`` is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
+
+        :param columnNameOfCorruptRecord: defines a field name for malformed strings created
+                                          by ``PERMISSIVE`` mode. If a user-specified `schema`
+                                          has this named field, Spark puts malformed strings
+                                          in this field. This overrides
+                                          `spark.sql.columnNameOfCorruptRecord`.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -380,7 +389,8 @@ class DataFrameReader(OptionUtils):
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
+            timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone)
         if isinstance(path, basestring):

@@ -28,7 +28,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -701,12 +701,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getMessage
       assert(msg.contains("CSV data source does not support array<double> data type"))
 
-      msg = intercept[SparkException] {
+      msg = intercept[UnsupportedOperationException] {
         val schema = StructType(StructField("a", new UDT.MyDenseVectorUDT(), true) :: Nil)
         spark.range(1).write.csv(csvDir)
         spark.read.schema(schema).csv(csvDir).collect()
-      }.getCause.getMessage
-      assert(msg.contains("Unsupported type: array"))
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<double> data type."))
     }
   }
 
@@ -962,28 +962,38 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
-    val errMsg = intercept[SparkException] {
-      spark
-        .read
-        .option("mode", "PERMISSIVE")
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .collect
-    }.getCause.getMessage
-    assert(errMsg.contains("Timestamp format must be"))
+    val df1 = spark
+      .read
+      .option("mode", "PERMISSIVE")
+      .schema(schema)
+      .csv(testFile(valueMalformedFile))
+    checkAnswer(df1,
+      Row(null, null) ::
+      Row(1, java.sql.Date.valueOf("1983-08-04")) ::
+      Nil)
 
     // If `schema` has `columnNameOfCorruptRecord`, it should handle corrupt records
     val columnNameOfCorruptRecord = "_unparsed"
-    val df = spark
+    val df2 = spark
       .read
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
       .schema(schema.add(columnNameOfCorruptRecord, StringType))
       .csv(testFile(valueMalformedFile))
-
-    checkAnswer(df,
-      Row(0, null, "0,2013-111-11 12:13:14") ::
+    checkAnswer(df2,
+      Row(null, null, "0,2013-111-11 12:13:14") ::
       Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
       Nil)
+
+    val errMsg = intercept[AnalysisException] {
+      spark
+        .read
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
+        .csv(testFile(valueMalformedFile))
+        .collect
+    }.getMessage
+    assert(errMsg.startsWith("A field for corrupt records must be a string type and nullable"))
   }
 }
