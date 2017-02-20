@@ -27,7 +27,7 @@ from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
-from pyspark.ml.param.shared import *
+from pyspark.ml.param.shared import HasFeaturesCol, HasPredictionCol
 
 
 class JavaWrapper(object):
