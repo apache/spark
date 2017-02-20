@@ -183,8 +183,44 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
    * evaluate to `true` for all rows produced.
+   *
+   * Note: This invariants don't contain all the possible invariants. This don't consider aliased
+   * attributes. This are the effective expressions which are useful for data filtering. Because if
+   * any one invariant in this set is false, then we can guarantee the conjunctive predicates from
+   * the complete invariants [[completeConstraints]] of this node would be false too.
    */
-  lazy val constraints: ExpressionSet = ExpressionSet(getRelevantConstraints(validConstraints))
+  lazy val constraints: ExpressionSet = {
+    // The aliased expressions which are not contained in the outputSet of this plan.
+    val obsoleteKeys = aliasedExpressionsInConstraints.keys.filterNot { key =>
+      key.references.subsetOf(outputSet)
+    }
+
+    // If there are obsolete aliased expressions. We need to select a new key.
+    if (obsoleteKeys.nonEmpty) {
+      var updatedConstraints = validConstraints
+      obsoleteKeys.foreach { oldKey =>
+        val newAttr = aliasedExpressionsInConstraints(oldKey).toSeq.sortWith { (x, y) =>
+          x.exprId.id < y.exprId.id
+        }.head
+        updatedConstraints ++= updatedConstraints.map { constraint =>
+          constraint.transform {
+            case e if e.semanticEquals(oldKey) => newAttr
+          }
+        }
+      }
+      ExpressionSet(getRelevantConstraints(updatedConstraints))
+    } else {
+      ExpressionSet(getRelevantConstraints(validConstraints))
+    }
+  }
+
+  /**
+   * An [[ExpressionSet]] that contains invariants about the rows output by this operator.
+   * Different with `constraints`, `completeConstraints` contains all invariants by transforming
+   * constraints to aliased constraints.
+   */
+  lazy val completeConstraints: ExpressionSet = ExpressionSet(getRelevantConstraints(
+    validConstraints.union(getAliasedValidConstraints(validConstraints))))
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
@@ -195,6 +231,96 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * See [[Canonicalize]] for more details.
    */
   protected def validConstraints: Set[Expression] = Set.empty
+
+  /**
+   * A map represents aliased expressions in the constraints. A key is an expression to be aliased.
+   * A value is a set of [[Attribute]] the corresponding key is aliased to. A constraint which
+   * refers a key in this map can be transformed to other constraints by replacing the key
+   * with the values in this map. For example, if there is a constraint "a > b" and there is a key
+   * "a" to value ["c", "d"] in this map. We can transform this constraint to other valid
+   * constraints such as ["c > b", "d > b"].
+   */
+  lazy val aliasedExpressionsInConstraints: Map[Expression, AttributeSet] = {
+    var aliasedMap = aliasedConstraintExprs
+    val combinedMap = children.map { child =>
+      // Get the alised expressions which are not in the `outputSet` of this plan anymore.
+      // For example, if in children we have aliased map like Map("a" -> Set("c", "d")), but this
+      // plan doesn't output "a". Then we replace the map with Map("c" -> Set("d")).
+      val obsoleteKeys = child.aliasedExpressionsInConstraints.keys.filterNot { key =>
+        key.references.subsetOf(child.outputSet)
+      }
+      obsoleteKeys.flatMap { obsoleteKey =>
+        // Get the all attributes the obsolete expression is alised to.
+        val attrs = child.aliasedExpressionsInConstraints(obsoleteKey).toSeq.sortWith { (x, y) =>
+          x.exprId.id < y.exprId.id
+        }
+        if (attrs.length > 1) {
+          // Take the first attribute as the new aliased expression for others attributes.
+          Some(attrs.head -> AttributeSet(attrs.tail))
+        } else {
+          // Only one attribute remains, it will be used in [[constraints]] to replace obsolete key.
+          None
+        }
+      }.toMap ++ child.aliasedExpressionsInConstraints.filter {
+        case (keyExpr, attrs) => keyExpr.references.subsetOf(child.outputSet)
+      }
+    }.flatten.toMap.map { case (keyExpr, attrs) =>
+      if (aliasedMap.contains(keyExpr)) {
+        val addedAttrs = aliasedMap(keyExpr)
+        aliasedMap = aliasedMap - keyExpr
+        keyExpr -> (attrs ++ addedAttrs)
+      } else {
+        keyExpr -> attrs
+      }
+    } ++ aliasedMap
+
+    combinedMap.flatMap {
+      case (keyExpr, attrs) =>
+        val newAtts = attrs.intersect(outputSet)
+        if (newAtts.isEmpty) {
+          None
+        } else {
+          Some(keyExpr -> newAtts)
+        }
+    }
+  }
+
+  /**
+   * A map represents aliased expressions and attributes newly added in the curent QueryPlan.
+   * A child class of QueryPlan should override this to specify the alias relations in its output.
+   * For example, if an output "a" of a child plan of this plan is aliased to "c" and "d" in this
+   * plan, it should record the map as Map("a" -> Set("c", "d")).
+   */
+  protected lazy val aliasedConstraintExprs: Map[Expression, AttributeSet] = Map.empty
+
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  private def getAliasedValidConstraints(constraints: Set[Expression]): Set[Expression] = {
+    // We only care about the constraints which refer to attributes in output and aliased
+    // expressions.
+    // For example, for a constraint 'a > b', if 'a' is aliased to 'c', we need to get aliased
+    // constraint 'c > b' only if 'b' is in output.
+    val relativeReferences = AttributeSet(
+      aliasedExpressionsInConstraints.keys.flatMap(_.references) ++ outputSet)
+
+    var allConstraints = constraints.filter { constraint =>
+      constraint.references.subsetOf(relativeReferences)
+    }.asInstanceOf[Set[Expression]]
+
+    aliasedExpressionsInConstraints.foreach { case (alisedExpr, attrs) =>
+      attrs.foreach { attr =>
+        allConstraints ++= allConstraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(alisedExpr) =>
+            attr
+        })
+        allConstraints += EqualNullSafe(alisedExpr, attr)
+      }
+    }
+
+    allConstraints -- constraints
+  }
 
   /**
    * Returns the set of attributes that are output by this node.
