@@ -35,7 +35,6 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-
 class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSQLContext {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
