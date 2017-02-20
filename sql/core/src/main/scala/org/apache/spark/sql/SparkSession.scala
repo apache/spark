@@ -95,18 +95,28 @@ class SparkSession private(
   /**
    * State shared across sessions, including the `SparkContext`, cached data, listener,
    * and a catalog that interacts with external systems.
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @since 2.2.0
    */
+  @InterfaceStability.Unstable
   @transient
-  private[sql] lazy val sharedState: SharedState = {
+  lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(new SharedState(sparkContext))
   }
 
   /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @since 2.2.0
    */
+  @InterfaceStability.Unstable
   @transient
-  private[sql] lazy val sessionState: SessionState = {
+  lazy val sessionState: SessionState = {
     SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
       self)
@@ -613,7 +623,6 @@ class SparkSession private(
    *
    * @since 2.1.0
    */
-  @InterfaceStability.Stable
   def time[T](f: => T): T = {
     val start = System.nanoTime()
     val ret = f
@@ -928,9 +937,19 @@ object SparkSession {
     defaultSession.set(null)
   }
 
-  private[sql] def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+  /**
+   * Returns the active SparkSession for the current thread, returned by the builder.
+   *
+   * @since 2.2.0
+   */
+  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
 
-  private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+  /**
+   * Returns the default SparkSession that is returned by the builder.
+   *
+   * @since 2.2.0
+   */
+  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
 
   /** A global SQL listener used for the SQL UI. */
   private[sql] val sqlListener = new AtomicReference[SQLListener]()
