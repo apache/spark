@@ -116,7 +116,7 @@ class SparkSession private(
    */
   @InterfaceStability.Unstable
   @transient
-  private[sql] lazy val sessionState: SessionState = {
+  lazy val sessionState: SessionState = {
     SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
       self)
