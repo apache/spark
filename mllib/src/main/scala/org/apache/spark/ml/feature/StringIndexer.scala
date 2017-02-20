@@ -37,6 +37,27 @@ import org.apache.spark.util.collection.OpenHashMap
 private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
     with HasHandleInvalid {
 
+  /**
+    * Param for the type of ordering used for assigning index to values of input column.
+    * Supported options:
+    *   - "freq_desc": in decreasing order by frequency of values (most frequent value indexed 0)
+    *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
+    *   - "alphabet_desc": in alphabetically decreasing order
+    *   - "alphabet_asc": in alphabetically ascending order
+    * Default is "freq_desc".
+    *
+    * @group param
+    */
+  @Since("2.2.0")
+  final val orderType: Param[String] = new Param(this, "orderTpe",
+    "The type of ordering used for assigning index to values of input column. " +
+      s"Supported options: ${supportedOrderType.mkString(", ")}.",
+    (value: String) => supportedOrderType.contains(value.toLowerCase))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getOrderType: String = $(orderType)
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
@@ -52,6 +73,9 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }
+
+  private val supportedOrderType: Array[String] =
+    Array("freq_desc", "freq_asc", "alphabet_desc", "alphabet_asc")
 }
 
 /**
@@ -83,14 +107,25 @@ class StringIndexer @Since("1.4.0") (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setOrderType(value: String): this.type = set(orderType, value)
+  setDefault(orderType, "freq_desc")
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
-    val counts = dataset.select(col($(inputCol)).cast(StringType))
-      .rdd
-      .map(_.getString(0))
-      .countByValue()
-    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
+
+    val values = dataset.select(col($(inputCol)).cast(StringType))
+      .rdd.map(_.getString(0))
+
+    val labels = $(orderType) match {
+      case "freq_asc" => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
+      case "alphabet_desc" => values.distinct.collect.sortWith(_ > _)
+      case "alphabet_asc" => values.distinct.collect.sortWith(_ < _)
+      case _ => values.countByValue().toSeq.sortBy(-_._2).map(_._1).toArray
+    }
+
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
