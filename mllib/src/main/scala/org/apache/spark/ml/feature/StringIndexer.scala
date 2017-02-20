@@ -31,7 +31,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
-
 /**
  * Trait for string order type (default: "freq_desc").
  */
@@ -59,7 +58,6 @@ private[ml] trait HasStringOrderType extends Params {
   @Since("2.2.0")
   def getStringOrderType: String = $(stringOrderType)
 }
-
 
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].

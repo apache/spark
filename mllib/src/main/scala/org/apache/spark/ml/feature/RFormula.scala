@@ -69,6 +69,15 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol
  * If the label column is of type string, it will be first transformed to double with
  * `StringIndexer`. If the label column does not exist in the DataFrame, the output label column
  * will be created from the specified response variable in the formula.
+ *
+ * When a feature column is of string type, it is first transformed to double with `StringIndexer`
+ * and then coded with `OneHotEncoder`. By default, the least frequent value is dropped and used
+ * as the reference level. This behavior is controlled by setting `stringOrderType`:
+ *
+ *  - "freq_desc": (default) the least frequent value as reference level
+ *  - "freq_asc": the most frequent value as reference level
+ *  - "alphabet_desc": the first alphabetical value as reference level (R's default setting)
+ *  - "alphabet_asc": the last alphabetical value as reference level
  */
 @Experimental
 @Since("1.5.0")
