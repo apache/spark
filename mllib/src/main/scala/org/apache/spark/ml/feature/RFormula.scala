@@ -35,8 +35,29 @@ import org.apache.spark.sql.types._
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
  */
-private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol
-  with HasStringOrderType {
+private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
+
+  /**
+    * Param for the method used to order values of input column. The first value after ordering
+    * is assigned an index of 0.
+    * Supported options:
+    *   - "freq_desc": in descending order by frequency of values (most frequent value indexed 0)
+    *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
+    *   - "alphabet_desc": in alphabetically descending order
+    *   - "alphabet_asc": in alphabetically ascending order
+    * Default is "freq_desc".
+    *
+    * @group param
+    */
+  @Since("2.2.0")
+  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
+    "The type of ordering used for assigning index to values of input column. " +
+      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    (value: String) => StringIndexer.supportedStringOrderType.contains(value.toLowerCase))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getStringOrderType: String = $(stringOrderType)
 
   protected def hasLabelCol(schema: StructType): Boolean = {
     schema.map(_.name).contains($(labelCol))

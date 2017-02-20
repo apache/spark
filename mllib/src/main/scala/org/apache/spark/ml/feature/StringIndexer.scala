@@ -32,22 +32,23 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
- * Trait for string order type (default: "freq_desc").
+ * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[ml] trait HasStringOrderType extends Params {
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
+    with HasHandleInvalid {
 
   /**
-   * Param for the method used to order values of input column. The first value after ordering
-   * is assigned an index of 0.
-   * Supported options:
-   *   - "freq_desc": in descending order by frequency of values (most frequent value indexed 0)
-   *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
-   *   - "alphabet_desc": in alphabetically descending order
-   *   - "alphabet_asc": in alphabetically ascending order
-   * Default is "freq_desc".
-   *
-   * @group param
-   */
+    * Param for the method used to order values of input column. The first value after ordering
+    * is assigned an index of 0.
+    * Supported options:
+    *   - "freq_desc": in descending order by frequency of values (most frequent value indexed 0)
+    *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
+    *   - "alphabet_desc": in alphabetically descending order
+    *   - "alphabet_asc": in alphabetically ascending order
+    * Default is "freq_desc".
+    *
+    * @group param
+    */
   @Since("2.2.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
     "The type of ordering used for assigning index to values of input column. " +
@@ -57,13 +58,6 @@ private[ml] trait HasStringOrderType extends Params {
   /** @group getParam */
   @Since("2.2.0")
   def getStringOrderType: String = $(stringOrderType)
-}
-
-/**
- * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
- */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
-    with HasHandleInvalid with HasStringOrderType {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
