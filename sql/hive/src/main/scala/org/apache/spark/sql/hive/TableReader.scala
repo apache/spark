@@ -39,8 +39,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -48,7 +50,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * A trait for subclasses that handle table scans.
  */
 private[hive] sealed trait TableReader {
-  def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow]
+  def makeRDDForTable(catalogTable: CatalogTable): RDD[InternalRow]
 
   def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow]
 }
@@ -83,9 +85,9 @@ class HadoopTableReader(
   private val _broadcastedHadoopConf =
     sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-  override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
+  override def makeRDDForTable(catalogTable: CatalogTable): RDD[InternalRow] =
     makeRDDForTable(
-      hiveTable,
+      catalogTable,
       Utils.classForName(relation.tableDesc.getSerdeClassName).asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
@@ -93,15 +95,16 @@ class HadoopTableReader(
    * Creates a Hadoop RDD to read data from the target table's data directory. Returns a transformed
    * RDD that contains deserialized rows.
    *
-   * @param hiveTable Hive metadata for the table being scanned.
+   * @param catalogTable the metadata for the table being scanned.
    * @param deserializerClass Class of the SerDe used to deserialize Writables read from Hadoop.
    * @param filterOpt If defined, then the filter is used to reject files contained in the data
    *                  directory being read. If None, then all files are accepted.
    */
   def makeRDDForTable(
-      hiveTable: HiveTable,
+      catalogTable: CatalogTable,
       deserializerClass: Class[_ <: Deserializer],
       filterOpt: Option[PathFilter]): RDD[InternalRow] = {
+    val hiveTable = HiveClientImpl.toHiveTable(catalogTable)
 
     assert(!hiveTable.isPartitioned, """makeRDDForTable() cannot be called on a partitioned table,
       since input formats may differ across partitions. Use makeRDDForTablePartitions() instead.""")

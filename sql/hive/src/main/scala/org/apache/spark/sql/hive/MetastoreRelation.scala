@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 
 import com.google.common.base.Objects
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
@@ -57,13 +57,13 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  @transient val hiveQlTable: HiveTable = HiveClientImpl.toHiveTable(catalogTable)
+  @transient private val hiveQlTable: HiveTable = HiveClientImpl.toHiveTable(catalogTable)
 
   @transient override def computeStats(conf: CatalystConf): Statistics = {
     catalogTable.stats.map(_.toPlanStats(output)).getOrElse(Statistics(
       sizeInBytes = {
-        val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
-        val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
+        val totalSize = catalogTable.properties.getOrElse(StatsSetupConst.TOTAL_SIZE, null)
+        val rawDataSize = catalogTable.properties.getOrElse(StatsSetupConst.RAW_DATA_SIZE, null)
         // TODO: check if this estimate is valid for tables after partition pruning.
         // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
         // relatively cheap if parameters for the table are populated into the metastore.
@@ -81,8 +81,9 @@ private[hive] case class MetastoreRelation(
           } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
             try {
               val hadoopConf = sparkSession.sessionState.newHadoopConf()
-              val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
-              fs.getContentSummary(hiveQlTable.getPath).getLength
+              val location = new Path(catalogTable.location)
+              val fs: FileSystem = location.getFileSystem(hadoopConf)
+              fs.getContentSummary(location).getLength
             } catch {
               case e: IOException =>
                 logWarning("Failed to get table size from hdfs.", e)

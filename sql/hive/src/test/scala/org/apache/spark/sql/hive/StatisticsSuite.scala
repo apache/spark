@@ -21,6 +21,8 @@ import java.io.{File, PrintWriter}
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
@@ -65,9 +67,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val relation = spark.table("csv_table").queryExecution.analyzed.children.head
           .asInstanceOf[MetastoreRelation]
 
-        val properties = relation.hiveQlTable.getParameters
-        assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-        assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+        val properties = relation.catalogTable.properties
+        val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE)
+        val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE)
+        assert(totalSize.nonEmpty && totalSize.get.toLong <= 0,
+          "external table totalSize must be <= 0")
+        assert(rawDataSize.nonEmpty && rawDataSize.get.toLong <= 0,
+          "external table rawDataSize must be <= 0")
 
         val sizeInBytes = relation.stats(conf).sizeInBytes
         assert(sizeInBytes === BigInt(file1.length() + file2.length()))
