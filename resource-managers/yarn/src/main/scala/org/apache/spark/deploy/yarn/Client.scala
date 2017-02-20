@@ -144,14 +144,8 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
-      launcherBackend.connect()
-      // Setup the credentials before doing anything else,
-      // so we have don't have issues at any point.
-      setupCredentials()
-      yarnClient.init(yarnConf)
-      yarnClient.start()
 
-      setMaxNumExecutors()
+      init()
 
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
@@ -1195,12 +1189,23 @@ private[spark] class Client(
       }
   }
 
+  def init(): Unit = {
+    launcherBackend.connect()
+    // Setup the credentials before doing anything else,
+    // so we have don't have issues at any point.
+    setupCredentials()
+    yarnClient.init(yarnConf)
+    yarnClient.start()
+
+    setMaxNumExecutors()
+  }
+
   /**
    * If using dynamic allocation and user doesn't set spark.dynamicAllocation.maxExecutors
    * then set the max number of executors depends on yarn cluster VCores Total.
    * If not using dynamic allocation don't set it.
    */
-  def setMaxNumExecutors(): Unit = {
+  private def setMaxNumExecutors(): Unit = {
     if (Utils.isDynamicAllocationEnabled(sparkConf)) {
 
       val defaultMaxNumExecutors = DYN_ALLOCATION_MAX_EXECUTORS.defaultValue.get
