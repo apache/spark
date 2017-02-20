@@ -374,8 +374,6 @@ case class DataSource(
           globPath
         }.toArray
 
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
-
         createHadoopRelation(format, globbedPaths)
       case _ =>
         throw new AnalysisException(
@@ -384,13 +382,12 @@ case class DataSource(
 
     relation
   }
-
   /**
-    * Creates Hadoop relation based on format and globbed file paths
-    * @param format format of the data source file
-    * @param globPaths Path to the file resolved by Hadoop library
-    * @return Hadoop relation object
-    */
+   * Creates Hadoop relation based on format and globbed file paths
+   * @param format format of the data source file
+   * @param globPaths Path to the file resolved by Hadoop library
+   * @return Hadoop relation object
+   */
   def createHadoopRelation(format: FileFormat,
                            globPaths: Array[Path]): BaseRelation = {
     val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
