@@ -39,7 +39,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
-  val warehousePath = {
+  val warehousePath: String = {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       sparkContext.hadoopConfiguration.addResource(configFile)
@@ -103,7 +103,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   /**
    * A manager for global temporary views.
    */
-  val globalTempViewManager = {
+  val globalTempViewManager: GlobalTempViewManager = {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
