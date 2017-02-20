@@ -1587,4 +1587,49 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("create table with default database use warehouse path instead of database location") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sparkContext.conf
+          .set(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key, "true")
+
+        spark.sql(s"CREATE DATABASE default_test LOCATION '$dir'" )
+        val db = spark.sessionState.catalog.getDatabaseMetadata("default_test")
+        assert(db.locationUri.stripSuffix("/") == s"file:${dir.getAbsolutePath.stripSuffix("/")}")
+        spark.sql("USE default_test")
+        val sparkWarehouseTablePath = s"file:${spark.sharedState.warehousePath.stripSuffix("/")}/t"
+
+        spark.sql("CREATE TABLE t(a string)")
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location.stripSuffix("/") == sparkWarehouseTablePath )
+
+        // clear
+        spark.sparkContext.conf
+          .remove(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key)
+        spark.sql("DROP TABLE t")
+        spark.sql("DROP DATABASE default_test")
+        spark.sql("USE DEFAULT")
+      }
+
+      withTempDir { dir =>
+        spark.sql(s"CREATE DATABASE test_not_default LOCATION '$dir'" )
+        val db = spark.sessionState.catalog.getDatabaseMetadata("test_not_default")
+        assert(db.locationUri.stripSuffix("/") == s"file:${dir.getAbsolutePath.stripSuffix("/")}")
+        spark.sql("USE test_not_default")
+        val sparkWarehouseTablePath = s"file:${spark.sharedState.warehousePath.stripSuffix("/")}/t"
+
+        spark.sql("CREATE TABLE t(a string)")
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location.stripSuffix("/") == s"${db.locationUri.stripSuffix("/")}/t" )
+
+        // clear
+        spark.sparkContext.conf
+          .remove(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key)
+        spark.sql("DROP TABLE t")
+        spark.sql("DROP DATABASE test_not_default")
+        spark.sql("USE DEFAULT")
+      }
+    }
+  }
 }

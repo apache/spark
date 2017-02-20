@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -407,8 +407,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     properties
   }
 
+  // if the database is default, the value of WAREHOUSE_PATH in conf returned
   private def defaultTablePath(tableIdent: TableIdentifier): String = {
-    val dbLocation = getDatabase(tableIdent.database.get).locationUri
+    val dbLocation = if (tableIdent.database.get == SessionCatalog.DEFAULT_DATABASE
+      || conf.get(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH)) {
+      conf.get(WAREHOUSE_PATH)
+    } else {
+      getDatabase(tableIdent.database.get).locationUri
+    }
     new Path(new Path(dbLocation), tableIdent.table).toString
   }
 
