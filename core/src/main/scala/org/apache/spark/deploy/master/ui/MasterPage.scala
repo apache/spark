@@ -33,7 +33,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
 
   def getMasterState: MasterStateResponse = {
-    master.askWithRetry[MasterStateResponse](RequestMasterState)
+    master.askSync[MasterStateResponse](RequestMasterState)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
