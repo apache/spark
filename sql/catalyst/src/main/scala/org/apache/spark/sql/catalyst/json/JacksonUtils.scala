@@ -66,8 +66,15 @@ object JacksonUtils {
     case e => throw new AnalysisException(s"Must be a string literal, but: $e")
   }
 
+  def strToStructType(schemaAsJson: String): StructType = Try {
+    DataType.fromJson(schemaAsJson).asInstanceOf[StructType]
+  }.getOrElse {
+    throw new AnalysisException(
+      s"""Illegal json string for representing a schema: $schemaAsJson"""")
+  }
+
   def validateSchemaLiteral(exp: Expression): StructType =
-    DataType.fromJson(validateStringLiteral(exp)).asInstanceOf[StructType]
+    strToStructType(validateStringLiteral(exp))
 
   /**
    * Convert a literal including a json option string (e.g., '{"mode": "PERMISSIVE", ...}')

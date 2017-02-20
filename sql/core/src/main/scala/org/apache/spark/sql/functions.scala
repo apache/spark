@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.json.JacksonUtils
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -3059,7 +3060,7 @@ object functions {
    * @since 2.1.0
    */
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
-    from_json(e, DataType.fromJson(schema), options)
+    from_json(e, JacksonUtils.strToStructType(schema), options)
 
   /**
    * (Scala-specific) Converts a column containing a `StructType` into a JSON string with the

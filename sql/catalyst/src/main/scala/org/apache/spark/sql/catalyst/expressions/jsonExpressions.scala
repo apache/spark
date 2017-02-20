@@ -330,7 +330,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Return a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   extended = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
@@ -484,7 +484,7 @@ case class JsonTuple(children: Seq[Expression])
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, schema[, options]) - Return a struct value with the given `jsonStr` and `schema`.",
+  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
   extended = """
     Examples:
       > SELECT _FUNC_('{"a":1}', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":true}]}');
@@ -589,7 +589,7 @@ case class JsonToStruct(
  * Converts a [[StructType]] to a json output string.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr[, options]) - Return a json string with a given struct value",
+  usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
   extended = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
