@@ -227,7 +227,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   private val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k").as("df1")
   private val df2 = (0 until 50).map(i => (i % 7, i % 11, i.toString)).toDF("i", "j", "k").as("df2")
 
-  case class BucketTableTestSpec(
+  case class BucketedTableTestSpec(
       bucketSpec: Option[BucketSpec],
       numPartitions: Int = 10,
       expectedShuffle: Boolean = true,
@@ -240,14 +240,14 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
    * exists as user expected according to the `shuffleLeft` and `shuffleRight`.
    */
   private def testBucketing(
-      bucketTableTestSpecLeft: BucketTableTestSpec,
-      bucketTableTestSpecRight: BucketTableTestSpec,
+      bucketedTableTestSpecLeft: BucketedTableTestSpec,
+      bucketedTableTestSpecRight: BucketedTableTestSpec,
       joinType: String = "inner",
       joinCondition: (DataFrame, DataFrame) => Column): Unit = {
-    val BucketTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
-      bucketTableTestSpecLeft
-    val BucketTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
-      bucketTableTestSpecRight
+    val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
+      bucketedTableTestSpecLeft
+    val BucketedTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
+      bucketedTableTestSpecRight
 
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
@@ -314,11 +314,11 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
   test("avoid shuffle when join 2 bucketed tables") {
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpec, expectedShuffle = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(bucketSpec, expectedShuffle = false)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
@@ -326,22 +326,22 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   // Enable it after fix https://issues.apache.org/jira/browse/SPARK-12704
   ignore("avoid shuffle when join keys are a super-set of bucket keys") {
     val bucketSpec = Some(BucketSpec(8, Seq("i"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpec, expectedShuffle = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(bucketSpec, expectedShuffle = false)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
 
   test("only shuffle one side when join bucketed table and non-bucketed table") {
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpec, expectedShuffle = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(None, expectedShuffle = true)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = false)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(None, expectedShuffle = true)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
@@ -349,11 +349,11 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("only shuffle one side when 2 bucketed tables have different bucket number") {
     val bucketSpecLeft = Some(BucketSpec(8, Seq("i", "j"), Nil))
     val bucketSpecRight = Some(BucketSpec(5, Seq("i", "j"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpecLeft, expectedShuffle = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(bucketSpecRight, expectedShuffle = true)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpecLeft, expectedShuffle = false)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpecRight, expectedShuffle = true)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
@@ -361,34 +361,34 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("only shuffle one side when 2 bucketed tables have different bucket keys") {
     val bucketSpecLeft = Some(BucketSpec(8, Seq("i"), Nil))
     val bucketSpecRight = Some(BucketSpec(8, Seq("j"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpecLeft, expectedShuffle = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(bucketSpecRight, expectedShuffle = true)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpecLeft, expectedShuffle = false)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpecRight, expectedShuffle = true)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i"))
     )
   }
 
   test("shuffle when join keys are not equal to bucket keys") {
     val bucketSpec = Some(BucketSpec(8, Seq("i"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpec, expectedShuffle = true)
-    val bucketTableTestSpecRight = BucketTableTestSpec(bucketSpec, expectedShuffle = true)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = true)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpec, expectedShuffle = true)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("j"))
     )
   }
 
   test("shuffle when join 2 bucketed tables with bucketing disabled") {
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Nil))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(bucketSpec, expectedShuffle = true)
-    val bucketTableTestSpecRight = BucketTableTestSpec(bucketSpec, expectedShuffle = true)
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(bucketSpec, expectedShuffle = true)
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(bucketSpec, expectedShuffle = true)
     withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
       testBucketing(
-        bucketTableTestSpecLeft,
-        bucketTableTestSpecRight,
+        bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+        bucketedTableTestSpecRight = bucketedTableTestSpecRight,
         joinCondition = joinCondition(Seq("i", "j"))
       )
     }
@@ -402,43 +402,43 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     // Therefore, we still need to keep the Sort in both sides.
     val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
 
-    val bucketTableTestSpecLeft1 = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft1 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
-    val bucketTableTestSpecRight1 = BucketTableTestSpec(
+    val bucketedTableTestSpecRight1 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
     testBucketing(
-      bucketTableTestSpecLeft1,
-      bucketTableTestSpecRight1,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft1,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight1,
       joinCondition = joinCondition(Seq("i", "j"))
     )
 
-    val bucketTableTestSpecLeft2 = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft2 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketTableTestSpecRight2 = BucketTableTestSpec(
+    val bucketedTableTestSpecRight2 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
     testBucketing(
-      bucketTableTestSpecLeft2,
-      bucketTableTestSpecRight2,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft2,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight2,
       joinCondition = joinCondition(Seq("i", "j"))
     )
 
-    val bucketTableTestSpecLeft3 = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft3 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
-    val bucketTableTestSpecRight3 = BucketTableTestSpec(
+    val bucketedTableTestSpecRight3 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 50, expectedShuffle = false, expectedSort = true)
     testBucketing(
-      bucketTableTestSpecLeft3,
-      bucketTableTestSpecRight3,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft3,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight3,
       joinCondition = joinCondition(Seq("i", "j"))
     )
 
-    val bucketTableTestSpecLeft4 = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft4 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketTableTestSpecRight4 = BucketTableTestSpec(
+    val bucketedTableTestSpecRight4 = BucketedTableTestSpec(
       bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
     testBucketing(
-      bucketTableTestSpecLeft4,
-      bucketTableTestSpecRight4,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft4,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight4,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
@@ -446,13 +446,13 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("avoid shuffle and sort when sort columns are a super set of join keys") {
     val bucketSpecLeft = Some(BucketSpec(8, Seq("i"), Seq("i", "j")))
     val bucketSpecRight = Some(BucketSpec(8, Seq("i"), Seq("i", "k")))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(
       bucketSpecLeft, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(
       bucketSpecRight, numPartitions = 1, expectedShuffle = false, expectedSort = false)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i"))
     )
   }
@@ -460,13 +460,13 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("only sort one side when sort columns are different") {
     val bucketSpecLeft = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
     val bucketSpecRight = Some(BucketSpec(8, Seq("i", "j"), Seq("k")))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(
       bucketSpecLeft, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(
       bucketSpecRight, numPartitions = 1, expectedShuffle = false, expectedSort = true)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
@@ -474,13 +474,13 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("only sort one side when sort columns are same but their ordering is different") {
     val bucketSpecLeft = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
     val bucketSpecRight = Some(BucketSpec(8, Seq("i", "j"), Seq("j", "i")))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(
       bucketSpecLeft, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(
       bucketSpecRight, numPartitions = 1, expectedShuffle = false, expectedSort = true)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinCondition = joinCondition(Seq("i", "j"))
     )
   }
@@ -515,13 +515,13 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
   test("SPARK-17698 Join predicates should not contain filter clauses") {
     val bucketSpec = Some(BucketSpec(8, Seq("i"), Seq("i")))
-    val bucketTableTestSpecLeft = BucketTableTestSpec(
+    val bucketedTableTestSpecLeft = BucketedTableTestSpec(
       bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
-    val bucketTableTestSpecRight = BucketTableTestSpec(
+    val bucketedTableTestSpecRight = BucketedTableTestSpec(
       bucketSpec, numPartitions = 1, expectedShuffle = false, expectedSort = false)
     testBucketing(
-      bucketTableTestSpecLeft,
-      bucketTableTestSpecRight,
+      bucketedTableTestSpecLeft = bucketedTableTestSpecLeft,
+      bucketedTableTestSpecRight = bucketedTableTestSpecRight,
       joinType = "fullouter",
       joinCondition = (left: DataFrame, right: DataFrame) => {
         val joinPredicates = Seq("i").map(col => left(col) === right(col)).reduce(_ && _)
