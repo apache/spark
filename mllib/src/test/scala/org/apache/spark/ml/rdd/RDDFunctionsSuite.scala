@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.rdd
 
-import org.apache.spark.ml.linalg.BLAS
-import org.apache.spark.ml.linalg.{Vectors, Vector}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.rdd.RDDFunctions._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.SparkFunSuite
