@@ -410,7 +410,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   // if the database is default, the value of WAREHOUSE_PATH in conf returned
   private def defaultTablePath(tableIdent: TableIdentifier): String = {
     val dbLocation = if (tableIdent.database.get == SessionCatalog.DEFAULT_DATABASE
-      || conf.get(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH)) {
+      || conf.get(SQLConf.TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH)) {
       conf.get(WAREHOUSE_PATH)
     } else {
       getDatabase(tableIdent.database.get).locationUri

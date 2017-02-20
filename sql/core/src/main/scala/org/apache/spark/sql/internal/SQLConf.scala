@@ -673,8 +673,8 @@ object SQLConf {
       .createWithDefault(TimeZone.getDefault().getID())
 
   // for test
-  val HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH =
-  buildConf("spark.hive.createTable.defaultDB.location.useWarehousePath")
+  val TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH =
+  buildConf("spark.hive.test.createTable.defaultDB.location.useWarehousePath")
     .doc("Enables test case to use warehouse path instead of db location when " +
       "create table in default database.")
     .booleanConf

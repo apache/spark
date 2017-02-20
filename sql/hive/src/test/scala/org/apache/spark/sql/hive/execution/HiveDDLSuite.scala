@@ -1592,7 +1592,7 @@ class HiveDDLSuite
     withTable("t") {
       withTempDir { dir =>
         spark.sparkContext.conf
-          .set(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key, "true")
+          .set(SQLConf.TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key, "true")
 
         spark.sql(s"CREATE DATABASE default_test LOCATION '$dir'" )
         val db = spark.sessionState.catalog.getDatabaseMetadata("default_test")
@@ -1606,7 +1606,7 @@ class HiveDDLSuite
 
         // clear
         spark.sparkContext.conf
-          .remove(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key)
+          .remove(SQLConf.TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key)
         spark.sql("DROP TABLE t")
         spark.sql("DROP DATABASE default_test")
         spark.sql("USE DEFAULT")
@@ -1624,8 +1624,6 @@ class HiveDDLSuite
         assert(table.location.stripSuffix("/") == s"${db.locationUri.stripSuffix("/")}/t" )
 
         // clear
-        spark.sparkContext.conf
-          .remove(SQLConf.HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH.key)
         spark.sql("DROP TABLE t")
         spark.sql("DROP DATABASE test_not_default")
         spark.sql("USE DEFAULT")
