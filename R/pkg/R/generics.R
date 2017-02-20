@@ -28,7 +28,7 @@ setGeneric("cacheRDD", function(x) { standardGeneric("cacheRDD") })
 # @rdname coalesce
 # @seealso repartition
 # @export
-setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coalesce") })
+setGeneric("coalesceRDD", function(x, numPartitions, ...) { standardGeneric("coalesceRDD") })
 
 # @rdname checkpoint-methods
 # @export
@@ -66,7 +66,7 @@ setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("fre
 # @rdname approxQuantile
 # @export
 setGeneric("approxQuantile",
-           function(x, col, probabilities, relativeError) {
+           function(x, cols, probabilities, relativeError) {
              standardGeneric("approxQuantile")
            })
 
@@ -405,6 +405,13 @@ setGeneric("attach")
 #' @rdname cache
 #' @export
 setGeneric("cache", function(x) { standardGeneric("cache") })
+
+#' @rdname coalesce
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, additional Columns can be optionally
+#'        provided.
+#' @export
+setGeneric("coalesce", function(x, ...) { standardGeneric("coalesce") })
 
 #' @rdname collect
 #' @export
@@ -1400,6 +1407,10 @@ setGeneric("spark.randomForest",
 #' @rdname spark.survreg
 #' @export
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+
+#' @rdname spark.svmLinear
+#' @export
+setGeneric("spark.svmLinear", function(data, formula, ...) { standardGeneric("spark.svmLinear") })
 
 #' @rdname spark.lda
 #' @export

@@ -190,12 +190,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
-      allMetrics.put("registeredExecutorsSize", new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return blockManager.getRegisteredExecutorsSize();
-        }
-      });
+      allMetrics.put("registeredExecutorsSize",
+                     (Gauge<Integer>) () -> blockManager.getRegisteredExecutorsSize());
     }
 
     @Override
