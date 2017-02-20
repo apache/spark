@@ -240,6 +240,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       joinCondition: (DataFrame, DataFrame) => Column,
       shuffleLeft: Boolean,
       shuffleRight: Boolean,
+      numPartitions: Int = 10,
       sortLeft: Boolean = true,
       sortRight: Boolean = true): Unit = {
     withTable("bucketed_table1", "bucketed_table2") {
@@ -263,8 +264,10 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         }.getOrElse(writer)
       }
 
-      withBucket(df1.write.format("parquet"), bucketSpecLeft).saveAsTable("bucketed_table1")
-      withBucket(df2.write.format("parquet"), bucketSpecRight).saveAsTable("bucketed_table2")
+      withBucket(df1.repartition(numPartitions).write.format("parquet"), bucketSpecLeft)
+        .saveAsTable("bucketed_table1")
+      withBucket(df2.repartition(numPartitions).write.format("parquet"), bucketSpecRight)
+        .saveAsTable("bucketed_table2")
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -291,10 +294,10 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         // check existence of sort
         assert(
           joinOperator.left.find(_.isInstanceOf[SortExec]).isDefined == sortLeft,
-          s"expected sort in plan to be $shuffleLeft but found\n${joinOperator.left}")
+          s"expected sort in the left child to be $sortLeft but found\n${joinOperator.left}")
         assert(
           joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
-          s"expected sort in plan to be $shuffleRight but found\n${joinOperator.right}")
+          s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
       }
     }
   }
@@ -393,8 +396,28 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       joinCondition = joinCondition(Seq("i", "j")),
       shuffleLeft = false,
       shuffleRight = false,
+      numPartitions = 1,
       sortLeft = false,
       sortRight = false
+    )
+  }
+
+  test("sort when bucket and sort columns are join keys when having multiple files in a bucket") {
+    val bucketSpec = Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j")))
+    // In case of bucketing, its possible to have multiple files belonging to the
+    // same bucket in a given relation. Each of these files are locally sorted
+    // but those files combined together are not globally sorted. Given that,
+    // the RDD partition will not be sorted even if the relation has sort columns set
+    // Therefore, we still need to keep the Sort in both sides.
+    testBucketing(
+      bucketSpecLeft = bucketSpec,
+      bucketSpecRight = bucketSpec,
+      joinCondition = joinCondition(Seq("i", "j")),
+      shuffleLeft = false,
+      shuffleRight = false,
+      numPartitions = 50,
+      sortLeft = true,
+      sortRight = true
     )
   }
 
@@ -407,6 +430,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       joinCondition = joinCondition(Seq("i")),
       shuffleLeft = false,
       shuffleRight = false,
+      numPartitions = 1,
       sortLeft = false,
       sortRight = false
     )
@@ -421,6 +445,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       joinCondition = joinCondition(Seq("i", "j")),
       shuffleLeft = false,
       shuffleRight = false,
+      numPartitions = 1,
       sortLeft = false,
       sortRight = true
     )
@@ -435,6 +460,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       joinCondition = joinCondition(Seq("i", "j")),
       shuffleLeft = false,
       shuffleRight = false,
+      numPartitions = 1,
       sortLeft = false,
       sortRight = true
     )
@@ -482,6 +508,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       },
       shuffleLeft = false,
       shuffleRight = false,
+      numPartitions = 1,
       sortLeft = false,
       sortRight = false
     )
