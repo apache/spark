@@ -110,6 +110,27 @@ case class AggregateExpression(
   extends Expression
   with Unevaluable {
 
+
+  def equalsTo(agg: AggregateExpression): Boolean = {
+      agg.eq(this) || (aggregateFunction.equals(agg.aggregateFunction) &&
+        mode.equals(agg.mode) && isDistinct == agg.isDistinct)
+  }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case agg: AggregateExpression => this.equalsTo(agg)
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    var result = 113
+    result = 37*result + aggregateFunction.hashCode()
+    result = 37*result + mode.hashCode()
+    result = 37*result + (if (isDistinct) 1 else 0)
+    result
+  }
+
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
     AttributeReference(
       aggregateFunction.toString,
