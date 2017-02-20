@@ -234,26 +234,6 @@ private[spark] trait UIRoot {
       .status(Response.Status.SERVICE_UNAVAILABLE)
       .build()
   }
-
-  /**
-   * Get the spark UI with the given appID, and apply a function
-   * to it.  If there is no such app, throw an appropriate exception
-   */
-  def withSparkUI[T](
-      req: HttpServletRequest,
-      appId: String,
-      attemptId: Option[String])(f: SparkUI => T): T = {
-    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
-    getSparkUI(appKey) match {
-      case Some(ui) =>
-        val user = req.getRemoteUser()
-        if (!ui.securityManager.checkUIViewPermissions(user)) {
-          throw new ForbiddenException(raw"""user "$user" is not authorized""")
-        }
-        f(ui)
-      case None => throw new NotFoundException("no such app: " + appId)
-    }
-  }
   def securityManager: SecurityManager
 }
 
@@ -279,8 +259,22 @@ private[v1] trait ApiRequestContext {
 
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
 
+
+  /**
+   * Get the spark UI with the given appID, and apply a function
+   * to it.  If there is no such app, throw an appropriate exception
+   */
   def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
-    uiRoot.withSparkUI(httpRequest, appId, attemptId)(f)
+    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
+    uiRoot.getSparkUI(appKey) match {
+      case Some(ui) =>
+        val user = httpRequest.getRemoteUser()
+        if (!ui.securityManager.checkUIViewPermissions(user)) {
+          throw new ForbiddenException(raw"""user "$user" is not authorized""")
+        }
+        f(ui)
+      case None => throw new NotFoundException("no such app: " + appId)
+    }
   }
 
 }
