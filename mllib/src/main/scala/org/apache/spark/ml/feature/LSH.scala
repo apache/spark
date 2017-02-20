@@ -169,7 +169,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
         .approxQuantile(distCol, Array(quantile), relativeError)
 
       // Filter the dataset where the hash value is less than the threshold.
-      modelDataset.filter(col(distCol) <= hashThreshold(0))
+      modelDatasetWithDist.filter(col(distCol) <= hashThreshold(0))
     }
 
     // Get the top k nearest neighbor by their distance to the key
