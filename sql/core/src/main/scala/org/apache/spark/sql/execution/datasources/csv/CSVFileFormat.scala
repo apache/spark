@@ -56,8 +56,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     require(files.nonEmpty, "Cannot infer schema from an empty set of files")
 
     val csvOptions = new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
-    val paths = files.map(_.getPath.toString)
-    val lines: Dataset[String] = createBaseDataset(sparkSession, csvOptions, paths)
+    val lines: Dataset[String] = createBaseDataset(sparkSession, csvOptions, files)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     Some(CSVInferSchema.infer(lines, caseSensitive, csvOptions))
   }
@@ -128,14 +127,16 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   private def createBaseDataset(
       sparkSession: SparkSession,
       options: CSVOptions,
-      inputPaths: Seq[String]): Dataset[String] = {
+      inputPaths: Seq[FileStatus]): Dataset[String] = {
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
+      // Fix for SPARK-19340. resolveRelation replaces with createHadoopRelation
+      // to avoid pattern resolution for already resolved file path
       sparkSession.baseRelationToDataFrame(
         DataSource.apply(
           sparkSession,
-          paths = inputPaths,
+          paths = inputPaths.map(_.getPath().toString),
           className = classOf[TextFileFormat].getName
-        ).resolveRelation(checkFilesExist = false))
+        ).createHadoopRelation(new TextFileFormat, inputPaths.map(_.getPath).toArray))
         .select("value").as[String](Encoders.STRING)
     } else {
       val charset = options.charset
