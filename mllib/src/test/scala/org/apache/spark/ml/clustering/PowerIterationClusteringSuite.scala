@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -29,6 +29,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
   with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var data: Dataset[_] = _
+  @transient var malData: Dataset[_] = _
   final val r1 = 1.0
   final val n1 = 10
   final val r2 = 4.0
@@ -38,6 +39,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     super.beforeAll()
 
     data = PowerIterationClusteringSuite.generatePICData(spark, r1, r2, n1, n2)
+    malData = PowerIterationClusteringSuite.generateMalFormatData(spark)
   }
 
   test("default parameters") {
@@ -80,10 +82,16 @@ class PowerIterationClusteringSuite extends SparkFunSuite
   test("power iteration clustering") {
     val n = n1 + n2
 
-    val result = new PowerIterationClustering()
+    val model = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(40)
-      .transform(data)
+    val result = model.transform(data)
+
+    val thrownData = intercept[SparkException] {
+      model.transform(malData)
+    }
+
+    assert(thrownData.getMessage().contains("The number of elements in each row must be 3"))
 
     val predictions = Array.fill(2)(mutable.Set.empty[Long])
     result.select("id", "prediction").collect().foreach {
@@ -150,4 +158,16 @@ object PowerIterationClusteringSuite {
       .map(v => TestRow(v))
     spark.createDataFrame(rdd)
   }
+
+  def generateMalFormatData(spark: SparkSession): DataFrame = {
+    val data = for (i <- 1 until 2; j <- 0 until i) yield {
+      (i.toLong, j.toLong, 0.01, (i + j).toLong)
+    }
+    val sc = spark.sparkContext
+    val rdd = sc.parallelize(data)
+      .map{case (i: Long, j: Long, sim: Double, k: Long) => Vectors.dense(Array(i, j, sim, k))}
+      .map(v => TestRow(v))
+    spark.createDataFrame(rdd)
+  }
+
 }
