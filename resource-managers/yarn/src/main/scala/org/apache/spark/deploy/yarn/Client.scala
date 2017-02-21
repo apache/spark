@@ -26,7 +26,6 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
-import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
@@ -47,7 +46,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -216,18 +215,7 @@ private[spark] class Client(
     appContext.setApplicationType("SPARK")
 
     sparkConf.get(APPLICATION_TAGS).foreach { tags =>
-      try {
-        // The setApplicationTags method was only introduced in Hadoop 2.4+, so we need to use
-        // reflection to set it, printing a warning if a tag was specified but the YARN version
-        // doesn't support it.
-        val method = appContext.getClass().getMethod(
-          "setApplicationTags", classOf[java.util.Set[String]])
-        method.invoke(appContext, new java.util.HashSet[String](tags.asJava))
-      } catch {
-        case e: NoSuchMethodException =>
-          logWarning(s"Ignoring ${APPLICATION_TAGS.key} because this version of " +
-            "YARN does not support it")
-      }
+      appContext.setApplicationTags(new java.util.HashSet[String](tags.asJava))
     }
     sparkConf.get(MAX_APP_ATTEMPTS) match {
       case Some(v) => appContext.setMaxAppAttempts(v)
@@ -236,15 +224,7 @@ private[spark] class Client(
     }
 
     sparkConf.get(AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).foreach { interval =>
-      try {
-        val method = appContext.getClass().getMethod(
-          "setAttemptFailuresValidityInterval", classOf[Long])
-        method.invoke(appContext, interval: java.lang.Long)
-      } catch {
-        case e: NoSuchMethodException =>
-          logWarning(s"Ignoring ${AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key} because " +
-            "the version of YARN does not support it")
-      }
+      appContext.setAttemptFailuresValidityInterval(interval)
     }
 
     val capability = Records.newRecord(classOf[Resource])
@@ -253,34 +233,23 @@ private[spark] class Client(
 
     sparkConf.get(AM_NODE_LABEL_EXPRESSION) match {
       case Some(expr) =>
-        try {
-          val amRequest = Records.newRecord(classOf[ResourceRequest])
-          amRequest.setResourceName(ResourceRequest.ANY)
-          amRequest.setPriority(Priority.newInstance(0))
-          amRequest.setCapability(capability)
-          amRequest.setNumContainers(1)
-          val method = amRequest.getClass.getMethod("setNodeLabelExpression", classOf[String])
-          method.invoke(amRequest, expr)
-
-          val setResourceRequestMethod =
-            appContext.getClass.getMethod("setAMContainerResourceRequest", classOf[ResourceRequest])
-          setResourceRequestMethod.invoke(appContext, amRequest)
-        } catch {
-          case e: NoSuchMethodException =>
-            logWarning(s"Ignoring ${AM_NODE_LABEL_EXPRESSION.key} because the version " +
-              "of YARN does not support it")
-            appContext.setResource(capability)
-        }
+        val amRequest = Records.newRecord(classOf[ResourceRequest])
+        amRequest.setResourceName(ResourceRequest.ANY)
+        amRequest.setPriority(Priority.newInstance(0))
+        amRequest.setCapability(capability)
+        amRequest.setNumContainers(1)
+        amRequest.setNodeLabelExpression(expr)
+        appContext.setAMContainerResourceRequest(amRequest)
       case None =>
         appContext.setResource(capability)
     }
 
     sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
       try {
-        val logAggregationContext = Records.newRecord(
-          Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
-          .asInstanceOf[Object]
+        val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
 
+        // These two methods were added in Hadoop 2.6.4, so we still need to use reflection to
+        // avoid compile error when building against Hadoop 2.6.0 ~ 2.6.3.
         val setRolledLogsIncludePatternMethod =
           logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
         setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
@@ -291,14 +260,11 @@ private[spark] class Client(
           setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
         }
 
-        val setLogAggregationContextMethod =
-          appContext.getClass.getMethod("setLogAggregationContext",
-            Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
-        setLogAggregationContextMethod.invoke(appContext, logAggregationContext)
+        appContext.setLogAggregationContext(logAggregationContext)
       } catch {
         case NonFatal(e) =>
           logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
-            s"does not support it", e)
+            "does not support it", e)
       }
     }
 
@@ -360,6 +326,7 @@ private[spark] class Client(
       destDir: Path,
       srcPath: Path,
       replication: Short,
+      symlinkCache: Map[URI, Path],
       force: Boolean = false,
       destName: Option[String] = None): Path = {
     val destFs = destDir.getFileSystem(hadoopConf)
@@ -377,8 +344,12 @@ private[spark] class Client(
     // Resolve any symlinks in the URI path so using a "current" symlink to point to a specific
     // version shows the specific version in the distributed cache configuration
     val qualifiedDestPath = destFs.makeQualified(destPath)
-    val fc = FileContext.getFileContext(qualifiedDestPath.toUri(), hadoopConf)
-    fc.resolvePath(qualifiedDestPath)
+    val qualifiedDestDir = qualifiedDestPath.getParent
+    val resolvedDestDir = symlinkCache.getOrElseUpdate(qualifiedDestDir.toUri(), {
+      val fc = FileContext.getFileContext(qualifiedDestDir.toUri(), hadoopConf)
+      fc.resolvePath(qualifiedDestDir)
+    })
+    new Path(resolvedDestDir, qualifiedDestPath.getName())
   }
 
   /**
@@ -434,6 +405,7 @@ private[spark] class Client(
     FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+    val symlinkCache: Map[URI, Path] = HashMap[URI, Path]()
 
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
@@ -479,7 +451,7 @@ private[spark] class Client(
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
           val linkname = targetDir.map(_ + "/").getOrElse("") +
             destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
-          val destPath = copyFileToRemote(destDir, localPath, replication)
+          val destPath = copyFileToRemote(destDir, localPath, replication, symlinkCache)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(
             destFs, hadoopConf, destPath, localResources, resType, linkname, statCache,
@@ -531,8 +503,9 @@ private[spark] class Client(
               val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
               val pathFs = FileSystem.get(path.toUri(), hadoopConf)
               pathFs.globStatus(path).filter(_.isFile()).foreach { entry =>
-                distribute(entry.getPath().toUri().toString(),
-                  targetDir = Some(LOCALIZED_LIB_DIR))
+                val uri = entry.getPath().toUri()
+                statCache.update(uri, entry)
+                distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
               }
             } else {
               localJars += jar
@@ -648,7 +621,7 @@ private[spark] class Client(
     sparkConf.set(CACHED_CONF_ARCHIVE, remoteConfArchivePath.toString())
 
     val localConfArchive = new Path(createConfArchive().toURI())
-    copyFileToRemote(destDir, localConfArchive, replication, force = true,
+    copyFileToRemote(destDir, localConfArchive, replication, symlinkCache, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
     // Manually add the config archive to the cache manager so that the AM is launched with
@@ -786,14 +759,12 @@ private[spark] class Client(
     val pythonPath = new ListBuffer[String]()
     val (pyFiles, pyArchives) = sparkConf.get(PY_FILES).partition(_.endsWith(".py"))
     if (pyFiles.nonEmpty) {
-      pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-        LOCALIZED_PYTHON_DIR)
+      pythonPath += buildPath(Environment.PWD.$$(), LOCALIZED_PYTHON_DIR)
     }
     (pySparkArchives ++ pyArchives).foreach { path =>
       val uri = Utils.resolveURI(path)
       if (uri.getScheme != LOCAL_SCHEME) {
-        pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-          new Path(uri).getName())
+        pythonPath += buildPath(Environment.PWD.$$(), new Path(uri).getName())
       } else {
         pythonPath += uri.getPath()
       }
@@ -802,7 +773,7 @@ private[spark] class Client(
     // Finally, update the Spark config to propagate PYTHONPATH to the AM and executors.
     if (pythonPath.nonEmpty) {
       val pythonPathStr = (sys.env.get("PYTHONPATH") ++ pythonPath)
-        .mkString(YarnSparkHadoopUtil.getClassPathSeparator)
+        .mkString(ApplicationConstants.CLASS_PATH_SEPARATOR)
       env("PYTHONPATH") = pythonPathStr
       sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
     }
@@ -882,10 +853,7 @@ private[spark] class Client(
     // Add Xmx for AM memory
     javaOpts += "-Xmx" + amMemory + "m"
 
-    val tmpDir = new Path(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-      YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
-    )
+    val tmpDir = new Path(Environment.PWD.$$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     javaOpts += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
@@ -943,7 +911,6 @@ private[spark] class Client(
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
-    YarnCommandBuilderUtils.addPermGenSizeOpt(javaOpts)
 
     val userClass =
       if (isClusterMode) {
@@ -982,15 +949,12 @@ private[spark] class Client(
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++
-        userArgs ++ Seq(
-          "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-            LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
+      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++ userArgs ++
+      Seq("--properties-file", buildPath(Environment.PWD.$$(), LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
 
     // Command for the ApplicationMaster
-    val commands = prefixEnv ++ Seq(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java", "-server"
-      ) ++
+    val commands = prefixEnv ++
+      Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
       javaOpts ++ amArgs ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
@@ -1265,59 +1229,28 @@ private object Client extends Logging {
   private[yarn] def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String])
     : Unit = {
     val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
-    for (c <- classPathElementsToAdd.flatten) {
+    classPathElementsToAdd.foreach { c =>
       YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, c.trim)
     }
   }
 
-  private def getYarnAppClasspath(conf: Configuration): Option[Seq[String]] =
+  private def getYarnAppClasspath(conf: Configuration): Seq[String] =
     Option(conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) match {
-      case Some(s) => Some(s.toSeq)
+      case Some(s) => s.toSeq
       case None => getDefaultYarnApplicationClasspath
     }
 
-  private def getMRAppClasspath(conf: Configuration): Option[Seq[String]] =
+  private def getMRAppClasspath(conf: Configuration): Seq[String] =
     Option(conf.getStrings("mapreduce.application.classpath")) match {
-      case Some(s) => Some(s.toSeq)
+      case Some(s) => s.toSeq
       case None => getDefaultMRApplicationClasspath
     }
 
-  private[yarn] def getDefaultYarnApplicationClasspath: Option[Seq[String]] = {
-    val triedDefault = Try[Seq[String]] {
-      val field = classOf[YarnConfiguration].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
-      val value = field.get(null).asInstanceOf[Array[String]]
-      value.toSeq
-    } recoverWith {
-      case e: NoSuchFieldException => Success(Seq.empty[String])
-    }
+  private[yarn] def getDefaultYarnApplicationClasspath: Seq[String] =
+    YarnConfiguration.DEFAULT_YARN_APPLICATION_CLASSPATH.toSeq
 
-    triedDefault match {
-      case f: Failure[_] =>
-        logError("Unable to obtain the default YARN Application classpath.", f.exception)
-      case s: Success[Seq[String]] =>
-        logDebug(s"Using the default YARN application classpath: ${s.get.mkString(",")}")
-    }
-
-    triedDefault.toOption
-  }
-
-  private[yarn] def getDefaultMRApplicationClasspath: Option[Seq[String]] = {
-    val triedDefault = Try[Seq[String]] {
-      val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
-      StringUtils.getStrings(field.get(null).asInstanceOf[String]).toSeq
-    } recoverWith {
-      case e: NoSuchFieldException => Success(Seq.empty[String])
-    }
-
-    triedDefault match {
-      case f: Failure[_] =>
-        logError("Unable to obtain the default MR Application classpath.", f.exception)
-      case s: Success[Seq[String]] =>
-        logDebug(s"Using the default MR application classpath: ${s.get.mkString(",")}")
-    }
-
-    triedDefault.toOption
-  }
+  private[yarn] def getDefaultMRApplicationClasspath: Seq[String] =
+    StringUtils.getStrings(MRJobConfig.DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH).toSeq
 
   /**
    * Populate the classpath entry in the given environment map.
@@ -1339,11 +1272,9 @@ private object Client extends Logging {
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
 
-    addClasspathEntry(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env)
+    addClasspathEntry(Environment.PWD.$$(), env)
 
-    addClasspathEntry(
-      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +
-        LOCALIZED_CONF_DIR, env)
+    addClasspathEntry(Environment.PWD.$$() + Path.SEPARATOR + LOCALIZED_CONF_DIR, env)
 
     if (sparkConf.get(USER_CLASS_PATH_FIRST)) {
       // in order to properly add the app jar when user classpath is first
@@ -1369,9 +1300,8 @@ private object Client extends Logging {
     }
 
     // Add the Spark jars to the classpath, depending on how they were distributed.
-    addClasspathEntry(buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-      LOCALIZED_LIB_DIR, "*"), env)
-    if (!sparkConf.get(SPARK_ARCHIVE).isDefined) {
+    addClasspathEntry(buildPath(Environment.PWD.$$(), LOCALIZED_LIB_DIR, "*"), env)
+    if (sparkConf.get(SPARK_ARCHIVE).isEmpty) {
       sparkConf.get(SPARK_JARS).foreach { jars =>
         jars.filter(isLocalUri).foreach { jar =>
           addClasspathEntry(getClusterPath(sparkConf, jar), env)
@@ -1430,13 +1360,11 @@ private object Client extends Logging {
     if (uri != null && uri.getScheme == LOCAL_SCHEME) {
       addClasspathEntry(getClusterPath(conf, uri.getPath), env)
     } else if (fileName != null) {
-      addClasspathEntry(buildPath(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
+      addClasspathEntry(buildPath(Environment.PWD.$$(), fileName), env)
     } else if (uri != null) {
       val localPath = getQualifiedLocalPath(uri, hadoopConf)
       val linkName = Option(uri.getFragment()).getOrElse(localPath.getName())
-      addClasspathEntry(buildPath(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), linkName), env)
+      addClasspathEntry(buildPath(Environment.PWD.$$(), linkName), env)
     }
   }
 

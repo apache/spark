@@ -104,15 +104,12 @@ abstract class AbstractCommandBuilder {
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
-      BufferedReader br = new BufferedReader(new InputStreamReader(
-          new FileInputStream(javaOpts), StandardCharsets.UTF_8));
-      try {
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(
+          new FileInputStream(javaOpts), StandardCharsets.UTF_8))) {
         String line;
         while ((line = br.readLine()) != null) {
           addOptionString(cmd, line);
         }
-      } finally {
-        br.close();
       }
     }
 

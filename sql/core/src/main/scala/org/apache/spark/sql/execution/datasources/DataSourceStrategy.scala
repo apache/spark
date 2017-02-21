@@ -45,7 +45,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  *
- * Note that, this rule must be run after [[PreprocessTableInsertion]].
+ * Note that, this rule must be run after `PreprocessTableCreation` and
+ * `PreprocessTableInsertion`.
  */
 case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
@@ -130,6 +131,17 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
+      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+
+    case CreateTable(tableDesc, mode, Some(query))
+        if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
+      CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
+
+    case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _),
+        parts, query, overwrite, false) if parts.isEmpty =>
+      InsertIntoDataSourceCommand(l, query, overwrite)
+
     case InsertIntoTable(
         l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
@@ -221,7 +233,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             // TODO: improve `InMemoryCatalog` and remove this limitation.
             catalogTable = if (withHiveSupport) Some(table) else None)
 
-        LogicalRelation(dataSource.resolveRelation(), catalogTable = Some(table))
+        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false),
+          catalogTable = Some(table))
       }
     })
   }
@@ -272,10 +285,6 @@ object DataSourceStrategy extends Strategy with Logging {
         UnknownPartitioning(0),
         Map.empty,
         None) :: Nil
-
-    case InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
-      part, query, overwrite, false) if part.isEmpty =>
-      ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
     case _ => Nil
   }
