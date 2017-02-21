@@ -344,6 +344,8 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
       )
 
       table.copy(
+        storage = table.storage.copy(
+          locationUri = table.storage.locationUri.map(_.stripPrefix("file:"))),
         createTime = 0L,
         lastAccessTime = 0L,
         properties = table.properties.filterKeys(!nondeterministicProps.contains(_))
