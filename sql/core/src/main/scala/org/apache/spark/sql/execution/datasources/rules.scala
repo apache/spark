@@ -52,8 +52,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
-        val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(a, plan, None)).getOrElse(plan)
+        LogicalRelation(dataSource.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
