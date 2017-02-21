@@ -790,6 +790,8 @@ case class SubqueryAlias(
     view: Option[TableIdentifier])
   extends UnaryNode {
 
+  override def sameResult(plan: LogicalPlan): Boolean = child.sameResult(plan.canonicalized)
+
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 
