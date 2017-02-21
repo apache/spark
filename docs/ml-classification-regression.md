@@ -363,6 +363,50 @@ Refer to the [R API docs](api/R/spark.mlp.html) for more details.
 
 </div>
 
+## Linear Support Vector Machine
+
+A [support vector machine](https://en.wikipedia.org/wiki/Support_vector_machine) constructs a hyperplane
+or set of hyperplanes in a high- or infinite-dimensional space, which can be used for classification,
+regression, or other tasks. Intuitively, a good separation is achieved by the hyperplane that has
+the largest distance to the nearest training-data points of any class (so-called functional margin),
+since in general the larger the margin the lower the generalization error of the classifier. LinearSVC
+in Spark ML supports binary classification with linear SVM. Internally, it optimizes the 
+[Hinge Loss](https://en.wikipedia.org/wiki/Hinge_loss) using OWLQN optimizer.
+
+
+**Examples**
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.LinearSVC) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/LinearSVCExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearSVC.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaLinearSVCExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.LinearSVC) for more details.
+
+{% include_example python/ml/linearsvc.py %}
+</div>
+
+<div data-lang="r" markdown="1">
+
+Refer to the [R API docs](api/R/spark.svmLinear.html) for more details.
+
+{% include_example r/ml/svmLinear.R %}
+</div>
+
+</div>
 
 ## One-vs-Rest classifier (a.k.a. One-vs-All)
 
