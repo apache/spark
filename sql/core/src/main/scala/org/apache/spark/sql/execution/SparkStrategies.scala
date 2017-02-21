@@ -258,26 +258,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Used to plan the batch deduplication operator.
-   */
-  object DeduplicationStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Deduplication(keys, child) =>
-        val keyExprIds = keys.map(_.exprId)
-        val aggCols = child.output.map { attr =>
-          if (keyExprIds.contains(attr.exprId)) {
-            attr
-          } else {
-            Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
-          }
-        }
-        Aggregation.apply(Aggregate(keys, aggCols, child))
-
-      case _ => Nil
-    }
-  }
-
-  /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
   object Aggregation extends Strategy {

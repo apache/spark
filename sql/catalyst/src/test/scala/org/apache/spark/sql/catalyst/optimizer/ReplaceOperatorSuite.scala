@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, _}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class ReplaceOperatorSuite extends PlanTest {
@@ -30,7 +32,8 @@ class ReplaceOperatorSuite extends PlanTest {
       Batch("Replace Operators", FixedPoint(100),
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
-        ReplaceIntersectWithSemiJoin) :: Nil
+        ReplaceIntersectWithSemiJoin,
+        ReplaceDeduplicationWithAggregate) :: Nil
   }
 
   test("replace Intersect with Left-semi Join") {
@@ -71,4 +74,37 @@ class ReplaceOperatorSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("replace batch Deduplication with Aggregate") {
+    val input = LocalRelation('a.int, 'b.int)
+    val attrA = input.output(0)
+    val attrB = input.output(1)
+    val query = Deduplication(Seq(attrA), input) // dropDuplicates("a")
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(
+        Seq(attrA),
+        Seq(
+          attrA,
+          Alias(new First(attrB).toAggregateExpression(), attrB.name)(attrB.exprId)
+        ),
+        input)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("don't replace streaming Deduplication") {
+    val input = TestStreamingRelation(Seq('a.int, 'b.int))
+    val attrA = input.output(0)
+    val query = Deduplication(Seq(attrA), input) // dropDuplicates("a")
+    val optimized = Optimize.execute(query.analyze)
+
+    comparePlans(optimized, query)
+  }
+}
+
+case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
+  def this(attribute: Attribute) = this(Seq(attribute))
+  override def isStreaming: Boolean = true
 }

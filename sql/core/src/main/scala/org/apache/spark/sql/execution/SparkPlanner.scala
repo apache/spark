@@ -38,7 +38,6 @@ class SparkPlanner(
       DataSourceStrategy ::
       SpecialLimits ::
       Aggregation ::
-      DeduplicationStrategy ::
       JoinSelection ::
       InMemoryScans ::
       BasicOperators :: Nil)
