@@ -444,28 +444,6 @@ class SessionCatalogSuite extends PlanTest {
       == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
   }
 
-  test("lookup table relation with alias") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    val alias = "monster"
-    val tableMetadata = catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
-    val relation = SubqueryAlias("tbl1", SimpleCatalogRelation(tableMetadata), None)
-    val relationWithAlias =
-      SubqueryAlias(alias,
-        SimpleCatalogRelation(tableMetadata), None)
-    assert(catalog.lookupRelation(
-      TableIdentifier("tbl1", Some("db2")), alias = None) == relation)
-    assert(catalog.lookupRelation(
-      TableIdentifier("tbl1", Some("db2")), alias = Some(alias)) == relationWithAlias)
-  }
-
-  test("lookup view with view name in alias") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    val tmpView = Range(1, 10, 2, 10)
-    catalog.createTempView("vw1", tmpView, overrideIfExists = false)
-    val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
-    assert(plan == SubqueryAlias("range", tmpView, None))
-  }
-
   test("look up view relation") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)

@@ -135,8 +135,9 @@ case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String]) {
-  if (numBuckets <= 0) {
-    throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
+  if (numBuckets <= 0 || numBuckets >= 100000) {
+    throw new AnalysisException(
+      s"Number of buckets should be greater than 0 but less than 100000. Got `$numBuckets`")
   }
 
   override def toString: String = {
@@ -192,6 +193,14 @@ case class CatalogTable(
     assert(partitionFields.map(_.name) == partitionColumnNames)
 
     StructType(partitionFields)
+  }
+
+  /**
+   * schema of this table's data columns
+   */
+  def dataSchema: StructType = {
+    val dataFields = schema.dropRight(partitionColumnNames.length)
+    StructType(dataFields)
   }
 
   /** Return the database this table was specified to belong to, assuming it exists. */

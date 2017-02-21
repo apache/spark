@@ -979,59 +979,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
   }
 
-  test("SPARK-7150 range api") {
-    // numSlice is greater than length
-    val res1 = spark.range(0, 10, 1, 15).select("id")
-    assert(res1.count == 10)
-    assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
-
-    val res2 = spark.range(3, 15, 3, 2).select("id")
-    assert(res2.count == 4)
-    assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
-
-    val res3 = spark.range(1, -2).select("id")
-    assert(res3.count == 0)
-
-    // start is positive, end is negative, step is negative
-    val res4 = spark.range(1, -2, -2, 6).select("id")
-    assert(res4.count == 2)
-    assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
-
-    // start, end, step are negative
-    val res5 = spark.range(-3, -8, -2, 1).select("id")
-    assert(res5.count == 3)
-    assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
-
-    // start, end are negative, step is positive
-    val res6 = spark.range(-8, -4, 2, 1).select("id")
-    assert(res6.count == 2)
-    assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
-
-    val res7 = spark.range(-10, -9, -20, 1).select("id")
-    assert(res7.count == 0)
-
-    val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
-    assert(res8.count == 3)
-    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
-
-    val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
-    assert(res9.count == 2)
-    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
-
-    // only end provided as argument
-    val res10 = spark.range(10).select("id")
-    assert(res10.count == 10)
-    assert(res10.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
-
-    val res11 = spark.range(-1).select("id")
-    assert(res11.count == 0)
-
-    // using the default slice number
-    val res12 = spark.range(3, 15, 3).select("id")
-    assert(res12.count == 4)
-    assert(res12.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
-  }
-
   test("SPARK-8621: support empty string column name") {
     val df = Seq(Tuple1(1)).toDF("").as("t")
     // We should allow empty string as column name

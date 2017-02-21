@@ -283,14 +283,29 @@ class AnalysisErrorSuite extends AnalysisTest {
     "union" :: "the compatible column types" :: Nil)
 
   errorTest(
+    "union with a incompatible column type and compatible column types",
+    testRelation3.union(testRelation4),
+    "union"  :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
     "intersect with incompatible column types",
     testRelation.intersect(nestedRelation),
     "intersect" :: "the compatible column types" :: Nil)
 
   errorTest(
+    "intersect with a incompatible column type and compatible column types",
+    testRelation3.intersect(testRelation4),
+    "intersect" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
     "except with incompatible column types",
     testRelation.except(nestedRelation),
     "except" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "except with a incompatible column type and compatible column types",
+    testRelation3.except(testRelation4),
+    "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
 
   errorTest(
     "SPARK-9955: correct error message for aggregate",

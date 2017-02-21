@@ -18,21 +18,35 @@
 package org.apache.spark.sql.catalyst.util
 
 /**
- * Builds a map in which keys are case insensitive
+ * Builds a map in which keys are case insensitive. Input map can be accessed for cases where
+ * case-sensitive information is required. The primary constructor is marked private to avoid
+ * nested case-insensitive map creation, otherwise the keys in the original map will become
+ * case-insensitive in this scenario.
  */
-class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
+class CaseInsensitiveMap[T] private (val originalMap: Map[String, T]) extends Map[String, T]
   with Serializable {
 
-  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+  val keyLowerCasedMap = originalMap.map(kv => kv.copy(_1 = kv._1.toLowerCase))
 
-  override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
+  override def get(k: String): Option[T] = keyLowerCasedMap.get(k.toLowerCase)
 
-  override def contains(k: String): Boolean = baseMap.contains(k.toLowerCase)
+  override def contains(k: String): Boolean = keyLowerCasedMap.contains(k.toLowerCase)
 
-  override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
-    baseMap + kv.copy(_1 = kv._1.toLowerCase)
+  override def +[B1 >: T](kv: (String, B1)): Map[String, B1] = {
+    new CaseInsensitiveMap(originalMap + kv)
+  }
 
-  override def iterator: Iterator[(String, String)] = baseMap.iterator
+  override def iterator: Iterator[(String, T)] = keyLowerCasedMap.iterator
 
-  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
+  override def -(key: String): Map[String, T] = {
+    new CaseInsensitiveMap(originalMap.filterKeys(!_.equalsIgnoreCase(key)))
+  }
 }
+
+object CaseInsensitiveMap {
+  def apply[T](params: Map[String, T]): CaseInsensitiveMap[T] = params match {
+    case caseSensitiveMap: CaseInsensitiveMap[T] => caseSensitiveMap
+    case _ => new CaseInsensitiveMap(params)
+  }
+}
+

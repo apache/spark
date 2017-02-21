@@ -36,7 +36,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
         OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
   }
 
-  testWithUninterruptibleThread("OffsetSeqLog - serialization - deserialization") {
+  test("OffsetSeqLog - serialization - deserialization") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
       val metadataLog = new OffsetSeqLog(spark, dir.getAbsolutePath)

@@ -74,23 +74,21 @@ class FileScanRDD(
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // apply readFunction, because it might read some bytes.
-      private val getBytesReadCallback: Option[() => Long] =
+      private val getBytesReadCallback =
         SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
 
-      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // We get our input bytes from thread-local Hadoop FileSystem statistics.
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
       private def updateBytesRead(): Unit = {
-        getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
-        }
+        inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
       }
 
       // If we can't get the bytes read from the FS stats, fall back to the file size,
       // which may be inaccurate.
       private def updateBytesReadWithFileSize(): Unit = {
-        if (getBytesReadCallback.isEmpty && currentFile != null) {
+        if (currentFile != null) {
           inputMetrics.incBytesRead(currentFile.length)
         }
       }
