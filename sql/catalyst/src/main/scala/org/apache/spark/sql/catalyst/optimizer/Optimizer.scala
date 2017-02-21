@@ -56,7 +56,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
-      RewriteDistinctAggregates) ::
+      RewriteDistinctAggregates,
+      ReplaceDeduplicationWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -72,8 +73,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate,
-      ReplaceDeduplicationWithAggregate) ::
+      ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) ::
@@ -1148,7 +1148,7 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceDeduplicationWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case d @ Deduplication(keys, child) if !d.isStreaming =>
+    case Deduplication(keys, child, streaming) if !streaming =>
       val keyExprIds = keys.map(_.exprId)
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {

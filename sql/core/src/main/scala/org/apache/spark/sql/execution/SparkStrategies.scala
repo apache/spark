@@ -250,7 +250,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Deduplication(keys, child) =>
+      case Deduplication(keys, child, true) =>
         StreamingDeduplicationExec(keys, planLater(child)) :: Nil
 
       case _ => Nil

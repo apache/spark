@@ -2006,7 +2006,7 @@ class Dataset[T] private[sql](
       }
       cols
     }
-    Deduplication(groupCols, logicalPlan)
+    Deduplication(groupCols, logicalPlan, isStreaming)
   }
 
   /**
