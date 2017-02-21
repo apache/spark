@@ -117,7 +117,7 @@ class HadoopTableReader(
     val locationPath = new Path(inputPathStr)
     val fs = locationPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
-    // if the table location is not exists, return an empty RDD
+    // if the table location does not exist, return an empty RDD
     if (!fs.exists(locationPath)) {
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
