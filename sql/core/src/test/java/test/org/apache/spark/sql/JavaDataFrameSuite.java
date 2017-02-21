@@ -153,6 +153,14 @@ public class JavaDataFrameSuite {
     public BigInteger getE() { return e; }
   }
 
+  public static class BeanWithoutGetter implements Serializable {
+    private String a;
+
+    public void setA(String a) {
+      this.a = a;
+    }
+  }
+
   void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
     StructType schema = df.schema();
     Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
@@ -396,5 +404,12 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < 1000; i++) {
       Assert.assertTrue(filter4.mightContain(i * 3));
     }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testBeanWithoutGetter() {
+    BeanWithoutGetter bean = new BeanWithoutGetter();
+    List<BeanWithoutGetter> data = Arrays.asList(bean);
+    spark.createDataFrame(data, BeanWithoutGetter.class);
   }
 }

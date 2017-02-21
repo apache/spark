@@ -123,7 +123,11 @@ object JavaTypeInference {
         val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)
         val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
         val fields = properties.map { property =>
-          val returnType = typeToken.method(property.getReadMethod).getReturnType
+          val readMethod = Option(property.getReadMethod).getOrElse {
+            throw new UnsupportedOperationException(
+              s"Cannot read the property ${property.getName} because it does not have the getter")
+          }
+          val returnType = typeToken.method(readMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType)
           new StructField(property.getName, dataType, nullable)
         }
