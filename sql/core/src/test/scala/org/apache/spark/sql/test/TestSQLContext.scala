@@ -96,7 +96,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
   }
 
   @transient
-  protected[sql] override lazy val sessionState: SessionState = TestSessionState(this)
+  override lazy val sessionState: SessionState = TestSessionState(this)
 
   // Needed for Java tests
   def loadTestData(): Unit = {
