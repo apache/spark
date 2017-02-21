@@ -1570,7 +1570,7 @@ class HiveDDLSuite
         val dataPath = new File(new File(path, "d=1"), "b=1").getCanonicalPath
         Seq(1 -> 1).toDF("a", "c").write.save(dataPath)
 
-        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.getCanonicalPath}'")
+        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.toURI}'")
         assert(getTableColumns("t3") == Seq("a", "c", "d", "b"))
       }
 
