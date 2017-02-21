@@ -34,12 +34,48 @@ import org.apache.spark.util.collection.BitSet
  * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
-    var leftKeys: Seq[Expression],
-    var rightKeys: Seq[Expression],
+    leftKeys: Seq[Expression],
+    rightKeys: Seq[Expression],
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with CodegenSupport {
+
+  lazy val (reorderedLeftKeys, reorderedRightKeys) = {
+    def reorder(
+        expectedOrderOfKeys: Seq[Expression],
+        currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+
+      val leftKeysBuffer = ArrayBuffer[Expression]()
+      val rightKeysBuffer = ArrayBuffer[Expression]()
+
+      expectedOrderOfKeys.foreach(expression => {
+        val index = currentOrderOfKeys.indexWhere(e => e.semanticEquals(expression))
+
+        leftKeysBuffer.append(leftKeys(index))
+        rightKeysBuffer.append(rightKeys(index))
+      })
+
+      (leftKeysBuffer, rightKeysBuffer)
+    }
+
+    left.outputPartitioning match {
+      case HashPartitioning(leftExpressions, _)
+        if leftExpressions.length == leftKeys.length &&
+          leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
+        reorder(leftExpressions, leftKeys)
+
+      case _ => right.outputPartitioning match {
+        case HashPartitioning(rightExpressions, _)
+          if rightExpressions.length == rightKeys.length &&
+            rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
+
+          reorder(rightExpressions, rightKeys)
+
+        case _ => (leftKeys, rightKeys)
+      }
+    }
+  }
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -77,44 +113,8 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  private def resolveOrderingOfJoinKeys(): Unit = {
-    def reorder(expectedOrderOfKeys: Seq[Expression],
-                currentOrderOfKeys: Seq[Expression]): Unit = {
-      val leftKeysBuffer = ArrayBuffer[Expression]()
-      val rightKeysBuffer = ArrayBuffer[Expression]()
-
-      expectedOrderOfKeys.foreach(expression => {
-        val index = currentOrderOfKeys.indexWhere(e => e.semanticEquals(expression))
-
-        leftKeysBuffer.append(leftKeys(index))
-        rightKeysBuffer.append(rightKeys(index))
-      })
-
-      leftKeys = leftKeysBuffer
-      rightKeys = rightKeysBuffer
-    }
-
-    left.outputPartitioning match {
-      case HashPartitioning(leftExpressions, _)
-        if leftExpressions.length == leftKeys.length &&
-          leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
-        reorder(leftExpressions, leftKeys)
-
-      case _ => right.outputPartitioning match {
-        case HashPartitioning(rightExpressions, _)
-          if rightExpressions.length == rightKeys.length &&
-            rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
-
-          reorder(rightExpressions, rightKeys)
-
-        case _ => // do nothing
-      }
-    }
-  }
-
   override def requiredChildDistribution: Seq[Distribution] = {
-    resolveOrderingOfJoinKeys()
-    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
+    ClusteredDistribution(reorderedLeftKeys) :: ClusteredDistribution(reorderedRightKeys) :: Nil
   }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
@@ -150,7 +150,7 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
+    requiredOrders(reorderedLeftKeys) :: requiredOrders(reorderedRightKeys) :: Nil
 
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
@@ -158,10 +158,10 @@ case class SortMergeJoinExec(
   }
 
   private def createLeftKeyGenerator(): Projection =
-    UnsafeProjection.create(leftKeys, left.output)
+    UnsafeProjection.create(reorderedLeftKeys, left.output)
 
   private def createRightKeyGenerator(): Projection =
-    UnsafeProjection.create(rightKeys, right.output)
+    UnsafeProjection.create(reorderedRightKeys, right.output)
 
   private def getSpillThreshold: Int = {
     sqlContext.conf.sortMergeJoinExecBufferSpillThreshold
@@ -180,7 +180,7 @@ case class SortMergeJoinExec(
       }
 
       // An ordering that can be used to compare keys from both sides.
-      val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
+      val keyOrdering = newNaturalAscendingOrdering(reorderedLeftKeys.map(_.dataType))
       val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
@@ -415,7 +415,7 @@ case class SortMergeJoinExec(
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
     vars.zipWithIndex.map { case (ev, i) =>
-      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
+      ctx.addBufferedState(reorderedLeftKeys(i).dataType, "value", ev.value)
     }
   }
 
@@ -423,7 +423,7 @@ case class SortMergeJoinExec(
     val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
       s"""
          |if (comp == 0) {
-         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
+         |  comp = ${ctx.genComp(reorderedLeftKeys(i).dataType, l.value, r.value)};
          |}
        """.stripMargin.trim
     }
@@ -445,9 +445,9 @@ case class SortMergeJoinExec(
     ctx.addMutableState("InternalRow", rightRow, s"$rightRow = null;")
 
     // Create variables for join keys from both sides.
-    val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+    val leftKeyVars = createJoinKey(ctx, leftRow, reorderedLeftKeys, left.output)
     val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
-    val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
+    val rightKeyTmpVars = createJoinKey(ctx, rightRow, reorderedRightKeys, right.output)
     val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
     // Copy the right key as class members so they could be used in next function call.
     val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)

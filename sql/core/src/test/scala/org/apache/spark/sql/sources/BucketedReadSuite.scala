@@ -254,12 +254,15 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketedTableTestSpecLeft: BucketedTableTestSpec,
       bucketedTableTestSpecRight: BucketedTableTestSpec,
       joinType: String = "inner",
-      joinCondition: (DataFrame, DataFrame) => Column): Unit = {
+      joinCondition: (DataFrame, DataFrame) => Column,
+      returnJoinResult: Boolean = false,
+      expectedResult: Option[Array[Row]] = None): Option[Array[Row]] = {
     val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
       bucketedTableTestSpecLeft
     val BucketedTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
       bucketedTableTestSpecRight
 
+    var result: Option[Array[Row]] = None
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
           writer: DataFrameWriter[Row],
@@ -315,8 +318,16 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         assert(
           joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
           s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
+
+        if (expectedResult.isDefined) {
+          checkAnswer(joined, expectedResult.get)
+        }
+        if (returnJoinResult) {
+          result = Some(joined.collect())
+        }
       }
     }
+    result
   }
 
   private def joinCondition(joinCols: Seq[String]) (left: DataFrame, right: DataFrame): Column = {
@@ -541,6 +552,41 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         joinPredicates && filterLeft && filterRight
       }
     )
+  }
+
+  test("SPARK-19122 if join predicates ordering differ from bucketing and sorting order," +
+    " shuffle and sort should not be done") {
+
+    val bucketedTableTestSpec = BucketedTableTestSpec(
+      Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
+      numPartitions = 1,
+      expectedShuffle = false,
+      expectedSort = false)
+
+    def testBucketingWithPredicate(
+        joinCondition: (DataFrame, DataFrame) => Column,
+        expectedResult: Option[Array[Row]] = None,
+        returnJoinResult: Boolean = false): Option[Array[Row]] = {
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpec,
+        bucketedTableTestSpecRight = bucketedTableTestSpec,
+        joinType = "inner",
+        joinCondition = joinCondition,
+        returnJoinResult = returnJoinResult,
+        expectedResult = expectedResult
+      )
+    }
+
+    // Irrespective of the ordering of keys in the join predicate, the query plan and
+    // query results should always be the same
+    val result =
+    testBucketingWithPredicate(joinCondition(Seq("i", "j", "k")), None, returnJoinResult = true)
+
+    testBucketingWithPredicate(joinCondition(Seq("i", "k", "j")), result)
+    testBucketingWithPredicate(joinCondition(Seq("j", "k", "i")), result)
+    testBucketingWithPredicate(joinCondition(Seq("j", "i", "k")), result)
+    testBucketingWithPredicate(joinCondition(Seq("k", "i", "j")), result)
+    testBucketingWithPredicate(joinCondition(Seq("k", "j", "i")), result)
   }
 
   test("error if there exists any malformed bucket files") {
