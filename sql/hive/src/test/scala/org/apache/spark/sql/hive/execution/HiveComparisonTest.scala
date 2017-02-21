@@ -313,6 +313,7 @@ abstract class HiveComparisonTest
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i) =>
+            // Query is related to the file name. change file name this time.
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
             new File(answerCache, cachedAnswerName)
         }
