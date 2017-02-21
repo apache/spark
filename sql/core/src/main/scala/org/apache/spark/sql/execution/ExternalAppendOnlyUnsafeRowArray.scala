@@ -23,8 +23,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer
+import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 
 /**
@@ -39,7 +42,26 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  *   This may lead to a performance regression compared to the normal case of using an
  *   [[ArrayBuffer]] or [[Array]].
  */
-private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) extends Logging {
+private[sql] class ExternalAppendOnlyUnsafeRowArray(
+    taskMemoryManager: TaskMemoryManager,
+    blockManager: BlockManager,
+    serializerManager: SerializerManager,
+    taskContext: TaskContext,
+    initialSize: Int,
+    pageSizeBytes: Long,
+    numRowsSpillThreshold: Int) extends Logging {
+
+  def this(numRowsSpillThreshold: Int) {
+    this(
+      TaskContext.get().taskMemoryManager(),
+      SparkEnv.get.blockManager,
+      SparkEnv.get.serializerManager,
+      TaskContext.get(),
+      1024,
+      SparkEnv.get.memoryManager.pageSizeBytes,
+      numRowsSpillThreshold)
+  }
+
   private val initialSizeOfInMemoryBuffer =
     Math.min(DefaultInitialSizeOfInMemoryBuffer, numRowsSpillThreshold)
 
@@ -89,26 +111,29 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(numRowsSpillThreshold: Int) 
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
         spillableArray = UnsafeExternalSorter.create(
-          TaskContext.get().taskMemoryManager(),
-          SparkEnv.get.blockManager,
-          SparkEnv.get.serializerManager,
-          TaskContext.get(),
+          taskMemoryManager,
+          blockManager,
+          serializerManager,
+          taskContext,
           null,
           null,
-          1024,
-          SparkEnv.get.memoryManager.pageSizeBytes,
+          initialSize,
+          pageSizeBytes,
           numRowsSpillThreshold,
           false)
 
-        inMemoryBuffer.foreach(existingUnsafeRow =>
-          spillableArray.insertRecord(
-            existingUnsafeRow.getBaseObject,
-            existingUnsafeRow.getBaseOffset,
-            existingUnsafeRow.getSizeInBytes,
-            0,
-            false)
-        )
-        inMemoryBuffer.clear()
+        // populate with existing in-memory buffered rows
+        if (inMemoryBuffer != null) {
+          inMemoryBuffer.foreach(existingUnsafeRow =>
+            spillableArray.insertRecord(
+              existingUnsafeRow.getBaseObject,
+              existingUnsafeRow.getBaseOffset,
+              existingUnsafeRow.getSizeInBytes,
+              0,
+              false)
+          )
+          inMemoryBuffer.clear()
+        }
         numFieldsPerRow = unsafeRow.numFields()
       }
 
