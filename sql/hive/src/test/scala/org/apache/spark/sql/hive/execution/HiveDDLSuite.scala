@@ -1501,9 +1501,9 @@ class HiveDDLSuite
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a string, b int)
-              |USING hive
-              |OPTIONS(path "file:${dir.getCanonicalPath}")
+             |CREATE TABLE t(a string, b int)
+             |USING hive
+             |OPTIONS(path "file:${dir.getCanonicalPath}")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
@@ -1522,13 +1522,12 @@ class HiveDDLSuite
         assert(tableLocFile.exists())
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
-        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
-        val newDirFile = new File(newDir)
-        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        val newDirFile = new File(dir, "x")
+        spark.sql(s"ALTER TABLE t SET LOCATION '${newDirFile.getAbsolutePath}'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == newDir)
+        assert(table1.location.stripSuffix("/") == newDirFile.getAbsolutePath.stripSuffix("/"))
         assert(!newDirFile.exists())
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1543,10 +1542,10 @@ class HiveDDLSuite
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a int, b int, c int, d int)
-              |USING hive
-              |PARTITIONED BY(a, b)
-              |LOCATION "file:${dir.getCanonicalPath}"
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING hive
+             |PARTITIONED BY(a, b)
+             |LOCATION "file:${dir.getCanonicalPath}"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
@@ -1563,9 +1562,9 @@ class HiveDDLSuite
         assert(partLoc.exists())
         checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
 
-        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
-        val newDirFile = new File(newDir)
-        spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION '$newDir'")
+        val newDirFile = new File(dir, "x")
+        spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION " +
+          s"'${newDirFile.getAbsolutePath}'")
         assert(!newDirFile.exists())
 
         // insert into a partition which location does not exists.
@@ -1581,9 +1580,9 @@ class HiveDDLSuite
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a string, b int)
-              |USING hive
-              |OPTIONS(path "file:${dir.getAbsolutePath}")
+             |CREATE TABLE t(a string, b int)
+             |USING hive
+             |OPTIONS(path "file:${dir.getAbsolutePath}")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
@@ -1592,12 +1591,12 @@ class HiveDDLSuite
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
 
-        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
-        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        val newDirFile = new File(dir, "x")
+        spark.sql(s"ALTER TABLE t SET LOCATION '${newDirFile.getAbsolutePath}'")
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == newDir)
-        assert(!new File(newDir).exists())
+        assert(table1.location.stripSuffix("/") == newDirFile.getAbsolutePath.stripSuffix("/"))
+        assert(!newDirFile.exists())
         checkAnswer(spark.table("t"), Nil)
       }
     }
@@ -1608,19 +1607,19 @@ class HiveDDLSuite
       withTempDir { dir =>
         spark.sql(
           s"""
-              |CREATE TABLE t(a int, b int, c int, d int)
-              |USING hive
-              |PARTITIONED BY(a, b)
-              |LOCATION "file:${dir.getCanonicalPath}"
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING hive
+             |PARTITIONED BY(a, b)
+             |LOCATION "file:${dir.getCanonicalPath}"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
 
-        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
-        val newDirFile = new File(newDir)
-        spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION '$newDir'")
+        val newDirFile = new File(dir, "x")
+        spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION " +
+          s"'${newDirFile.getAbsolutePath}'")
         assert(!newDirFile.exists())
         // select from a partition which location has changed to a not existed location
         withSQLConf(SQLConf.HIVE_VERIFY_PARTITION_PATH.key -> "true") {

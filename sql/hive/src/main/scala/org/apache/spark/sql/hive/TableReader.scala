@@ -114,22 +114,30 @@ class HadoopTableReader(
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
-    // logDebug("Table input: %s".format(tablePath))
-    val ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
+    val locationPath = new Path(inputPathStr)
+    val fs = locationPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
-    val attrsWithIndex = attributes.zipWithIndex
-    val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
+    // if the table location is not exists, return an empty RDD
+    if (!fs.exists(locationPath)) {
+      new EmptyRDD[InternalRow](sparkSession.sparkContext)
+    } else {
+      // logDebug("Table input: %s".format(tablePath))
+      val ifc = hiveTable.getInputFormatClass
+        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+      val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
 
-    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHadoopConf.value.value
-      val deserializer = deserializerClass.newInstance()
-      deserializer.initialize(hconf, tableDesc.getProperties)
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      val attrsWithIndex = attributes.zipWithIndex
+      val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
+
+      val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
+        val hconf = broadcastedHadoopConf.value.value
+        val deserializer = deserializerClass.newInstance()
+        deserializer.initialize(hconf, tableDesc.getProperties)
+        HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      }
+
+      deserializedHadoopRDD
     }
-
-    deserializedHadoopRDD
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
