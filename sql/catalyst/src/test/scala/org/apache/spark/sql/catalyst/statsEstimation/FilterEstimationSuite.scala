@@ -220,7 +220,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     val d20170102 = Date.valueOf("2017-01-02")
     validateEstimatedStats(
       arDate,
-      Filter(EqualTo(arDate, Literal(d20170102, DateType)),
+      Filter(EqualTo(arDate, Literal(d20170102)),
         childStatsTestPlan(Seq(arDate))),
       ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
         nullCount = 0, avgLen = 4, maxLen = 4),

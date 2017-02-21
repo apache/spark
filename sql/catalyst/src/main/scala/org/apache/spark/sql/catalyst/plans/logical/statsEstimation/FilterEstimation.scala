@@ -404,7 +404,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         val statsRange =
           Range(aColStat.min, aColStat.max, aType).asInstanceOf[NumericRange]
 
-        // To faciliate finding the min and max values in hSet, we map hSet values to BigDecimal.
+        // To facilitate finding the min and max values in hSet, we map hSet values to BigDecimal.
         // Using hSetBigdec, we can find the min and max values quickly in the ordered hSetBigdec.
         // We use hSetBigdecToAnyMap to help us find the original hSet value.
         val hSetBigdecToAnyMap: Map[BigDecimal, Any] =
