@@ -110,7 +110,7 @@ private[hive] class HiveSessionState(
 
   override def copy(sparkSession: SparkSession): HiveSessionState = {
     val sparkContext = sparkSession.sparkContext
-    val confCopy = conf.copy
+    val confCopy = conf.clone
     val copyHelper = SessionState(sparkSession, Some(confCopy))
     val catalogCopy = catalog.copy(
       sparkSession,

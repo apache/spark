@@ -98,9 +98,11 @@ private[sql] class HiveSessionCatalog(
       hadoopConf,
       parser)
 
-    catalog.currentDb = currentDb
-    // copy over temporary tables
-    tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    synchronized {
+      catalog.currentDb = currentDb
+      // copy over temporary tables
+      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    }
 
     catalog
   }

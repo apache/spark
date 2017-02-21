@@ -90,7 +90,7 @@ private[sql] class SessionState(
    */
   def copy(sparkSession: SparkSession): SessionState = {
     val sparkContext = sparkSession.sparkContext
-    val confCopy = conf.copy
+    val confCopy = conf.clone
     val hadoopConfCopy = SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy)
     val functionRegistryCopy = functionRegistry.copy
     val sqlParser: ParserInterface = new SparkSqlParser(confCopy)

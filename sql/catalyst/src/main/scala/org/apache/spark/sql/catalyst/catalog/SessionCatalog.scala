@@ -74,7 +74,7 @@ class SessionCatalog(
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
+    this(externalCatalog, new SimpleFunctionRegistry, SimpleCatalystConf(true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -1201,9 +1201,11 @@ class SessionCatalog(
       hadoopConf,
       parser)
 
-    catalog.currentDb = currentDb
-    // copy over temporary tables
-    tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    synchronized {
+      catalog.currentDb = currentDb
+      // copy over temporary tables
+      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    }
 
     catalog
   }

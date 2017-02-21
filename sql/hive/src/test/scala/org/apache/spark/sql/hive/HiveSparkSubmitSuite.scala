@@ -217,8 +217,8 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  /*  TODO: SPARK-19540 re-enable this test
-  test("set hive.metastore.warehouse.dir") {
+  // TODO: SPARK-19540 re-enable this test
+  ignore("set hive.metastore.warehouse.dir") {
     // In this test, we set hive.metastore.warehouse.dir in hive-site.xml but
     // not set spark.sql.warehouse.dir. So, the warehouse dir should be
     // the value of hive.metastore.warehouse.dir. Also, the value of
@@ -256,7 +256,6 @@ class HiveSparkSubmitSuite
       unusedJar.toString)
     runSparkSubmit(args)
   }
-  */
 
   test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
     // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
@@ -299,7 +298,8 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  test("SPARK-18360: default table path of tables in default database should depend on the " +
+  // TODO: SPARK-19540 re-enable this test
+  ignore("SPARK-18360: default table path of tables in default database should depend on the " +
     "location of default database") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
@@ -864,7 +864,6 @@ object SPARK_18360 {
         schema = new StructType().add("i", "int"),
         provider = Some(DDLUtils.HIVE_PROVIDER))
 
-      /* TODO: SPARK-19540 re-enable this assert
       val newWarehousePath = Utils.createTempDir().getAbsolutePath
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$newWarehousePath")
       hiveClient.createTable(tableMeta, ignoreIfExists = false)
@@ -873,7 +872,6 @@ object SPARK_18360 {
       // location for tables in default database.
       assert(rawTable.storage.locationUri.get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
-      */
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")

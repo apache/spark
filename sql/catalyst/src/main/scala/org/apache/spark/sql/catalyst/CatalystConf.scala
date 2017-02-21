@@ -61,7 +61,7 @@ trait CatalystConf {
    */
   def cboEnabled: Boolean
 
-  def copy: CatalystConf
+  override def clone: CatalystConf = throw new CloneNotSupportedException()
 }
 
 
@@ -81,20 +81,5 @@ case class SimpleCatalystConf(
     sessionLocalTimeZone: String = TimeZone.getDefault().getID)
   extends CatalystConf {
 
-  override def copy: SimpleCatalystConf = {
-    SimpleCatalystConf(
-      caseSensitiveAnalysis,
-      orderByOrdinal,
-      groupByOrdinal,
-      optimizerMaxIterations,
-      optimizerInSetConversionThreshold,
-      maxCaseBranchesForCodegen,
-      tableRelationCacheSize,
-      runSQLonFile,
-      crossJoinEnabled,
-      cboEnabled,
-      warehousePath,
-      sessionLocalTimeZone)
-  }
-
+  override def clone: SimpleCatalystConf = this.copy()
 }
