@@ -17,7 +17,7 @@ checkout:
 
 dependencies:
   override:
-    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
+    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
 
 test:
   override:
@@ -33,7 +33,7 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
           }
 
           make_dist() {
@@ -50,10 +50,10 @@ test:
             publish_artifacts
             ;;
           1)
-            make_dist hadoop-2.7 "-Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
+            make_dist hadoop-2.7 "-Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
             ;;
           2)
-            make_dist without-hadoop "-Phadoop-provided -Pmesos -Pyarn -Psparkr"
+            make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr"
             ;;
           esac
       :
