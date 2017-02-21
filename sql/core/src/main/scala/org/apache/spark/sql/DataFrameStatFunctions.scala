@@ -89,7 +89,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @note null and NaN values will be removed from the numerical column before calculation. If
+   * @note null and NaN values will be ignored in numerical columns before calculation. If
    *   the dataframe is empty, or all rows in some column contain null or NaN, null is returned.
    *
    * @since 2.2.0

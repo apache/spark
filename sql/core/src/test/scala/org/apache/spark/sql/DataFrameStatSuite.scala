@@ -171,15 +171,6 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), -1.0)
     }
     assert(e2.getMessage.contains("Relative Error must be non-negative"))
-
-    // return null if the dataset is empty
-    val res1 = df.selectExpr("*").limit(0)
-      .stat.approxQuantile("singles", Array(q1, q2), epsilons.head)
-    assert(res1 === null)
-
-    val res2 = df.selectExpr("*").limit(0)
-      .stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilons.head)
-    assert(res2 === null)
   }
 
   test("approximate quantile 2: test relativeError greater than 1 return the same result as 1") {
@@ -214,11 +205,13 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val q1 = 0.5
     val q2 = 0.8
     val epsilon = 0.1
-    val rows = spark.sparkContext.parallelize(Seq(Row(Double.NaN, 1.0), Row(1.0, -1.0),
-      Row(-1.0, Double.NaN), Row(Double.NaN, Double.NaN), Row(null, null), Row(null, 1.0),
-      Row(-1.0, null), Row(Double.NaN, null)))
+    val rows = spark.sparkContext.parallelize(Seq(Row(Double.NaN, 1.0, Double.NaN),
+      Row(1.0, -1.0, null), Row(-1.0, Double.NaN, null), Row(Double.NaN, Double.NaN, null),
+      Row(null, null, Double.NaN), Row(null, 1.0, null), Row(-1.0, null, Double.NaN),
+      Row(Double.NaN, null, null)))
     val schema = StructType(Seq(StructField("input1", DoubleType, nullable = true),
-      StructField("input2", DoubleType, nullable = true)))
+      StructField("input2", DoubleType, nullable = true),
+      StructField("input3", DoubleType, nullable = true)))
     val dfNaN = spark.createDataFrame(rows, schema)
     val resNaN1 = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilon)
     assert(resNaN1.count(_.isNaN) === 0)
@@ -237,6 +230,19 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(resNaN1(1) === resNaNAll(0)(1))
     assert(resNaN2(0) === resNaNAll(1)(0))
     assert(resNaN2(1) === resNaNAll(1)(1))
+
+    // return null if the dataset is empty
+    val res1 = dfNaN.selectExpr("*").limit(0)
+      .stat.approxQuantile("input1", Array(q1, q2), epsilon)
+    assert(res1 === null)
+
+    val res2 = dfNaN.selectExpr("*").limit(0)
+      .stat.approxQuantile(Array("input1", "input2"), Array(q1, q2), epsilon)
+    assert(res2 === null)
+
+    // return null if all rows in some column contain null or NaN
+    val res3 = dfNaN.stat.approxQuantile(Array("input1", "input3"), Array(q1, q2), epsilon)
+    assert(res3 === null)
   }
 
   test("crosstab") {
