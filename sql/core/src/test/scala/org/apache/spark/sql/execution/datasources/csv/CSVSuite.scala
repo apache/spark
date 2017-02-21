@@ -53,6 +53,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val numbersFile = "test-data/numbers.csv"
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
+  private val filenameSpecialChr = "filename19340*.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -957,5 +958,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       checkAnswer(df, Row(1, null))
     }
+  }
+
+  test("SPARK-19340 special characters in csv file name") {
+    val csvDF = spark.read
+      .option("header", "false")
+      // testFile doesn't work with filenames that contain special characters
+      .csv(testFile("test-data") + "/" + filenameSpecialChr ).take(1)
   }
 }
