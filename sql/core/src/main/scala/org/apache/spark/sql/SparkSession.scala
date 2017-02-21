@@ -72,7 +72,7 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
-    existingSessionState: Option[SessionState])
+    @transient private val parentSessionState: Option[SessionState])
   extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext, existingSharedState: Option[SharedState]) {
@@ -108,10 +108,11 @@ class SparkSession private(
   /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
+   * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
    */
   @transient
   private[sql] lazy val sessionState: SessionState = {
-    existingSessionState
+    parentSessionState
       .map(_.copy(this))
       .getOrElse(SparkSession.instantiateSessionState(
         SparkSession.sessionStateClassName(sparkContext.conf),
@@ -211,8 +212,8 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Create an identical copy of this `SparkSession`, sharing the underlying `SparkContext`
-   * and cached data. SessionState (SQL configurations, temporary tables, registered functions)
-   * is also copied over.
+   * and cached data. All the state of this session (i.e. SQL configurations, temporary tables,
+   * registered functions) is also copied over.
    * Changes to base session are not propagated to cloned session, cloned is independent
    * after creation.
    *
@@ -982,7 +983,7 @@ object SparkSession {
   }
 
   /**
-   * Helper method to create an instance of `SessionState`
+   * Helper method to create an instance of `SessionState` based on `className` from conf.
    * The result is either `SessionState` or `HiveSessionState`
    */
   private def instantiateSessionState(

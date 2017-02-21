@@ -60,6 +60,8 @@ trait CatalystConf {
    * Enables CBO for estimation of plan statistics when set true.
    */
   def cboEnabled: Boolean
+
+  def copy: CatalystConf
 }
 
 
@@ -77,4 +79,22 @@ case class SimpleCatalystConf(
     cboEnabled: Boolean = false,
     warehousePath: String = "/user/hive/warehouse",
     sessionLocalTimeZone: String = TimeZone.getDefault().getID)
-  extends CatalystConf
+  extends CatalystConf {
+
+  override def copy: SimpleCatalystConf = {
+    SimpleCatalystConf(
+      caseSensitiveAnalysis,
+      orderByOrdinal,
+      groupByOrdinal,
+      optimizerMaxIterations,
+      optimizerInSetConversionThreshold,
+      maxCaseBranchesForCodegen,
+      tableRelationCacheSize,
+      runSQLonFile,
+      crossJoinEnabled,
+      cboEnabled,
+      warehousePath,
+      sessionLocalTimeZone)
+  }
+
+}

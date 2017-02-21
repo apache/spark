@@ -108,29 +108,35 @@ private[hive] class HiveSessionState(
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
-  override def copy(associatedSparkSession: SparkSession): HiveSessionState = {
-    val sqlConf = conf.copy
-    val copyHelper = SessionState(associatedSparkSession, Some(sqlConf))
-    val catalogCopy = catalog.copy(associatedSparkSession)
+  override def copy(sparkSession: SparkSession): HiveSessionState = {
+    val sparkContext = sparkSession.sparkContext
+    val confCopy = conf.copy
+    val copyHelper = SessionState(sparkSession, Some(confCopy))
+    val catalogCopy = catalog.copy(
+      sparkSession,
+      confCopy,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy),
+      copyHelper.functionRegistry,
+      copyHelper.sqlParser)
     val hiveClient =
-      associatedSparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .newSession()
 
     new HiveSessionState(
-      associatedSparkSession.sparkContext,
-      sqlConf,
+      sparkContext,
+      confCopy,
       copyHelper.experimentalMethods,
       copyHelper.functionRegistry,
       catalogCopy,
       copyHelper.sqlParser,
       hiveClient,
-      HiveSessionState.createAnalyzer(associatedSparkSession, catalogCopy, sqlConf),
+      HiveSessionState.createAnalyzer(sparkSession, catalogCopy, confCopy),
       copyHelper.streamingQueryManager,
       copyHelper.queryExecutionCreator,
       jarClassLoader,
       HiveSessionState.createPlannerCreator(
-        associatedSparkSession,
-        sqlConf,
+        sparkSession,
+        confCopy,
         copyHelper.experimentalMethods))
   }
 
@@ -150,7 +156,7 @@ object HiveSessionState {
 
     val sparkContext = sparkSession.sparkContext
 
-    val catalog = new HiveSessionCatalog(
+    val catalog = HiveSessionCatalog(
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
       sparkSession.sharedState.globalTempViewManager,
       sparkSession,

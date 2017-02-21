@@ -152,9 +152,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
-  override def copy: FunctionRegistry = {
-    throw new UnsupportedOperationException
-  }
+  override def copy: FunctionRegistry = this
 }
 
 

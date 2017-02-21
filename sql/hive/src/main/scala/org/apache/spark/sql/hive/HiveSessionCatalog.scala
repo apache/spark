@@ -43,30 +43,24 @@ import org.apache.spark.util.Utils
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    sparkSession: SparkSession,
+    private val metastoreCatalog: HiveMetastoreCatalog,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface)
   extends SessionCatalog(
-    externalCatalog,
-    globalTempViewManager,
-    functionResourceLoader,
-    functionRegistry,
-    conf,
-    hadoopConf,
-    parser) {
+      externalCatalog,
+      globalTempViewManager,
+      functionResourceLoader,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser) {
 
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
-
-  // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
-  // essentially a cache for metastore tables. However, it relies on a lot of session-specific
-  // things so it would be a lot of work to split its functionality between HiveSessionCatalog
-  // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
 
   // These 2 rules must be run before all other DDL post-hoc resolution rules, i.e.
   // `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
@@ -77,8 +71,24 @@ private[sql] class HiveSessionCatalog(
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
-  def copy(sparkSession: SparkSession): HiveSessionCatalog = {
-    val catalog = new HiveSessionCatalog(
+  /**
+   * Get an identical copy of the `SessionCatalog`.
+   * The temporary tables and function registry are retained.
+   * The table relation cache will not be populated.
+   * @note `externalCatalog` and `globalTempViewManager` are from shared state, don't need deep copy
+   * `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
+   * All arguments passed in should be associated with `sparkSession`.
+   * This should ideally override `SessionCatalog.copy` but does not at present, since
+   * `HiveMetastoreCatalog` is dependent on `SparkSession`.
+   */
+  def copy(
+      sparkSession: SparkSession,
+      conf: SQLConf,
+      hadoopConf: Configuration,
+      functionRegistry: FunctionRegistry,
+      parser: ParserInterface): HiveSessionCatalog = {
+
+    val catalog = HiveSessionCatalog(
       externalCatalog,
       globalTempViewManager,
       sparkSession,
@@ -98,7 +108,7 @@ private[sql] class HiveSessionCatalog(
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = metastoreCatalog.getQualifiedTableName(table)
-    sparkSession.sessionState.catalog.tableRelationCache.getIfPresent(key)
+    tableRelationCache.getIfPresent(key)
   }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
@@ -229,4 +239,34 @@ private[sql] class HiveSessionCatalog(
   private val hiveFunctions = Seq(
     "histogram_numeric"
   )
+}
+
+private[sql] object HiveSessionCatalog {
+
+  def apply(
+      externalCatalog: HiveExternalCatalog,
+      globalTempViewManager: GlobalTempViewManager,
+      sparkSession: SparkSession,
+      functionResourceLoader: FunctionResourceLoader,
+      functionRegistry: FunctionRegistry,
+      conf: SQLConf,
+      hadoopConf: Configuration,
+      parser: ParserInterface): HiveSessionCatalog = {
+
+    // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
+    // essentially a cache for metastore tables. However, it relies on a lot of session-specific
+    // things so it would be a lot of work to split its functionality between HiveSessionCatalog
+    // and HiveCatalog. We should still do it at some point...
+    val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
+
+    new HiveSessionCatalog(
+      externalCatalog: HiveExternalCatalog,
+      globalTempViewManager: GlobalTempViewManager,
+      metastoreCatalog,
+      functionResourceLoader: FunctionResourceLoader,
+      functionRegistry: FunctionRegistry,
+      conf: SQLConf,
+      hadoopConf: Configuration,
+      parser: ParserInterface)
+  }
 }

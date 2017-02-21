@@ -88,25 +88,28 @@ private[sql] class SessionState(
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  def copy(associatedSparkSession: SparkSession): SessionState = {
-    val sqlConf = conf.copy
-    val catalogCopy = catalog.copy
-    val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
-    val queryExecution = (plan: LogicalPlan) => new QueryExecution(associatedSparkSession, plan)
+  def copy(sparkSession: SparkSession): SessionState = {
+    val sparkContext = sparkSession.sparkContext
+    val confCopy = conf.copy
+    val hadoopConfCopy = SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy)
+    val functionRegistryCopy = functionRegistry.copy
+    val sqlParser: ParserInterface = new SparkSqlParser(confCopy)
+    val catalogCopy = catalog.copy(confCopy, hadoopConfCopy, functionRegistryCopy, sqlParser)
+    val queryExecution = (plan: LogicalPlan) => new QueryExecution(sparkSession, plan)
 
-    associatedSparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
-      sqlConf.setConfString(k, v)
+    sparkContext.getConf.getAll.foreach { case (k, v) =>
+      confCopy.setConfString(k, v)
     }
 
     new SessionState(
-      associatedSparkSession.sparkContext,
-      sqlConf,
+      sparkContext,
+      confCopy,
       experimentalMethods.copy,
-      functionRegistry.copy,
+      functionRegistryCopy,
       catalogCopy,
       sqlParser,
-      SessionState.createAnalyzer(associatedSparkSession, catalogCopy, sqlConf),
-      new StreamingQueryManager(associatedSparkSession),
+      SessionState.createAnalyzer(sparkSession, catalogCopy, confCopy),
+      new StreamingQueryManager(sparkSession),
       queryExecution,
       jarClassLoader)
   }

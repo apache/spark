@@ -217,6 +217,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  /*  TODO: SPARK-19540 re-enable this test
   test("set hive.metastore.warehouse.dir") {
     // In this test, we set hive.metastore.warehouse.dir in hive-site.xml but
     // not set spark.sql.warehouse.dir. So, the warehouse dir should be
@@ -255,6 +256,7 @@ class HiveSparkSubmitSuite
       unusedJar.toString)
     runSparkSubmit(args)
   }
+  */
 
   test("SPARK-16901: set javax.jdo.option.ConnectionURL") {
     // In this test, we set javax.jdo.option.ConnectionURL and set metastore version to
