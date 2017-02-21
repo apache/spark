@@ -51,7 +51,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    */
   @Since("2.2.0")
   final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
-    "The type of ordering used for assigning index to values of input column. " +
+    "The method used to order values of input column. " +
       s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
     (value: String) => StringIndexer.supportedStringOrderType.contains(value.toLowerCase))
 
