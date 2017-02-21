@@ -1015,6 +1015,11 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
+  expect_warning(df1 <- df[[1:2]], "Subset index has length > 1. Only the first index is used.")
+  expect_is(df1, "Column")
+  expect_warning(df1 <- df[[c("names", "age")]], "Subset index has length > 1. Only the first index is used.")
+  expect_is(df1, "Column")
+
   expect_is(df[, 1, drop = F], "SparkDataFrame")
   expect_equal(columns(df[, 1, drop = F]), c("name"))
   expect_equal(columns(df[, "age", drop = F]), c("age"))
