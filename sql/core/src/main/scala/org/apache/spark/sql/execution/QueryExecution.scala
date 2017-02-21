@@ -210,7 +210,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     ).filter(_.nonEmpty).mkString("\n")
 
     val optimizedPlanString = if (appendStats) {
-      optimizedPlan.treeStringWithStats(sparkSession.sessionState.conf)
+      // trigger to compute stats for logical plans
+      optimizedPlan.stats(sparkSession.sessionState.conf)
+      optimizedPlan.treeString(verbose = true, addSuffix = true)
     } else {
       optimizedPlan.treeString(verbose = true)
     }

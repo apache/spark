@@ -92,7 +92,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     extended: Boolean = false,
-    codegen: Boolean = false)
+    codegen: Boolean = false,
+    cost: Boolean = false)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -112,11 +113,9 @@ case class ExplainCommand(
       if (codegen) {
         codegenString(queryExecution.executedPlan)
       } else if (extended) {
-        if (sparkSession.sessionState.conf.showStatsInExplain) {
-          queryExecution.toStringWithStats
-        } else {
-          queryExecution.toString
-        }
+        queryExecution.toString
+      } else if (cost) {
+        queryExecution.toStringWithStats
       } else {
         queryExecution.simpleString
       }

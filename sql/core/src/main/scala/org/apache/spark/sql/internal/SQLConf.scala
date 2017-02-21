@@ -660,14 +660,6 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
-  val SHOW_STATS_IN_EXPLAIN =
-    SQLConfigBuilder("spark.sql.statistics.showInExplain")
-      .internal()
-      .doc("When true, estimated statistics (size in bytes and row count) for logical plan will " +
-        "be shown in explain extended commands.")
-      .booleanConf
-      .createWithDefault(false)
-
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -884,8 +876,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
-
-  def showStatsInExplain: Boolean = getConf(SHOW_STATS_IN_EXPLAIN)
 
   override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 

@@ -461,8 +461,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /** Returns a string representation of the nodes in this tree */
   def treeString: String = treeString(verbose = true)
 
-  def treeString(verbose: Boolean): String = {
-    generateTreeString(0, Nil, new StringBuilder, verbose).toString
+  def treeString(verbose: Boolean, addSuffix: Boolean = false): String = {
+    generateTreeString(0, Nil, new StringBuilder, verbose = verbose, addSuffix = addSuffix).toString
   }
 
   /**
