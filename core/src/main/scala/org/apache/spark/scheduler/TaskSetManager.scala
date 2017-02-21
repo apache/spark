@@ -177,7 +177,7 @@ private[spark] class TaskSetManager(
   // Delay scheduling variables: we keep track of our current locality level and the time we
   // last launched a task at that level, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task.
-  private var currentLocalityIndex = 0    // Index of our current locality level in validLocalityLevels
+  private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
   private var lastLaunchTime = clock.getTimeMillis()  // Time we last launched a task at this level
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
