@@ -117,7 +117,7 @@ object JavaTypeInference {
         val (valueDataType, nullable) = inferDataType(valueType)
         (MapType(keyDataType, valueDataType, nullable), true)
 
-      case _ =>
+      case c =>
         // TODO: we should only collect properties that have getter and setter. However, some tests
         // pass in scala case class as java bean class which doesn't have getter and setter.
         val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)
@@ -125,7 +125,8 @@ object JavaTypeInference {
         val fields = properties.map { property =>
           val readMethod = Option(property.getReadMethod).getOrElse {
             throw new UnsupportedOperationException(
-              s"Cannot read the property ${property.getName} because it does not have the getter")
+              s"Cannot infer type for class ${c.getName} " +
+                s"because property ${property.getName} does not have the getter")
           }
           val returnType = typeToken.method(readMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType)
