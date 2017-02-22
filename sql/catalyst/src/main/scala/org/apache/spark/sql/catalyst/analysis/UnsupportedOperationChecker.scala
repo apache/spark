@@ -120,7 +120,7 @@ object UnsupportedOperationChecker {
           throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case d: Deduplication if collectStreamingAggregates(d).nonEmpty =>
+        case d: Deduplicate if collectStreamingAggregates(d).nonEmpty =>
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 

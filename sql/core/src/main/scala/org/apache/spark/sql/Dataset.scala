@@ -557,7 +557,8 @@ class Dataset[T] private[sql](
    * Spark will use this watermark for several purposes:
    *  - To know when a given time window aggregation can be finalized and thus can be emitted when
    *    using output modes that do not allow updates.
-   *  - To minimize the amount of state that we need to keep for on-going aggregations.
+   *  - To minimize the amount of state that we need to keep for on-going aggregations,
+   *    `mapGroupsWithState` and `dropDuplicates` operators.
    *
    *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
    *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
@@ -2006,12 +2007,17 @@ class Dataset[T] private[sql](
       }
       cols
     }
-    Deduplication(groupCols, logicalPlan, isStreaming)
+    Deduplicate(groupCols, logicalPlan, isStreaming)
   }
 
   /**
    * Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
+   *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state.
    *
    * @group typedrel
    * @since 2.0.0
@@ -2021,6 +2027,11 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] with duplicate rows removed, considering only
    * the subset of columns.
+   *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state.
    *
    * @group typedrel
    * @since 2.0.0

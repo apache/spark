@@ -57,7 +57,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
       RewriteDistinctAggregates,
-      ReplaceDeduplicationWithAggregate) ::
+      ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -1144,11 +1144,11 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces logical [[Deduplication]] operator with an [[Aggregate]] operator.
+ * Replaces logical [[Deduplicate]] operator with an [[Aggregate]] operator.
  */
-object ReplaceDeduplicationWithAggregate extends Rule[LogicalPlan] {
+object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Deduplication(keys, child, streaming) if !streaming =>
+    case Deduplicate(keys, child, streaming) if !streaming =>
       val keyExprIds = keys.map(_.exprId)
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {

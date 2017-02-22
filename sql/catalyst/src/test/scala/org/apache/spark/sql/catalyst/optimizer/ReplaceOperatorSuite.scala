@@ -33,7 +33,7 @@ class ReplaceOperatorSuite extends PlanTest {
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
-        ReplaceDeduplicationWithAggregate) :: Nil
+        ReplaceDeduplicateWithAggregate) :: Nil
   }
 
   test("replace Intersect with Left-semi Join") {
@@ -75,11 +75,11 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("replace batch Deduplication with Aggregate") {
+  test("replace batch Deduplicate with Aggregate") {
     val input = LocalRelation('a.int, 'b.int)
     val attrA = input.output(0)
     val attrB = input.output(1)
-    val query = Deduplication(Seq(attrA), input, streaming = false) // dropDuplicates("a")
+    val query = Deduplicate(Seq(attrA), input, streaming = false) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -94,10 +94,10 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("don't replace streaming Deduplication") {
+  test("don't replace streaming Deduplicate") {
     val input = LocalRelation('a.int, 'b.int)
     val attrA = input.output(0)
-    val query = Deduplication(Seq(attrA), input, streaming = true) // dropDuplicates("a")
+    val query = Deduplicate(Seq(attrA), input, streaming = true) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, query)

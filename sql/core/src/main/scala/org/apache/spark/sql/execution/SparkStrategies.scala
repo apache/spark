@@ -246,12 +246,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Used to plan the streaming deduplication operator.
+   * Used to plan the streaming deduplicate operator.
    */
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Deduplication(keys, child, true) =>
-        StreamingDeduplicationExec(keys, planLater(child)) :: Nil
+      case Deduplicate(keys, child, true) =>
+        StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
     }

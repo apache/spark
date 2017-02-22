@@ -871,7 +871,7 @@ case object OneRowRelation extends LeafNode {
 }
 
 /** A logical plan for `dropDuplicates`. */
-case class Deduplication(
+case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan,
     streaming: Boolean) extends UnaryNode {

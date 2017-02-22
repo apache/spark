@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, NullType, StructType}
 import org.apache.spark.util.CompletionIterator
 
 
@@ -332,8 +332,8 @@ case class MapGroupsWithStateExec(
 }
 
 
-/** Physical operator for executing streaming Deduplication. */
-case class StreamingDeduplicationExec(
+/** Physical operator for executing streaming Deduplicate. */
+case class StreamingDeduplicateExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
     stateId: Option[OperatorStateId] = None,
@@ -365,30 +365,35 @@ case class StreamingDeduplicationExec(
         case None => iter
       }
 
-      while (baseIterator.hasNext) {
-        val row = baseIterator.next().asInstanceOf[UnsafeRow]
+      val result = baseIterator.filter { r =>
+        val row = r.asInstanceOf[UnsafeRow]
         val key = getKey(row)
         val value = store.get(key)
         if (value.isEmpty) {
-          store.put(key.copy(), row.copy())
+          store.put(key.copy(), StreamingDeduplicateExec.EMPTY_ROW)
           numUpdatedStateRows += 1
+          numOutputRows += 1
+          true
         } else {
           // Drop duplicated rows
+          false
         }
       }
 
-      watermarkPredicate.foreach(f => store.remove(f.eval _))
-      store.commit()
-
-      numTotalStateRows += store.numKeys()
-      store.updates().filter(_.isInstanceOf[ValueAdded]).map { added =>
-        numOutputRows += 1
-        added.value.asInstanceOf[InternalRow]
-      }
+      CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
+        watermarkPredicate.foreach(f => store.remove(f.eval _))
+        store.commit()
+        numTotalStateRows += store.numKeys()
+      })
     }
   }
 
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+}
+
+object StreamingDeduplicateExec {
+  private val EMPTY_ROW =
+    UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 }

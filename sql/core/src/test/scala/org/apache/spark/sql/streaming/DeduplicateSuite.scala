@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 
-class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
+class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   import testImplicits._
 
@@ -33,7 +33,7 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     StateStore.stop()
   }
 
-  test("deduplication with all columns") {
+  test("deduplicate with all columns") {
     val inputData = MemoryStream[String]
     val result = inputData.toDS().dropDuplicates()
 
@@ -50,7 +50,7 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with some columns") {
+  test("deduplicate with some columns") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS().dropDuplicates("_1")
 
@@ -67,7 +67,7 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("multiple deduplications") {
+  test("multiple deduplicates") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS().dropDuplicates().dropDuplicates("_1")
 
@@ -86,7 +86,7 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with watermark") {
+  test("deduplicate with watermark") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
       .withColumn("eventTime", $"value".cast("timestamp"))
@@ -121,9 +121,9 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with aggregation - append mode") {
+  test("deduplicate with aggregate - append mode") {
     val inputData = MemoryStream[Int]
-    val windowedAggregation = inputData.toDS()
+    val windowedaggregate = inputData.toDS()
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .dropDuplicates()
@@ -132,24 +132,24 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       .agg(count("*") as 'count)
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    testStream(windowedAggregation)(
+    testStream(windowedaggregate)(
       AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
       CheckLastBatch(),
-      // states in aggregation in [10, 14), [15, 20) (2 windows)
-      // states in deduplication is 10 to 15
+      // states in aggregate in [10, 14), [15, 20) (2 windows)
+      // states in deduplicate is 10 to 15
       assertNumStateRows(total = Seq(2L, 6L), updated = Seq(2L, 6L)),
 
       AddData(inputData, 25), // Advance watermark to 15 seconds
       CheckLastBatch(),
-      // states in aggregation in [10, 14), [15, 20) and [25, 30) (3 windows)
-      // states in deduplication is 10 to 15 and 25
+      // states in aggregate in [10, 14), [15, 20) and [25, 30) (3 windows)
+      // states in deduplicate is 10 to 15 and 25
       assertNumStateRows(total = Seq(3L, 7L), updated = Seq(1L, 1L)),
 
       AddData(inputData, 25), // Emit items less than watermark and drop their state
-      CheckLastBatch((10 -> 5)), // 5 items (10 to 14) after deduplication
-      // states in aggregation in [15, 20) and [25, 30) (2 windows, note aggregation uses the end of
+      CheckLastBatch((10 -> 5)), // 5 items (10 to 14) after deduplicate
+      // states in aggregate in [15, 20) and [25, 30) (2 windows, note aggregate uses the end of
       // window to evict items, so [15, 20) is still in the state store)
-      // states in deduplication is 25
+      // states in deduplicate is 25
       assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L)),
 
       AddData(inputData, 10), // Should not emit anything as data less than watermark
@@ -158,19 +158,19 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
       AddData(inputData, 40), // Advance watermark to 30 seconds
       CheckLastBatch(),
-      // states in aggregation in [15, 20), [25, 30) and [40, 45)
-      // states in deduplication is 25 and 40,
+      // states in aggregate in [15, 20), [25, 30) and [40, 45)
+      // states in deduplicate is 25 and 40,
       assertNumStateRows(total = Seq(3L, 2L), updated = Seq(1L, 1L)),
 
       AddData(inputData, 40), // Emit items less than watermark and drop their state
       CheckLastBatch((15 -> 1), (25 -> 1)),
-        // states in aggregation in [40, 45)
-      // states in deduplication is 40,
+      // states in aggregate in [40, 45)
+      // states in deduplicate is 40,
       assertNumStateRows(total = Seq(1L, 1L), updated = Seq(0L, 0L))
     )
   }
 
-  test("deduplication with aggregation - update mode") {
+  test("deduplicate with aggregate - update mode") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS()
       .select($"_1" as "str", $"_2" as "num")
@@ -195,7 +195,7 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with aggregation - complete mode") {
+  test("deduplicate with aggregate - complete mode") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS()
       .select($"_1" as "str", $"_2" as "num")
@@ -220,7 +220,7 @@ class DeduplicationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplication with file sink") {
+  test("deduplicate with file sink") {
     withTempDir { output =>
       withTempDir { checkpointDir =>
         val outputPath = output.getAbsolutePath
