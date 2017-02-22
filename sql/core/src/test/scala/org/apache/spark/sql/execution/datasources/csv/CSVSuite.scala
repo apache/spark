@@ -974,15 +974,33 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     // If `schema` has `columnNameOfCorruptRecord`, it should handle corrupt records
     val columnNameOfCorruptRecord = "_unparsed"
+    val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
     val df2 = spark
       .read
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-      .schema(schema.add(columnNameOfCorruptRecord, StringType))
+      .schema(schemaWithCorrField1)
       .csv(testFile(valueMalformedFile))
     checkAnswer(df2,
       Row(null, null, "0,2013-111-11 12:13:14") ::
       Row(1, java.sql.Date.valueOf("1983-08-04"), null) ::
+      Nil)
+
+    // We put a `columnNameOfCorruptRecord` field in the middle of a schema
+    new StructType
+    val schemaWithCorrField2 = new StructType()
+      .add("a", IntegerType)
+      .add(columnNameOfCorruptRecord, StringType)
+      .add("b", TimestampType)
+    val df3 = spark
+      .read
+      .option("mode", "PERMISSIVE")
+      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .schema(schemaWithCorrField2)
+      .csv(testFile(valueMalformedFile))
+    checkAnswer(df3,
+      Row(null, "0,2013-111-11 12:13:14", null) ::
+      Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
       Nil)
 
     val errMsg = intercept[AnalysisException] {
@@ -994,6 +1012,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .csv(testFile(valueMalformedFile))
         .collect
     }.getMessage
-    assert(errMsg.startsWith("A field for corrupt records must be a string type and nullable"))
+    assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
   }
 }
