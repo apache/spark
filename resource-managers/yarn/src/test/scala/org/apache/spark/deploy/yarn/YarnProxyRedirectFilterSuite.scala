@@ -33,6 +33,8 @@ class YarnProxyRedirectFilterSuite extends SparkFunSuite {
     val cookies = Array(new Cookie(YarnProxyRedirectFilter.COOKIE_NAME, "dr.who"))
 
     val req = mock(classOf[HttpServletRequest])
+
+    // First request mocks a YARN proxy request (with the cookie set), second one has no cookies.
     when(req.getCookies()).thenReturn(cookies, null)
     when(req.getRequestURL()).thenReturn(new StringBuffer(requestURL))
 

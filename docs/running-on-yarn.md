@@ -608,8 +608,9 @@ will include a list of all tokens obtained, and their expiry details
 ## Using the Spark History Server to replace the Spark Web UI
 
 It is possible to use the Spark History Server application page as the tracking URL for running
-applications in scenarios where it may be desired to disable the built-in application UI. Two steps
-need to be taken for this to work:
+applications when the application UI is disabled. This may be desirable on secure clusters, or to
+reduce the memory usage of the Spark driver. To set up tracking through the Spark History Server,
+do the following:
 
 - On the application side, set <code>spark.yarn.historyServer.allowTracking=true</code> in Spark's
   configuration. This will tell Spark to use the history server's URL as the tracking URL if
