@@ -47,7 +47,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -1210,14 +1210,37 @@ private[spark] class Client(
 
       val defaultMaxNumExecutors = DYN_ALLOCATION_MAX_EXECUTORS.defaultValue.get
       if (defaultMaxNumExecutors == sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)) {
-        val executorCores = sparkConf.getInt("spark.executor.cores", 1)
-        val maxNumExecutors = yarnClient.getNodeReports().asScala.
-          filter(_.getNodeState == NodeState.RUNNING).
-          map(_.getCapability.getVirtualCores / executorCores).sum
+        val executorCores = sparkConf.get(EXECUTOR_CORES)
+        val runningNodes = yarnClient.getNodeReports().asScala.
+          filter(_.getNodeState == NodeState.RUNNING)
+        val absMaxCapacity = getAbsMaxCapacity(yarnClient, sparkConf.get(QUEUE_NAME))
 
-        sparkConf.set(DYN_ALLOCATION_MAX_EXECUTORS, maxNumExecutors)
+        val maxNumExecutors = runningNodes.map(_.getCapability.getVirtualCores).
+          sum * absMaxCapacity / executorCores
+        sparkConf.set(DYN_ALLOCATION_MAX_EXECUTORS, maxNumExecutors.toInt)
       }
     }
+  }
+
+  /**
+   * Get the absolute max capacity for a given queue.
+   */
+  private def getAbsMaxCapacity(yarnClient: YarnClient, queueName: String): Float = {
+    var maxCapacity = 1F
+    for (queue <- yarnClient.getRootQueueInfos.asScala) {
+      getQueueInfo(queue, queue.getMaximumCapacity)
+    }
+
+    def getQueueInfo(queueInfo: QueueInfo, capacity: Float): Unit = {
+      if (queueInfo.getQueueName.equals(queueName)) {
+        maxCapacity = capacity
+      } else {
+        for (child <- queueInfo.getChildQueues.asScala) {
+          getQueueInfo(child, child.getMaximumCapacity * capacity)
+        }
+      }
+    }
+    maxCapacity
   }
 
 }
