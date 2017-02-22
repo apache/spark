@@ -120,7 +120,7 @@ object JavaTypeInference {
       case other =>
         // TODO: we should only collect properties that have getter and setter. However, some tests
         // pass in scala case class as java bean class which doesn't have getter and setter.
-        val properties = getJavaBeanPropertiesWithGetters(other)
+        val properties = getJavaBeanReadableProperties(other)
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType)
@@ -130,17 +130,15 @@ object JavaTypeInference {
     }
   }
 
-  def getJavaBeanPropertiesWithGetters(beanClass: Class[_]): Array[PropertyDescriptor] = {
+  def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
-    beanInfo.getPropertyDescriptors
-      .filterNot(_.getName == "class").filter(p => p.getReadMethod != null)
+    beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+      .filter(_.getReadMethod != null)
   }
 
-  private def getJavaBeanProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
-    val beanInfo = Introspector.getBeanInfo(beanClass)
-    beanInfo.getPropertyDescriptors
-      .filterNot(_.getName == "class")
-      .filter(p => p.getReadMethod != null && p.getWriteMethod != null)
+  private def getJavaBeanReadableWritableProperties(
+      beanClass: Class[_]): Array[PropertyDescriptor] = {
+    getJavaBeanReadableProperties(beanClass).filter(_.getWriteMethod != null)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
@@ -304,7 +302,7 @@ object JavaTypeInference {
           keyData :: valueData :: Nil)
 
       case other =>
-        val properties = getJavaBeanProperties(other)
+        val properties = getJavaBeanReadableWritableProperties(other)
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
@@ -421,7 +419,7 @@ object JavaTypeInference {
           )
 
         case other =>
-          val properties = getJavaBeanProperties(other)
+          val properties = getJavaBeanReadableWritableProperties(other)
           CreateNamedStruct(properties.flatMap { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
