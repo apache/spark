@@ -278,11 +278,5 @@ class SparkSqlParserSuite extends PlanTest {
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
           numPartitions = newConf.numShufflePartitions)))
-
-    val msg = "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported"
-    intercept(s"$baseSql order by a sort by a", msg)
-    intercept(s"$baseSql cluster by a distribute by a", msg)
-    intercept(s"$baseSql order by a cluster by a", msg)
-    intercept(s"$baseSql order by a distribute by a", msg)
   }
 }
