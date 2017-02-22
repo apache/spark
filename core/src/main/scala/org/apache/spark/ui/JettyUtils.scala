@@ -395,25 +395,26 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def createRedirectHttpsHandler(securePort: Int, scheme: String): ContextHandler = {
-    val redirectHandler: ContextHandler = new ContextHandler
+    val redirectHandler = new ServletContextHandler()
     redirectHandler.setContextPath("/")
     redirectHandler.setVirtualHosts(toVirtualHosts(REDIRECT_CONNECTOR_NAME))
-    redirectHandler.setHandler(new AbstractHandler {
-      override def handle(
-          target: String,
-          baseRequest: Request,
-          request: HttpServletRequest,
-          response: HttpServletResponse): Unit = {
-        if (baseRequest.isSecure) {
-          return
+
+    val redirectServlet = new HttpServlet() {
+      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        val uri = new URI(req.getRequestURL().toString())
+        if (uri.getScheme() != scheme) {
+          val httpsURI = createRedirectURI(scheme, uri.getHost(), securePort, uri.getPath(),
+            uri.getQuery())
+          res.setContentLength(0)
+          res.sendRedirect(res.encodeRedirectURL(httpsURI))
+        } else {
+          // Shouldn't really reach this.
+          res.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
         }
-        val httpsURI = createRedirectURI(scheme, baseRequest.getServerName, securePort,
-          baseRequest.getRequestURI, baseRequest.getQueryString)
-        response.setContentLength(0)
-        response.sendRedirect(response.encodeRedirectURL(httpsURI))
-        baseRequest.setHandled(true)
       }
-    })
+    }
+    redirectHandler.addServlet(new ServletHolder(redirectServlet), "/*")
+
     redirectHandler
   }
 
