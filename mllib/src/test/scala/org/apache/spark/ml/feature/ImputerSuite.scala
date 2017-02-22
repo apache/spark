@@ -30,9 +30,9 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (1, 1.0, 1.0, 1.0),
       (2, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0),
-      (4, Double.NaN, 2.25, 3.0)
+      (4, Double.NaN, 2.25, 1.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
-    val imputer = new Imputer().setInputCol("value").setOutputCol("out")
+    val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
     ImputerSuite.iterateStrategyTest(imputer, df)
   }
 
@@ -43,7 +43,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, Double.NaN, Double.NaN, Double.NaN),
       (3, -1.0, 2.0, 3.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
-    val imputer = new Imputer().setInputCol("value").setOutputCol("out")
+    val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1.0)
     ImputerSuite.iterateStrategyTest(imputer, df)
   }
@@ -56,7 +56,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (3, 10.0F, 10.0F, 10.0F),
       (4, -1.0F, 6.0F, 3.0F)
     )).toDF("id", "value", "expected_mean", "expected_median")
-    val imputer = new Imputer().setInputCol("value").setOutputCol("out")
+    val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1)
     ImputerSuite.iterateStrategyTest(imputer, df)
   }
@@ -70,7 +70,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (4, -1.0, 8.0, 10.0)
     )).toDF("id", "value", "expected_mean", "expected_median")
     val df2 = df.selectExpr("*", "IF(value=-1.0, null, value) as nullable_value")
-    val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
+    val imputer = new Imputer().setInputCols(Array("nullable_value")).setOutputCols(Array("out"))
     ImputerSuite.iterateStrategyTest(imputer, df2)
   }
 
@@ -82,7 +82,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, Double.NaN, Double.NaN, Double.NaN)
     )).toDF("id", "value", "expected_mean", "expected_median")
     Seq("mean", "median").foreach { strategy =>
-      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
+      val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
+        .setStrategy(strategy)
       intercept[SparkException] {
         val model = imputer.fit(df)
       }
@@ -91,8 +92,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
 
   test("Imputer read/write") {
     val t = new Imputer()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
+      .setInputCols(Array("myInputCol"))
+      .setOutputCols(Array("myOutputCol"))
       .setMissingValue(-1.0)
     testDefaultReadWrite(t)
   }
@@ -104,8 +105,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
 
     val instance = new ImputerModel(
       "myImputer", surrogateDF)
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
+      .setInputCols(Array("myInputCol"))
+      .setOutputCols(Array("myOutputCol"))
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.surrogateDF.collect() === instance.surrogateDF.collect())
   }
