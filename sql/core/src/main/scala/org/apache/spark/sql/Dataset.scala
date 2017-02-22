@@ -181,7 +181,7 @@ class Dataset[T] private[sql](
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
       case _: RunnableCommand =>
-        queryExecution.executedPlan.execute() // Trigger execution
+        queryExecution.executedPlan.executeToIterator() // Trigger execution
         MaterializedPlan(queryExecution.executedPlan)
       case _: Command =>
         // Note that there is currently no command that is not a RunnableCommand.
