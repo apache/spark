@@ -1635,5 +1635,3 @@ class HiveDDLSuite
     }
   }
 }
-
-case class cc(a: Array[Byte])
