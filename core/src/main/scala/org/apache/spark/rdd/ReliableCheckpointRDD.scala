@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
@@ -133,9 +134,13 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val broadcastedConf = sc.broadcast(
       new SerializableConfiguration(sc.hadoopConfiguration))
     // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
+    logInfo(s"The checkpoint compression codec is " +
+      s"${sc.conf.get("spark.checkpoint.compress.codec", "none")}.")
+    val startTime = System.currentTimeMillis()
     sc.runJob(originalRDD,
       writePartitionToCheckpointFile[T](checkpointDirPath.toString, broadcastedConf) _)
 
+    logInfo(s"Checkpointing took ${System.currentTimeMillis() - startTime} ms.")
     if (originalRDD.partitioner.nonEmpty) {
       writePartitionerToCheckpointDir(sc, originalRDD.partitioner.get, checkpointDirPath)
     }
@@ -169,7 +174,15 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
 
     val fileOutputStream = if (blockSize < 0) {
-      fs.create(tempOutputPath, false, bufferSize)
+      val checkpointCodec = env.conf.get("spark.checkpoint.compress.codec", "none")
+      val fileStream = fs.create(tempOutputPath, false, bufferSize)
+      if (CompressionCodec.ALL_COMPRESSION_CODECS_SHORT.contains(checkpointCodec)) {
+        val compressionCodec = CompressionCodec.createCodec(env.conf, checkpointCodec)
+        logInfo(s"Compressing using $checkpointCodec.")
+        compressionCodec.compressedOutputStream(fileStream)
+      } else {
+        fileStream
+      }
     } else {
       // This is mainly for testing purpose
       fs.create(tempOutputPath, false, bufferSize,
@@ -177,6 +190,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)
+    logInfo(s"Starting to write to checkpoint file $tempOutputPath.")
+    val startTimeMs = System.currentTimeMillis()
     Utils.tryWithSafeFinally {
       serializeStream.writeAll(iterator)
     } {
@@ -197,6 +212,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         }
       }
     }
+    logInfo(s"Checkpointing took ${System.currentTimeMillis() - startTimeMs} ms.")
   }
 
   /**
@@ -273,9 +289,16 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val env = SparkEnv.get
     val fs = path.getFileSystem(broadcastedConf.value.value)
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
-    val fileInputStream = fs.open(path, bufferSize)
+    val checkpointCodec = env.conf.get("spark.checkpoint.compress.codec", "none")
+    val fileStream = fs.open(path, bufferSize)
+    val inputStream =
+      if (CompressionCodec.ALL_COMPRESSION_CODECS_SHORT.contains(checkpointCodec)) {
+        CompressionCodec.createCodec(env.conf, checkpointCodec).compressedInputStream(fileStream)
+      } else {
+        fileStream
+      }
     val serializer = env.serializer.newInstance()
-    val deserializeStream = serializer.deserializeStream(fileInputStream)
+    val deserializeStream = serializer.deserializeStream(inputStream)
 
     // Register an on-task-completion callback to close the input stream.
     context.addTaskCompletionListener(context => deserializeStream.close())
