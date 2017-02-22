@@ -550,8 +550,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   test("ui and api authorization checks") {
-    val appId = "app-20161115172038-0000"
-    val owner = "jose"
+    val appId = "local-1422981759269"
+    val owner = "irashid"
     val admin = "root"
     val other = "alice"
 
