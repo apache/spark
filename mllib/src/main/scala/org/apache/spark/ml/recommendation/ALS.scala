@@ -327,6 +327,15 @@ class ALSModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
+
+  // TODO: output is DataFrame ?? DataSet ?? what exactly is the output schema?
+  def recommendForAllUsers(): DataFrame = {
+
+  }
+
+  def recommendForAllItems(): DataFrame = {
+
+  }
 }
 
 @Since("1.6.0")
