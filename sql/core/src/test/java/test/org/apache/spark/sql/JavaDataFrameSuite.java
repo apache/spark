@@ -406,10 +406,12 @@ public class JavaDataFrameSuite {
     }
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testBeanWithoutGetter() {
     BeanWithoutGetter bean = new BeanWithoutGetter();
     List<BeanWithoutGetter> data = Arrays.asList(bean);
-    spark.createDataFrame(data, BeanWithoutGetter.class);
+    Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.count(), 1);
   }
 }

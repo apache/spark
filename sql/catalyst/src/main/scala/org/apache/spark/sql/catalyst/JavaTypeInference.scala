@@ -117,18 +117,10 @@ object JavaTypeInference {
         val (valueDataType, nullable) = inferDataType(valueType)
         (MapType(keyDataType, valueDataType, nullable), true)
 
-      case c =>
-        // TODO: we should only collect properties that have getter and setter. However, some tests
-        // pass in scala case class as java bean class which doesn't have getter and setter.
-        val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)
-        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+      case _ =>
+        val properties = getJavaBeanPropertiesWithGetters(typeToken.getRawType)
         val fields = properties.map { property =>
-          val readMethod = Option(property.getReadMethod).getOrElse {
-            throw new UnsupportedOperationException(
-              s"Cannot infer type for class ${c.getName} " +
-                s"because property ${property.getName} does not have the getter")
-          }
-          val returnType = typeToken.method(readMethod).getReturnType
+          val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType)
           new StructField(property.getName, dataType, nullable)
         }
@@ -136,9 +128,16 @@ object JavaTypeInference {
     }
   }
 
+  def getJavaBeanPropertiesWithGetters(beanClass: Class[_]): Array[PropertyDescriptor] = {
+    val beanInfo = Introspector.getBeanInfo(beanClass)
+    beanInfo.getPropertyDescriptors
+      .filterNot(_.getName == "class").filter(p => p.getReadMethod != null)
+  }
+
   private def getJavaBeanProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
     beanInfo.getPropertyDescriptors
+      .filterNot(_.getName == "class")
       .filter(p => p.getReadMethod != null && p.getWriteMethod != null)
   }
 
@@ -304,8 +303,6 @@ object JavaTypeInference {
 
       case other =>
         val properties = getJavaBeanProperties(other)
-        assert(properties.length > 0)
-
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
@@ -423,20 +420,15 @@ object JavaTypeInference {
 
         case other =>
           val properties = getJavaBeanProperties(other)
-          if (properties.length > 0) {
-            CreateNamedStruct(properties.flatMap { p =>
-              val fieldName = p.getName
-              val fieldType = typeToken.method(p.getReadMethod).getReturnType
-              val fieldValue = Invoke(
-                inputObject,
-                p.getReadMethod.getName,
-                inferExternalType(fieldType.getRawType))
-              expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
-            })
-          } else {
-            throw new UnsupportedOperationException(
-              s"Cannot infer type for class ${other.getName} because it is not bean-compliant")
-          }
+          CreateNamedStruct(properties.flatMap { p =>
+            val fieldName = p.getName
+            val fieldType = typeToken.method(p.getReadMethod).getReturnType
+            val fieldValue = Invoke(
+              inputObject,
+              p.getReadMethod.getName,
+              inferExternalType(fieldType.getRawType))
+            expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
+          })
       }
     }
   }
