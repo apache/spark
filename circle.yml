@@ -17,7 +17,7 @@ checkout:
 
 dependencies:
   override:
-    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
+    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
 
 test:
   override:
