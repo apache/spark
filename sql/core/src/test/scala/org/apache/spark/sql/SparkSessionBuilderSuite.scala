@@ -133,25 +133,34 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
 
     assert(forkedSession ne activeSession)
     assert(forkedSession.sessionState ne activeSession.sessionState)
+    assert(forkedSession.conf ne activeSession.conf)
+    // the rest of copying is tested individually for each field
 
     forkedSession.stop()
-    activeSession.stop()
   }
 
-  test("fork new session and inherit sql config options") {
+  test("fork new session and inherit RuntimeConfig options") {
     val activeSession = SparkSession
       .builder()
       .master("local")
       .getOrCreate()
-    activeSession.conf.set("spark-configb", "b")
-    val forkedSession = activeSession.cloneSession()
 
+    val key = "spark-config-clone"
+    activeSession.conf.set(key, "active")
+
+    // inheritance
+    val forkedSession = activeSession.cloneSession()
     assert(forkedSession ne activeSession)
     assert(forkedSession.conf ne activeSession.conf)
-    assert(forkedSession.conf.get("spark-configb") == "b")
+    assert(forkedSession.conf.get(key) == "active")
+
+    // independence
+    forkedSession.conf.set(key, "forked")
+    assert(activeSession.conf.get(key) == "active")
+    activeSession.conf.set(key, "dontcopyme")
+    assert(forkedSession.conf.get(key) == "forked")
 
     forkedSession.stop()
-    activeSession.stop()
   }
 
   test("fork new session and inherit function registry and udf") {
@@ -159,13 +168,19 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
     activeSession.udf.register("strlenScala", (_: String).length + (_: Int))
     val forkedSession = activeSession.cloneSession()
 
+    // inheritance
     assert(forkedSession ne activeSession)
     assert(forkedSession.sessionState.functionRegistry ne
       activeSession.sessionState.functionRegistry)
     assert(forkedSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
 
+    // independence
+    forkedSession.sessionState.functionRegistry.dropFunction("strlenScala")
+    assert(activeSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
+    activeSession.udf.register("addone", (_: Int) + 1)
+    assert(forkedSession.sessionState.functionRegistry.lookupFunction("addone").isEmpty)
+
     forkedSession.stop()
-    activeSession.stop()
   }
 
   test("fork new session and inherit experimental methods") {
@@ -182,12 +197,18 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
 
     val forkedSession = activeSession.cloneSession()
 
+    // inheritance
     assert(forkedSession ne activeSession)
     assert(forkedSession.experimental.extraOptimizations.toSet ==
       activeSession.experimental.extraOptimizations.toSet)
 
+    // independence
+    forkedSession.experimental.extraOptimizations = List(DummyRule2)
+    assert(activeSession.experimental.extraOptimizations == optimizations)
+    activeSession.experimental.extraOptimizations = List(DummyRule1)
+    assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
+
     forkedSession.stop()
-    activeSession.stop()
   }
 
   test("fork new session and run query on inherited table") {
@@ -215,6 +236,5 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
 
     SparkSession.clearActiveSession()
     forkedSession.stop()
-    activeSession.stop()
   }
 }

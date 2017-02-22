@@ -157,8 +157,6 @@ object HiveSessionState {
     val sparkContext = sparkSession.sparkContext
 
     val catalog = HiveSessionCatalog(
-      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
-      sparkSession.sharedState.globalTempViewManager,
       sparkSession,
       SessionState.createFunctionResourceLoader(sparkContext, initHelper.jarClassLoader),
       initHelper.functionRegistry,

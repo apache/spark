@@ -74,7 +74,10 @@ class SessionCatalog(
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleFunctionRegistry, SimpleCatalystConf(true))
+    this(
+      externalCatalog,
+      new SimpleFunctionRegistry,
+      SimpleCatalystConf(caseSensitiveAnalysis = true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */

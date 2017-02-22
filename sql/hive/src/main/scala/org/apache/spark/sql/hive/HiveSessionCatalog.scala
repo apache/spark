@@ -89,8 +89,6 @@ private[sql] class HiveSessionCatalog(
       parser: ParserInterface): HiveSessionCatalog = {
 
     val catalog = HiveSessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
       sparkSession,
       functionResourceLoader,
       functionRegistry,
@@ -246,8 +244,6 @@ private[sql] class HiveSessionCatalog(
 private[sql] object HiveSessionCatalog {
 
   def apply(
-      externalCatalog: HiveExternalCatalog,
-      globalTempViewManager: GlobalTempViewManager,
       sparkSession: SparkSession,
       functionResourceLoader: FunctionResourceLoader,
       functionRegistry: FunctionRegistry,
@@ -262,8 +258,8 @@ private[sql] object HiveSessionCatalog {
     val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
 
     new HiveSessionCatalog(
-      externalCatalog: HiveExternalCatalog,
-      globalTempViewManager: GlobalTempViewManager,
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
+      sparkSession.sharedState.globalTempViewManager,
       metastoreCatalog,
       functionResourceLoader: FunctionResourceLoader,
       functionRegistry: FunctionRegistry,

@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1195,5 +1197,28 @@ class SessionCatalogSuite extends PlanTest {
     intercept[NoSuchDatabaseException] {
       catalog.listFunctions("unknown_db", "func*")
     }
+  }
+
+  test("copy SessionCatalog") {
+    val externalCatalog = newEmptyCatalog()
+    val original = new SessionCatalog(externalCatalog)
+    val tempTable1 = Range(1, 10, 1, 10)
+    original.createTempView("copytest1", tempTable1, overrideIfExists = false)
+
+    // check if tables copied over
+    val clone = original.copy(
+      SimpleCatalystConf(caseSensitiveAnalysis = true),
+      new Configuration(),
+      new SimpleFunctionRegistry,
+      CatalystSqlParser)
+    assert(clone.getTempView("copytest1") == Option(tempTable1))
+
+    // check if clone and original independent
+    clone.dropTable(TableIdentifier("copytest1"), ignoreIfNotExists = false, purge = false)
+    assert(original.getTempView("copytest1") == Option(tempTable1))
+
+    val tempTable2 = Range(1, 20, 2, 10)
+    original.createTempView("copytest2", tempTable2, overrideIfExists = false)
+    assert(clone.getTempView("copytest2").isEmpty)
   }
 }

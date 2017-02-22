@@ -237,7 +237,9 @@ class SparkSession private(
   @Experimental
   @InterfaceStability.Evolving
   def cloneSession(): SparkSession = {
-    new SparkSession(sparkContext, Some(sharedState), Some(sessionState))
+    val result = new SparkSession(sparkContext, Some(sharedState), Some(sessionState))
+    result.sessionState // force copy of SessionState
+    result
   }
 
 
@@ -867,6 +869,7 @@ object SparkSession {
         if (options.nonEmpty) {
           logWarning("Using an existing SparkSession; some configuration may not take effect.")
         }
+        logInfo("1 using current thread's active session")
         return session
       }
 
@@ -879,6 +882,7 @@ object SparkSession {
           if (options.nonEmpty) {
             logWarning("Using an existing SparkSession; some configuration may not take effect.")
           }
+          logInfo("2 using global session")
           return session
         }
 
@@ -898,6 +902,7 @@ object SparkSession {
           if (!sc.conf.contains("spark.app.name")) {
             sc.conf.setAppName(randomAppName)
           }
+          logDebug("3 using new sparkContext")
           sc
         }
         session = new SparkSession(sparkContext)
@@ -914,7 +919,7 @@ object SparkSession {
           }
         })
       }
-
+      logInfo("4 using created session")
       return session
     }
   }
