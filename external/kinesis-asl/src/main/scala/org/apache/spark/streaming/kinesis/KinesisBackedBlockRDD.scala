@@ -139,6 +139,8 @@ class KinesisSequenceRangeIterator(
   private val client = new AmazonKinesisClient(credentials)
   private val streamName = range.streamName
   private val shardId = range.shardId
+  // AWS limits to maximum of 10k records per get call
+  private val maxGetRecordsLimit = 10000
 
   private var toSeqNumberReceived = false
   private var lastSeqNumber: String = null
@@ -212,7 +214,7 @@ class KinesisSequenceRangeIterator(
     val getRecordsRequest = new GetRecordsRequest
     getRecordsRequest.setRequestCredentials(credentials)
     getRecordsRequest.setShardIterator(shardIterator)
-    getRecordsRequest.setLimit(recordCount)
+    getRecordsRequest.setLimit(Math.max(recordCount, this.maxGetRecordsLimit))
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
       s"getting records using shard iterator") {
         client.getRecords(getRecordsRequest)
