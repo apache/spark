@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
@@ -138,7 +138,8 @@ case class Percentile(
   override def update(
       buffer: OpenHashMap[Number, Long],
       input: InternalRow): OpenHashMap[Number, Long] = {
-    val key = child.eval(input).asInstanceOf[Number]
+    val scalaValue = CatalystTypeConverters.convertToScala(child.eval(input), child.dataType)
+    val key = scalaValue.asInstanceOf[Number]
     val frqValue = frequencyExpression.eval(input)
 
     // Null values are ignored in counts map.
@@ -246,7 +247,8 @@ case class Percentile(
       val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
       // Write pairs in counts map to byte buffer.
       obj.foreach { case (key, count) =>
-        val row = InternalRow.apply(key, count)
+        val catalystValue = CatalystTypeConverters.convertToCatalyst(key)
+        val row = InternalRow.apply(catalystValue, count)
         val unsafeRow = projection.apply(row)
         out.writeInt(unsafeRow.getSizeInBytes)
         unsafeRow.writeToStream(out, buffer)
@@ -274,7 +276,9 @@ case class Percentile(
         val row = new UnsafeRow(2)
         row.pointTo(bs, sizeOfNextRow)
         // Insert the pairs into counts map.
-        val key = row.get(0, child.dataType).asInstanceOf[Number]
+        val catalystValue = row.get(0, child.dataType)
+        val scalaValue = CatalystTypeConverters.convertToScala(catalystValue, child.dataType)
+        val key = scalaValue.asInstanceOf[Number]
         val count = row.get(1, LongType).asInstanceOf[Long]
         counts.update(key, count)
         sizeOfNextRow = ins.readInt()
