@@ -136,7 +136,7 @@ object JavaTypeInference {
       .filter(_.getReadMethod != null)
   }
 
-  private def getJavaBeanReadableWritableProperties(
+  private def getJavaBeanReadableAndWritableProperties(
       beanClass: Class[_]): Array[PropertyDescriptor] = {
     getJavaBeanReadableProperties(beanClass).filter(_.getWriteMethod != null)
   }
@@ -302,7 +302,7 @@ object JavaTypeInference {
           keyData :: valueData :: Nil)
 
       case other =>
-        val properties = getJavaBeanReadableWritableProperties(other)
+        val properties = getJavaBeanReadableAndWritableProperties(other)
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
@@ -419,7 +419,7 @@ object JavaTypeInference {
           )
 
         case other =>
-          val properties = getJavaBeanReadableWritableProperties(other)
+          val properties = getJavaBeanReadableAndWritableProperties(other)
           CreateNamedStruct(properties.flatMap { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
