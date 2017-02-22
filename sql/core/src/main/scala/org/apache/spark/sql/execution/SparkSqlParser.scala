@@ -1444,7 +1444,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a clause for ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY.
+   * Create a clause for DISTRIBUTE BY.
    */
   override protected def withRepartitionByExpression(
       ctx: QueryOrganizationContext,
