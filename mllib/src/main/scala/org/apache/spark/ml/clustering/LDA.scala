@@ -437,6 +437,9 @@ abstract class LDAModel private[ml] (
   @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
+  @Since("2.2.0")
+  def setTopicDistributionCol(value: String): this.type = set(topicDistributionCol, value)
+
   /** @group setParam */
   @Since("1.6.0")
   def setSeed(value: Long): this.type = set(seed, value)
