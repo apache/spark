@@ -49,35 +49,44 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
     // Master, Worker, HistoryServer, ExternalShuffleService, MesosClusterDispatcher use
     // SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
-    if (className.equals("org.apache.spark.deploy.master.Master")) {
-      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
-      javaOptsKeys.add("SPARK_MASTER_OPTS");
-      memKey = "SPARK_DAEMON_MEMORY";
-    } else if (className.equals("org.apache.spark.deploy.worker.Worker")) {
-      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
-      javaOptsKeys.add("SPARK_WORKER_OPTS");
-      memKey = "SPARK_DAEMON_MEMORY";
-    } else if (className.equals("org.apache.spark.deploy.history.HistoryServer")) {
-      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
-      javaOptsKeys.add("SPARK_HISTORY_OPTS");
-      memKey = "SPARK_DAEMON_MEMORY";
-    } else if (className.equals("org.apache.spark.executor.CoarseGrainedExecutorBackend")) {
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
-      javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
-      memKey = "SPARK_EXECUTOR_MEMORY";
-    } else if (className.equals("org.apache.spark.executor.MesosExecutorBackend")) {
-      javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
-      memKey = "SPARK_EXECUTOR_MEMORY";
-    } else if (className.equals("org.apache.spark.deploy.mesos.MesosClusterDispatcher")) {
-      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
-    } else if (className.equals("org.apache.spark.deploy.ExternalShuffleService") ||
-        className.equals("org.apache.spark.deploy.mesos.MesosExternalShuffleService")) {
-      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
-      javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
-      memKey = "SPARK_DAEMON_MEMORY";
-    } else {
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
-      memKey = "SPARK_DRIVER_MEMORY";
+    switch (className) {
+      case "org.apache.spark.deploy.master.Master":
+        javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+        javaOptsKeys.add("SPARK_MASTER_OPTS");
+        memKey = "SPARK_DAEMON_MEMORY";
+        break;
+      case "org.apache.spark.deploy.worker.Worker":
+        javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+        javaOptsKeys.add("SPARK_WORKER_OPTS");
+        memKey = "SPARK_DAEMON_MEMORY";
+        break;
+      case "org.apache.spark.deploy.history.HistoryServer":
+        javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+        javaOptsKeys.add("SPARK_HISTORY_OPTS");
+        memKey = "SPARK_DAEMON_MEMORY";
+        break;
+      case "org.apache.spark.executor.CoarseGrainedExecutorBackend":
+        javaOptsKeys.add("SPARK_JAVA_OPTS");
+        javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
+        memKey = "SPARK_EXECUTOR_MEMORY";
+        break;
+      case "org.apache.spark.executor.MesosExecutorBackend":
+        javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
+        memKey = "SPARK_EXECUTOR_MEMORY";
+        break;
+      case "org.apache.spark.deploy.mesos.MesosClusterDispatcher":
+        javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+        break;
+      case "org.apache.spark.deploy.ExternalShuffleService":
+      case "org.apache.spark.deploy.mesos.MesosExternalShuffleService":
+        javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+        javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
+        memKey = "SPARK_DAEMON_MEMORY";
+        break;
+      default:
+        javaOptsKeys.add("SPARK_JAVA_OPTS");
+        memKey = "SPARK_DRIVER_MEMORY";
+        break;
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
@@ -94,7 +103,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xmx" + mem);
-    addPermGenSizeOpt(cmd);
     cmd.add(className);
     cmd.addAll(classArgs);
     return cmd;

@@ -177,15 +177,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
-    val overwrite = ctx.OVERWRITE != null
-    val staticPartitionKeys: Map[String, String] =
-      partitionKeys.filter(_._2.nonEmpty).map(t => (t._1, t._2.get))
 
     InsertIntoTable(
-      UnresolvedRelation(tableIdent, None),
+      UnresolvedRelation(tableIdent),
       partitionKeys,
       query,
-      OverwriteOptions(overwrite, if (overwrite) staticPartitionKeys else Map.empty),
+      ctx.OVERWRITE != null,
       ctx.EXISTS != null)
   }
 
@@ -383,7 +380,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
 
         // Window
-        withDistinct.optionalMap(windows)(withWindows)
+        val withWindow = withDistinct.optionalMap(windows)(withWindows)
+
+        // Hint
+        withWindow.optionalMap(hint)(withHints)
     }
   }
 
@@ -506,6 +506,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       Aggregate(mappedGroupByExpressions, selectExpressions, query)
     }
+  }
+
+  /**
+   * Add a Hint to a logical plan.
+   */
+  private def withHints(
+      ctx: HintContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val stmt = ctx.hintStatement
+    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
   }
 
   /**
@@ -635,17 +645,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * }}}
    */
   override def visitTable(ctx: TableContext): LogicalPlan = withOrigin(ctx) {
-    UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier), None)
+    UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val table = UnresolvedRelation(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.strictIdentifier).map(_.getText))
-    table.optionalMap(ctx.sample)(withSample)
+    val table = UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
+
+    val tableWithAlias = Option(ctx.strictIdentifier).map(_.getText) match {
+      case Some(strictIdentifier) =>
+        SubqueryAlias(strictIdentifier, table, None)
+      case _ => table
+    }
+    tableWithAlias.optionalMap(ctx.sample)(withSample)
   }
 
   /**
@@ -1460,8 +1474,28 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
-    if (STRING == null) structField else structField.withComment(string(STRING))
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    if (STRING != null) {
+      builder.putString("comment", string(STRING))
+    }
+    // Add Hive type string to metadata.
+    dataType match {
+      case p: PrimitiveDataTypeContext =>
+        p.identifier.getText.toLowerCase match {
+          case "varchar" | "char" =>
+            builder.putString(HIVE_TYPE_STRING, dataType.getText.toLowerCase)
+          case _ =>
+        }
+      case _ =>
+    }
+
+    StructField(
+      identifier.getText,
+      typedVisit(dataType),
+      nullable = true,
+      builder.build())
   }
 
   /**

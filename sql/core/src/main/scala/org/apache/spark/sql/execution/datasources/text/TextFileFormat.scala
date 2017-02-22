@@ -39,6 +39,8 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 
+  override def toString: String = "Text"
+
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
       throw new AnalysisException(
@@ -63,9 +65,10 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema)
 
+    val textOptions = new TextOptions(options)
     val conf = job.getConfiguration
-    val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
-    compressionCodec.foreach { codec =>
+
+    textOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
@@ -130,9 +133,7 @@ class TextOutputWriter(
 
   private val writer = CodecStreams.createOutputStream(context, new Path(path))
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
-
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  override def write(row: InternalRow): Unit = {
     if (!row.isNullAt(0)) {
       val utf8string = row.getUTF8String(0)
       utf8string.writeTo(writer)

@@ -23,7 +23,6 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
@@ -483,21 +482,35 @@ case class JsonTuple(children: Seq[Expression])
 /**
  * Converts an json input string to a [[StructType]] with the specified schema.
  */
-case class JsonToStruct(schema: StructType, options: Map[String, String], child: Expression)
-  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
+case class JsonToStruct(
+    schema: StructType,
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
+
+  def this(schema: StructType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, None)
 
   @transient
   lazy val parser =
     new JacksonParser(
       schema,
-      "invalid", // Not used since we force fail fast.  Invalid rows will be set to `null`.
-      new JSONOptions(options ++ Map("mode" -> ParseModes.FAIL_FAST_MODE)))
+      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
 
   override def dataType: DataType = schema
 
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
   override def nullSafeEval(json: Any): Any = {
-    try parser.parse(json.toString).head catch {
+    try {
+      parser.parse(
+        json.asInstanceOf[UTF8String],
+        CreateJacksonParser.utf8String,
+        identity[UTF8String]).headOption.orNull
+    } catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
@@ -508,16 +521,24 @@ case class JsonToStruct(schema: StructType, options: Map[String, String], child:
 /**
  * Converts a [[StructType]] to a json output string.
  */
-case class StructToJson(options: Map[String, String], child: Expression)
-  extends UnaryExpression with CodegenFallback with ExpectsInputTypes {
+case class StructToJson(
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
+
+  def this(options: Map[String, String], child: Expression) = this(options, child, None)
 
   @transient
   lazy val writer = new CharArrayWriter()
 
   @transient
   lazy val gen =
-    new JacksonGenerator(child.dataType.asInstanceOf[StructType], writer)
+    new JacksonGenerator(
+      child.dataType.asInstanceOf[StructType],
+      writer,
+      new JSONOptions(options, timeZoneId.get))
 
   override def dataType: DataType = StringType
 
@@ -535,6 +556,9 @@ case class StructToJson(options: Map[String, String], child: Expression)
         s"$prettyName requires that the expression is a struct expression.")
     }
   }
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(row: Any): Any = {
     gen.write(row.asInstanceOf[InternalRow])

@@ -132,6 +132,9 @@ class SparkContext(object):
             self._conf = conf
         else:
             self._conf = SparkConf(_jvm=SparkContext._jvm)
+            if conf is not None:
+                for k, v in conf.getAll():
+                    self._conf.set(k, v)
 
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer

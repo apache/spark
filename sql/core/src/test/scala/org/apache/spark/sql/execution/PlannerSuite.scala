@@ -363,7 +363,7 @@ class PlannerSuite extends SharedSQLContext {
   // This is a regression test for SPARK-9703
   test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
     // Consider an operator that imposes both output distribution and  ordering requirements on its
-    // children, such as sort sort merge join. If the distribution requirements are satisfied but
+    // children, such as sort merge join. If the distribution requirements are satisfied but
     // the output ordering requirements are unsatisfied, then the planner should only add sorts and
     // should not need to add additional shuffles / exchanges.
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))

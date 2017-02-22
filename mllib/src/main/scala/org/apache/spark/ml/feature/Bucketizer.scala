@@ -78,9 +78,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are skip (filter out rows with
-   * invalid values), error (throw an error), or keep (keep invalid values in a special additional
-   * bucket).
+   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
+   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
+   * additional bucket).
    * Default: "error"
    * @group param
    */

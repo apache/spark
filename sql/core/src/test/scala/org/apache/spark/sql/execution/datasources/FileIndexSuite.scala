@@ -142,6 +142,7 @@ class FileIndexSuite extends SharedSQLContext {
     assert(!PartitioningAwareFileIndex.shouldFilterOut("_common_metadata"))
     assert(PartitioningAwareFileIndex.shouldFilterOut("_ab_metadata"))
     assert(PartitioningAwareFileIndex.shouldFilterOut("_cd_common_metadata"))
+    assert(PartitioningAwareFileIndex.shouldFilterOut("a._COPYING_"))
   }
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {

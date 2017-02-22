@@ -139,11 +139,9 @@ public class JavaSQLDataSourceExample {
     // Parquet files can also be used to create a temporary view and then used in SQL statements
     parquetFileDF.createOrReplaceTempView("parquetFile");
     Dataset<Row> namesDF = spark.sql("SELECT name FROM parquetFile WHERE age BETWEEN 13 AND 19");
-    Dataset<String> namesDS = namesDF.map(new MapFunction<Row, String>() {
-      public String call(Row row) {
-        return "Name: " + row.getString(0);
-      }
-    }, Encoders.STRING());
+    Dataset<String> namesDS = namesDF.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.getString(0),
+        Encoders.STRING());
     namesDS.show();
     // +------------+
     // |       value|
@@ -224,7 +222,7 @@ public class JavaSQLDataSourceExample {
             "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     JavaRDD<String> anotherPeopleRDD =
             new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
-    Dataset anotherPeople = spark.read().json(anotherPeopleRDD);
+    Dataset<Row> anotherPeople = spark.read().json(anotherPeopleRDD);
     anotherPeople.show();
     // +---------------+----+
     // |        address|name|

@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -35,10 +34,10 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     spark.read.json(rdd).createOrReplaceTempView("jt")
     sql(
       s"""
-        |CREATE TEMPORARY TABLE jsonTable (a int, b string)
+        |CREATE TEMPORARY VIEW jsonTable (a int, b string)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${path.toString}'
+        |  path '${path.toURI.toString}'
         |)
       """.stripMargin)
   }
@@ -114,7 +113,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
     }.getMessage
-    assert(message.contains("the number of columns are different")
+    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
     )
   }
 
@@ -294,7 +293,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   test("it's not allowed to insert into a relation that is not an InsertableRelation") {
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTen
+        |CREATE TEMPORARY VIEW oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',

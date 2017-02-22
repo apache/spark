@@ -70,7 +70,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT a, b FROM jt
          """.stripMargin)
@@ -94,7 +94,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${childPath.toString}'
+           |  path '${childPath.toURI}'
            |) AS
            |SELECT a, b FROM jt
          """.stripMargin)
@@ -112,7 +112,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT a, b FROM jt
          """.stripMargin)
@@ -127,7 +127,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE IF NOT EXISTS jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT a * 4 FROM jt
          """.stripMargin)
@@ -145,7 +145,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT b FROM jt
          """.stripMargin)
@@ -162,7 +162,7 @@ class CreateTableAsSelectSuite
         sql(
           s"""
              |CREATE TEMPORARY TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toString}')
+             |OPTIONS (PATH '${path.toURI}')
              |PARTITIONED BY (a)
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
@@ -179,7 +179,7 @@ class CreateTableAsSelectSuite
         sql(
           s"""
              |CREATE EXTERNAL TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toString}')
+             |OPTIONS (PATH '${path.toURI}')
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
         )
@@ -196,7 +196,7 @@ class CreateTableAsSelectSuite
       sql(
         s"""
            |CREATE TABLE t USING PARQUET
-           |OPTIONS (PATH '${path.toString}')
+           |OPTIONS (PATH '${path.toURI}')
            |PARTITIONED BY (a)
            |AS SELECT 1 AS a, 2 AS b
          """.stripMargin
@@ -206,13 +206,13 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with non-zero buckets") {
+  test("create table using as select - with valid number of buckets") {
     val catalog = spark.sessionState.catalog
     withTable("t") {
       sql(
         s"""
            |CREATE TABLE t USING PARQUET
-           |OPTIONS (PATH '${path.toString}')
+           |OPTIONS (PATH '${path.toURI}')
            |CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS
            |AS SELECT 1 AS a, 2 AS b
          """.stripMargin
@@ -222,19 +222,21 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with zero buckets") {
+  test("create table using as select - with invalid number of buckets") {
     withTable("t") {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toString}')
-             |CLUSTERED BY (a) SORTED BY (b) INTO 0 BUCKETS
-             |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
-        )
-      }.getMessage
-      assert(e.contains("Expected positive number of buckets, but got `0`"))
+      Seq(0, 100000).foreach(numBuckets => {
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE t USING PARQUET
+               |OPTIONS (PATH '${path.toURI}')
+               |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
+               |AS SELECT 1 AS a, 2 AS b
+             """.stripMargin
+          )
+        }.getMessage
+        assert(e.contains("Number of buckets should be greater than 0 but less than 100000"))
+      })
     }
   }
 

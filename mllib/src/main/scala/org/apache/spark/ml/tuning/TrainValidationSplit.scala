@@ -98,6 +98,10 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(trainRatio, seed)
+    logTuningParams(instr)
+
     val Array(trainingDataset, validationDataset) =
       dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
     trainingDataset.cache()
@@ -124,6 +128,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best train validation split metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    instr.logSuccess(bestModel)
     val model = copyValues(new TrainValidationSplitModel(uid, bestModel, metrics).setParent(this))
     val summary = new TuningSummary(epm, metrics, bestIndex)
     model.setSummary(Some(summary))
@@ -302,4 +307,3 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
     }
   }
 }
-

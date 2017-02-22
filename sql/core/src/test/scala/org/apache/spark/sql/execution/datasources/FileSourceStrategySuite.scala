@@ -476,6 +476,17 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("[SPARK-18753] keep pushed-down null literal as a filter in Spark-side post-filter") {
+    val ds = Seq(Tuple1(Some(true)), Tuple1(None), Tuple1(Some(false))).toDS()
+    withTempPath { p =>
+      val path = p.getAbsolutePath
+      ds.write.parquet(path)
+      val readBack = spark.read.parquet(path).filter($"_1" === "true")
+      val filtered = ds.filter($"_1" === "true").toDF()
+      checkAnswer(readBack, filtered)
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

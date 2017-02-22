@@ -157,7 +157,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     // to the accumulator. So we can check if the row groups are filtered or not in test case.
     TaskContext taskContext = TaskContext$.MODULE$.get();
     if (taskContext != null) {
-      Option<AccumulatorV2<?, ?>> accu = (Option<AccumulatorV2<?, ?>>) taskContext.taskMetrics()
+      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics()
         .lookForAccumulatorByName("numRowGroups");
       if (accu.isDefined()) {
         ((LongAccumulator)accu.get()).add((long)blocks.size());

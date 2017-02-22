@@ -455,7 +455,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       assert(partDf.schema.map(_.name) === Seq("intField", "stringField"))
 
       path.listFiles().foreach { f =>
-        if (f.getName.toLowerCase().endsWith(".parquet")) {
+        if (!f.getName.startsWith("_") && f.getName.toLowerCase().endsWith(".parquet")) {
           // when the input is a path to a parquet file
           val df = spark.read.parquet(f.getCanonicalPath)
           assert(df.schema.map(_.name) === Seq("intField", "stringField"))
@@ -463,7 +463,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       }
 
       path.listFiles().foreach { f =>
-        if (f.getName.toLowerCase().endsWith(".parquet")) {
+        if (!f.getName.startsWith("_") && f.getName.toLowerCase().endsWith(".parquet")) {
           // when the input is a path to a parquet file but `basePath` is overridden to
           // the base path containing partitioning directories
           val df = spark
@@ -932,7 +932,10 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withSQLConf(
+          ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true",
+          "spark.sql.sources.commitProtocolClass" ->
+            classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
         spark.range(3).write.parquet(s"$path/p0=0/p1=0")
       }
 
@@ -967,6 +970,17 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         Row(1, 0, 0),
         Row(2, 0, 0)
       ))
+    }
+  }
+
+  test("SPARK-18108 Parquet reader fails when data column types conflict with partition ones") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = Seq((1L, 2.0)).toDF("a", "b")
+        df.write.parquet(s"$path/a=1")
+        checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1, 2.0)))
+      }
     }
   }
 }

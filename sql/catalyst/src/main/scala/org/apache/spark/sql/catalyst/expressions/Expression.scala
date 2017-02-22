@@ -70,9 +70,9 @@ abstract class Expression extends TreeNode[Expression] {
    * children.
    *
    * Note that this means that an expression should be considered as non-deterministic if:
-   * - if it relies on some mutable internal state, or
-   * - if it relies on some implicit input that is not part of the children expression list.
-   * - if it has non-deterministic child or children.
+   * - it relies on some mutable internal state, or
+   * - it relies on some implicit input that is not part of the children expression list.
+   * - it has non-deterministic child or children.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.

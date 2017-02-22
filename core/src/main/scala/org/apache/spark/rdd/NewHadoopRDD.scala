@@ -152,11 +152,11 @@ class NewHadoopRDD[K, V](
       private val getBytesReadCallback: Option[() => Long] =
         split.serializableHadoopSplit.value match {
           case _: FileSplit | _: CombineFileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+            Some(SparkHadoopUtil.get.getFSBytesReadOnThreadCallback())
           case _ => None
         }
 
-      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // We get our input bytes from thread-local Hadoop FileSystem statistics.
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
@@ -174,14 +174,25 @@ class NewHadoopRDD[K, V](
       }
       private val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
       private val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-      private var reader = format.createRecordReader(
-        split.serializableHadoopSplit.value, hadoopAttemptContext)
-      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+      private var finished = false
+      private var reader =
+        try {
+          val _reader = format.createRecordReader(
+            split.serializableHadoopSplit.value, hadoopAttemptContext)
+          _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+          _reader
+        } catch {
+          case e: IOException if ignoreCorruptFiles =>
+            logWarning(
+              s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
+              e)
+            finished = true
+            null
+        }
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener(context => close())
       private var havePair = false
-      private var finished = false
       private var recordsSinceMetricsUpdate = 0
 
       override def hasNext: Boolean = {
@@ -189,7 +200,11 @@ class NewHadoopRDD[K, V](
           try {
             finished = !reader.nextKeyValue
           } catch {
-            case e: IOException if ignoreCorruptFiles => finished = true
+            case e: IOException if ignoreCorruptFiles =>
+              logWarning(
+                s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
+                e)
+              finished = true
           }
           if (finished) {
             // Close and release the reader here; close() will also be called when the task
@@ -216,13 +231,9 @@ class NewHadoopRDD[K, V](
         (reader.getCurrentKey, reader.getCurrentValue)
       }
 
-      private def close() {
+      private def close(): Unit = {
         if (reader != null) {
           InputFileBlockHolder.unset()
-          // Close the reader and release it. Note: it's very important that we don't close the
-          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
-          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
-          // corruption issues when reading compressed input.
           try {
             reader.close()
           } catch {
@@ -262,18 +273,7 @@ class NewHadoopRDD[K, V](
 
   override def getPreferredLocations(hsplit: Partition): Seq[String] = {
     val split = hsplit.asInstanceOf[NewHadoopPartition].serializableHadoopSplit.value
-    val locs = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
-      case Some(c) =>
-        try {
-          val infos = c.newGetLocationInfo.invoke(split).asInstanceOf[Array[AnyRef]]
-          HadoopRDD.convertSplitLocationInfo(infos)
-        } catch {
-          case e : Exception =>
-            logDebug("Failed to use InputSplit#getLocationInfo.", e)
-            None
-        }
-      case None => None
-    }
+    val locs = HadoopRDD.convertSplitLocationInfo(split.getLocationInfo)
     locs.getOrElse(split.getLocations.filter(_ != "localhost"))
   }
 

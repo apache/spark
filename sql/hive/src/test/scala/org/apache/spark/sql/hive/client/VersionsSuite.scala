@@ -20,19 +20,21 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPermanentFunctionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.ExtendedHiveTest
@@ -45,7 +47,7 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * is not fully tested.
  */
 @ExtendedHiveTest
-class VersionsSuite extends SparkFunSuite with Logging {
+class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton with Logging {
 
   private val clientBuilder = new HiveClientBuilder
   import clientBuilder.buildClient
@@ -135,11 +137,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: getDatabase") {
       // No exception should be thrown
       client.getDatabase("default")
+      intercept[NoSuchDatabaseException](client.getDatabase("nonexist"))
     }
 
-    test(s"$version: getDatabaseOption") {
-      assert(client.getDatabaseOption("default").isDefined)
-      assert(client.getDatabaseOption("nonexist") == None)
+    test(s"$version: databaseExists") {
+      assert(client.databaseExists("default") == true)
+      assert(client.databaseExists("nonexist") == false)
     }
 
     test(s"$version: listDatabases") {
@@ -153,9 +156,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: dropDatabase") {
-      assert(client.getDatabaseOption("temporary").isDefined)
+      assert(client.databaseExists("temporary") == true)
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
-      assert(client.getDatabaseOption("temporary").isEmpty)
+      assert(client.databaseExists("temporary") == false)
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -172,7 +175,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
         emptyDir,
         tableName = "src",
         replace = false,
-        holdDDLTime = false)
+        holdDDLTime = false,
+        isSrcLocal = false)
     }
 
     test(s"$version: tableExists") {
@@ -254,6 +258,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
         "default", "src_part", partitions, ignoreIfExists = true)
     }
 
+    test(s"$version: getPartitionNames(catalogTable)") {
+      val partitionNames = (1 to testPartitionCount).map(key2 => s"key1=1/key2=$key2")
+      assert(partitionNames == client.getPartitionNames(client.getTable("default", "src_part")))
+    }
+
     test(s"$version: getPartitions(catalogTable)") {
       assert(testPartitionCount ==
         client.getPartitions(client.getTable("default", "src_part")).size)
@@ -305,7 +314,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
         partSpec,
         replace = false,
         holdDDLTime = false,
-        inheritTableSpecs = false)
+        inheritTableSpecs = false,
+        isSrcLocal = false)
     }
 
     test(s"$version: loadDynamicPartitions") {
@@ -525,5 +535,143 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.reset()
       assert(client.listTables("default").isEmpty)
     }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // End-To-End tests
+    ///////////////////////////////////////////////////////////////////////////
+
+    test(s"$version: CREATE TABLE AS SELECT") {
+      withTable("tbl") {
+        spark.sql("CREATE TABLE tbl AS SELECT 1 AS a")
+        assert(spark.table("tbl").collect().toSeq == Seq(Row(1)))
+      }
+    }
+
+    test(s"$version: Delete the temporary staging directory and files after each insert") {
+      withTempDir { tmpDir =>
+        withTable("tab") {
+          spark.sql(
+            s"""
+               |CREATE TABLE tab(c1 string)
+               |location '${tmpDir.toURI.toString}'
+             """.stripMargin)
+
+          (1 to 3).map { i =>
+            spark.sql(s"INSERT OVERWRITE TABLE tab SELECT '$i'")
+          }
+          def listFiles(path: File): List[String] = {
+            val dir = path.listFiles()
+            val folders = dir.filter(_.isDirectory).toList
+            val filePaths = dir.map(_.getName).toList
+            folders.flatMap(listFiles) ++: filePaths
+          }
+          // expect 2 files left: `.part-00000-random-uuid.crc` and `part-00000-random-uuid`
+          assert(listFiles(tmpDir).length == 2)
+        }
+      }
+    }
+
+    test(s"$version: SPARK-13709: reading partitioned Avro table with nested schema") {
+      withTempDir { dir =>
+        val path = dir.toURI.toString
+        val tableName = "spark_13709"
+        val tempTableName = "spark_13709_temp"
+
+        new File(dir.getAbsolutePath, tableName).mkdir()
+        new File(dir.getAbsolutePath, tempTableName).mkdir()
+
+        val avroSchema =
+          """{
+            |  "name": "test_record",
+            |  "type": "record",
+            |  "fields": [ {
+            |    "name": "f0",
+            |    "type": "int"
+            |  }, {
+            |    "name": "f1",
+            |    "type": {
+            |      "type": "record",
+            |      "name": "inner",
+            |      "fields": [ {
+            |        "name": "f10",
+            |        "type": "int"
+            |      }, {
+            |        "name": "f11",
+            |        "type": "double"
+            |      } ]
+            |    }
+            |  } ]
+            |}
+          """.stripMargin
+
+        withTable(tableName, tempTableName) {
+          // Creates the external partitioned Avro table to be tested.
+          sql(
+            s"""CREATE EXTERNAL TABLE $tableName
+               |PARTITIONED BY (ds STRING)
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |LOCATION '$path/$tableName'
+               |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+          )
+
+          // Creates an temporary Avro table used to prepare testing Avro file.
+          sql(
+            s"""CREATE EXTERNAL TABLE $tempTableName
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+               |STORED AS
+               |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+               |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+               |LOCATION '$path/$tempTableName'
+               |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+          )
+
+          // Generates Avro data.
+          sql(s"INSERT OVERWRITE TABLE $tempTableName SELECT 1, STRUCT(2, 2.5)")
+
+          // Adds generated Avro data as a new partition to the testing table.
+          sql(s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
+
+          // The following query fails before SPARK-13709 is fixed. This is because when reading
+          // data from table partitions, Avro deserializer needs the Avro schema, which is defined
+          // in table property "avro.schema.literal". However, we only initializes the deserializer
+          // using partition properties, which doesn't include the wanted property entry. Merging
+          // two sets of properties solves the problem.
+          checkAnswer(
+            sql(s"SELECT * FROM $tableName"),
+            Row(1, Row(2, 2.5D), "foo")
+          )
+        }
+      }
+    }
+
+    test(s"$version: CTAS for managed data source tables") {
+      withTable("t", "t1") {
+        import spark.implicits._
+
+        val tPath = new Path(spark.sessionState.conf.warehousePath, "t")
+        Seq("1").toDF("a").write.saveAsTable("t")
+        val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+
+        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
+        checkAnswer(spark.table("t"), Row("1") :: Nil)
+
+        val t1Path = new Path(spark.sessionState.conf.warehousePath, "t1")
+        spark.sql("create table t1 using parquet as select 2 as a")
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
+
+        assert(table1.location.stripSuffix("/") == expectedPath1)
+        assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
+        checkAnswer(spark.table("t1"), Row(2) :: Nil)
+      }
+    }
+    // TODO: add more tests.
   }
 }

@@ -26,9 +26,9 @@ import org.apache.spark.util.Utils
 /**
  * User specified options for file streams.
  */
-class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
+class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   val maxFilesPerTrigger: Option[Int] = parameters.get("maxFilesPerTrigger").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).getOrElse {
@@ -53,4 +53,18 @@ class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
   /** Options as specified by the user, in a case-insensitive map, without "path" set. */
   val optionMapWithoutPath: Map[String, String] =
     parameters.filterKeys(_ != "path")
+
+  /**
+   * Whether to scan latest files first. If it's true, when the source finds unprocessed files in a
+   * trigger, it will first process the latest files.
+   */
+  val latestFirst: Boolean = parameters.get("latestFirst").map { str =>
+    try {
+      str.toBoolean
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new IllegalArgumentException(
+          s"Invalid value '$str' for option 'latestFirst', must be 'true' or 'false'")
+    }
+  }.getOrElse(false)
 }

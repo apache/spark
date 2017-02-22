@@ -180,16 +180,7 @@ class PlanParserSuite extends PlanTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifNotExists: Boolean = false): LogicalPlan =
-      InsertIntoTable(
-        table("s"), partition, plan,
-        OverwriteOptions(
-          overwrite,
-          if (overwrite && partition.nonEmpty) {
-            partition.map(kv => (kv._1, kv._2.get))
-          } else {
-            Map.empty
-          }),
-        ifNotExists)
+      InsertIntoTable(table("s"), partition, plan, overwrite, ifNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -205,9 +196,9 @@ class PlanParserSuite extends PlanTest {
     val plan2 = table("t").where('x > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       InsertIntoTable(
-        table("s"), Map.empty, plan.limit(1), OverwriteOptions(false), ifNotExists = false).union(
+        table("s"), Map.empty, plan.limit(1), false, ifNotExists = false).union(
         InsertIntoTable(
-          table("u"), Map.empty, plan2, OverwriteOptions(false), ifNotExists = false)))
+          table("u"), Map.empty, plan2, false, ifNotExists = false)))
   }
 
   test ("insert with if not exists") {
@@ -501,5 +492,53 @@ class PlanParserSuite extends PlanTest {
     // !> is equivalent to <=
     assertEqual("select a, b from db.c where x !> 1",
       table("db", "c").where('x <= 1).select('a, 'b))
+  }
+
+  test("select hint syntax") {
+    // Hive compatibility: Missing parameter raises ParseException.
+    val m = intercept[ParseException] {
+      parsePlan("SELECT /*+ HINT() */ * FROM t")
+    }.getMessage
+    assert(m.contains("no viable alternative at input"))
+
+    // Hive compatibility: No database.
+    val m2 = intercept[ParseException] {
+      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
+    }.getMessage
+    assert(m2.contains("mismatched input '.' expecting {')', ','}"))
+
+    // Disallow space as the delimiter.
+    val m3 = intercept[ParseException] {
+      parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
+    }.getMessage
+    assert(m3.contains("mismatched input 'b' expecting {')', ','}"))
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT */ * FROM t"),
+      Hint("HINT", Seq.empty, table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),
+      Hint("BROADCASTJOIN", Seq("u"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
+      Hint("MAPJOIN", Seq("u"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
+      Hint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
+      Hint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
+      Hint("MAPJOIN", Seq("default.t"), table("default.t").select(star())))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
+      Hint("MAPJOIN", Seq("t"), table("t").where(Literal(true)).groupBy('a)('a)).orderBy('a.asc))
   }
 }

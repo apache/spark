@@ -279,7 +279,7 @@ object GradientDescent extends Logging {
   }
 
   /**
-   * Alias of [[runMiniBatchSGD]] with convergenceTol set to default value of 0.001.
+   * Alias of `runMiniBatchSGD` with convergenceTol set to default value of 0.001.
    */
   def runMiniBatchSGD(
       data: RDD[(Double, Vector)],

@@ -505,6 +505,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(distributedModel.topicConcentration === sameDistributedModel.topicConcentration)
       assert(distributedModel.gammaShape === sameDistributedModel.gammaShape)
       assert(distributedModel.globalTopicTotals === sameDistributedModel.globalTopicTotals)
+      assert(distributedModel.logLikelihood ~== sameDistributedModel.logLikelihood absTol 1e-6)
+      assert(distributedModel.logPrior ~== sameDistributedModel.logPrior absTol 1e-6)
 
       val graph = distributedModel.graph
       val sameGraph = sameDistributedModel.graph

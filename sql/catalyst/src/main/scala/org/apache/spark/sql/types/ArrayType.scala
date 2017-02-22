@@ -49,7 +49,7 @@ object ArrayType extends AbstractDataType {
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *
- * Please use [[DataTypes.createArrayType()]] to create a specific instance.
+ * Please use `DataTypes.createArrayType()` to create a specific instance.
  *
  * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
  * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
@@ -78,10 +78,10 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       ("containsNull" -> containsNull)
 
   /**
-   * The default size of a value of the ArrayType is 100 * the default size of the element type.
-   * (We assume that there are 100 elements).
+   * The default size of a value of the ArrayType is the default size of the element type.
+   * We assume that there is only 1 element on average in an array. See SPARK-18853.
    */
-  override def defaultSize: Int = 100 * elementType.defaultSize
+  override def defaultSize: Int = 1 * elementType.defaultSize
 
   override def simpleString: String = s"array<${elementType.simpleString}>"
 

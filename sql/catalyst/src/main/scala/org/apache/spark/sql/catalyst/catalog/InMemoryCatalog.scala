@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -228,9 +229,22 @@ class InMemoryCatalog(
     if (tableExists(db, table)) {
       val tableMeta = getTable(db, table)
       if (tableMeta.tableType == CatalogTableType.MANAGED) {
+        // Delete the data/directory for each partition
+        val locationAllParts = catalog(db).tables(table).partitions.values.toSeq.map(_.location)
+        locationAllParts.foreach { loc =>
+          val partitionPath = new Path(loc)
+          try {
+            val fs = partitionPath.getFileSystem(hadoopConfig)
+            fs.delete(partitionPath, true)
+          } catch {
+            case e: IOException =>
+              throw new SparkException(s"Unable to delete partition path $partitionPath", e)
+          }
+        }
         assert(tableMeta.storage.locationUri.isDefined,
           "Managed table should always have table location, as we will assign a default location " +
             "to it if it doesn't have one.")
+        // Delete the data/directory of the table
         val dir = new Path(tableMeta.location)
         try {
           val fs = dir.getFileSystem(hadoopConfig)
@@ -311,7 +325,8 @@ class InMemoryCatalog(
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean): Unit = {
+      holdDDLTime: Boolean,
+      isSrcLocal: Boolean): Unit = {
     throw new UnsupportedOperationException("loadTable is not implemented")
   }
 
@@ -322,7 +337,8 @@ class InMemoryCatalog(
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
       holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean): Unit = {
+      inheritTableSpecs: Boolean,
+      isSrcLocal: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
   }
 
@@ -486,6 +502,19 @@ class InMemoryCatalog(
     } else {
       Option(catalog(db).tables(table).partitions(spec))
     }
+  }
+
+  override def listPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = synchronized {
+    val partitionColumnNames = getTable(db, table).partitionColumnNames
+
+    listPartitions(db, table, partialSpec).map { partition =>
+      partitionColumnNames.map { name =>
+        escapePathName(name) + "=" + escapePathName(partition.spec(name))
+      }.mkString("/")
+    }.sorted
   }
 
   override def listPartitions(

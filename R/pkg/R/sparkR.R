@@ -410,6 +410,30 @@ sparkR.session <- function(
   sparkSession
 }
 
+#' Get the URL of the SparkUI instance for the current active SparkSession
+#'
+#' Get the URL of the SparkUI instance for the current active SparkSession.
+#'
+#' @return the SparkUI URL, or NA if it is disabled, or not started.
+#' @rdname sparkR.uiWebUrl
+#' @name sparkR.uiWebUrl
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' url <- sparkR.uiWebUrl()
+#' }
+#' @note sparkR.uiWebUrl since 2.1.1
+sparkR.uiWebUrl <- function() {
+  sc <- sparkR.callJMethod(getSparkContext(), "sc")
+  u <- callJMethod(sc, "uiWebUrl")
+  if (callJMethod(u, "isDefined")) {
+    callJMethod(u, "get")
+  } else {
+    NA
+  }
+}
+
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
@@ -427,7 +451,7 @@ sparkR.session <- function(
 #' @method setJobGroup default
 setJobGroup.default <- function(groupId, description, interruptOnCancel) {
   sc <- getSparkContext()
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  invisible(callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel))
 }
 
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
@@ -457,7 +481,7 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
 #' @method clearJobGroup default
 clearJobGroup.default <- function() {
   sc <- getSparkContext()
-  callJMethod(sc, "clearJobGroup")
+  invisible(callJMethod(sc, "clearJobGroup"))
 }
 
 clearJobGroup <- function(sc) {
@@ -484,7 +508,7 @@ clearJobGroup <- function(sc) {
 #' @method cancelJobGroup default
 cancelJobGroup.default <- function(groupId) {
   sc <- getSparkContext()
-  callJMethod(sc, "cancelJobGroup", groupId)
+  invisible(callJMethod(sc, "cancelJobGroup", groupId))
 }
 
 cancelJobGroup <- function(sc, groupId) {
@@ -564,13 +588,11 @@ processSparkPackages <- function(packages) {
 sparkCheckInstall <- function(sparkHome, master, deployMode) {
   if (!isSparkRShell()) {
     if (!is.na(file.info(sparkHome)$isdir)) {
-      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
-      message(msg)
+      message("Spark package found in SPARK_HOME: ", sparkHome)
       NULL
     } else {
       if (interactive() || isMasterLocal(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ", sparkHome)
-        message(msg)
+        message("Spark not found in SPARK_HOME: ", sparkHome)
         packageLocalDir <- install.spark()
         packageLocalDir
       } else if (isClientMode(master) || deployMode == "client") {

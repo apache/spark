@@ -18,17 +18,20 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
-import java.util.Locale
+import java.util.{Locale, TimeZone}
 
+import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[csv] class CSVOptions(@transient private val parameters: CaseInsensitiveMap)
+private[csv] class CSVOptions(
+    @transient private val parameters: CaseInsensitiveMap[String], defaultTimeZoneId: String)
   extends Logging with Serializable {
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String], defaultTimeZoneId: String) =
+    this(CaseInsensitiveMap(parameters), defaultTimeZoneId)
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -68,7 +71,7 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(
+  val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
@@ -105,13 +108,15 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
     name.map(CompressionCodecs.getCodecClassName)
   }
 
+  val timeZone: TimeZone = TimeZone.getTimeZone(parameters.getOrElse("timeZone", defaultTimeZoneId))
+
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
     FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), Locale.US)
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
 
   val maxColumns = getInt("maxColumns", 20480)
 
@@ -126,13 +131,37 @@ private[csv] class CSVOptions(@transient private val parameters: CaseInsensitive
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
-}
 
-object CSVOptions {
+  def asWriterSettings: CsvWriterSettings = {
+    val writerSettings = new CsvWriterSettings()
+    val format = writerSettings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    writerSettings.setNullValue(nullValue)
+    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setSkipEmptyLines(true)
+    writerSettings.setQuoteAllFields(quoteAll)
+    writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings
+  }
 
-  def apply(): CSVOptions = new CSVOptions(new CaseInsensitiveMap(Map.empty))
-
-  def apply(paramName: String, paramValue: String): CSVOptions = {
-    new CSVOptions(Map(paramName -> paramValue))
+  def asParserSettings: CsvParserSettings = {
+    val settings = new CsvParserSettings()
+    val format = settings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
+    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
+    settings.setReadInputOnSeparateThread(false)
+    settings.setInputBufferSize(inputBufferSize)
+    settings.setMaxColumns(maxColumns)
+    settings.setNullValue(nullValue)
+    settings.setMaxCharsPerColumn(maxCharsPerColumn)
+    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings
   }
 }
