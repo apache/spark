@@ -76,7 +76,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
-    visit(ctx.dataType).asInstanceOf[DataType]
+    visitSparkDataType(ctx.dataType)
   }
 
   /* ********************************************************************************************
@@ -996,7 +996,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), typedVisit(ctx.dataType))
+    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
   }
 
   /**
@@ -1415,6 +1415,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * DataType parsing
    * ******************************************************************************************** */
   /**
+   * Create a Spark DataType.
+   */
+  private def visitSparkDataType(ctx: DataTypeContext): DataType = {
+    HiveStringType.replaceCharType(typedVisit(ctx))
+  }
+
+  /**
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
@@ -1428,8 +1435,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => TimestampType
-      case ("char" | "varchar" | "string", Nil) => StringType
-      case ("char" | "varchar", _ :: Nil) => StringType
+      case ("string", Nil) => StringType
+      case ("char", length :: Nil) => CharType(length.getText.toInt)
+      case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
       case ("binary", Nil) => BinaryType
       case ("decimal", Nil) => DecimalType.USER_DEFAULT
       case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
@@ -1451,7 +1459,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        createStructType(ctx.complexColTypeList())
+        StructType(Option(ctx.complexColTypeList).toSeq.flatMap(visitComplexColTypeList))
     }
   }
 
@@ -1470,7 +1478,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a [[StructField]] from a column definition.
+   * Create a top level [[StructField]] from a column definition.
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
@@ -1481,19 +1489,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       builder.putString("comment", string(STRING))
     }
     // Add Hive type string to metadata.
-    dataType match {
-      case p: PrimitiveDataTypeContext =>
-        p.identifier.getText.toLowerCase match {
-          case "varchar" | "char" =>
-            builder.putString(HIVE_TYPE_STRING, dataType.getText.toLowerCase)
-          case _ =>
-        }
-      case _ =>
-    }
+    val rawDataType = typedVisit[DataType](ctx.dataType)
+    builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
 
     StructField(
       identifier.getText,
-      typedVisit(dataType),
+      HiveStringType.replaceCharType(rawDataType),
       nullable = true,
       builder.build())
   }
