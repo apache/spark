@@ -92,6 +92,11 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
   def tableDir: File = {
     val identifier = spark.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
+    val x = spark.sessionState.catalog.defaultTablePath(identifier)
+    val y = s"file:$x"
+    val z = URI.create(y)
+    println(s"tableDir $x,$y,$z")
+
     new File(URI.create(s"file:${spark.sessionState.catalog.defaultTablePath(identifier)}"))
   }
 
