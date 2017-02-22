@@ -63,8 +63,34 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   val metadataPath = new Path(path)
   protected val fileManager = createFileManager()
 
-  if (!fileManager.exists(metadataPath)) {
-    fileManager.mkdirs(metadataPath)
+  runUninterruptiblyIfLocal {
+    if (!fileManager.exists(metadataPath)) {
+      fileManager.mkdirs(metadataPath)
+    }
+  }
+
+  private def runUninterruptiblyIfLocal[T](body: => T): T = {
+    if (fileManager.isLocalFileSystem && Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
+      // When using a local file system, some file system APIs like "create" or "mkdirs" must be
+      // called in [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be
+      // disabled.
+      //
+      // This is because there is a potential dead-lock in Hadoop "Shell.runCommand" before
+      // 2.5.0 (HADOOP-10622). If the thread running "Shell.runCommand" is interrupted, then
+      // the thread can get deadlocked. In our case, file system APIs like "create" or "mkdirs"
+      // will call "Shell.runCommand" to set the file permission if using the local file system,
+      // and can get deadlocked if the stream execution thread is stopped by interrupt.
+      //
+      // Hence, we use "runUninterruptibly" here to disable interrupts here. (SPARK-14131)
+      Thread.currentThread.asInstanceOf[UninterruptibleThread].runUninterruptibly {
+        body
+      }
+    } else {
+      // For a distributed file system, such as HDFS or S3, if the network is broken, write
+      // operations may just hang until timeout. We should enable interrupts to allow stopping
+      // the query fast.
+      body
+    }
   }
 
   /**
@@ -109,39 +135,14 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      if (fileManager.isLocalFileSystem) {
-        Thread.currentThread match {
-          case ut: UninterruptibleThread =>
-            // When using a local file system, "writeBatch" must be called on a
-            // [[org.apache.spark.util.UninterruptibleThread]] so that interrupts can be disabled
-            // while writing the batch file.
-            //
-            // This is because Hadoop "Shell.runCommand" swallows InterruptException (HADOOP-14084).
-            // If the user tries to stop a query, and the thread running "Shell.runCommand" is
-            // interrupted, then InterruptException will be dropped and the query will be still
-            // running. (Note: `writeBatch` creates a file using HDFS APIs and will call
-            // "Shell.runCommand" to set the file permission if using the local file system)
-            //
-            // Hence, we make sure that "writeBatch" is called on [[UninterruptibleThread]] which
-            // allows us to disable interrupts here, in order to propagate the interrupt state
-            // correctly. Also see SPARK-19599.
-            ut.runUninterruptibly { writeBatch(batchId, metadata) }
-          case _ =>
-            throw new IllegalStateException(
-              "HDFSMetadataLog.add() on a local file system must be executed on " +
-                "a o.a.spark.util.UninterruptibleThread")
-        }
-      } else {
-        // For a distributed file system, such as HDFS or S3, if the network is broken, write
-        // operations may just hang until timeout. We should enable interrupts to allow stopping
-        // the query fast.
+      runUninterruptiblyIfLocal {
         writeBatch(batchId, metadata)
       }
       true
     }
   }
 
-  def writeTempBatch(metadata: T): Option[Path] = {
+  private def writeTempBatch(metadata: T): Option[Path] = {
     while (true) {
       val tempPath = new Path(metadataPath, s".${UUID.randomUUID.toString}.tmp")
       try {
