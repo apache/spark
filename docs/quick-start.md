@@ -240,7 +240,8 @@ object SimpleApp {
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
-    println("Lines with a: %s, Lines with b: %s".format(numAs, numBs))
+    println(s"Lines with a: $numAs, Lines with b: $numBs")
+    sc.stop()
   }
 }
 {% endhighlight %}
@@ -319,15 +320,12 @@ public class SimpleApp {
     JavaSparkContext sc = new JavaSparkContext(conf);
     JavaRDD<String> logData = sc.textFile(logFile).cache();
 
-    long numAs = logData.filter(new Function<String, Boolean>() {
-      public Boolean call(String s) { return s.contains("a"); }
-    }).count();
-
-    long numBs = logData.filter(new Function<String, Boolean>() {
-      public Boolean call(String s) { return s.contains("b"); }
-    }).count();
+    long numAs = logData.filter(s -> s.contains("a")).count();
+    long numBs = logData.filter(s -> s.contains("b")).count();
 
     System.out.println("Lines with a: " + numAs + ", lines with b: " + numBs);
+    
+    sc.stop();
   }
 }
 {% endhighlight %}
@@ -407,6 +405,8 @@ numAs = logData.filter(lambda s: 'a' in s).count()
 numBs = logData.filter(lambda s: 'b' in s).count()
 
 print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
+
+sc.stop()
 {% endhighlight %}
 
 

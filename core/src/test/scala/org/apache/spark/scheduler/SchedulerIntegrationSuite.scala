@@ -28,6 +28,8 @@ import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
 import org.scalatest.Assertions.AssertionsHelper
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
@@ -157,8 +159,16 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       }
       // When a job fails, we terminate before waiting for all the task end events to come in,
       // so there might still be a running task set.  So we only check these conditions
-      // when the job succeeds
-      assert(taskScheduler.runningTaskSets.isEmpty)
+      // when the job succeeds.
+      // When the final task of a taskset completes, we post
+      // the event to the DAGScheduler event loop before we finish processing in the taskscheduler
+      // thread.  It's possible the DAGScheduler thread processes the event, finishes the job,
+      // and notifies the job waiter before our original thread in the task scheduler finishes
+      // handling the event and marks the taskset as complete.  So its ok if we need to wait a
+      // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
+      eventually(timeout(1 second), interval(10 millis)) {
+        assert(taskScheduler.runningTaskSets.isEmpty)
+      }
       assert(!backend.hasTasks)
     } else {
       assert(failure != null)
@@ -381,17 +391,17 @@ private[spark] abstract class MockBackend(
    * scheduling.
    */
   override def reviveOffers(): Unit = {
-    val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
-    // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
-    // tests from introducing a race if they need it
-    val newTasks = taskScheduler.synchronized {
-      newTaskDescriptions.map { taskDescription =>
+    // Need a lock on the entire scheduler to protect freeCores -- otherwise, multiple threads
+    // may make offers at the same time, though they are using the same set of freeCores.
+    taskScheduler.synchronized {
+      val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
+      // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
+      // tests from introducing a race if they need it.
+      val newTasks = newTaskDescriptions.map { taskDescription =>
         val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
         val task = taskSet.tasks(taskDescription.index)
         (taskDescription, task)
       }
-    }
-    synchronized {
       newTasks.foreach { case (taskDescription, _) =>
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
@@ -620,9 +630,9 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
+    assertDataStructuresEmpty()
     assert(results === (0 until 10).map { idx => idx -> (42 + idx) }.toMap)
     assert(stageToAttempts === Map(0 -> Set(0, 1), 1 -> Set(0, 1)))
-    assertDataStructuresEmpty()
   }
 
   testScheduler("job failure after 4 attempts") {
@@ -634,7 +644,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
-      failure.getMessage.contains("test task failure")
+      assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
   }

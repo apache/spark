@@ -19,20 +19,22 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
- * Interface used to load a streaming [[Dataset]] from external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[SparkSession.readStream]] to access this.
+ * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
+ * key-value stores, etc). Use `SparkSession.readStream` to access this.
  *
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Specifies the input data source format.
@@ -109,12 +111,17 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
 
   /**
-   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
+   * Loads input data stream in as a `DataFrame`, for data streams that don't require a path
    * (e.g. external key-value stores).
    *
    * @since 2.0.0
    */
   def load(): DataFrame = {
+    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
+        "read files of Hive data source directly.")
+    }
+
     val dataSource =
       DataSource(
         sparkSession,
@@ -125,7 +132,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads input in as a [[DataFrame]], for data streams that read from some path.
+   * Loads input in as a `DataFrame`, for data streams that read from some path.
    *
    * @since 2.0.0
    */
@@ -134,7 +141,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads a JSON file stream (one object per line) and returns the result as a [[DataFrame]].
+   * Loads a JSON file stream and returns the results as a `DataFrame`.
+   *
+   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
+   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -173,6 +183,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps.</li>
+   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
+   * per file</li>
    * </ul>
    *
    * @since 2.0.0
@@ -180,11 +194,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def json(path: String): DataFrame = format("json").load(path)
 
   /**
-   * Loads a CSV file stream and returns the result as a [[DataFrame]].
+   * Loads a CSV file stream and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
-   * specify the schema explicitly using [[schema]].
+   * specify the schema explicitly using `schema`.
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
@@ -222,6 +236,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
@@ -242,7 +258,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   def csv(path: String): DataFrame = format("csv").load(path)
 
   /**
-   * Loads a Parquet file stream, returning the result as a [[DataFrame]].
+   * Loads a Parquet file stream, returning the result as a `DataFrame`.
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
    * <ul>
@@ -261,7 +277,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
    * Each line in the text files is a new row in the resulting DataFrame. For example:
@@ -283,6 +299,37 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def text(path: String): DataFrame = format("text").load(path)
 
+  /**
+   * Loads text file(s) and returns a `Dataset` of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
+   *
+   * Each line in the text file is a new element in the resulting Dataset. For example:
+   * {{{
+   *   // Scala:
+   *   spark.readStream.textFile("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   spark.readStream().textFile("/path/to/spark/README.md")
+   * }}}
+   *
+   * You can set the following text-specific options to deal with text files:
+   * <ul>
+   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
+   * considered in every trigger.</li>
+   * </ul>
+   *
+   * @param path input path
+   * @since 2.1.0
+   */
+  def textFile(path: String): Dataset[String] = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new AnalysisException("User specified schema not supported with `textFile`")
+    }
+    text(path).select("value").as[String](sparkSession.implicits.newStringEncoder)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

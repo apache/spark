@@ -114,6 +114,26 @@ public class SparkFirehoseListener implements SparkListenerInterface {
     }
 
     @Override
+    public final void onExecutorBlacklisted(SparkListenerExecutorBlacklisted executorBlacklisted) {
+        onEvent(executorBlacklisted);
+    }
+
+    @Override
+    public final void onExecutorUnblacklisted(SparkListenerExecutorUnblacklisted executorUnblacklisted) {
+        onEvent(executorUnblacklisted);
+    }
+
+    @Override
+    public final void onNodeBlacklisted(SparkListenerNodeBlacklisted nodeBlacklisted) {
+        onEvent(nodeBlacklisted);
+    }
+
+    @Override
+    public final void onNodeUnblacklisted(SparkListenerNodeUnblacklisted nodeUnblacklisted) {
+        onEvent(nodeUnblacklisted);
+    }
+
+    @Override
     public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) {
         onEvent(blockUpdated);
     }

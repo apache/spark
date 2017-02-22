@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{ByteArrayOutputStream, StringWriter}
+import java.io.{ByteArrayOutputStream, CharArrayWriter, StringWriter}
 
 import scala.util.parsing.combinator.RegexParsers
 
@@ -26,7 +26,7 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.json.{JacksonParser, JSONOptions, SparkSQLJsonProcessingException}
+import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.ParseModes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -68,7 +68,7 @@ private[this] object JsonPathParser extends RegexParsers {
   // parse `.name` or `['name']` child expressions
   def named: Parser[List[PathInstruction]] =
     for {
-      name <- '.' ~> "[^\\.\\[]+".r | "[\\'" ~> "[^\\'\\?]+" <~ "\\']"
+      name <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']"
     } yield {
       Key :: Named(name) :: Nil
     }
@@ -109,7 +109,12 @@ private[this] object SharedFactory {
  * of the extracted json object. It will return null if the input json string is invalid.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_txt, path) - Extract a json object from path")
+  usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":"b"}', '$.a');
+       b
+  """)
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -325,7 +330,12 @@ case class GetJsonObject(json: Expression, path: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - like get_json_object, but it takes multiple names and return a tuple. All the input parameters and output column types are string.")
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Return a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
+       1  2
+  """)
 // scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -472,25 +482,91 @@ case class JsonTuple(children: Seq[Expression])
 /**
  * Converts an json input string to a [[StructType]] with the specified schema.
  */
-case class JsonToStruct(schema: StructType, options: Map[String, String], child: Expression)
-  extends Expression with CodegenFallback with ExpectsInputTypes {
+case class JsonToStruct(
+    schema: StructType,
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
+
+  def this(schema: StructType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, None)
 
   @transient
   lazy val parser =
     new JacksonParser(
       schema,
-      "invalid", // Not used since we force fail fast.  Invalid rows will be set to `null`.
-      new JSONOptions(options ++ Map("mode" -> ParseModes.FAIL_FAST_MODE)))
+      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
 
   override def dataType: DataType = schema
-  override def children: Seq[Expression] = child :: Nil
 
-  override def eval(input: InternalRow): Any = {
-    try parser.parse(child.eval(input).toString).head catch {
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(json: Any): Any = {
+    try {
+      parser.parse(
+        json.asInstanceOf[UTF8String],
+        CreateJacksonParser.utf8String,
+        identity[UTF8String]).headOption.orNull
+    } catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+}
+
+/**
+ * Converts a [[StructType]] to a json output string.
+ */
+case class StructToJson(
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+  override def nullable: Boolean = true
+
+  def this(options: Map[String, String], child: Expression) = this(options, child, None)
+
+  @transient
+  lazy val writer = new CharArrayWriter()
+
+  @transient
+  lazy val gen =
+    new JacksonGenerator(
+      child.dataType.asInstanceOf[StructType],
+      writer,
+      new JSONOptions(options, timeZoneId.get))
+
+  override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (StructType.acceptsType(child.dataType)) {
+      try {
+        JacksonUtils.verifySchema(child.dataType.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName requires that the expression is a struct expression.")
+    }
+  }
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(row: Any): Any = {
+    gen.write(row.asInstanceOf[InternalRow])
+    gen.flush()
+    val json = writer.toString
+    writer.reset()
+    UTF8String.fromString(json)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 }

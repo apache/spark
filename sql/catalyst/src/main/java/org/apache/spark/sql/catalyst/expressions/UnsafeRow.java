@@ -59,7 +59,7 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends MutableRow implements Externalizable, KryoSerializable {
+public final class UnsafeRow extends InternalRow implements Externalizable, KryoSerializable {
 
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
@@ -196,7 +196,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     assertIndexIsValid(i);
     BitSetMethods.set(baseObject, baseOffset, i);
     // To preserve row equality, zero out the value when setting the column to null.
-    // Since this row does does not currently support updates to variable-length values, we don't
+    // Since this row does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     Platform.putLong(baseObject, getFieldOffset(i), 0);
   }
@@ -578,12 +578,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
-    } else if (!(other instanceof InternalRow)) {
-      return false;
-    } else {
-      throw new IllegalArgumentException(
-        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
+    return false;
   }
 
   /**

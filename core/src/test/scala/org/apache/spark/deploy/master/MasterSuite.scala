@@ -432,7 +432,7 @@ class MasterSuite extends SparkFunSuite
     val master = makeMaster()
     master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
     eventually(timeout(10.seconds)) {
-      val masterState = master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
       assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
     }
 
@@ -447,7 +447,7 @@ class MasterSuite extends SparkFunSuite
       }
     })
 
-    master.self.ask(
+    master.self.send(
       RegisterWorker("1", "localhost", 9999, fakeWorker, 10, 1024, "http://localhost:8080"))
     val executors = (0 until 3).map { i =>
       new ExecutorDescription(appId = i.toString, execId = i, 2, ExecutorState.RUNNING)

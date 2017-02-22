@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalog
 
-import org.apache.spark.annotation.Experimental
+import scala.collection.JavaConverters._
+
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
@@ -27,6 +29,7 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 2.0.0
  */
+@InterfaceStability.Stable
 abstract class Catalog {
 
   /**
@@ -186,89 +189,212 @@ abstract class Catalog {
   def functionExists(dbName: String, functionName: String): Boolean
 
   /**
-   * :: Experimental ::
-   * Creates an external table from the given path and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @since 2.0.0
    */
-  @Experimental
-  def createExternalTable(tableName: String, path: String): DataFrame
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    createTable(tableName, path)
+  }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source
-   * and returns the corresponding DataFrame.
+   * Creates a table from the given path and returns the corresponding DataFrame.
+   * It will use the default data source configured by spark.sql.sources.default.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(tableName: String, path: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
    *
    * @since 2.0.0
    */
-  @Experimental
-  def createExternalTable(tableName: String, path: String, source: String): DataFrame
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
+    createTable(tableName, path, source)
+  }
 
   /**
    * :: Experimental ::
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table from the given path based on a data source and returns the corresponding
+   * DataFrame.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(tableName: String, path: String, source: String): DataFrame
+
+  /**
+   * Creates a table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("use createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
-      options: java.util.Map[String, String]): DataFrame
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+      tableName: String,
+      source: String,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table from the given path based on a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, options)
+  }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates an external table from the given path based on a data source and a set of options.
+   * Creates a table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
-  def createExternalTable(
+  @InterfaceStability.Evolving
+  def createTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame
 
   /**
    * :: Experimental ::
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("use createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
-      options: java.util.Map[String, String]): DataFrame
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
+
+  /**
+   * :: Experimental ::
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.2.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options.asScala.toMap)
+  }
+
+  /**
+   * (Scala-specific)
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @since 2.0.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, schema, options)
+  }
 
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
+   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
    *
-   * @since 2.0.0
+   * @since 2.2.0
    */
   @Experimental
-  def createExternalTable(
+  @InterfaceStability.Evolving
+  def createTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame
 
   /**
-   * Drops the temporary view with the given view name in the catalog.
+   * Drops the local temporary view with the given view name in the catalog.
    * If the view has been cached before, then it will also be uncached.
    *
+   * Local temporary view is session-scoped. Its lifetime is the lifetime of the session that
+   * created it, i.e. it will be automatically dropped when the session terminates. It's not
+   * tied to any databases, i.e. we can't use `db1.view1` to reference a local temporary view.
+   *
+   * Note that, the return type of this method was Unit in Spark 2.0, but changed to Boolean
+   * in Spark 2.1.
+   *
    * @param viewName the name of the view to be dropped.
+   * @return true if the view is dropped successfully, false otherwise.
    * @since 2.0.0
    */
-  def dropTempView(viewName: String): Unit
+  def dropTempView(viewName: String): Boolean
+
+  /**
+   * Drops the global temporary view with the given view name in the catalog.
+   * If the view has been cached before, then it will also be uncached.
+   *
+   * Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+   * i.e. it will be automatically dropped when the application terminates. It's tied to a system
+   * preserved database `global_temp`, and we must use the qualified name to refer a global temp
+   * view, e.g. `SELECT * FROM global_temp.view1`.
+   *
+   * @param viewName the name of the view to be dropped.
+   * @return true if the view is dropped successfully, false otherwise.
+   * @since 2.1.0
+   */
+  def dropGlobalTempView(viewName: String): Boolean
+
+  /**
+   * Recover all the partitions in the directory of a table and update the catalog.
+   *
+   * @since 2.1.1
+   */
+  def recoverPartitions(tableName: String): Unit
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -313,7 +439,8 @@ abstract class Catalog {
 
   /**
    * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
-   * contains the given data source path.
+   * contains the given data source path. Path matching is by prefix, i.e. "/" would invalidate
+   * everything that is cached.
    *
    * @since 2.0.0
    */

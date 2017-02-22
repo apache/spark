@@ -305,9 +305,6 @@ def get_hadoop_profiles(hadoop_version):
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop2.2": ["-Phadoop-2.2"],
-        "hadoop2.3": ["-Phadoop-2.3"],
-        "hadoop2.4": ["-Phadoop-2.4"],
         "hadoop2.6": ["-Phadoop-2.6"],
         "hadoop2.7": ["-Phadoop-2.7"],
     }
@@ -432,6 +429,12 @@ def run_python_tests(test_modules, parallelism):
     run_cmd(command)
 
 
+def run_python_packaging_tests():
+    set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
+    command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+    run_cmd(command)
+
+
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
@@ -489,9 +492,6 @@ def main():
 
     java_version = determine_java_version(java_exe)
 
-    if java_version.minor < 8:
-        print("[warn] Java 8 tests will not run because JDK version is < 1.8.")
-
     # install SparkR
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
@@ -502,14 +502,14 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
-        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.3")
+        hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop2.6")
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.6")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
@@ -583,6 +583,7 @@ def main():
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
         run_python_tests(modules_with_python_tests, opts.parallelism)
+        run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()
 

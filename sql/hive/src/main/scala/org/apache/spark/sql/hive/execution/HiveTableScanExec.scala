@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * The Hive table scan operator.  Column and partition pruning are both handled.
  *
  * @param requestedAttributes Attributes to be fetched from the Hive table.
- * @param relation The Hive table be be scanned.
+ * @param relation The Hive table be scanned.
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]
@@ -113,7 +113,7 @@ case class HiveTableScanExec(
       .mkString(",")
 
     hiveConf.set(serdeConstants.LIST_COLUMN_TYPES, columnTypeNames)
-    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.attributes.map(_.name).mkString(","))
+    hiveConf.set(serdeConstants.LIST_COLUMNS, relation.dataColKeys.map(_.name).mkString(","))
   }
 
   /**
@@ -146,16 +146,27 @@ case class HiveTableScanExec(
         hadoopReader.makeRDDForTable(relation.hiveQlTable)
       }
     } else {
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we do not need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = partitionPruningPred.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+
       Utils.withDummyCallSite(sqlContext.sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(
-          prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
+          prunePartitions(relation.getHiveQlPartitions(normalizedFilters)))
       }
     }
     val numOutputRows = longMetric("numOutputRows")
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema
-    rdd.mapPartitionsInternal { iter =>
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(outputSchema)
+      proj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

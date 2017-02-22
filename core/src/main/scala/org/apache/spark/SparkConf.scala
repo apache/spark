@@ -42,10 +42,10 @@ import org.apache.spark.util.Utils
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
  *
- * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
- * by the user. Spark does not support modifying the configuration at runtime.
- *
  * @param loadDefaults whether to also load values from Java system properties
+ *
+ * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
+ * by the user. Spark does not support modifying the configuration at runtime.
  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
 
@@ -262,7 +262,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then seconds are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the time parameter is not set
    */
   def getTimeAsSeconds(key: String): Long = {
     Utils.timeStringAsSeconds(get(key))
@@ -279,7 +279,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then milliseconds are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the time parameter is not set
    */
   def getTimeAsMs(key: String): Long = {
     Utils.timeStringAsMs(get(key))
@@ -296,7 +296,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then bytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsBytes(key: String): Long = {
     Utils.byteStringAsBytes(get(key))
@@ -320,7 +320,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsKb(key: String): Long = {
     Utils.byteStringAsKb(get(key))
@@ -337,7 +337,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Mebibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsMb(key: String): Long = {
     Utils.byteStringAsMb(get(key))
@@ -354,7 +354,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Gibibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsGb(key: String): Long = {
     Utils.byteStringAsGb(get(key))
@@ -378,7 +378,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
-  /** Get all parameters that start with `prefix` */
+  /**
+   * Get all parameters that start with `prefix`
+   */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) }
       .map { case (k, v) => (k.substring(prefix.length), v) }
@@ -605,6 +607,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           "\"client\".")
       }
     }
+
+    val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
+    require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
+      s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
   }
 
   /**
@@ -636,7 +642,9 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more."),
+      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
+        "Please use the new blacklisting options, spark.blacklist.*")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -695,8 +703,10 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.message.maxSize" -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
-      AlternateConfig("spark.yarn.jar", "2.0"))
-    )
+      AlternateConfig("spark.yarn.jar", "2.0")),
+    "spark.yarn.access.hadoopFileSystems" -> Seq(
+      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+  )
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
@@ -720,6 +730,7 @@ private[spark] object SparkConf extends Logging {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.ssl") ||
     name.startsWith("spark.rpc") ||
+    name.startsWith("spark.network") ||
     isSparkPortConf(name)
   }
 

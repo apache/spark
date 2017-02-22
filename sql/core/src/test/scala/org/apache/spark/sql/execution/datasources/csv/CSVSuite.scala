@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -28,6 +29,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -184,16 +186,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test different encoding") {
-    // scalastyle:off
-    spark.sql(
-      s"""
-         |CREATE TEMPORARY TABLE carsTable USING csv
-         |OPTIONS (path "${testFile(carsFile8859)}", header "true",
-         |charset "iso-8859-1", delimiter "þ")
-      """.stripMargin.replaceAll("\n", " "))
-    // scalastyle:on
-
-    verifyCars(spark.table("carsTable"), withHeader = true)
+    withView("carsTable") {
+      // scalastyle:off
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable USING csv
+          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
+          |charset "iso-8859-1", delimiter "þ")
+         """.stripMargin.replaceAll("\n", " "))
+      // scalastyle:on
+      verifyCars(spark.table("carsTable"), withHeader = true)
+    }
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
@@ -211,27 +214,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("DDL test with tab separated file") {
-    spark.sql(
-      s"""
-         |CREATE TEMPORARY TABLE carsTable USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable USING csv
+          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+         """.stripMargin.replaceAll("\n", " "))
 
-    verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
+      verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
+    }
   }
 
   test("DDL test parsing decimal type") {
-    spark.sql(
-      s"""
-         |CREATE TEMPORARY TABLE carsTable
-         |(yearMade double, makeName string, modelName string, priceTag decimal,
-         | comments string, grp string)
-         |USING csv
-         |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable
+          |(yearMade double, makeName string, modelName string, priceTag decimal,
+          | comments string, grp string)
+          |USING csv
+          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+         """.stripMargin.replaceAll("\n", " "))
 
-    assert(
-      spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().size === 1)
+      assert(
+        spark.sql("SELECT makeName FROM carsTable where priceTag > 60000").collect().size === 1)
+    }
   }
 
   test("test for DROPMALFORMED parsing mode") {
@@ -298,28 +305,34 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("DDL test with empty file") {
-    spark.sql(s"""
-           |CREATE TEMPORARY TABLE carsTable
-           |(yearMade double, makeName string, modelName string, comments string, grp string)
-           |USING csv
-           |OPTIONS (path "${testFile(emptyFile)}", header "false")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable
+          |(yearMade double, makeName string, modelName string, comments string, grp string)
+          |USING csv
+          |OPTIONS (path "${testFile(emptyFile)}", header "false")
+         """.stripMargin.replaceAll("\n", " "))
 
-    assert(spark.sql("SELECT count(*) FROM carsTable").collect().head(0) === 0)
+      assert(spark.sql("SELECT count(*) FROM carsTable").collect().head(0) === 0)
+    }
   }
 
   test("DDL test with schema") {
-    spark.sql(s"""
-           |CREATE TEMPORARY TABLE carsTable
-           |(yearMade double, makeName string, modelName string, comments string, blank string)
-           |USING csv
-           |OPTIONS (path "${testFile(carsFile)}", header "true")
-      """.stripMargin.replaceAll("\n", " "))
+    withView("carsTable") {
+      spark.sql(
+        s"""
+          |CREATE TEMPORARY VIEW carsTable
+          |(yearMade double, makeName string, modelName string, comments string, blank string)
+          |USING csv
+          |OPTIONS (path "${testFile(carsFile)}", header "true")
+         """.stripMargin.replaceAll("\n", " "))
 
-    val cars = spark.table("carsTable")
-    verifyCars(cars, withHeader = true, checkHeader = false, checkValues = false)
-    assert(
-      cars.schema.fieldNames === Array("yearMade", "makeName", "modelName", "comments", "blank"))
+      val cars = spark.table("carsTable")
+      verifyCars(cars, withHeader = true, checkHeader = false, checkValues = false)
+      assert(
+        cars.schema.fieldNames === Array("yearMade", "makeName", "modelName", "comments", "blank"))
+    }
   }
 
   test("save csv") {
@@ -486,7 +499,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US)
     val expected =
       Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
@@ -508,7 +521,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .select("date")
       .collect()
 
-    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm", Locale.US)
     val expected = Seq(
       new Date(dateFormat.parse("26/08/2015 18:00").getTime),
       new Date(dateFormat.parse("27/10/2014 18:30").getTime),
@@ -727,7 +740,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", "false")
         .load(iso8601timestampsPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ", Locale.US)
       val expectedTimestamps = timestamps.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -760,7 +773,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", "false")
         .load(iso8601datesPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd")
+      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
       val expectedDates = dates.collect().map { r =>
         // This should be ISO8601 formatted string.
         Row(iso8501.format(r.toSeq.head))
@@ -826,7 +839,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Write timestamps correctly with dateFormat option") {
+  test("Write timestamps correctly with timestampFormat option") {
     withTempDir { dir =>
       // With dateFormat option.
       val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.csv"
@@ -854,6 +867,95 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         Row("2016/01/28 20:00"))
 
       checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
+    }
+  }
+
+  test("Write timestamps correctly with timestampFormat option and timeZone option") {
+    withTempDir { dir =>
+      // With dateFormat option and timeZone option.
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.csv"
+      val timestampsWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("timestampFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      timestampsWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
+        .option("timeZone", "GMT")
+        .save(timestampsWithFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringTimestampsWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(timestampsWithFormatPath)
+      val expectedStringTimestampsWithFormat = Seq(
+        Row("2015/08/27 01:00"),
+        Row("2014/10/28 01:30"),
+        Row("2016/01/29 04:00"))
+
+      checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
+
+      val readBack = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("timestampFormat", "yyyy/MM/dd HH:mm")
+        .option("timeZone", "GMT")
+        .load(timestampsWithFormatPath)
+
+      checkAnswer(readBack, timestampsWithFormat)
+    }
+  }
+
+  test("load duplicated field names consistently with null or empty strings - case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTempPath { path =>
+        Seq("a,a,c,A,b,B").toDF().write.text(path.getAbsolutePath)
+        val actualSchema = spark.read
+          .format("csv")
+          .option("header", true)
+          .load(path.getAbsolutePath)
+          .schema
+        val fields = Seq("a0", "a1", "c", "A", "b", "B").map(StructField(_, StringType, true))
+        val expectedSchema = StructType(fields)
+        assert(actualSchema == expectedSchema)
+      }
+    }
+  }
+
+  test("load duplicated field names consistently with null or empty strings - case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        Seq("a,A,c,A,b,B").toDF().write.text(path.getAbsolutePath)
+        val actualSchema = spark.read
+          .format("csv")
+          .option("header", true)
+          .load(path.getAbsolutePath)
+          .schema
+        val fields = Seq("a0", "A1", "c", "A3", "b4", "B5").map(StructField(_, StringType, true))
+        val expectedSchema = StructType(fields)
+        assert(actualSchema == expectedSchema)
+      }
+    }
+  }
+
+  test("load null when the schema is larger than parsed tokens ") {
+    withTempPath { path =>
+      Seq("1").toDF().write.text(path.getAbsolutePath)
+      val schema = StructType(
+        StructField("a", IntegerType, true) ::
+        StructField("b", IntegerType, true) :: Nil)
+      val df = spark.read
+        .schema(schema)
+        .option("header", "false")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Row(1, null))
     }
   }
 }

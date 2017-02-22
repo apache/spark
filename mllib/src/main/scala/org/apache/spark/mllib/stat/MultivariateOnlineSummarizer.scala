@@ -30,12 +30,15 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * the corresponding joint dataset.
  *
  * A numerically stable algorithm is implemented to compute the mean and variance of instances:
- * Reference: [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]]
+ * Reference: <a href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
+ * variance-wiki</a>
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
  *
  * For weighted instances, the unbiased estimation of variance is defined by the reliability
- * weights: [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]].
+ * weights:
+ * see <a href="https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights">
+ * Reliability weights (Wikipedia)</a>.
  */
 @Since("1.1.0")
 @DeveloperApi

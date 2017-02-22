@@ -92,10 +92,9 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
-        val taskDesc = ser.deserialize[TaskDescription](data.value)
+        val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
-          taskDesc.name, taskDesc.serializedTask)
+        executor.launchTask(this, taskDesc)
       }
 
     case KillTask(taskId, _, interruptThread) =>
@@ -200,8 +199,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         new SecurityManager(executorConf),
         clientMode = true)
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val props = driver.askWithRetry[Seq[(String, String)]](RetrieveSparkProps) ++
-        Seq[(String, String)](("spark.app.id", appId))
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
+      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
@@ -221,7 +220,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, port, cores, isLocal = false)
+        driverConf, executorId, hostname, port, cores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))

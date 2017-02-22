@@ -46,8 +46,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     : LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
-      val (joinConditions, others) = conditions.partition(
-        e => !SubqueryExpression.hasCorrelatedSubquery(e))
+      val (joinConditions, others) = conditions.partition(canEvaluateWithinJoin)
       val ((left, leftJoinType), (right, rightJoinType)) = (input(0), input(1))
       val innerJoinType = (leftJoinType, rightJoinType) match {
         case (Inner, Inner) => Inner
@@ -65,7 +64,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val conditionalJoin = rest.find { planJoinPair =>
         val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
-        conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
+        conditions
+          .filterNot(l => l.references.nonEmpty && canEvaluate(l, left))
+          .filterNot(r => r.references.nonEmpty && canEvaluate(r, plan))
           .exists(_.references.subsetOf(refs))
       }
       // pick the next one if no condition left
@@ -73,7 +74,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
-        e => e.references.subsetOf(joinedRefs) && !SubqueryExpression.hasCorrelatedSubquery(e))
+        e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
       val joined = Join(left, right, innerJoinType, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan

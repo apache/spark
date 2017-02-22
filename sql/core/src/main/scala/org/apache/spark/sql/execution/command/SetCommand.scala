@@ -60,6 +60,13 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+    case Some((key @ SetCommand.VariableName(name), Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.conf.set(name, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
@@ -72,7 +79,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAll.map { case (k, v) => Row(k, v) }.toSeq
+        sparkSession.conf.getAll.toSeq.sorted.map { case (k, v) => Row(k, v) }
       }
       (keyValueOutput, runFunc)
 
@@ -80,8 +87,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // SQLConf of the sparkSession.
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
-          Row(key, defaultValue, doc)
+        sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
+          case (key, defaultValue, doc) =>
+            Row(key, Option(defaultValue).getOrElse("<undefined>"), doc)
         }
       }
       val schema = StructType(
@@ -115,6 +123,10 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   override def run(sparkSession: SparkSession): Seq[Row] = runFunc(sparkSession)
 
+}
+
+object SetCommand {
+  val VariableName = """hivevar:([^=]+)""".r
 }
 
 /**

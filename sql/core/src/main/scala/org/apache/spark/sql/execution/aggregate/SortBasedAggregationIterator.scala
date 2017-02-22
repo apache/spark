@@ -49,11 +49,11 @@ class SortBasedAggregationIterator(
    * Creates a new aggregation buffer and initializes buffer values
    * for all aggregate functions.
    */
-  private def newBuffer: MutableRow = {
+  private def newBuffer: InternalRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
-    val genericMutableBuffer = new GenericMutableRow(bufferRowSize)
+    val genericMutableBuffer = new GenericInternalRow(bufferRowSize)
     val useUnsafeBuffer = bufferSchema.map(_.dataType).forall(UnsafeRow.isMutable)
 
     val buffer = if (useUnsafeBuffer) {
@@ -84,7 +84,7 @@ class SortBasedAggregationIterator(
   private[this] var sortedInputHasNewGroup: Boolean = false
 
   // The aggregation buffer used by the sort-based aggregation.
-  private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
+  private[this] val sortBasedAggregationBuffer: InternalRow = newBuffer
 
   // This safe projection is used to turn the input row into safe row. This is necessary
   // because the input row may be produced by unsafe projection in child operator and all the

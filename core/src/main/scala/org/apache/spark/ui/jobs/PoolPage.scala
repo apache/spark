@@ -44,7 +44,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       }
       val shouldShowActiveStages = activeStages.nonEmpty
       val activeStagesTable =
-        new StageTableBase(request, activeStages, "activeStage", parent.basePath, "stages/pool",
+        new StageTableBase(request, activeStages, "", "activeStage", parent.basePath, "stages/pool",
           parent.progressListener, parent.isFairScheduler, parent.killEnabled,
           isFailedStage = false)
 
