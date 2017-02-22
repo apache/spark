@@ -109,12 +109,11 @@ private[hive] class HiveSessionState(
 
   override def clone(sparkSession: SparkSession): HiveSessionState = {
     val sparkContext = sparkSession.sparkContext
-    val confCopy = conf.clone()
-    val copyHelper = SessionState(sparkSession, Some(confCopy))
+    val copyHelper = super.clone(sparkSession)
     val catalogCopy = catalog.clone(
       sparkSession,
-      confCopy,
-      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy),
+      copyHelper.conf,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, copyHelper.conf),
       copyHelper.functionRegistry,
       copyHelper.sqlParser)
     val hiveClient =
@@ -124,18 +123,18 @@ private[hive] class HiveSessionState(
     new HiveSessionState(
       sparkContext,
       sparkSession.sharedState,
-      confCopy,
+      copyHelper.conf,
       copyHelper.experimentalMethods,
       copyHelper.functionRegistry,
       catalogCopy,
       copyHelper.sqlParser,
       hiveClient,
-      HiveSessionState.createAnalyzer(sparkSession, catalogCopy, confCopy),
+      HiveSessionState.createAnalyzer(sparkSession, catalogCopy, copyHelper.conf),
       copyHelper.streamingQueryManager,
       copyHelper.queryExecutionCreator,
       HiveSessionState.createPlannerCreator(
         sparkSession,
-        confCopy,
+        copyHelper.conf,
         copyHelper.experimentalMethods))
   }
 
