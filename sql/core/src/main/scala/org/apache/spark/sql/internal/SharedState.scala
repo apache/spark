@@ -90,10 +90,8 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   // Create the default database if it doesn't exist.
   {
-    // default database set to empty string,
-    // when reload from metastore using warehouse path to replace it
     val defaultDbDefinition = CatalogDatabase(
-      SessionCatalog.DEFAULT_DATABASE, "default database", "", Map())
+      SessionCatalog.DEFAULT_DATABASE, "default database", warehousePath, Map())
     // Initialize default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we

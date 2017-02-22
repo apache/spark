@@ -313,12 +313,11 @@ private[hive] class HiveClientImpl(
   override def createDatabase(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
-    // default database's location always use the warehouse path, here set to emtpy string
     client.createDatabase(
       new HiveDatabase(
         database.name,
         database.description,
-        if (database.name == SessionCatalog.DEFAULT_DATABASE) "" else database.locationUri,
+        database.locationUri,
         Option(database.properties).map(_.asJava).orNull),
         ignoreIfExists)
   }
