@@ -1090,14 +1090,14 @@ object SQLContext {
    */
   private[sql] def beansToRows(
         data: Iterator[_],
-        beanInfo: BeanInfo,
+        beanClass: Class[_],
         attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
-      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+      JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
     val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
       (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
     }
-    data.map{ element =>
+    data.map { element =>
       new GenericInternalRow(
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
       ): InternalRow

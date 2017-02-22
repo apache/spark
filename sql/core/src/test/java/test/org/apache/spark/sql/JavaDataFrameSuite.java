@@ -397,4 +397,21 @@ public class JavaDataFrameSuite {
       Assert.assertTrue(filter4.mightContain(i * 3));
     }
   }
+
+  public static class BeanWithoutGetter implements Serializable {
+    private String a;
+
+    public void setA(String a) {
+      this.a = a;
+    }
+  }
+
+  @Test
+  public void testBeanWithoutGetter() {
+    BeanWithoutGetter bean = new BeanWithoutGetter();
+    List<BeanWithoutGetter> data = Arrays.asList(bean);
+    Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.collectAsList().size(), 1);
+  }
 }

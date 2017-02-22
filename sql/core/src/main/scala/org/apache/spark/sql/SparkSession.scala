@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.beans.Introspector
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
@@ -347,8 +346,7 @@ class SparkSession private(
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
     // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
-      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
+      SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
     }
     Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
   }
@@ -374,8 +372,7 @@ class SparkSession private(
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
     val attrSeq = getSchema(beanClass)
-    val beanInfo = Introspector.getBeanInfo(beanClass)
-    val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
+    val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
