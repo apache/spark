@@ -1285,6 +1285,6 @@ public class JavaDatasetSuite implements Serializable {
     List<EmptyBean> data = Arrays.asList(bean);
     Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
     Assert.assertEquals(df.schema().length(), 0);
-    Assert.assertEquals(df.count(), 1);
+    Assert.assertEquals(df.collectAsList().size(), 1);
   }
 }
