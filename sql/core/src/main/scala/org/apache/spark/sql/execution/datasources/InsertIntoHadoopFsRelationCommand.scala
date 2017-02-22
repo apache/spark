@@ -114,7 +114,8 @@ case class InsertIntoHadoopFsRelationCommand(
     if (doInsertion) {
 
       // Callback for updating metastore partition metadata after the insertion job completes.
-      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+      // and refresh the path in cache
+      def refreshCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
         if (partitionsTrackedByCatalog) {
           val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
           if (newPartitions.nonEmpty) {
@@ -134,7 +135,6 @@ case class InsertIntoHadoopFsRelationCommand(
         }
 
         sparkSession.catalog.refreshByPath(outputPath.toString)
-
       }
 
       FileFormatWriter.write(
@@ -147,7 +147,7 @@ case class InsertIntoHadoopFsRelationCommand(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        refreshFunction = refreshPartitionsCallback,
+        refreshFunction = refreshCallback,
         options = options)
 
       fileIndex.foreach(_.refresh())
