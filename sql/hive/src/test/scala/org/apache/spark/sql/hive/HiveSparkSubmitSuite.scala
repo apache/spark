@@ -334,6 +334,35 @@ class HiveSparkSubmitSuite
     runSparkSubmit(argsForShowTables)
   }
 
+  test("SPARK-19667: create table in default database with HiveEnabled use warehouse path " +
+    "instead of the location of default database") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val warehousePath1 = Utils.createTempDir("wh1")
+    val argsForCreateTable = Seq(
+      "--class", SPARK_19667_CREATE_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-19667",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.warehouse.dir=$warehousePath1",
+      unusedJar.toString)
+    runSparkSubmit(argsForCreateTable)
+
+    val warehousePath2 = Utils.createTempDir("wh2")
+    val argsForShowTables = Seq(
+      "--class", SPARK_19667_VERIFY_TABLE_PATH.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-19667",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--conf", s"spark.sql.warehouse.dir=$warehousePath2",
+      unusedJar.toString)
+    runSparkSubmit(argsForShowTables)
+
+    Utils.deleteRecursively(warehousePath1)
+    Utils.deleteRecursively(warehousePath2)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -902,6 +931,94 @@ object SPARK_18989_DESC_TABLE {
       spark.sql("DESC base64_tbl")
     } finally {
       spark.sql("DROP TABLE IF EXISTS base64_tbl")
+    }
+  }
+}
+
+object SPARK_19667_CREATE_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    try {
+      val warehousePath = spark.sharedState.warehousePath.stripSuffix("/")
+      val defaultDB = spark.sessionState.catalog.getDatabaseMetadata("default")
+      // default database use warehouse path as its location
+      assert(defaultDB.locationUri.stripSuffix("/") == warehousePath)
+      spark.sql("CREATE TABLE t(a string)")
+
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      // table in default database use the location of default database which is also warehouse path
+      assert(table.location.stripSuffix("/") == s"file:$warehousePath/t")
+      spark.sql("INSERT INTO TABLE t SELECT 1")
+      assert(spark.sql("SELECT * FROM t").count == 1)
+
+      spark.sql("CREATE DATABASE not_default")
+      spark.sql("USE not_default")
+      spark.sql("CREATE TABLE t1(b string)")
+      val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      // table in not default database use the location of its own database
+      assert(table1.location.stripSuffix("/") == s"file:$warehousePath/not_default.db/t1")
+    } finally {
+      spark.sql("USE default")
+    }
+  }
+}
+
+object SPARK_19667_VERIFY_TABLE_PATH {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    try {
+      val warehousePath = spark.sharedState.warehousePath.stripSuffix("/")
+      val defaultDB = spark.sessionState.catalog.getDatabaseMetadata("default")
+      // default database use warehouse path as its location
+      assert(defaultDB.locationUri.stripSuffix("/") == warehousePath)
+
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      // the table in default database created in job(SPARK_19667_CREATE_TABLE) above,
+      // which has different warehouse path from this job, its location still equals to
+      // the location when it's created.
+      assert(table.location.stripSuffix("/") != s"file:$warehousePath/t")
+      assert(spark.sql("SELECT * FROM t").count == 1)
+
+      spark.sql("CREATE TABLE t3(d string)")
+      val table3 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
+      // the table in default database created here in this job, it will use the warehouse path
+      // of this job as its location
+      assert(table3.location.stripSuffix("/") == s"file:$warehousePath/t3")
+
+      spark.sql("USE not_default")
+      val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+      // the table in not default database create in job(SPARK_19667_CREATE_TABLE) above,
+      // which has different warehouse path from this job, its location still equals to
+      // the location when it's created.
+      assert(table1.location.stripSuffix("/") != s"$warehousePath/not_default.db/t1")
+      assert(!new File(s"$warehousePath/not_default.db/t1").exists())
+
+      spark.sql("CREATE TABLE t2(c string)")
+      val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+      // the table in not default database created here in this job, it will use the location
+      // of the database as its location, not the warehouse path in this job
+      assert(table2.location.stripSuffix("/") != s"file:$warehousePath/not_default.db/t2")
+
+      spark.sql("CREATE DATABASE not_default_1")
+      spark.sql("USE not_default_1")
+      spark.sql("CREATE TABLE t4(e string)")
+      val table4 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
+      // the table created in the database which created in this job, it will use the location
+      // of the database.
+      assert(table4.location.stripSuffix("/") == s"file:$warehousePath/not_default_1.db/t4")
+
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS t4")
+      spark.sql("DROP DATABASE not_default_1")
+
+      spark.sql("USE not_default")
+      spark.sql("DROP TABLE IF EXISTS t1")
+      spark.sql("DROP TABLE IF EXISTS t2")
+      spark.sql("DROP DATABASE not_default")
+
+      spark.sql("USE default")
+      spark.sql("DROP TABLE IF EXISTS t")
+      spark.sql("DROP TABLE IF EXISTS t3")
     }
   }
 }

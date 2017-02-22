@@ -48,7 +48,6 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -342,9 +341,7 @@ private[hive] class HiveClientImpl(
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
       // default database's location always use the warehouse path
-      // TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH is a flag fro test
-      val dbLocation = if (dbName == SessionCatalog.DEFAULT_DATABASE
-        || sparkConf.get(SQLConf.TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH)) {
+      val dbLocation = if (dbName == SessionCatalog.DEFAULT_DATABASE) {
         sparkConf.get(WAREHOUSE_PATH)
       } else d.getLocationUri
 

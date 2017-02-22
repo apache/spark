@@ -672,14 +672,6 @@ object SQLConf {
       .stringConf
       .createWithDefault(TimeZone.getDefault().getID())
 
-  // for test
-  val TEST_HIVE_CREATETABLE_DEFAULTDB_USEWAREHOUSE_PATH =
-  buildConf("spark.hive.test.createTable.defaultDB.location.useWarehousePath")
-    .doc("Enables test case to use warehouse path instead of db location when " +
-      "create table in default database.")
-    .booleanConf
-    .createWithDefault(false)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
