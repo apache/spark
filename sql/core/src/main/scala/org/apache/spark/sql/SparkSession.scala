@@ -123,7 +123,7 @@ class SparkSession private(
   @transient
   lazy val sessionState: SessionState = {
     parentSessionState
-      .map(_.copy(this))
+      .map(_.clone(this))
       .getOrElse(SparkSession.instantiateSessionState(
         SparkSession.sessionStateClassName(sparkContext.conf),
         self))

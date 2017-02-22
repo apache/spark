@@ -20,13 +20,12 @@ package org.apache.spark.sql.hive
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{NonClosableMutableURLClassLoader, SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 
 
@@ -35,6 +34,7 @@ import org.apache.spark.sql.streaming.StreamingQueryManager
  */
 private[hive] class HiveSessionState(
     sparkContext: SparkContext,
+    sharedState: SharedState,
     conf: SQLConf,
     experimentalMethods: ExperimentalMethods,
     functionRegistry: FunctionRegistry,
@@ -44,10 +44,10 @@ private[hive] class HiveSessionState(
     override val analyzer: Analyzer,
     streamingQueryManager: StreamingQueryManager,
     queryExecutionCreator: LogicalPlan => QueryExecution,
-    jarClassLoader: NonClosableMutableURLClassLoader,
     val plannerCreator: () => SparkPlanner)
   extends SessionState(
       sparkContext,
+      sharedState,
       conf,
       experimentalMethods,
       functionRegistry,
@@ -55,8 +55,7 @@ private[hive] class HiveSessionState(
       sqlParser,
       analyzer,
       streamingQueryManager,
-      queryExecutionCreator,
-      jarClassLoader) { self =>
+      queryExecutionCreator) { self =>
 
   /**
    * Planner that takes into account Hive-specific strategies.
@@ -108,11 +107,11 @@ private[hive] class HiveSessionState(
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
-  override def copy(sparkSession: SparkSession): HiveSessionState = {
+  override def clone(sparkSession: SparkSession): HiveSessionState = {
     val sparkContext = sparkSession.sparkContext
-    val confCopy = conf.clone
+    val confCopy = conf.clone()
     val copyHelper = SessionState(sparkSession, Some(confCopy))
-    val catalogCopy = catalog.copy(
+    val catalogCopy = catalog.clone(
       sparkSession,
       confCopy,
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy),
@@ -124,6 +123,7 @@ private[hive] class HiveSessionState(
 
     new HiveSessionState(
       sparkContext,
+      sparkSession.sharedState,
       confCopy,
       copyHelper.experimentalMethods,
       copyHelper.functionRegistry,
@@ -133,7 +133,6 @@ private[hive] class HiveSessionState(
       HiveSessionState.createAnalyzer(sparkSession, catalogCopy, confCopy),
       copyHelper.streamingQueryManager,
       copyHelper.queryExecutionCreator,
-      jarClassLoader,
       HiveSessionState.createPlannerCreator(
         sparkSession,
         confCopy,
@@ -158,7 +157,7 @@ object HiveSessionState {
 
     val catalog = HiveSessionCatalog(
       sparkSession,
-      SessionState.createFunctionResourceLoader(sparkContext, initHelper.jarClassLoader),
+      SessionState.createFunctionResourceLoader(sparkContext, sparkSession.sharedState),
       initHelper.functionRegistry,
       initHelper.conf,
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, initHelper.conf),
@@ -179,6 +178,7 @@ object HiveSessionState {
 
     new HiveSessionState(
       sparkContext,
+      sparkSession.sharedState,
       initHelper.conf,
       initHelper.experimentalMethods,
       initHelper.functionRegistry,
@@ -188,7 +188,6 @@ object HiveSessionState {
       analyzer,
       initHelper.streamingQueryManager,
       initHelper.queryExecutionCreator,
-      initHelper.jarClassLoader,
       plannerCreator)
   }
 

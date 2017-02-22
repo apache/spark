@@ -494,6 +494,7 @@ private[hive] class TestHiveQueryExecution(
 
 private[hive] class TestHiveSessionState(
     sparkContext: SparkContext,
+    sharedState: SharedState,
     conf: SQLConf,
     experimentalMethods: ExperimentalMethods,
     functionRegistry: org.apache.spark.sql.catalyst.analysis.FunctionRegistry,
@@ -503,10 +504,10 @@ private[hive] class TestHiveSessionState(
     analyzer: Analyzer,
     streamingQueryManager: StreamingQueryManager,
     queryExecutionCreator: LogicalPlan => TestHiveQueryExecution,
-    jarClassLoader: NonClosableMutableURLClassLoader,
     plannerCreator: () => SparkPlanner)
   extends HiveSessionState(
       sparkContext,
+      sharedState,
       conf,
       experimentalMethods,
       functionRegistry,
@@ -516,7 +517,6 @@ private[hive] class TestHiveSessionState(
       analyzer,
       streamingQueryManager,
       queryExecutionCreator,
-      jarClassLoader,
       plannerCreator) {}
 
 private[hive] object TestHiveSessionState {
@@ -540,6 +540,7 @@ private[hive] object TestHiveSessionState {
 
     new TestHiveSessionState(
       sparkSession.sparkContext,
+      sparkSession.sharedState,
       sqlConf,
       initHelper.experimentalMethods,
       initHelper.functionRegistry,
@@ -549,7 +550,6 @@ private[hive] object TestHiveSessionState {
       initHelper.analyzer,
       initHelper.streamingQueryManager,
       queryExecutionCreator,
-      initHelper.jarClassLoader,
       initHelper.plannerCreator)
   }
 

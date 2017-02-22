@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
+
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -135,6 +138,21 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       }
     }
     SparkSession.sqlListener.get()
+  }
+
+  def addJar(path: String): Unit = {
+    sparkContext.addJar(path)
+
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(jarClassLoader)
   }
 }
 

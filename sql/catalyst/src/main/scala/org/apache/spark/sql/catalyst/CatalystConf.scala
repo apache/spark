@@ -61,7 +61,7 @@ trait CatalystConf {
    */
   def cboEnabled: Boolean
 
-  override def clone: CatalystConf = throw new CloneNotSupportedException()
+  override def clone(): CatalystConf = throw new CloneNotSupportedException()
 }
 
 
@@ -81,5 +81,5 @@ case class SimpleCatalystConf(
     sessionLocalTimeZone: String = TimeZone.getDefault().getID)
   extends CatalystConf {
 
-  override def clone: SimpleCatalystConf = this.copy()
+  override def clone(): SimpleCatalystConf = this.copy()
 }

@@ -1206,7 +1206,7 @@ class SessionCatalogSuite extends PlanTest {
     original.createTempView("copytest1", tempTable1, overrideIfExists = false)
 
     // check if tables copied over
-    val clone = original.copy(
+    val clone = original.clone(
       SimpleCatalystConf(caseSensitiveAnalysis = true),
       new Configuration(),
       new SimpleFunctionRegistry,

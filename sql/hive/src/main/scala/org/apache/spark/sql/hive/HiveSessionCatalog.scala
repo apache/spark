@@ -81,7 +81,7 @@ private[sql] class HiveSessionCatalog(
    * This should ideally override `SessionCatalog.copy` but does not at present, since
    * `HiveMetastoreCatalog` is dependent on `SparkSession`.
    */
-  def copy(
+  def clone(
       sparkSession: SparkSession,
       conf: SQLConf,
       hadoopConf: Configuration,

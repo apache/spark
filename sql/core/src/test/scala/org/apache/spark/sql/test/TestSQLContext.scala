@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.internal.{NonClosableMutableURLClassLoader, SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 
 /**
@@ -42,6 +42,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
 
   class TestSessionState(
       sparkContext: SparkContext,
+      sharedState: SharedState,
       conf: SQLConf,
       experimentalMethods: ExperimentalMethods,
       functionRegistry: FunctionRegistry,
@@ -49,10 +50,10 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
       sqlParser: ParserInterface,
       analyzer: Analyzer,
       streamingQueryManager: StreamingQueryManager,
-      queryExecution: LogicalPlan => QueryExecution,
-      jarClassLoader: NonClosableMutableURLClassLoader)
+      queryExecution: LogicalPlan => QueryExecution)
     extends SessionState(
         sparkContext,
+        sharedState,
         conf,
         experimentalMethods,
         functionRegistry,
@@ -60,8 +61,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
         sqlParser,
         analyzer,
         streamingQueryManager,
-        queryExecution,
-        jarClassLoader) {}
+        queryExecution) {}
 
   object TestSessionState {
 
@@ -82,6 +82,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
 
       new TestSessionState(
         sparkSession.sparkContext,
+        sparkSession.sharedState,
         sqlConf,
         initHelper.experimentalMethods,
         initHelper.functionRegistry,
@@ -89,9 +90,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
         initHelper.sqlParser,
         initHelper.analyzer,
         initHelper.streamingQueryManager,
-        initHelper.queryExecutionCreator,
-        initHelper.jarClassLoader
-      )
+        initHelper.queryExecutionCreator)
     }
   }
 

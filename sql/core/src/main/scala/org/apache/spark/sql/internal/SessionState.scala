@@ -40,6 +40,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 private[sql] class SessionState(
     sparkContext: SparkContext,
+    sharedState: SharedState,
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
@@ -47,8 +48,7 @@ private[sql] class SessionState(
     val sqlParser: ParserInterface,
     val analyzer: Analyzer,
     val streamingQueryManager: StreamingQueryManager,
-    val queryExecutionCreator: LogicalPlan => QueryExecution,
-    val jarClassLoader: NonClosableMutableURLClassLoader) {
+    val queryExecutionCreator: LogicalPlan => QueryExecution) {
 
   /*
    * Interface exposed to the user for registering user-defined functions.
@@ -88,13 +88,13 @@ private[sql] class SessionState(
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  def copy(sparkSession: SparkSession): SessionState = {
+  def clone(sparkSession: SparkSession): SessionState = {
     val sparkContext = sparkSession.sparkContext
-    val confCopy = conf.clone
+    val confCopy = conf.clone()
     val hadoopConfCopy = SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy)
-    val functionRegistryCopy = functionRegistry.copy
+    val functionRegistryCopy = functionRegistry.clone()
     val sqlParser: ParserInterface = new SparkSqlParser(confCopy)
-    val catalogCopy = catalog.copy(confCopy, hadoopConfCopy, functionRegistryCopy, sqlParser)
+    val catalogCopy = catalog.clone(confCopy, hadoopConfCopy, functionRegistryCopy, sqlParser)
     val queryExecution = (plan: LogicalPlan) => new QueryExecution(sparkSession, plan)
 
     sparkContext.getConf.getAll.foreach { case (k, v) =>
@@ -103,6 +103,7 @@ private[sql] class SessionState(
 
     new SessionState(
       sparkContext,
+      sparkSession.sharedState,
       confCopy,
       experimentalMethods.copy,
       functionRegistryCopy,
@@ -110,8 +111,7 @@ private[sql] class SessionState(
       sqlParser,
       SessionState.createAnalyzer(sparkSession, catalogCopy, confCopy),
       new StreamingQueryManager(sparkSession),
-      queryExecution,
-      jarClassLoader)
+      queryExecution)
   }
 
   // ------------------------------------------------------
@@ -124,7 +124,7 @@ private[sql] class SessionState(
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
 
-  def addJar(path: String): Unit = SessionState.addJar(sparkContext, path, jarClassLoader)
+  def addJar(path: String): Unit = sharedState.addJar(path)
 
 }
 
@@ -150,13 +150,11 @@ object SessionState {
     }
 
     // Internal catalog for managing functions registered by the user.
-    val functionRegistry = FunctionRegistry.builtin.copy
-
-    val jarClassLoader: NonClosableMutableURLClassLoader = sparkSession.sharedState.jarClassLoader
+    val functionRegistry = FunctionRegistry.builtin.clone()
 
     // A class for loading resources specified by a function.
     val functionResourceLoader: FunctionResourceLoader =
-      createFunctionResourceLoader(sparkContext, jarClassLoader)
+      createFunctionResourceLoader(sparkContext, sparkSession.sharedState)
 
     // Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
     val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
@@ -181,6 +179,7 @@ object SessionState {
 
     new SessionState(
       sparkContext,
+      sparkSession.sharedState,
       sqlConf,
       new ExperimentalMethods,
       functionRegistry,
@@ -188,18 +187,17 @@ object SessionState {
       sqlParser,
       analyzer,
       streamingQueryManager,
-      queryExecutionCreator,
-      jarClassLoader)
+      queryExecutionCreator)
   }
 
   def createFunctionResourceLoader(
       sparkContext: SparkContext,
-      jarClassLoader: NonClosableMutableURLClassLoader): FunctionResourceLoader = {
+      sharedState: SharedState): FunctionResourceLoader = {
 
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
         resource.resourceType match {
-          case JarResource => addJar(sparkContext, resource.uri, jarClassLoader)
+          case JarResource => sharedState.addJar(resource.uri)
           case FileResource => sparkContext.addFile(resource.uri)
           case ArchiveResource =>
             throw new AnalysisException(
@@ -233,25 +231,6 @@ object SessionState {
 
       override val extendedCheckRules = Seq(PreWriteCheck, HiveOnlyCheck)
     }
-  }
-
-  def addJar(
-      sparkContext: SparkContext,
-      path: String,
-      jarClassLoader: NonClosableMutableURLClassLoader): Unit = {
-
-    sparkContext.addJar(path)
-
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
-    }
-    jarClassLoader.addURL(jarURL)
-    Thread.currentThread().setContextClassLoader(jarClassLoader)
   }
 
 }

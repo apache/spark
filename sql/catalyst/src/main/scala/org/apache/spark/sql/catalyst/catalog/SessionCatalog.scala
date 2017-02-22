@@ -1189,7 +1189,7 @@ class SessionCatalog(
    * `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
    * All arguments passed in should be associated with a particular `SparkSession`.
    */
-  def copy(
+  def clone(
       conf: CatalystConf,
       hadoopConf: Configuration,
       functionRegistry: FunctionRegistry,

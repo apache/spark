@@ -195,7 +195,7 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
     // inheritance
     original.setConfString(key, "orig")
-    val clone = original.clone
+    val clone = original.clone()
     assert(clone.getConfString(key, "noentry") === "orig")
 
     // independence

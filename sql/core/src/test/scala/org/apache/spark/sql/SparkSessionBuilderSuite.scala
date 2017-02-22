@@ -212,10 +212,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("fork new session and run query on inherited table") {
-    import testImplicits._
-
     def checkTableExists(sparkSession: SparkSession): Unit = {
-      QueryTest.checkAnswer(sql(
+      QueryTest.checkAnswer(sparkSession.sql(
         """
           |SELECT x.str, COUNT(*)
           |FROM df x JOIN df y ON x.str = y.str
@@ -226,6 +224,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
 
     val activeSession = SparkSession.builder().master("local").getOrCreate()
     SparkSession.setActiveSession(activeSession)
+    import activeSession.implicits._
 
     Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
     checkTableExists(activeSession)
