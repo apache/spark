@@ -572,16 +572,14 @@ class SessionCatalog(
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
    *
    * @param name The name of the table/view that we look up.
-   * @param alias The alias name of the table/view that we look up.
    */
-  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+  def lookupRelation(name: TableIdentifier): LogicalPlan = {
     synchronized {
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
-      val relationAlias = alias.getOrElse(table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(relationAlias, viewDef, None)
+          SubqueryAlias(table, viewDef, None)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -594,12 +592,12 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(relationAlias, child, Some(name.copy(table = table, database = Some(db))))
+          SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
         } else {
-          SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), None)
+          SubqueryAlias(table, SimpleCatalogRelation(metadata), None)
         }
       } else {
-        SubqueryAlias(relationAlias, tempTables(table), None)
+        SubqueryAlias(table, tempTables(table), None)
       }
     }
   }

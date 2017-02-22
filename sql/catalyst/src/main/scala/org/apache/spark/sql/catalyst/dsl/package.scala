@@ -280,11 +280,10 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
-    def table(ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref), None)
+    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
 
     def table(db: String, ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref, Option(db)), None)
+      UnresolvedRelation(TableIdentifier(ref, Option(db)))
 
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
       def select(exprs: Expression*): LogicalPlan = {
@@ -369,10 +368,7 @@ package object dsl {
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
           Map.empty, logicalPlan, overwrite, false)
 
-      def as(alias: String): LogicalPlan = logicalPlan match {
-        case UnresolvedRelation(tbl, _) => UnresolvedRelation(tbl, Option(alias))
-        case plan => SubqueryAlias(alias, plan, None)
-      }
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan, None)
 
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)

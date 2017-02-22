@@ -259,7 +259,7 @@ class SparkSqlParserSuite extends PlanTest {
     // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
     val baseSql = "select * from t"
     val basePlan =
-      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(TableIdentifier("t"), None))
+      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(TableIdentifier("t")))
 
     assertEqual(s"$baseSql distribute by a, b",
       RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
