@@ -31,17 +31,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, CatalogTableType}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
@@ -61,26 +57,18 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  /**
-   * The property key that is used to store the raw hive type string in the metadata of StructField.
-   * For example, in the case where the Hive type is varchar, the type gets mapped to a string type
-   * in Spark SQL, but we need to preserve the original type in order to invoke the correct object
-   * inspector in Hive.
-   */
-  val hiveTypeString: String = "HIVE_TYPE_STRING"
-
-  val HIVE_METASTORE_VERSION = SQLConfigBuilder("spark.sql.hive.metastore.version")
+  val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
     .stringConf
     .createWithDefault(hiveExecutionVersion)
 
-  val HIVE_EXECUTION_VERSION = SQLConfigBuilder("spark.sql.hive.version")
+  val HIVE_EXECUTION_VERSION = buildConf("spark.sql.hive.version")
     .doc("Version of Hive used internally by Spark SQL.")
     .stringConf
     .createWithDefault(hiveExecutionVersion)
 
-  val HIVE_METASTORE_JARS = SQLConfigBuilder("spark.sql.hive.metastore.jars")
+  val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
@@ -96,28 +84,28 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .createWithDefault("builtin")
 
-  val CONVERT_METASTORE_PARQUET = SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet")
+  val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
       "the built in support.")
     .booleanConf
     .createWithDefault(true)
 
   val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING =
-    SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet.mergeSchema")
+    buildConf("spark.sql.hive.convertMetastoreParquet.mergeSchema")
       .doc("When true, also tries to merge possibly different but compatible Parquet schemas in " +
         "different Parquet data files. This configuration is only effective " +
         "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
       .booleanConf
       .createWithDefault(false)
 
-  val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+  val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
     .createWithDefault(false)
 
-  val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
+  val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
@@ -130,7 +118,7 @@ private[spark] object HiveUtils extends Logging {
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
-  val HIVE_METASTORE_BARRIER_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.barrierPrefixes")
+  val HIVE_METASTORE_BARRIER_PREFIXES = buildConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
       "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
@@ -138,7 +126,7 @@ private[spark] object HiveUtils extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
-  val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
+  val HIVE_THRIFT_SERVER_ASYNC = buildConf("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
     .booleanConf
     .createWithDefault(true)
@@ -463,132 +451,21 @@ private[spark] object HiveUtils extends Logging {
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 
-  /** Converts the native StructField to Hive's FieldSchema. */
-  private def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = if (c.metadata.contains(HiveUtils.hiveTypeString)) {
-      c.metadata.getString(HiveUtils.hiveTypeString)
-    } else {
-      c.dataType.catalogString
-    }
-    new FieldSchema(c.name, typeString, c.getComment.orNull)
-  }
-
-  /** Builds the native StructField from Hive's FieldSchema. */
-  private def fromHiveColumn(hc: FieldSchema): StructField = {
-    val columnType = try {
-      CatalystSqlParser.parseDataType(hc.getType)
-    } catch {
-      case e: ParseException =>
-        throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
-    }
-
-    val metadata = new MetadataBuilder().putString(HiveUtils.hiveTypeString, hc.getType).build()
-    val field = StructField(
-      name = hc.getName,
-      dataType = columnType,
-      nullable = true,
-      metadata = metadata)
-    Option(hc.getComment).map(field.withComment).getOrElse(field)
-  }
-
-  // TODO: merge this with HiveClientImpl#toHiveTable
-  /** Converts the native table metadata representation format CatalogTable to Hive's Table. */
-  def toHiveTable(catalogTable: CatalogTable): HiveTable = {
-    // We start by constructing an API table as Hive performs several important transformations
-    // internally when converting an API table to a QL table.
-    val tTable = new org.apache.hadoop.hive.metastore.api.Table()
-    tTable.setTableName(catalogTable.identifier.table)
-    tTable.setDbName(catalogTable.database)
-
-    val tableParameters = new java.util.HashMap[String, String]()
-    tTable.setParameters(tableParameters)
-    catalogTable.properties.foreach { case (k, v) => tableParameters.put(k, v) }
-
-    tTable.setTableType(catalogTable.tableType match {
-      case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE.toString
-      case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE.toString
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW.toString
-    })
-
-    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-    tTable.setSd(sd)
-
-    // Note: In Hive the schema and partition columns must be disjoint sets
-    val (partCols, schema) = catalogTable.schema.map(toHiveColumn).partition { c =>
-      catalogTable.partitionColumnNames.contains(c.getName)
-    }
-    sd.setCols(schema.asJava)
-    tTable.setPartitionKeys(partCols.asJava)
-
-    catalogTable.storage.locationUri.foreach(sd.setLocation)
-    catalogTable.storage.inputFormat.foreach(sd.setInputFormat)
-    catalogTable.storage.outputFormat.foreach(sd.setOutputFormat)
-
-    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    catalogTable.storage.serde.foreach(serdeInfo.setSerializationLib)
-    sd.setSerdeInfo(serdeInfo)
-
-    val serdeParameters = new java.util.HashMap[String, String]()
-    catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
-    serdeInfo.setParameters(serdeParameters)
-
-    new HiveTable(tTable)
-  }
-
-  /**
-   * Converts the native partition metadata representation format CatalogTablePartition to
-   * Hive's Partition.
-   */
-  def toHivePartition(
-      catalogTable: CatalogTable,
-      hiveTable: HiveTable,
-      partition: CatalogTablePartition): HivePartition = {
-    val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
-    tPartition.setDbName(catalogTable.database)
-    tPartition.setTableName(catalogTable.identifier.table)
-    tPartition.setValues(catalogTable.partitionColumnNames.map(partition.spec(_)).asJava)
-
-    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-    tPartition.setSd(sd)
-
-    // Note: In Hive the schema and partition columns must be disjoint sets
-    val schema = catalogTable.schema.map(toHiveColumn).filter { c =>
-      !catalogTable.partitionColumnNames.contains(c.getName)
-    }
-    sd.setCols(schema.asJava)
-
-    partition.storage.locationUri.foreach(sd.setLocation)
-    partition.storage.inputFormat.foreach(sd.setInputFormat)
-    partition.storage.outputFormat.foreach(sd.setOutputFormat)
-
-    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    sd.setSerdeInfo(serdeInfo)
-    // maps and lists should be set only after all elements are ready (see HIVE-7975)
-    partition.storage.serde.foreach(serdeInfo.setSerializationLib)
-
-    val serdeParameters = new java.util.HashMap[String, String]()
-    catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
-    partition.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
-    serdeInfo.setParameters(serdeParameters)
-
-    new HivePartition(hiveTable, tPartition)
-  }
-
   /**
    * Infers the schema for Hive serde tables and returns the CatalogTable with the inferred schema.
    * When the tables are data source tables or the schema already exists, returns the original
    * CatalogTable.
    */
   def inferSchema(table: CatalogTable): CatalogTable = {
-    if (DDLUtils.isDatasourceTable(table) || table.schema.nonEmpty) {
+    if (DDLUtils.isDatasourceTable(table) || table.dataSchema.nonEmpty) {
       table
     } else {
-      val hiveTable = toHiveTable(table)
+      val hiveTable = HiveClientImpl.toHiveTable(table)
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
-      val partCols = hiveTable.getPartCols.asScala.map(fromHiveColumn)
-      val schema = StructType(hiveTable.getCols.asScala.map(fromHiveColumn) ++ partCols)
-      table.copy(schema = schema)
+      val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
+      val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
+      table.copy(schema = StructType(dataCols ++ partCols))
     }
   }
 }

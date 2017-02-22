@@ -329,7 +329,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   /** Sends JobCancelled to the DAG scheduler. */
   private def cancel(jobId: Int) {
-    runEvent(JobCancelled(jobId))
+    runEvent(JobCancelled(jobId, None))
   }
 
   test("[SPARK-3353] parent stage should have lower stage id") {
@@ -2159,6 +2159,76 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
         case e: Throwable => fail("A job with one fetch failure should eventually succeed")
       }
     }
+  }
+
+  test("[SPARK-19263] DAGScheduler should not submit multiple active tasksets," +
+      " even with late completions from earlier stage attempts") {
+    // Create 3 RDDs with shuffle dependencies on each other: rddA <--- rddB <--- rddC
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val shuffleIdA = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 2, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(2))
+
+    val rddC = new MyRDD(sc, 2, List(shuffleDepB), tracker = mapOutputTracker)
+
+    submit(rddC, Array(0, 1))
+
+    // Complete both tasks in rddA.
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2))))
+
+    // Fetch failed for task(stageId=1, stageAttemptId=0, partitionId=0) running on hostA
+    // and task(stageId=1, stageAttemptId=0, partitionId=1) is still running.
+    assert(taskSets(1).stageId === 1 && taskSets(1).stageAttemptId === 0)
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0,
+        "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"),
+      result = null))
+
+    // Both original tasks in rddA should be marked as failed, because they ran on the
+    // failed hostA, so both should be resubmitted. Complete them on hostB successfully.
+    scheduler.resubmitFailedStages()
+    assert(taskSets(2).stageId === 0 && taskSets(2).stageAttemptId === 1
+      && taskSets(2).tasks.size === 2)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // Complete task(stageId=1, stageAttemptId=0, partitionId=1) running on failed hostA
+    // successfully. The success should be ignored because the task started before the
+    // executor failed, so the output may have been lost.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostA", 2)))
+
+    // Both tasks in rddB should be resubmitted, because none of them has succeeded truely.
+    // Complete the task(stageId=1, stageAttemptId=1, partitionId=0) successfully.
+    // Task(stageId=1, stageAttemptId=1, partitionId=1) of this new active stage attempt
+    // is still running.
+    assert(taskSets(3).stageId === 1 && taskSets(3).stageAttemptId === 1
+      && taskSets(3).tasks.size === 2)
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0), Success, makeMapStatus("hostB", 2)))
+
+    // There should be no new attempt of stage submitted,
+    // because task(stageId=1, stageAttempt=1, partitionId=1) is still running in
+    // the current attempt (and hasn't completed successfully in any earlier attempts).
+    assert(taskSets.size === 4)
+
+    // Complete task(stageId=1, stageAttempt=1, partitionId=1) successfully.
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(1), Success, makeMapStatus("hostB", 2)))
+
+    // Now the ResultStage should be submitted, because all of the tasks of rddB have
+    // completed successfully on alive executors.
+    assert(taskSets.size === 5 && taskSets(4).tasks(0).isInstanceOf[ResultTask[_, _]])
+    complete(taskSets(4), Seq(
+      (Success, 1),
+      (Success, 1)))
   }
 
   /**

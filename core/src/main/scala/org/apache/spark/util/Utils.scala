@@ -1882,20 +1882,17 @@ private[spark] object Utils extends Logging {
   def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
     // Politely destroy first
     process.destroy()
-
-    if (waitForProcess(process, timeoutMs)) {
+    if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
       // Successful exit
       Option(process.exitValue())
     } else {
-      // Java 8 added a new API which will more forcibly kill the process. Use that if available.
       try {
-        classOf[Process].getMethod("destroyForcibly").invoke(process)
+        process.destroyForcibly()
       } catch {
-        case _: NoSuchMethodException => return None // Not available; give up
         case NonFatal(e) => logWarning("Exception when attempting to kill process", e)
       }
       // Wait, again, although this really should return almost immediately
-      if (waitForProcess(process, timeoutMs)) {
+      if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
         Option(process.exitValue())
       } else {
         logWarning("Timed out waiting to forcibly kill process")
@@ -1905,44 +1902,11 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Wait for a process to terminate for at most the specified duration.
-   *
-   * @return whether the process actually terminated before the given timeout.
-   */
-  def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
-    try {
-      // Use Java 8 method if available
-      classOf[Process].getMethod("waitFor", java.lang.Long.TYPE, classOf[TimeUnit])
-        .invoke(process, timeoutMs.asInstanceOf[java.lang.Long], TimeUnit.MILLISECONDS)
-        .asInstanceOf[Boolean]
-    } catch {
-      case _: NoSuchMethodException =>
-        // Otherwise implement it manually
-        var terminated = false
-        val startTime = System.currentTimeMillis
-        while (!terminated) {
-          try {
-            process.exitValue()
-            terminated = true
-          } catch {
-            case e: IllegalThreadStateException =>
-              // Process not terminated yet
-              if (System.currentTimeMillis - startTime > timeoutMs) {
-                return false
-              }
-              Thread.sleep(100)
-          }
-        }
-        true
-    }
-  }
-
-  /**
    * Return the stderr of a process after waiting for the process to terminate.
    * If the process does not terminate within the specified timeout, return None.
    */
   def getStderr(process: Process, timeoutMs: Long): Option[String] = {
-    val terminated = Utils.waitForProcess(process, timeoutMs)
+    val terminated = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
     if (terminated) {
       Some(Source.fromInputStream(process.getErrorStream).getLines().mkString("\n"))
     } else {
@@ -2203,6 +2167,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns the user port to try when trying to bind a service. Handles wrapping and skipping
+   * privileged ports.
+   */
+  def userPort(base: Int, offset: Int): Int = {
+    (base + offset - 1024) % (65536 - 1024) + 1024
+  }
+
+  /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
@@ -2229,8 +2201,7 @@ private[spark] object Utils extends Logging {
       val tryPort = if (startPort == 0) {
         startPort
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        userPort(startPort, offset)
       }
       try {
         val (service, port) = startService(tryPort)
@@ -2239,17 +2210,32 @@ private[spark] object Utils extends Logging {
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
-            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
-              s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
-              s"the appropriate port for the service$serviceString (for example spark.ui.port " +
-              s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            val exceptionMessage = if (startPort == 0) {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (on a random free port)! " +
+                s"Consider explicitly setting the appropriate binding address for " +
+                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"for SparkDriver) to the correct binding address."
+            } else {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
+                s"the appropriate port for the service$serviceString (for example spark.ui.port " +
+                s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            }
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
-            s"Attempting port ${tryPort + 1}.")
+          if (startPort == 0) {
+            // As startPort 0 is for a random free port, it is most possibly binding address is
+            // not correct.
+            logWarning(s"Service$serviceString could not bind on a random free port. " +
+              "You may check whether configuring an appropriate binding address.")
+          } else {
+            logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+              s"Attempting port ${tryPort + 1}.")
+          }
       }
     }
     // Should never happen
@@ -2601,12 +2587,8 @@ private[util] object CallerContext extends Logging {
   val callerContextSupported: Boolean = {
     SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
       try {
-        // `Utils.classForName` will make `ReplSuite` fail with `ClassCircularityError` in
-        // master Maven build, so do not use it before resolving SPARK-17714.
-        // scalastyle:off classforname
-        Class.forName("org.apache.hadoop.ipc.CallerContext")
-        Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
-        // scalastyle:on classforname
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         true
       } catch {
         case _: ClassNotFoundException =>
@@ -2681,12 +2663,8 @@ private[spark] class CallerContext(
   def setCurrentContext(): Unit = {
     if (CallerContext.callerContextSupported) {
       try {
-        // `Utils.classForName` will make `ReplSuite` fail with `ClassCircularityError` in
-        // master Maven build, so do not use it before resolving SPARK-17714.
-        // scalastyle:off classforname
-        val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
-        val builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
-        // scalastyle:on classforname
+        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)

@@ -36,9 +36,11 @@ kmeansModel <- spark.kmeans(kmeansDF, ~ Sepal_Length + Sepal_Width + Petal_Lengt
 summary(kmeansModel)
 
 # Get fitted result from the k-means model
-showDF(fitted(kmeansModel))
+head(fitted(kmeansModel))
 
 # Prediction
 kmeansPredictions <- predict(kmeansModel, kmeansTestDF)
-showDF(kmeansPredictions)
+head(kmeansPredictions)
 # $example off$
+
+sparkR.session.stop()
