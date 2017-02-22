@@ -110,7 +110,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val f = dataSchema(corruptFieldIndex)
       if (f.dataType != StringType || !f.nullable) {
         throw new AnalysisException(
-          "A field for corrupt records must be a string type and nullable")
+          "The field for corrupt records must be string type and nullable")
       }
     }
 
