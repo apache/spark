@@ -156,6 +156,15 @@ package object config {
         .stringConf
         .createOptional
 
+  private[spark] val EXPOSE_KUBERNETES_DRIVER_SERVICE_UI_PORT =
+    ConfigBuilder("spark.kubernetes.driver.service.exposeUiPort")
+      .doc("""
+          | Whether to expose the driver Web UI port as a service NodePort. Turned off by default
+          | because NodePort is a limited resource. Use alternatives such as Ingress if possible.
+        """.stripMargin)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")
       .doc("""

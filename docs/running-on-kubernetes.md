@@ -194,6 +194,14 @@ from the other deployment modes. See the [configuration page](configuration.html
     Time to wait for the driver pod to start running before aborting its execution.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.driver.service.exposeUiPort</code></td>
+  <td><code>false</code></td>
+  <td>
+    Whether to expose the driver Web UI port as a service NodePort. Turned off by default because NodePort is a limited
+    resource. Use alternatives such as Ingress if possible.
+  </td>
+</tr>
 </table>
 
 ## Current Limitations
