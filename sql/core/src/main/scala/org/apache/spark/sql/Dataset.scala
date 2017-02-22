@@ -175,22 +175,18 @@ class Dataset[T] private[sql](
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
-    def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
-      case _: Command |
-           _: InsertIntoTable => true
-      case _ => false
-    }
-
+    // For various commands (like DDL) and queries with side effects, we force query execution
+    // to happen right away to let these side effects take place eagerly.
     queryExecution.analyzed match {
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
-      case cmd: RunnableCommand =>
-        // Trigger execution.
-        queryExecution.executedPlan.executeCollect()
-        cmd
-      case p if hasSideEffects(p) =>
+      case _: RunnableCommand =>
+        queryExecution.executedPlan.execute() // Trigger execution
+        MaterializedPlan(queryExecution.executedPlan)
+      case _: Command =>
+        // Note that there is currently no command that is not a RunnableCommand.
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
-      case Union(children) if children.forall(hasSideEffects) =>
+      case Union(children) if children.forall(_.isInstanceOf[Command]) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
       case _ =>
         queryExecution.analyzed
