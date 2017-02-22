@@ -1021,12 +1021,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SET mapreduce.job.reduces automatically converted to spark.sql.shuffle.partitions") {
     spark.sessionState.conf.clear()
-    val numReduces = 20
     val before = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
-    sql(s"SET mapreduce.job.reduces=${numReduces.toString}")
+    val newConf = before + 1
+    sql(s"SET mapreduce.job.reduces=${newConf.toString}")
     val after = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
     assert(before != after)
-    assert(numReduces === after)
+    assert(newConf === after)
     intercept[IllegalArgumentException](sql(s"SET mapreduce.job.reduces=-1"))
     spark.sessionState.conf.clear()
   }
