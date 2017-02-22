@@ -88,6 +88,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkPlan {
  * @param logicalPlan plan to explain
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
+ * @param cost whether to show cost information for operators.
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,

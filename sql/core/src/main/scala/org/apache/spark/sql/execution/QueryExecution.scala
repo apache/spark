@@ -201,7 +201,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def toStringWithStats: String = completeString(appendStats = true)
 
-  def completeString(appendStats: Boolean): String = {
+  private def completeString(appendStats: Boolean): String = {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(

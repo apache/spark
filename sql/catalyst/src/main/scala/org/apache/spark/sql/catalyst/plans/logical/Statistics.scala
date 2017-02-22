@@ -57,28 +57,15 @@ case class Statistics(
 
   /** Readable string representation for the Statistics. */
   def simpleString: String = {
-    Seq(s"sizeInBytes=${format(sizeInBytes, isSize = true)}",
-      if (rowCount.isDefined) s"rowCount=${format(rowCount.get, isSize = false)}" else "",
+    Seq(s"sizeInBytes=${Utils.bytesToString(sizeInBytes)}",
+      if (rowCount.isDefined) {
+        // Show row count in scientific notation.
+        s"rowCount=${BigDecimal(rowCount.get, new MathContext(3, RoundingMode.HALF_UP)).toString()}"
+      } else {
+        ""
+      },
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
-  }
-
-  /** Show the given number in a readable format. */
-  def format(number: BigInt, isSize: Boolean): String = {
-    val decimalValue = BigDecimal(number, new MathContext(3, RoundingMode.HALF_UP))
-    if (isSize) {
-      // The largest unit in Utils.bytesToString is TB
-      val PB = 1L << 50
-      if (number < 2 * PB) {
-        // The number is not very large, so we can use Utils.bytesToString to show it.
-        Utils.bytesToString(number.toLong)
-      } else {
-        // The number is too large, show it in scientific notation.
-        decimalValue.toString() + " B"
-      }
-    } else {
-      decimalValue.toString()
-    }
   }
 }
 
