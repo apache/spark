@@ -175,16 +175,6 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }
 
-  test("resolve RepartitionByExpression") {
-    checkAnalysis(
-      CatalystSqlParser.parsePlan("SELECT * FROM table DISTRIBUTE BY a"),
-      RepartitionByExpression(
-        Seq("a".attr),
-        testRelation.select('a),
-        numPartitions = Some(conf.numShufflePartitions)).analyze,
-      caseSensitive = false)
-  }
-
   test("divide should be casted into fractional types") {
     val plan = caseInsensitiveAnalyzer.execute(
       testRelation2.select(
@@ -203,13 +193,13 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("pull out nondeterministic expressions from RepartitionByExpression") {
-    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
+    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation, numPartitions = 10)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
           Project(testRelation.output :+ projected, testRelation),
-          numPartitions = Some(conf.numShufflePartitions)))
+          numPartitions = 10))
     checkAnalysis(plan, expected)
   }
 

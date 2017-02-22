@@ -42,8 +42,6 @@ trait CatalystConf {
 
   def sessionLocalTimeZone: String
 
-  def numShufflePartitions: Int
-
   /** If true, cartesian products between relations will be allowed for all
    * join types(inner, (left|right|full) outer).
    * If false, cartesian products will require explicit CROSS JOIN syntax.
@@ -64,7 +62,6 @@ trait CatalystConf {
   def cboEnabled: Boolean
 }
 
-
 /** A CatalystConf that can be used for local testing. */
 case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
@@ -78,6 +75,5 @@ case class SimpleCatalystConf(
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,
     warehousePath: String = "/user/hive/warehouse",
-    sessionLocalTimeZone: String = TimeZone.getDefault().getID,
-    numShufflePartitions: Int = 200)
+    sessionLocalTimeZone: String = TimeZone.getDefault().getID)
   extends CatalystConf

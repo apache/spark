@@ -412,10 +412,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
-      case logical.RepartitionByExpression(expressions, child, nPartitions) =>
-        val numPartitions = nPartitions.getOrElse {
-          throw new IllegalStateException("numPartitions should have been filled in the Analyzer")
-        }
+      case logical.RepartitionByExpression(expressions, child, numPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
           expressions, numPartitions), planLater(child)) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
