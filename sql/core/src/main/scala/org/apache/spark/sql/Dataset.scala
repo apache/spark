@@ -1982,6 +1982,12 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `distinct`.
    *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
+   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1990,6 +1996,12 @@ class Dataset[T] private[sql](
   /**
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
+   *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
    *
    * @group typedrel
    * @since 2.0.0
@@ -2017,7 +2029,8 @@ class Dataset[T] private[sql](
    * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
    * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
    * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
-   * the state.
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
    *
    * @group typedrel
    * @since 2.0.0
@@ -2031,7 +2044,8 @@ class Dataset[T] private[sql](
    * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
    * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
    * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
-   * the state.
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
    *
    * @group typedrel
    * @since 2.0.0
