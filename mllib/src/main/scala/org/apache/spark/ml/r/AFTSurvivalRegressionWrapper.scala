@@ -82,7 +82,10 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
   }
 
 
-  def fit(formula: String, data: DataFrame): AFTSurvivalRegressionWrapper = {
+  def fit(
+      formula: String,
+      data: DataFrame,
+      aggregationDepth: Int): AFTSurvivalRegressionWrapper = {
 
     val (rewritedFormula, censorCol) = formulaRewrite(formula)
 
@@ -100,6 +103,7 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
       .setCensorCol(censorCol)
       .setFitIntercept(rFormula.hasIntercept)
       .setFeaturesCol(rFormula.getFeaturesCol)
+      .setAggregationDepth(aggregationDepth)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, aft))
