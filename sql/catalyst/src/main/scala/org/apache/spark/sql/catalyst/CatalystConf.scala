@@ -62,6 +62,7 @@ trait CatalystConf {
   def cboEnabled: Boolean
 }
 
+
 /** A CatalystConf that can be used for local testing. */
 case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
