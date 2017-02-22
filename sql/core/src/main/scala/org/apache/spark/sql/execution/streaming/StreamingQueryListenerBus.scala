@@ -70,12 +70,22 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
         sparkListenerBus.post(s)
         // post to local listeners to trigger callbacks
         postToAll(s)
-      case t: QueryTerminatedEvent =>
-        // run all the listeners synchronized before removing the id from the list
-        postToAll(t)
-        activeQueryRunIds.synchronized { activeQueryRunIds -= t.runId }
       case _ =>
         sparkListenerBus.post(event)
+    }
+  }
+
+  /**
+   * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
+   * `postToAll` in the same thread for all events. also remove the query id after all listeners
+   * process the QueryTerminatedEvent
+   */
+  override def postToAll(event: Event): Unit = {
+    super.postToAll(event)
+    event match {
+      case t: QueryTerminatedEvent =>
+        activeQueryRunIds.synchronized { activeQueryRunIds -= t.runId }
+      case _ =>
     }
   }
 
