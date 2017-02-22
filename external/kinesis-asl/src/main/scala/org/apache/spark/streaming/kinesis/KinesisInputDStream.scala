@@ -39,7 +39,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T,
-    awsCredentialsOption: Option[SerializableAWSCredentials]
+    kinesisCredsProvider: SerializableCredentialsProvider
   ) extends ReceiverInputDStream[T](_ssc) {
 
   private[streaming]
@@ -61,7 +61,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
         isBlockIdValid = isBlockIdValid,
         retryTimeoutMs = ssc.graph.batchDuration.milliseconds.toInt,
         messageHandler = messageHandler,
-        awsCredentialsOption = awsCredentialsOption)
+        kinesisCredsProvider = kinesisCredsProvider)
     } else {
       logWarning("Kinesis sequence number information was not present with some block metadata," +
         " it may not be possible to recover from failures")
@@ -71,6 +71,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
 
   override def getReceiver(): Receiver[T] = {
     new KinesisReceiver(streamName, endpointUrl, regionName, initialPositionInStream,
-      checkpointAppName, checkpointInterval, storageLevel, messageHandler, awsCredentialsOption)
+      checkpointAppName, checkpointInterval, storageLevel, messageHandler,
+      kinesisCredsProvider)
   }
 }
