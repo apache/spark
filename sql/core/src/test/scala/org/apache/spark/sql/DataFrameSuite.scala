@@ -1734,4 +1734,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
+
+  test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
+    val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
+    checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
+  }
 }
