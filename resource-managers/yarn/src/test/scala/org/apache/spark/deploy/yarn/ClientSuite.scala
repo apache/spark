@@ -286,7 +286,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     clientA.stop()
 
     // a1's cores: 80 * 0.6 * 0.7 = 33
-    val a1CoreTotal = (coresTotal * (aMaximumCapacity / 100) * (a1MaximumCapacity/ 100)).toInt
+    val a1CoreTotal = (coresTotal * (aMaximumCapacity / 100) * (a1MaximumCapacity / 100)).toInt
     val sparkConfA1 = new SparkConf()
       .set("spark.dynamicAllocation.enabled", "true")
       .set(QUEUE_NAME, "a1")
@@ -347,10 +347,10 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       .set(QUEUE_NAME, "b")
     val clientEnabledSetCores = new Client(args, yarnCluster.getConfig, sparkConfSetCores)
 
-    assert(Int.MaxValue == clientEnabledSetCores.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    assert(Int.MaxValue === clientEnabledSetCores.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
     clientEnabledSetCores.init()
     assert(bExecutorTotal === 26)
-    assert(26 ===  clientEnabledSetCores.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
+    assert(26 === clientEnabledSetCores.sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS))
     clientEnabledSetCores.stop()
 
     // dynamicAllocation disabled
