@@ -1664,8 +1664,8 @@ class Analyzer(
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
-        val newProjectList = projectList.flatMap {
 
+        val newProjectList = projectList.flatMap {
           case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
             // It's a sanity check, this should not happen as the previous case will throw
             // exception earlier.
