@@ -89,6 +89,10 @@ case class Percentile(
       case arrayData: ArrayData => arrayData.toDoubleArray().toSeq
   }
 
+  private lazy val toScalaValue = CatalystTypeConverters.createToScalaConverter(child.dataType)
+  private lazy val toCatalystValue =
+    CatalystTypeConverters.createToCatalystConverter(child.dataType)
+
   override def children: Seq[Expression] = {
     child  :: percentageExpression ::frequencyExpression :: Nil
   }
@@ -138,8 +142,7 @@ case class Percentile(
   override def update(
       buffer: OpenHashMap[Number, Long],
       input: InternalRow): OpenHashMap[Number, Long] = {
-    val scalaValue = CatalystTypeConverters.convertToScala(child.eval(input), child.dataType)
-    val key = scalaValue.asInstanceOf[Number]
+    val key = toScalaValue(child.eval(input)).asInstanceOf[Number]
     val frqValue = frequencyExpression.eval(input)
 
     // Null values are ignored in counts map.
@@ -247,7 +250,7 @@ case class Percentile(
       val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
       // Write pairs in counts map to byte buffer.
       obj.foreach { case (key, count) =>
-        val catalystValue = CatalystTypeConverters.convertToCatalyst(key)
+        val catalystValue = toCatalystValue(key)
         val row = InternalRow.apply(catalystValue, count)
         val unsafeRow = projection.apply(row)
         out.writeInt(unsafeRow.getSizeInBytes)
@@ -277,8 +280,7 @@ case class Percentile(
         row.pointTo(bs, sizeOfNextRow)
         // Insert the pairs into counts map.
         val catalystValue = row.get(0, child.dataType)
-        val scalaValue = CatalystTypeConverters.convertToScala(catalystValue, child.dataType)
-        val key = scalaValue.asInstanceOf[Number]
+        val key = toScalaValue(catalystValue).asInstanceOf[Number]
         val count = row.get(1, LongType).asInstanceOf[Long]
         counts.update(key, count)
         sizeOfNextRow = ins.readInt()
