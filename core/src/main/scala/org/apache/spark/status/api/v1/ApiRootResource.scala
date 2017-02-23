@@ -201,7 +201,7 @@ private[v1] class ApiRootResource extends ApiRequestContext {
 
   @Path("applications/{appId}/environment")
   def getEnvironment(@PathParam("appId") appId: String): ApplicationEnvironmentResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new ApplicationEnvironmentResource(ui)
     }
   }
@@ -210,7 +210,7 @@ private[v1] class ApiRootResource extends ApiRequestContext {
   def getEnvironment(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ApplicationEnvironmentResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new ApplicationEnvironmentResource(ui)
     }
   }
