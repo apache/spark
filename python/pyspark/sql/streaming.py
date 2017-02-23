@@ -463,11 +463,13 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record and puts the malformed string into a new field configured by \
-                 ``columnNameOfCorruptRecord``. An user-defined schema can include \
-                 a string type field named ``columnNameOfCorruptRecord`` for corrupt records. \
-                 When a schema is set by user, it sets ``null`` for extra fields.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                 record, and puts the malformed string into a field configured by \
+                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
+                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
+                 schema. If a schema does not have the field, it drops corrupt records during \
+                 parsing. When inferring a schema, it implicitly adds a \
+                 ``columnNameOfCorruptRecord`` field in an output schema.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -620,11 +622,13 @@ class DataStreamReader(OptionUtils):
         :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
                          If None is set, it uses the default value, session local timezone.
 
-                *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record and puts the malformed string into a new field configured by \
-                 ``columnNameOfCorruptRecord``. An user-defined schema can include \
-                 a string type field named ``columnNameOfCorruptRecord`` for corrupt records. \
-                 When a schema is set by user, it sets ``null`` for extra fields.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                  record, and puts the malformed string into a field configured by \
+                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
+                  a string type field named ``columnNameOfCorruptRecord`` in an \
+                  user-defined schema. If a schema does not have the field, it drops corrupt \
+                  records during parsing. When a length of parsed CSV tokens is shorter than \
+                  an expected length of a schema, it sets `null` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
