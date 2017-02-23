@@ -103,7 +103,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
-    dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).map { corruptFieldIndex =>
+    dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = dataSchema(corruptFieldIndex)
       if (f.dataType != StringType || !f.nullable) {
         throw new AnalysisException(

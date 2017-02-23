@@ -366,7 +366,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
-    schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).map { corruptFieldIndex =>
+    schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (f.dataType != StringType || !f.nullable) {
         throw new AnalysisException(

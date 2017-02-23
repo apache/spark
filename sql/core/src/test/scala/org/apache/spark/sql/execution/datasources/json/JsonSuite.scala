@@ -1963,9 +1963,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.createDataFrame(
-        corruptRecords.map(Row(_)), new StructType().add("value", StringType)
-      ).write.text(path)
+      corruptRecords.toDF("value").write.text(path)
       val errMsg = intercept[AnalysisException] {
         spark.read
           .option("mode", "PERMISSIVE")
