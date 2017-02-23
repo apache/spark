@@ -51,7 +51,7 @@ class PercentileSuite extends SparkFunSuite {
   test("class Percentile, high level interface, update, merge, eval...") {
     val count = 10000
     val percentages = Seq(0, 0.25, 0.5, 0.75, 1)
-    val expectedPercentiles = Seq[Double](1, 2500.75, 5000.5, 7500.25, 10000)
+    val expectedPercentiles = Seq(1, 2500.75, 5000.5, 7500.25, 10000)
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = false), DoubleType)
     val percentageExpression = CreateArray(percentages.toSeq.map(Literal(_)))
     val agg = new Percentile(childExpression, percentageExpression)

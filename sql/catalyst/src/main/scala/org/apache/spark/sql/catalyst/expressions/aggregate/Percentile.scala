@@ -130,11 +130,6 @@ case class Percentile(
     }
   }
 
-  private def toLongValue(d: Any): Long = d match {
-    case d: Decimal => d.toLong
-    case n: Number => n.longValue
-  }
-
   private def toDoubleValue(d: Any): Double = d match {
     case d: Decimal => d.toDouble
     case n: Number => n.doubleValue
@@ -153,7 +148,7 @@ case class Percentile(
 
     // Null values are ignored in counts map.
     if (key != null && frqValue != null) {
-      val frqLong = toLongValue(frqValue)
+      val frqLong = frqValue.asInstanceOf[Number].longValue()
       // add only when frequency is positive
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
@@ -283,8 +278,7 @@ case class Percentile(
         val row = new UnsafeRow(2)
         row.pointTo(bs, sizeOfNextRow)
         // Insert the pairs into counts map.
-        val catalystValue = row.get(0, child.dataType)
-        val key = catalystValue.asInstanceOf[AnyRef]
+        val key = row.get(0, child.dataType)
         val count = row.get(1, LongType).asInstanceOf[Long]
         counts.update(key, count)
         sizeOfNextRow = ins.readInt()
