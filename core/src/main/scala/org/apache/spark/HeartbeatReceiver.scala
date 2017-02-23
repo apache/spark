@@ -150,10 +150,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   /**
-   * Send ExecutorRegistered to the event loop to add a new executor. Only for test.
+   * Send [[ExecutorRegistered]] to the event loop to add a new executor.
    *
-   * @return if HeartbeatReceiver is stopped, return None. Otherwise, return a Some(Future) that
-   *         indicate if this operation is successful.
+   * @return [[None]] when HeartbeatReceiver is stopped. Otherwise, a Some(Future) that
+   *         indicates if this operation is successful.
    */
   def addExecutor(executorId: String): Option[Future[Boolean]] = {
     Option(self).map(_.ask[Boolean](ExecutorRegistered(executorId)))
