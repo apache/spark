@@ -20,6 +20,7 @@ import java.io.{File, FileOutputStream, StringReader}
 import java.net.URI
 import java.nio.file.Paths
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import com.google.common.base.Charsets
@@ -101,6 +102,7 @@ private[spark] class KubernetesSparkRestServer(
     conf: SparkConf,
     expectedApplicationSecret: Array[Byte],
     shutdownLock: CountDownLatch,
+    exitCode: AtomicInteger,
     sslOptions: SSLOptions = new SSLOptions)
   extends RestSubmissionServer(host, port, conf, sslOptions) {
 
@@ -238,7 +240,8 @@ private[spark] class KubernetesSparkRestServer(
                 })
                 waitForProcessCompleteExecutor.submit(new Runnable {
                   override def run(): Unit = {
-                    process.waitFor
+                    // set the REST service's exit code to the exit code of the driver subprocess
+                    exitCode.set(process.waitFor)
                     SERVLET_LOCK.synchronized {
                       logInfo("Spark application complete. Shutting down submission server...")
                       KubernetesSparkRestServer.this.stop
@@ -355,12 +358,14 @@ private[spark] object KubernetesSparkRestServer {
     }
     val secretBytes = Files.toByteArray(secretFile)
     val sparkConf = new SparkConf(true)
+    val exitCode = new AtomicInteger(0)
     val server = new KubernetesSparkRestServer(
       parsedArguments.host.get,
       parsedArguments.port.get,
       sparkConf,
       secretBytes,
       barrier,
+      exitCode,
       sslOptions)
     server.start()
     ShutdownHookManager.addShutdownHook(() => {
@@ -371,6 +376,7 @@ private[spark] object KubernetesSparkRestServer {
       }
     })
     barrier.await()
+    System.exit(exitCode.get())
   }
 }
 
