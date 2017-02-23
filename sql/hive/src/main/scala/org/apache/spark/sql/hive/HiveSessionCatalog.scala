@@ -82,14 +82,14 @@ private[sql] class HiveSessionCatalog(
    * `HiveMetastoreCatalog` is dependent on `SparkSession`.
    */
   def clone(
-      sparkSession: SparkSession,
+      newSparkSession: SparkSession,
       conf: SQLConf,
       hadoopConf: Configuration,
       functionRegistry: FunctionRegistry,
       parser: ParserInterface): HiveSessionCatalog = {
 
     val catalog = HiveSessionCatalog(
-      sparkSession,
+      newSparkSession,
       functionResourceLoader,
       functionRegistry,
       conf,

@@ -40,62 +40,16 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
     this(new SparkConf)
   }
 
-  class TestSessionState(
-      sparkContext: SparkContext,
-      sharedState: SharedState,
-      conf: SQLConf,
-      experimentalMethods: ExperimentalMethods,
-      functionRegistry: FunctionRegistry,
-      catalog: SessionCatalog,
-      sqlParser: ParserInterface,
-      analyzer: Analyzer,
-      streamingQueryManager: StreamingQueryManager,
-      queryExecution: LogicalPlan => QueryExecution)
-    extends SessionState(
-        sparkContext,
-        sharedState,
-        conf,
-        experimentalMethods,
-        functionRegistry,
-        catalog,
-        sqlParser,
-        analyzer,
-        streamingQueryManager,
-        queryExecution) {}
-
-  object TestSessionState {
-
-    def testConf: SQLConf = {
-      new SQLConf {
-        clear()
-        override def clear(): Unit = {
-          super.clear()
-          // Make sure we start with the default test configs even after clear
-          TestSQLContext.overrideConfs.foreach { case (key, value) => setConfString(key, value) }
-        }
-      }
-    }
-
-    def apply(sparkSession: SparkSession): TestSessionState = {
-      val sqlConf = testConf
-      val initHelper = SessionState(sparkSession, Some(sqlConf))
-
-      new TestSessionState(
-        sparkSession.sparkContext,
-        sparkSession.sharedState,
-        sqlConf,
-        initHelper.experimentalMethods,
-        initHelper.functionRegistry,
-        initHelper.catalog,
-        initHelper.sqlParser,
-        initHelper.analyzer,
-        initHelper.streamingQueryManager,
-        initHelper.queryExecutionCreator)
-    }
-  }
-
   @transient
-  override lazy val sessionState: SessionState = TestSessionState(this)
+  override lazy val sessionState: SessionState = SessionState(this, Some(
+    new SQLConf {
+      clear()
+      override def clear(): Unit = {
+        super.clear()
+        // Make sure we start with the default test configs even after clear
+        TestSQLContext.overrideConfs.foreach { case (key, value) => setConfString(key, value) }
+      }
+    }))
 
   // Needed for Java tests
   def loadTestData(): Unit = {

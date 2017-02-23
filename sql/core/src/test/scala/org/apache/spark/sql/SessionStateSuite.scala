@@ -128,6 +128,7 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
     checkTableExists(activeSession)
 
     val forkedSession = activeSession.cloneSession()
+    assert(forkedSession ne activeSession)
     SparkSession.setActiveSession(forkedSession)
     checkTableExists(forkedSession)
 

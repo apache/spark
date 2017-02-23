@@ -500,9 +500,12 @@ class CatalogSuite
     createTempTable("my_temp_table")
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
 
+    // inheritance
     val forkedSession = spark.cloneSession()
+    assert(spark ne forkedSession)
     assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
 
+    // independence
     dropTable("my_temp_table") // drop table in original session
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
     assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))

@@ -107,33 +107,33 @@ private[hive] class HiveSessionState(
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
-  override def clone(sparkSession: SparkSession): HiveSessionState = {
-    val sparkContext = sparkSession.sparkContext
-    val copyHelper = super.clone(sparkSession)
+  override def clone(newSparkSession: SparkSession): HiveSessionState = {
+    val sparkContext = newSparkSession.sparkContext
+    val copyHelper = super.clone(newSparkSession)
     val catalogCopy = catalog.clone(
-      sparkSession,
+      newSparkSession,
       copyHelper.conf,
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, copyHelper.conf),
       copyHelper.functionRegistry,
       copyHelper.sqlParser)
     val hiveClient =
-      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      newSparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .newSession()
 
     new HiveSessionState(
       sparkContext,
-      sparkSession.sharedState,
+      newSparkSession.sharedState,
       copyHelper.conf,
       copyHelper.experimentalMethods,
       copyHelper.functionRegistry,
       catalogCopy,
       copyHelper.sqlParser,
       hiveClient,
-      HiveSessionState.createAnalyzer(sparkSession, catalogCopy, copyHelper.conf),
+      HiveSessionState.createAnalyzer(newSparkSession, catalogCopy, copyHelper.conf),
       copyHelper.streamingQueryManager,
       copyHelper.queryExecutionCreator,
       HiveSessionState.createPlannerCreator(
-        sparkSession,
+        newSparkSession,
         copyHelper.conf,
         copyHelper.experimentalMethods))
   }
