@@ -1589,8 +1589,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // At this point, no more tasks are running for the stage (and the TaskSetManager considers the
     // stage complete), but the tasks that ran on HostA need to be re-run, so the DAGScheduler
-    // should re-submit the stage.
+    // should re-submit the stage with one task (the task that originally ran on HostA).
     assert(taskSets.size === 2)
+    assert(taskSets(1).tasks.size === 1)
 
     // Make sure that the stage that was re-submitted was the ShuffleMapStage (not the reduce
     // stage, which shouldn't be run until all of the tasks in the ShuffleMapStage complete on
