@@ -1804,6 +1804,10 @@ setClassUnion("numericOrcharacter", c("numeric", "character"))
 #' @note [[ since 1.4.0
 setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i) {
+            if (length(i) > 1) {
+              warning("Subset index has length > 1. Only the first index is used.")
+              i <- i[1]
+            }
             if (is.numeric(i)) {
               cols <- columns(x)
               i <- cols[[i]]
@@ -1817,6 +1821,10 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 #' @note [[<- since 2.1.1
 setMethod("[[<-", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i, value) {
+            if (length(i) > 1) {
+              warning("Subset index has length > 1. Only the first index is used.")
+              i <- i[1]
+            }
             if (is.numeric(i)) {
               cols <- columns(x)
               i <- cols[[i]]
