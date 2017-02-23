@@ -180,6 +180,7 @@ class QuantileSummaries(
     require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
     require(headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
+    require(sampled.nonEmpty, "buffer of quantile statistics should not be empty")
 
     if (quantile <= relativeError) {
       return sampled.head.value

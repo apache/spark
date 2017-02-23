@@ -55,7 +55,8 @@ object StatFunctions extends Logging {
    *
    * @return for each column, returns the requested approximations
    *
-   * @note null and NaN values will be ignored in numerical columns before calculation.
+   * @note null and NaN values will be ignored in numerical columns before calculation. For
+   *   a column only containing null or NaN values, an empty array is returned.
    */
   def multipleApproxQuantiles(
       df: DataFrame,
@@ -98,7 +99,13 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary => probabilities.map(summary.query) }
+    summaries.map { summary =>
+      try {
+        probabilities.map(summary.query)
+      } catch {
+        case e: IllegalArgumentException => Seq.empty[Double]
+      }
+    }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

@@ -213,6 +213,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       StructField("input2", DoubleType, nullable = true),
       StructField("input3", DoubleType, nullable = true)))
     val dfNaN = spark.createDataFrame(rows, schema)
+
     val resNaN1 = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilon)
     assert(resNaN1.count(_.isNaN) === 0)
     assert(resNaN1.count(_ == null) === 0)
@@ -221,7 +222,10 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(resNaN2.count(_.isNaN) === 0)
     assert(resNaN2.count(_ == null) === 0)
 
-    val resNaNAll = dfNaN.stat.approxQuantile(Array("input1", "input2"),
+    val resNaN3 = dfNaN.stat.approxQuantile("input3", Array(q1, q2), epsilon)
+    assert(resNaN3.isEmpty)
+
+    val resNaNAll = dfNaN.stat.approxQuantile(Array("input1", "input2", "input3"),
       Array(q1, q2), epsilon)
     assert(resNaNAll.flatten.count(_.isNaN) === 0)
     assert(resNaNAll.flatten.count(_ == null) === 0)
@@ -231,18 +235,18 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(resNaN2(0) === resNaNAll(1)(0))
     assert(resNaN2(1) === resNaNAll(1)(1))
 
-    // return null if the dataset is empty
+    // return empty array for columns only containing null or NaN values
+    assert(resNaNAll(2).isEmpty)
+
+    // return empty array if the dataset is empty
     val res1 = dfNaN.selectExpr("*").limit(0)
       .stat.approxQuantile("input1", Array(q1, q2), epsilon)
-    assert(res1 === null)
+    assert(res1.isEmpty)
 
     val res2 = dfNaN.selectExpr("*").limit(0)
       .stat.approxQuantile(Array("input1", "input2"), Array(q1, q2), epsilon)
-    assert(res2 === null)
-
-    // return null if all rows in some column contain null or NaN
-    val res3 = dfNaN.stat.approxQuantile(Array("input1", "input3"), Array(q1, q2), epsilon)
-    assert(res3 === null)
+    assert(res2(0).isEmpty)
+    assert(res2(1).isEmpty)
   }
 
   test("crosstab") {
