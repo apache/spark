@@ -183,7 +183,6 @@ class FramedSerializer(Serializer):
 
 
 class ArrowSerializer(FramedSerializer):
-
     """
     Serializes an Arrow stream.
     """

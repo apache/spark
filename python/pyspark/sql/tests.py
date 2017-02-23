@@ -2347,6 +2347,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
         importlib.reload(window)
 
+
 @unittest.skipIf(not _have_arrow, "Arrow not installed")
 class ArrowTests(ReusedPySparkTestCase):
 

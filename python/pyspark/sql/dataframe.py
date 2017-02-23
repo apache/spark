@@ -27,7 +27,8 @@ else:
 
 from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, \
+    UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -391,7 +392,7 @@ class DataFrame(object):
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
-    @since(2.0)
+    @since(2.2)
     def collectAsArrow(self):
         """Returns all records as list of deserialized ArrowPayloads
         """
