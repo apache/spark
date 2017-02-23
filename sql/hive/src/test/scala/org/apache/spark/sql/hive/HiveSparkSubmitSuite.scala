@@ -939,7 +939,7 @@ object SPARK_19667_CREATE_TABLE {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
     try {
-      val warehousePath = spark.sharedState.warehousePath.stripSuffix("/")
+      val warehousePath = s"file:${spark.sharedState.warehousePath.stripSuffix("/")}"
       val defaultDB = spark.sessionState.catalog.getDatabaseMetadata("default")
       // default database use warehouse path as its location
       assert(defaultDB.locationUri.stripSuffix("/") == warehousePath)
@@ -947,7 +947,7 @@ object SPARK_19667_CREATE_TABLE {
 
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       // table in default database use the location of default database which is also warehouse path
-      assert(table.location.stripSuffix("/") == s"file:$warehousePath/t")
+      assert(table.location.stripSuffix("/") == s"$warehousePath/t")
       spark.sql("INSERT INTO TABLE t SELECT 1")
       assert(spark.sql("SELECT * FROM t").count == 1)
 
@@ -956,7 +956,7 @@ object SPARK_19667_CREATE_TABLE {
       spark.sql("CREATE TABLE t1(b string)")
       val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
       // table in not default database use the location of its own database
-      assert(table1.location.stripSuffix("/") == s"file:$warehousePath/not_default.db/t1")
+      assert(table1.location.stripSuffix("/") == s"$warehousePath/not_default.db/t1")
     } finally {
       spark.sql("USE default")
     }
@@ -967,7 +967,7 @@ object SPARK_19667_VERIFY_TABLE_PATH {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
     try {
-      val warehousePath = spark.sharedState.warehousePath.stripSuffix("/")
+      val warehousePath = s"file:${spark.sharedState.warehousePath.stripSuffix("/")}"
       val defaultDB = spark.sessionState.catalog.getDatabaseMetadata("default")
       // default database use warehouse path as its location
       assert(defaultDB.locationUri.stripSuffix("/") == warehousePath)
@@ -976,14 +976,14 @@ object SPARK_19667_VERIFY_TABLE_PATH {
       // the table in default database created in job(SPARK_19667_CREATE_TABLE) above,
       // which has different warehouse path from this job, its location still equals to
       // the location when it's created.
-      assert(table.location.stripSuffix("/") != s"file:$warehousePath/t")
+      assert(table.location.stripSuffix("/") != s"$warehousePath/t")
       assert(spark.sql("SELECT * FROM t").count == 1)
 
       spark.sql("CREATE TABLE t3(d string)")
       val table3 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t3"))
       // the table in default database created here in this job, it will use the warehouse path
       // of this job as its location
-      assert(table3.location.stripSuffix("/") == s"file:$warehousePath/t3")
+      assert(table3.location.stripSuffix("/") == s"$warehousePath/t3")
 
       spark.sql("USE not_default")
       val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -997,7 +997,7 @@ object SPARK_19667_VERIFY_TABLE_PATH {
       val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
       // the table in not default database created here in this job, it will use the location
       // of the database as its location, not the warehouse path in this job
-      assert(table2.location.stripSuffix("/") != s"file:$warehousePath/not_default.db/t2")
+      assert(table2.location.stripSuffix("/") != s"$warehousePath/not_default.db/t2")
 
       spark.sql("CREATE DATABASE not_default_1")
       spark.sql("USE not_default_1")
@@ -1005,7 +1005,7 @@ object SPARK_19667_VERIFY_TABLE_PATH {
       val table4 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t4"))
       // the table created in the database which created in this job, it will use the location
       // of the database.
-      assert(table4.location.stripSuffix("/") == s"file:$warehousePath/not_default_1.db/t4")
+      assert(table4.location.stripSuffix("/") == s"$warehousePath/not_default_1.db/t4")
 
     } finally {
       spark.sql("DROP TABLE IF EXISTS t4")
