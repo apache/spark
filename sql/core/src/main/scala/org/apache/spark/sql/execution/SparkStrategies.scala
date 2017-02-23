@@ -22,9 +22,10 @@ import org.apache.spark.sql.{SaveMode, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, EventTimeWatermark, LogicalPlan, MapGroupsWithState}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
@@ -239,6 +240,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           aggregateExpressions,
           rewrittenResultExpressions,
           planLater(child))
+
+      case _ => Nil
+    }
+  }
+
+  /**
+   * Used to plan the streaming deduplicate operator.
+   */
+  object StreamingDeduplicationStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case Deduplicate(keys, child, true) =>
+        StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
     }

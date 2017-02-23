@@ -35,7 +35,7 @@ object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
+class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()

@@ -864,3 +864,12 @@ case object OneRowRelation extends LeafNode {
   override def output: Seq[Attribute] = Nil
   override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
 }
+
+/** A logical plan for `dropDuplicates`. */
+case class Deduplicate(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    streaming: Boolean) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
+}

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 /** Class to check custom state types */
 case class RunningCount(count: Long)
 
-class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
+class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   import testImplicits._
 
@@ -320,13 +320,6 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       StartStream(),
       CheckLastBatch(("a", 3L))     // task should not fail, and should show correct count
     )
-  }
-
-  private def assertNumStateRows(total: Long, updated: Long): AssertOnQuery = AssertOnQuery { q =>
-    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
-    assert(progressWithData.stateOperators(0).numRowsTotal === total, "incorrect total rows")
-    assert(progressWithData.stateOperators(0).numRowsUpdated === updated, "incorrect updates rows")
-    true
   }
 }
 

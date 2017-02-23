@@ -75,7 +75,7 @@ object UnsupportedOperationChecker {
         if (watermarkAttributes.isEmpty) {
           throwError(
             s"$outputMode output mode not supported when there are streaming aggregations on " +
-                s"streaming DataFrames/DataSets")(plan)
+                s"streaming DataFrames/DataSets without watermark")(plan)
         }
 
       case InternalOutputModes.Complete if aggregates.isEmpty =>
@@ -118,6 +118,10 @@ object UnsupportedOperationChecker {
 
         case m: MapGroupsWithState if collectStreamingAggregates(m).nonEmpty =>
           throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
+            "streaming DataFrame/Dataset")
+
+        case d: Deduplicate if collectStreamingAggregates(d).nonEmpty =>
+          throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
         case Join(left, right, joinType, _) =>
