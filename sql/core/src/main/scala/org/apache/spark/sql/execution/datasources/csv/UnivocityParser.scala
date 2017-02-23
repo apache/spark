@@ -51,10 +51,10 @@ private[csv] class UnivocityParser(
     require(schema(corrFieldIndex).nullable)
   }
 
-  private val inputSchema = StructType(schema.filter(_.name != options.columnNameOfCorruptRecord))
+  private val dataSchema = StructType(schema.filter(_.name != options.columnNameOfCorruptRecord))
 
   private val valueConverters =
-    inputSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+    schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
 
   private val parser = new CsvParser(options.asParserSettings)
 
@@ -62,9 +62,7 @@ private[csv] class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  // This parser loads an `indexArr._1`-th position value in input tokens,
-  // then put the value in `row(indexArr._2)`.
-  private val indexArr: Array[(Int, Int)] = {
+  private val indexArr: Array[Int] = {
     val fields = if (options.dropMalformed) {
       // If `dropMalformed` is enabled, then it needs to parse all the values
       // so that we can decide which row is malformed.
@@ -72,14 +70,7 @@ private[csv] class UnivocityParser(
     } else {
       requiredSchema
     }
-    val fieldsWithIndexes = fields.zipWithIndex
-    corruptFieldIndex.map { case corrFieldIndex =>
-      fieldsWithIndexes.filter { case (_, i) => i != corrFieldIndex }
-    }.getOrElse {
-      fieldsWithIndexes
-    }.map { case (f, i) =>
-      (inputSchema.indexOf(f), i)
-    }.toArray
+    fields.map(schema.indexOf(_: StructField)).toArray
   }
 
   /**
@@ -193,13 +184,13 @@ private[csv] class UnivocityParser(
     convertWithParseMode(input) { tokens =>
       var i: Int = 0
       while (i < indexArr.length) {
-        val (pos, rowIdx) = indexArr(i)
+        val pos = indexArr(i)
         // It anyway needs to try to parse since it decides if this row is malformed
         // or not after trying to cast in `DROPMALFORMED` mode even if the casted
         // value is not stored in the row.
         val value = valueConverters(pos).apply(tokens(pos))
         if (i < requiredSchema.length) {
-          row(rowIdx) = value
+          row(i) = value
         }
         i += 1
       }
@@ -210,7 +201,7 @@ private[csv] class UnivocityParser(
   private def convertWithParseMode(
       input: String)(convert: Array[String] => InternalRow): Option[InternalRow] = {
     val tokens = parser.parseLine(input)
-    if (options.dropMalformed && inputSchema.length != tokens.length) {
+    if (options.dropMalformed && dataSchema.length != tokens.length) {
       if (numMalformedRecords < options.maxMalformedLogPerPartition) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")
       }
@@ -221,14 +212,30 @@ private[csv] class UnivocityParser(
       }
       numMalformedRecords += 1
       None
-    } else if (options.failFast && inputSchema.length != tokens.length) {
+    } else if (options.failFast && dataSchema.length != tokens.length) {
       throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
         s"${tokens.mkString(options.delimiter.toString)}")
     } else {
-      val checkedTokens = if (options.permissive && inputSchema.length > tokens.length) {
-        tokens ++ new Array[String](inputSchema.length - tokens.length)
-      } else if (options.permissive && inputSchema.length < tokens.length) {
-        tokens.take(inputSchema.length)
+      val checkedTokens = if (options.permissive) {
+        // If a length of parsed tokens is not equal to expected one, it makes the length the same
+        // with the expected. If the length is shorter, it adds extra tokens in the tail.
+        // If longer, it drops extra tokens.
+        val lengthSafeTokens = if (dataSchema.length > tokens.length) {
+          tokens ++ new Array[String](dataSchema.length - tokens.length)
+        } else if (dataSchema.length < tokens.length) {
+          tokens.take(dataSchema.length)
+        } else {
+          tokens
+        }
+
+        // If we need to handle corrupt fields, it adds an extra token to skip a field for malformed
+        // strings when loading parsed tokens into a resulting `row`.
+        corruptFieldIndex.map { corrFieldIndex =>
+          val (front, back) = lengthSafeTokens.splitAt(corrFieldIndex)
+          front ++ new Array[String](1) ++ back
+        }.getOrElse {
+          lengthSafeTokens
+        }
       } else {
         tokens
       }
@@ -238,7 +245,7 @@ private[csv] class UnivocityParser(
       } catch {
         case NonFatal(e) if options.permissive =>
           val row = new GenericInternalRow(requiredSchema.length)
-          corruptFieldIndex.map(row(_) = UTF8String.fromString(input))
+          corruptFieldIndex.foreach(row(_) = UTF8String.fromString(input))
           Some(row)
         case NonFatal(e) if options.dropMalformed =>
           if (numMalformedRecords < options.maxMalformedLogPerPartition) {
