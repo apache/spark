@@ -26,10 +26,11 @@ sparkR.session(appName = "SparkR-ML-kmeans-example")
 
 # $example on$
 # Fit a k-means model with spark.kmeans
-irisDF <- suppressWarnings(createDataFrame(iris))
-kmeansDF <- irisDF
-kmeansTestDF <- irisDF
-kmeansModel <- spark.kmeans(kmeansDF, ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width,
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+kmeansDF <- training
+kmeansTestDF <- training
+kmeansModel <- spark.kmeans(kmeansDF, ~ Class + Sex + Age + Freq,
                             k = 3)
 
 # Model summary
