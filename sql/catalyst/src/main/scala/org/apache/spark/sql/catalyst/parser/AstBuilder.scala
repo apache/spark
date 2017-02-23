@@ -1490,11 +1490,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
     // Add Hive type string to metadata.
     val rawDataType = typedVisit[DataType](ctx.dataType)
-    builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
+    val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
+    if (rawDataType != cleanedDataType) {
+      builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
+    }
 
     StructField(
       identifier.getText,
-      HiveStringType.replaceCharType(rawDataType),
+      cleanedDataType,
       nullable = true,
       builder.build())
   }
