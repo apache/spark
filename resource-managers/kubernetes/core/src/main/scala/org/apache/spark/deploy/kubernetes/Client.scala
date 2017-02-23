@@ -62,7 +62,11 @@ private[spark] class Client(
   private val uiPort = sparkConf.getInt("spark.ui.port", DEFAULT_UI_PORT)
   private val driverSubmitTimeoutSecs = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_TIMEOUT)
   private val sparkFiles = sparkConf.getOption("spark.files")
+    .map(_.split(","))
+    .getOrElse(Array.empty[String])
   private val sparkJars = sparkConf.getOption("spark.jars")
+    .map(_.split(","))
+    .getOrElse(Array.empty[String])
 
   private val waitForAppCompletion: Boolean = sparkConf.get(WAIT_FOR_APP_COMPLETION)
 
