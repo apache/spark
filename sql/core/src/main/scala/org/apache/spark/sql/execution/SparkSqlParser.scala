@@ -1312,9 +1312,25 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // just convert the whole type string to lower case, otherwise the struct field names
         // will no longer be case sensitive. Instead, we rely on our parser to get the proper
         // case before passing it to Hive.
-        typedVisit[DataType](col.dataType).catalogString,
+        getCatalogColumnDataType(col.dataType()),
         nullable = true,
         Option(col.STRING).map(string))
+    }
+  }
+
+  private def getCatalogColumnDataType(dataTypeContext: DataTypeContext): String = {
+    val defaultType = typedVisit[DataType](dataTypeContext).catalogString
+
+    dataTypeContext match {
+      case p: PrimitiveDataTypeContext =>
+        p.identifier.getText.toLowerCase match {
+          case "varchar" | "char" =>
+            dataTypeContext.getText.toLowerCase
+          case _ =>
+            defaultType
+        }
+      case _ =>
+        defaultType
     }
   }
 
