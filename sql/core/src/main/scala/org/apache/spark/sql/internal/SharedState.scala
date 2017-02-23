@@ -64,9 +64,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       val sparkWarehouseDir = sparkContext.conf.get(WAREHOUSE_PATH)
       logInfo(s"Setting hive.metastore.warehouse.dir ($hiveWarehouseDir) to the value of " +
         s"${WAREHOUSE_PATH.key} ('$sparkWarehouseDir').")
-      if (hiveWarehouseDir != null) {
-        sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
-      }
+      sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
       sparkContext.conf.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
       sparkWarehouseDir
     }
