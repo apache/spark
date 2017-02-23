@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.{InterruptedIOException, IOException}
+import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
+
 import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
@@ -350,13 +353,45 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("handle IOException when the streaming thread is interrupted (pre Hadoop 2.8)") {
+    // This test uses a fake source to throw the same IOException as pre Hadoop 2.8 when the
+    // streaming thread is interrupted. We should handle it properly by not failing the query.
+    ThrowingIOExceptionLikeHadoop12074.createSourceLatch = new CountDownLatch(1)
+    val query = spark
+      .readStream
+      .format(classOf[ThrowingIOExceptionLikeHadoop12074].getName)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(ThrowingIOExceptionLikeHadoop12074.createSourceLatch
+      .await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS),
+      "ThrowingIOExceptionLikeHadoop12074.createSource wasn't called before timeout")
+    query.stop()
+    assert(query.exception.isEmpty)
+  }
+
+  test("handle InterruptedIOException when the streaming thread is interrupted (Hadoop 2.8+)") {
+    // This test uses a fake source to throw the same InterruptedIOException as Hadoop 2.8+ when the
+    // streaming thread is interrupted. We should handle it properly by not failing the query.
+    ThrowingInterruptedIOException.createSourceLatch = new CountDownLatch(1)
+    val query = spark
+      .readStream
+      .format(classOf[ThrowingInterruptedIOException].getName)
+      .load()
+      .writeStream
+      .format("console")
+      .start()
+    assert(ThrowingInterruptedIOException.createSourceLatch
+      .await(streamingTimeout.toMillis, TimeUnit.MILLISECONDS),
+      "ThrowingInterruptedIOException.createSource wasn't called before timeout")
+    query.stop()
+    assert(query.exception.isEmpty)
+  }
 }
 
-/**
- * A fake StreamSourceProvider thats creates a fake Source that cannot be reused.
- */
-class FakeDefaultSource extends StreamSourceProvider {
-
+abstract class FakeSource extends StreamSourceProvider {
   private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
 
   override def sourceSchema(
@@ -364,6 +399,10 @@ class FakeDefaultSource extends StreamSourceProvider {
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = ("fakeSource", fakeSchema)
+}
+
+/** A fake StreamSourceProvider that creates a fake Source that cannot be reused. */
+class FakeDefaultSource extends FakeSource {
 
   override def createSource(
       spark: SQLContext,
@@ -394,4 +433,64 @@ class FakeDefaultSource extends StreamSourceProvider {
       override def stop() {}
     }
   }
+}
+
+/** A fake source that throws the same IOException like pre Hadoop 2.8 when it's interrupted. */
+class ThrowingIOExceptionLikeHadoop12074 extends FakeSource {
+  import ThrowingIOExceptionLikeHadoop12074._
+
+  override def createSource(
+      spark: SQLContext,
+      metadataPath: String,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source = {
+    createSourceLatch.countDown()
+    try {
+      Thread.sleep(30000)
+      throw new TimeoutException("sleep was not interrupted in 30 seconds")
+    } catch {
+      case ie: InterruptedException =>
+        throw new IOException(ie.toString)
+    }
+  }
+}
+
+object ThrowingIOExceptionLikeHadoop12074 {
+  /**
+   * A latch to allow the user to wait until [[ThrowingIOExceptionLikeHadoop12074.createSource]] is
+   * called.
+   */
+  @volatile var createSourceLatch: CountDownLatch = null
+}
+
+/** A fake source that throws InterruptedIOException like Hadoop 2.8+ when it's interrupted. */
+class ThrowingInterruptedIOException extends FakeSource {
+  import ThrowingInterruptedIOException._
+
+  override def createSource(
+      spark: SQLContext,
+      metadataPath: String,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source = {
+    createSourceLatch.countDown()
+    try {
+      Thread.sleep(30000)
+      throw new TimeoutException("sleep was not interrupted in 30 seconds")
+    } catch {
+      case ie: InterruptedException =>
+        val iie = new InterruptedIOException(ie.toString)
+        iie.initCause(ie)
+        throw iie
+    }
+  }
+}
+
+object ThrowingInterruptedIOException {
+  /**
+   * A latch to allow the user to wait until [[ThrowingInterruptedIOException.createSource]] is
+   * called.
+   */
+  @volatile var createSourceLatch: CountDownLatch = null
 }
