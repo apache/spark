@@ -218,7 +218,7 @@ class HiveSparkSubmitSuite
   }
 
   // TODO: SPARK-19540 re-enable this test
-  test("set hive.metastore.warehouse.dir") {
+  ignore("set hive.metastore.warehouse.dir") {
     // In this test, we set hive.metastore.warehouse.dir in hive-site.xml but
     // not set spark.sql.warehouse.dir. So, the warehouse dir should be
     // the value of hive.metastore.warehouse.dir. Also, the value of
@@ -238,7 +238,6 @@ class HiveSparkSubmitSuite
 
     // Write a hive-site.xml containing a setting of hive.metastore.warehouse.dir.
     val hiveSiteDir = Utils.createTempDir()
-    println(s"kunal $hiveSiteDir")
     val file = new File(hiveSiteDir.getCanonicalPath, "hive-site.xml")
     val bw = new BufferedWriter(new FileWriter(file))
     bw.write(hiveSiteXmlContent)
@@ -449,7 +448,6 @@ object SetWarehouseLocationTest extends Logging {
     val providedExpectedWarehouseLocation =
       sparkConf.getOption("spark.sql.test.expectedWarehouseDir")
 
-    println(s"kunal providedExpectedWarehouseLocation: $providedExpectedWarehouseLocation")
     val (sparkSession, expectedWarehouseLocation) = providedExpectedWarehouseLocation match {
       case Some(warehouseDir) =>
         // If spark.sql.test.expectedWarehouseDir is set, the warehouse dir is set

@@ -65,7 +65,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
 
   object TestSessionState {
 
-    def createTestConf: SQLConf = {
+    def testConf: SQLConf = {
       new SQLConf {
         clear()
         override def clear(): Unit = {
@@ -77,7 +77,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
     }
 
     def apply(sparkSession: SparkSession): TestSessionState = {
-      val sqlConf = createTestConf
+      val sqlConf = testConf
       val initHelper = SessionState(sparkSession, Some(sqlConf))
 
       new TestSessionState(

@@ -50,7 +50,7 @@ private[sql] class SessionState(
     val streamingQueryManager: StreamingQueryManager,
     val queryExecutionCreator: LogicalPlan => QueryExecution) {
 
-  /*
+  /**
    * Interface exposed to the user for registering user-defined functions.
    * Note that the user-defined functions must be deterministic.
    */
@@ -59,7 +59,7 @@ private[sql] class SessionState(
   // Logical query plan optimizer.
   val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
 
-  /*
+  /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    */
@@ -88,14 +88,14 @@ private[sql] class SessionState(
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
-  def clone(sparkSession: SparkSession): SessionState = {
-    val sparkContext = sparkSession.sparkContext
+  def clone(newSparkSession: SparkSession): SessionState = {
+    val sparkContext = newSparkSession.sparkContext
     val confCopy = conf.clone()
     val hadoopConfCopy = SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy)
     val functionRegistryCopy = functionRegistry.clone()
     val sqlParser: ParserInterface = new SparkSqlParser(confCopy)
     val catalogCopy = catalog.clone(confCopy, hadoopConfCopy, functionRegistryCopy, sqlParser)
-    val queryExecution = (plan: LogicalPlan) => new QueryExecution(sparkSession, plan)
+    val queryExecution = (plan: LogicalPlan) => new QueryExecution(newSparkSession, plan)
 
     sparkContext.getConf.getAll.foreach { case (k, v) =>
       confCopy.setConfString(k, v)
@@ -103,14 +103,14 @@ private[sql] class SessionState(
 
     new SessionState(
       sparkContext,
-      sparkSession.sharedState,
+      newSparkSession.sharedState,
       confCopy,
-      experimentalMethods.copy,
+      experimentalMethods.clone(),
       functionRegistryCopy,
       catalogCopy,
       sqlParser,
-      SessionState.createAnalyzer(sparkSession, catalogCopy, confCopy),
-      new StreamingQueryManager(sparkSession),
+      SessionState.createAnalyzer(newSparkSession, catalogCopy, confCopy),
+      new StreamingQueryManager(newSparkSession),
       queryExecution)
   }
 
@@ -125,7 +125,6 @@ private[sql] class SessionState(
   }
 
   def addJar(path: String): Unit = sharedState.addJar(path)
-
 }
 
 

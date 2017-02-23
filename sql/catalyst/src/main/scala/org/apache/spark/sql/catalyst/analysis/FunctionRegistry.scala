@@ -109,7 +109,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.clear()
   }
 
-  override def clone(): FunctionRegistry = synchronized {
+  override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)

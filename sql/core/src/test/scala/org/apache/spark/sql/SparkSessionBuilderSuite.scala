@@ -18,18 +18,15 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.test.SharedSQLContext
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
+class SparkSessionBuilderSuite extends SparkFunSuite {
 
   private var initialSession: SparkSession = _
 
-  override lazy val sparkContext: SparkContext = {
+  private lazy val sparkContext: SparkContext = {
     initialSession = SparkSession.builder()
       .master("local")
       .config("spark.ui.enabled", value = false)
@@ -125,115 +122,5 @@ class SparkSessionBuilderSuite extends SparkFunSuite with SharedSQLContext {
       session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
       session.stop()
     }
-  }
-
-  test("fork new session and inherit a copy of the session state") {
-    val activeSession = SparkSession.builder().master("local").getOrCreate()
-    val forkedSession = activeSession.cloneSession()
-
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.sessionState ne activeSession.sessionState)
-    assert(forkedSession.conf ne activeSession.conf)
-    // the rest of copying is tested individually for each field
-
-    forkedSession.stop()
-  }
-
-  test("fork new session and inherit RuntimeConfig options") {
-    val activeSession = SparkSession
-      .builder()
-      .master("local")
-      .getOrCreate()
-
-    val key = "spark-config-clone"
-    activeSession.conf.set(key, "active")
-
-    // inheritance
-    val forkedSession = activeSession.cloneSession()
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.conf ne activeSession.conf)
-    assert(forkedSession.conf.get(key) == "active")
-
-    // independence
-    forkedSession.conf.set(key, "forked")
-    assert(activeSession.conf.get(key) == "active")
-    activeSession.conf.set(key, "dontcopyme")
-    assert(forkedSession.conf.get(key) == "forked")
-
-    forkedSession.stop()
-  }
-
-  test("fork new session and inherit function registry and udf") {
-    val activeSession = SparkSession.builder().master("local").getOrCreate()
-    activeSession.udf.register("strlenScala", (_: String).length + (_: Int))
-    val forkedSession = activeSession.cloneSession()
-
-    // inheritance
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.sessionState.functionRegistry ne
-      activeSession.sessionState.functionRegistry)
-    assert(forkedSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
-
-    // independence
-    forkedSession.sessionState.functionRegistry.dropFunction("strlenScala")
-    assert(activeSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
-    activeSession.udf.register("addone", (_: Int) + 1)
-    assert(forkedSession.sessionState.functionRegistry.lookupFunction("addone").isEmpty)
-
-    forkedSession.stop()
-  }
-
-  test("fork new session and inherit experimental methods") {
-    object DummyRule1 extends Rule[LogicalPlan] {
-      def apply(p: LogicalPlan): LogicalPlan = p
-    }
-    object DummyRule2 extends Rule[LogicalPlan] {
-      def apply(p: LogicalPlan): LogicalPlan = p
-    }
-    val optimizations = List(DummyRule1, DummyRule2)
-
-    val activeSession = SparkSession.builder().master("local").getOrCreate()
-    activeSession.experimental.extraOptimizations = optimizations
-
-    val forkedSession = activeSession.cloneSession()
-
-    // inheritance
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.experimental.extraOptimizations.toSet ==
-      activeSession.experimental.extraOptimizations.toSet)
-
-    // independence
-    forkedSession.experimental.extraOptimizations = List(DummyRule2)
-    assert(activeSession.experimental.extraOptimizations == optimizations)
-    activeSession.experimental.extraOptimizations = List(DummyRule1)
-    assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
-
-    forkedSession.stop()
-  }
-
-  test("fork new session and run query on inherited table") {
-    def checkTableExists(sparkSession: SparkSession): Unit = {
-      QueryTest.checkAnswer(sparkSession.sql(
-        """
-          |SELECT x.str, COUNT(*)
-          |FROM df x JOIN df y ON x.str = y.str
-          |GROUP BY x.str
-        """.stripMargin),
-        Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-    }
-
-    val activeSession = SparkSession.builder().master("local").getOrCreate()
-    SparkSession.setActiveSession(activeSession)
-    import activeSession.implicits._
-
-    Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
-    checkTableExists(activeSession)
-
-    val forkedSession = activeSession.cloneSession()
-    SparkSession.setActiveSession(forkedSession)
-    checkTableExists(forkedSession)
-
-    SparkSession.clearActiveSession()
-    forkedSession.stop()
   }
 }

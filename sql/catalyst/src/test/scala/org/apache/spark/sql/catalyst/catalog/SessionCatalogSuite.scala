@@ -1214,6 +1214,7 @@ class SessionCatalogSuite extends PlanTest {
     assert(clone.getTempView("copytest1") == Option(tempTable1))
 
     // check if clone and original independent
+    assert(original ne clone)
     clone.dropTable(TableIdentifier("copytest1"), ignoreIfNotExists = false, purge = false)
     assert(original.getTempView("copytest1") == Option(tempTable1))
 

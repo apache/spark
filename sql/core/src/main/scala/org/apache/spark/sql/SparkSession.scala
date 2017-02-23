@@ -223,9 +223,9 @@ class SparkSession private(
    * :: Experimental ::
    * Create an identical copy of this `SparkSession`, sharing the underlying `SparkContext`
    * and cached data. All the state of this session (i.e. SQL configurations, temporary tables,
-   * registered functions) is also copied over.
-   * Changes to base session are not propagated to cloned session, cloned is independent
-   * after creation.
+   * registered functions) is copied over, and the cloned session is set up with the same shared
+   * state as this session. The cloned session is independent of this session, that is, any
+   * non-global change in either session is not reflected in the other.
    *
    * @note Other than the `SparkContext`, all shared state is initialized lazily.
    * This method will force the initialization of the shared state to ensure that parent
@@ -869,7 +869,6 @@ object SparkSession {
         if (options.nonEmpty) {
           logWarning("Using an existing SparkSession; some configuration may not take effect.")
         }
-        logInfo("1 using current thread's active session")
         return session
       }
 
@@ -882,7 +881,6 @@ object SparkSession {
           if (options.nonEmpty) {
             logWarning("Using an existing SparkSession; some configuration may not take effect.")
           }
-          logInfo("2 using global session")
           return session
         }
 
@@ -902,7 +900,6 @@ object SparkSession {
           if (!sc.conf.contains("spark.app.name")) {
             sc.conf.setAppName(randomAppName)
           }
-          logDebug("3 using new sparkContext")
           sc
         }
         session = new SparkSession(sparkContext)
@@ -919,7 +916,6 @@ object SparkSession {
           }
         })
       }
-      logInfo("4 using created session")
       return session
     }
   }

@@ -72,13 +72,13 @@ private[sql] class HiveSessionCatalog(
   }
 
   /**
-   * Get an identical copy of the `SessionCatalog`.
+   * Get an identical copy of the `HiveSessionCatalog`.
    * The temporary tables and function registry are retained.
    * The table relation cache will not be populated.
-   * @note `externalCatalog` and `globalTempViewManager` are from shared state, don't need deep copy
-   * `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
+   * @note `externalCatalog` and `globalTempViewManager` are from shared state, don't need
+   * deep copy. `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
    * All arguments passed in should be associated with `sparkSession`.
-   * This should ideally override `SessionCatalog.copy` but does not at present, since
+   * This should ideally override `SessionCatalog.clone()` but does not at present, since
    * `HiveMetastoreCatalog` is dependent on `SparkSession`.
    */
   def clone(

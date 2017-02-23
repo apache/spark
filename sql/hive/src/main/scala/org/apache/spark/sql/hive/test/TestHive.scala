@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{NonClosableMutableURLClassLoader, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -116,8 +116,13 @@ class TestHiveContext(
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
+    @transient private val parentSessionState: Option[SessionState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
+
+  def this(sc: SparkContext, existingSharedState: Option[SharedState], loadTestTables: Boolean) {
+    this(sc, existingSharedState, None, loadTestTables)
+  }
 
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
@@ -148,10 +153,22 @@ private[hive] class TestHiveSparkSession(
   // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
   // logic based on the setting of CATALOG_IMPLEMENTATION.
   @transient
-  override lazy val sessionState: TestHiveSessionState = TestHiveSessionState(self)
+  override lazy val sessionState: TestHiveSessionState = {
+    parentSessionState
+      .map(_.clone(this))
+      .getOrElse(TestHiveSessionState(self))
+      .asInstanceOf[TestHiveSessionState]
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
+  }
+
+  override def cloneSession(): TestHiveSparkSession = {
+    val clonedSession =
+      new TestHiveSparkSession(sc, Some(sharedState), Some(sessionState), loadTestTables)
+    clonedSession.sessionState // force initialization
+    clonedSession
   }
 
   private var cacheTables: Boolean = false
@@ -517,7 +534,25 @@ private[hive] class TestHiveSessionState(
       analyzer,
       streamingQueryManager,
       queryExecutionCreator,
-      plannerCreator) {}
+      plannerCreator) {
+
+  override def clone(newSparkSession: SparkSession): TestHiveSessionState = {
+    val copyHelper = super.clone(newSparkSession)
+    new TestHiveSessionState(
+      sparkContext,
+      sharedState,
+      copyHelper.conf,
+      copyHelper.experimentalMethods,
+      copyHelper.functionRegistry,
+      copyHelper.catalog,
+      copyHelper.sqlParser,
+      copyHelper.metadataHive,
+      copyHelper.analyzer,
+      copyHelper.streamingQueryManager,
+      queryExecutionCreator,
+      plannerCreator)
+  }
+}
 
 private[hive] object TestHiveSessionState {
 
