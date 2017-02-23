@@ -21,7 +21,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
@@ -39,12 +38,12 @@ class PercentileSuite extends SparkFunSuite {
     val agg = new Percentile(BoundReference(0, IntegerType, true), Literal(0.5))
 
     // Check empty serialize and deserialize
-    val buffer = new OpenHashMap[Number, Long]()
+    val buffer = new OpenHashMap[AnyRef, Long]()
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
 
     // Check non-empty buffer serializa and deserialize.
     data.foreach { key =>
-      buffer.changeValue(key, 1L, _ + 1L)
+      buffer.changeValue(new Integer(key), 1L, _ + 1L)
     }
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
@@ -58,25 +57,25 @@ class PercentileSuite extends SparkFunSuite {
     val agg = new Percentile(childExpression, percentageExpression)
 
     // Test with rows without frequency
-    val rows = (1 to count).map( x => Seq(x))
-    runTest( agg, rows, expectedPercentiles)
+    val rows = (1 to count).map(x => Seq(x))
+    runTest(agg, rows, expectedPercentiles)
 
     // Test with row with frequency. Second and third columns are frequency in Int and Long
     val countForFrequencyTest = 1000
-    val rowsWithFrequency = (1 to countForFrequencyTest).map( x => Seq(x, x):+ x.toLong)
+    val rowsWithFrequency = (1 to countForFrequencyTest).map(x => Seq(x, x):+ x.toLong)
     val expectedPercentilesWithFrquency = Seq(1.0, 500.0, 707.0, 866.0, 1000.0)
 
     val frequencyExpressionInt = BoundReference(1, IntegerType, nullable = false)
     val aggInt = new Percentile(childExpression, percentageExpression, frequencyExpressionInt)
-    runTest( aggInt, rowsWithFrequency, expectedPercentilesWithFrquency)
+    runTest(aggInt, rowsWithFrequency, expectedPercentilesWithFrquency)
 
     val frequencyExpressionLong = BoundReference(2, LongType, nullable = false)
     val aggLong = new Percentile(childExpression, percentageExpression, frequencyExpressionLong)
-    runTest( aggLong, rowsWithFrequency, expectedPercentilesWithFrquency)
+    runTest(aggLong, rowsWithFrequency, expectedPercentilesWithFrquency)
 
     // Run test with Flatten data
-    val flattenRows = (1 to countForFrequencyTest).flatMap( current =>
-      (1 to current).map( y => current )).map( Seq(_))
+    val flattenRows = (1 to countForFrequencyTest).flatMap(current =>
+      (1 to current).map(y => current )).map(Seq(_))
     runTest(agg, flattenRows, expectedPercentilesWithFrquency)
   }
 
@@ -153,7 +152,7 @@ class PercentileSuite extends SparkFunSuite {
     }
 
     val validFrequencyTypes = Seq(ByteType, ShortType, IntegerType, LongType)
-    for ( dataType <- validDataTypes;
+    for (dataType <- validDataTypes;
       frequencyType <- validFrequencyTypes)  {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
@@ -176,7 +175,7 @@ class PercentileSuite extends SparkFunSuite {
         StringType, DateType, TimestampType,
       CalendarIntervalType, NullType)
 
-    for( dataType <- invalidDataTypes;
+    for(dataType <- invalidDataTypes;
         frequencyType <- validFrequencyTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
@@ -186,7 +185,7 @@ class PercentileSuite extends SparkFunSuite {
             s"'`a`' is of ${dataType.simpleString} type."))
     }
 
-    for( dataType <- validDataTypes;
+    for(dataType <- validDataTypes;
         frequencyType <- invalidFrequencyDataTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
@@ -294,11 +293,11 @@ class PercentileSuite extends SparkFunSuite {
         agg.update(buffer, InternalRow(1, -5))
         agg.eval(buffer)
       }
-    assert( caught.getMessage.startsWith("Negative values found in "))
+    assert(caught.getMessage.startsWith("Negative values found in "))
   }
 
   private def compareEquals(
-      left: OpenHashMap[Number, Long], right: OpenHashMap[Number, Long]): Boolean = {
+      left: OpenHashMap[AnyRef, Long], right: OpenHashMap[AnyRef, Long]): Boolean = {
     left.size == right.size && left.forall { case (key, count) =>
       right.apply(key) == count
     }
