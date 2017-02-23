@@ -112,12 +112,12 @@ AND             t1b != t3b
 AND             t1d = t2d
 GROUP BY        t1a, t1b, t1c, t3a, t3b, t3c
 HAVING          count(distinct(t3a)) >= 1
-ORDER BY        t1a
+ORDER BY        t1a, t3b
 -- !query 4 schema
 struct<t1a:string,t1b:smallint,t1c:int,count(DISTINCT t3a):bigint,t3b:smallint,t3c:int>
 -- !query 4 output
-val1c	8	16	1	10	12
 val1c	8	16	1	6	12
+val1c	8	16	1	10	12
 val1c	8	16	1	17	16
 
 
@@ -141,15 +141,16 @@ AND    t1d NOT IN
               FROM   t2
               RIGHT JOIN t1 on t2e = t1e
               WHERE t1a = t2a)
+ORDER BY t1a, t1h
 -- !query 5 schema
 struct<t1a:string,t1b:smallint,t1c:int,t1d:bigint,t1h:timestamp>
 -- !query 5 output
-val1a	16	12	10	2014-07-04 01:01:00
-val1a	16	12	21	2014-06-04 01:02:00.001
 val1a	6	8	10	2014-04-04 01:00:00
 val1a	6	8	10	2014-04-04 01:02:00.001
-val1d	10	NULL	12	2015-05-04 01:01:00
+val1a	16	12	21	2014-06-04 01:02:00.001
+val1a	16	12	10	2014-07-04 01:01:00
 val1d	NULL	16	22	2014-06-04 01:01:00
+val1d	10	NULL	12	2015-05-04 01:01:00
 val1e	10	NULL	25	2014-08-04 01:01:00
 
 
