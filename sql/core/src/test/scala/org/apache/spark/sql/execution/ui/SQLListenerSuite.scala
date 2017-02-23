@@ -147,7 +147,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
-    // Non-existing driver accumulator updates should be filtered and no exception will be thrown.
+    // Driver accumulator updates don't belong to this execution should be filtered and no
+    // exception will be thrown.
     listener.onOtherEvent(SparkListenerDriverAccumUpdates(0, Seq((999L, 2L))))
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 2))
 
