@@ -43,8 +43,6 @@ object KafkaWriter extends Logging {
   val DEFAULT_MAX_OUTSTANDING_WRITES: Int = 1000
   val WAIT_FOR_CONFIRMED_WRITE_MS = "waitForConfirmedWriteMs"
   val DEFAULT_WAIT_FOR_CONFIRMED_WRITE_MS = 1000
-  val WAIT_FOR_CONFIRMED_WRITE_RETRIES = "waitForConfirmedWriteRetries"
-  val DEFAULT_WAIT_FOR_CONFIRMED_WRITE_RETRIES = 3
 
   private case class TaskCommitMessage(
     sparkStageId: Int,
@@ -176,12 +174,6 @@ object KafkaWriter extends Logging {
       } else {
         DEFAULT_WAIT_FOR_CONFIRMED_WRITE_MS
       }
-    val waitForConfirmedWriteRetries =
-      if (producerConfiguration.containsKey(WAIT_FOR_CONFIRMED_WRITE_RETRIES)) {
-        producerConfiguration.get(WAIT_FOR_CONFIRMED_WRITE_RETRIES).asInstanceOf[Int]
-      } else {
-        DEFAULT_WAIT_FOR_CONFIRMED_WRITE_RETRIES
-      }
     val maxOutstandingWrites =
       if (producerConfiguration.containsKey(MAX_OUTSTANDING_WRITES)) {
         producerConfiguration.get(MAX_OUTSTANDING_WRITES).asInstanceOf[Int]
@@ -239,13 +231,9 @@ object KafkaWriter extends Logging {
         val topic = projectedRow.get(0, StringType).toString
         val key = projectedRow.get(1, BinaryType).asInstanceOf[Array[Byte]]
         val value = projectedRow.get(2, BinaryType).asInstanceOf[Array[Byte]]
-        /* TODO: check for null value topic, which can happen when
-         * we have a topic field and no default */
         val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
         val callback = outstandingWriteSet.synchronized {
-          var waitRetries = waitForConfirmedWriteRetries
-          while (outstandingWriteSet.size >= maxOutstandingWrites && waitRetries > 0) {
-            waitRetries -= 1
+          if (outstandingWriteSet.size >= maxOutstandingWrites) {
             outstandingWriteSet.wait(waitForConfirmedWriteMs)
           }
           if (outstandingWriteSet.size >= maxOutstandingWrites) {
@@ -264,19 +252,12 @@ object KafkaWriter extends Logging {
     def releaseResources(): Unit = {
       /* Ensure that all writes are confirmed */
       outstandingWriteSet.synchronized {
-        var waitRetries = waitForConfirmedWriteRetries
-        while (outstandingWriteSet.size > 0 && waitRetries > 0) {
-          val currentSize = outstandingWriteSet.size
-          waitRetries -= 1
+        if (outstandingWriteSet.size > 0) {
           outstandingWriteSet.wait(waitForConfirmedWriteMs)
-          if (currentSize < outstandingWriteSet.size) {
-            /* we made progress so let's keep retrying */
-            waitRetries = waitForConfirmedWriteRetries
-          }
         }
         if (outstandingWriteSet.size > 0) {
           throw new SparkException(s"Unable to confirm ${outstandingWriteSet.size} " +
-            s"record writes to Kafka")
+            s"record writes to Kafka.")
         }
       }
       producer.close()
