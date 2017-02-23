@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -250,17 +251,14 @@ object KafkaWriter extends Logging {
     }
 
     def releaseResources(): Unit = {
+      producer.close(waitForConfirmedWriteMs, TimeUnit.MILLISECONDS)
       /* Ensure that all writes are confirmed */
       outstandingWriteSet.synchronized {
-        if (outstandingWriteSet.size > 0) {
-          outstandingWriteSet.wait(waitForConfirmedWriteMs)
-        }
         if (outstandingWriteSet.size > 0) {
           throw new SparkException(s"Unable to confirm ${outstandingWriteSet.size} " +
             s"record writes to Kafka.")
         }
       }
-      producer.close()
     }
   }
 }
