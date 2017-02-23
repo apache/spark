@@ -844,18 +844,13 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
  * information about the number of partitions during execution. Used when a specific ordering or
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
- * If `numPartitions` is not specified, the number of partitions will be the number set by
- * `spark.sql.shuffle.partitions`.
  */
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Option[Int] = None) extends UnaryNode {
+    numPartitions: Int) extends UnaryNode {
 
-  numPartitions match {
-    case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
-    case None => // Ok
-  }
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output

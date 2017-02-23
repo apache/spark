@@ -373,8 +373,8 @@ package object dsl {
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 
-      def distribute(exprs: Expression*)(n: Int = -1): LogicalPlan =
-        RepartitionByExpression(exprs, logicalPlan, numPartitions = if (n < 0) None else Some(n))
+      def distribute(exprs: Expression*)(n: Int): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))

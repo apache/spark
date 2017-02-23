@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -36,7 +38,8 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  */
 class SparkSqlParserSuite extends PlanTest {
 
-  private lazy val parser = new SparkSqlParser(new SQLConf)
+  val newConf = new SQLConf
+  private lazy val parser = new SparkSqlParser(newConf)
 
   /**
    * Normalizes plans:
@@ -250,5 +253,30 @@ class SparkSqlParserSuite extends PlanTest {
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
       AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+  }
+
+  test("query organization") {
+    // Test all valid combinations of order by/sort by/distribute by/cluster by/limit/windows
+    val baseSql = "select * from t"
+    val basePlan =
+      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(TableIdentifier("t")))
+
+    assertEqual(s"$baseSql distribute by a, b",
+      RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
+        basePlan,
+        numPartitions = newConf.numShufflePartitions))
+    assertEqual(s"$baseSql distribute by a sort by b",
+      Sort(SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+        global = false,
+        RepartitionByExpression(UnresolvedAttribute("a") :: Nil,
+          basePlan,
+          numPartitions = newConf.numShufflePartitions)))
+    assertEqual(s"$baseSql cluster by a, b",
+      Sort(SortOrder(UnresolvedAttribute("a"), Ascending) ::
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+        global = false,
+        RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
+          basePlan,
+          numPartitions = newConf.numShufflePartitions)))
   }
 }

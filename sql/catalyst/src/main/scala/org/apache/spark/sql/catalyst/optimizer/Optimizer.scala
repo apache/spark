@@ -578,7 +578,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       RepartitionByExpression(exprs, child, numPartitions)
     // Case 3
     case Repartition(numPartitions, _, r: RepartitionByExpression) =>
-      r.copy(numPartitions = Some(numPartitions))
+      r.copy(numPartitions = numPartitions)
     // Case 3
     case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
       RepartitionByExpression(exprs, child, numPartitions)
