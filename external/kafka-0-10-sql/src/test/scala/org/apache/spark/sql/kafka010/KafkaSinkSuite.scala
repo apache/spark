@@ -81,7 +81,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .option("kafka.metadata.max.age.ms", "1")
         .option("startingOffsets", "earliest")
         .option("subscribe", topic)
-        .option("failOnDataLoss", "false")
+        .option("failOnDataLoss", "true")
         .load()
       val kafka = reader
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
@@ -97,11 +97,56 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
         StopStream
       )
+      writer.stop()
+    }
+  }
+
+  test("write structured streaming aggregation") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      val topic = newTopic()
+
+      val writer = input.toDF()
+        .groupBy("value")
+        .count()
+        .selectExpr("CAST(value as STRING) key", "CAST(count as STRING) value")
+        .writeStream
+        .format("kafka")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .outputMode(OutputMode.Update)
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("defaultTopic", topic)
+        .queryName("kafkaAggStream")
+        .start()
+
+      // Create Kafka source that reads from earliest to latest offset
+      val reader = spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("startingOffsets", "earliest")
+        .option("subscribe", topic)
+        .option("failOnDataLoss", "true")
+        .load()
+      val kafka = reader
+        .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+        .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
+        .as[(Int, Int)]
+
+      testStream(kafka, outputMode = OutputMode.Update)(
+        StartStream(ProcessingTime(0)),
+        AddMoreData(input, writer, "1", "2", "2", "3", "3", "3"),
+
+        CheckAnswer((1, 1), (2, 2), (3, 3)),
+        AddMoreData(input, writer, "1", "2", "3"),
+        CheckAnswer((1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4)),
+        StopStream
+      )
+      writer.stop()
     }
   }
 
   test("write batch to kafka") {
-
     val topic = newTopic()
     val df = spark
       .sparkContext

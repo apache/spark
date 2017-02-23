@@ -19,11 +19,11 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{blocking, Future}
 
-import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
-import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSerializer}
+import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.common.serialization.ByteArraySerializer
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -39,6 +39,12 @@ object KafkaWriter extends Logging {
   val TOPIC_ATTRIBUTE_NAME: String = "topic"
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
+  val MAX_OUTSTANDING_WRITES: String = "maxOutstandingWrites"
+  val DEFAULT_MAX_OUTSTANDING_WRITES: Int = 1000
+  val WAIT_FOR_CONFIRMED_WRITE_MS = "waitForConfirmedWriteMs"
+  val DEFAULT_WAIT_FOR_CONFIRMED_WRITE_MS = 1000
+  val WAIT_FOR_CONFIRMED_WRITE_RETRIES = "waitForConfirmedWriteRetries"
+  val DEFAULT_WAIT_FOR_CONFIRMED_WRITE_RETRIES = 3
 
   private case class TaskCommitMessage(
     sparkStageId: Int,
@@ -139,6 +145,23 @@ object KafkaWriter extends Logging {
   }
 
   /**
+   * Used to reference an outstanding write. Kafka will call onCompletion when
+   * the write has been confirmed, after which we remove it from the outstanding
+   * write set.
+   * @param uuid used to differentiate writes
+   * @param outstandingWriteSet to remove itself from after write is confirmed
+   */
+  private case class KafkaCallback(uuid: ju.UUID)(
+      val outstandingWriteSet: mutable.HashSet[KafkaCallback]) extends Callback {
+    override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
+      outstandingWriteSet.synchronized {
+        outstandingWriteSet.remove(this)
+        outstandingWriteSet.notifyAll()
+      }
+    }
+  }
+
+  /**
    * A simple trait for writing out data in a single Spark task, without any concerns about how
    * to commit or abort tasks. Exceptions thrown by the implementation of this trait will
    * automatically trigger task aborts.
@@ -147,7 +170,25 @@ object KafkaWriter extends Logging {
       producerConfiguration: ju.Map[String, Object],
       inputSchema: Seq[Attribute],
       defaultTopic: Option[String]) {
-    var confirmedWrites = 0
+    val waitForConfirmedWriteMs =
+      if (producerConfiguration.containsKey(WAIT_FOR_CONFIRMED_WRITE_MS)) {
+        producerConfiguration.get(WAIT_FOR_CONFIRMED_WRITE_MS).asInstanceOf[Int]
+      } else {
+        DEFAULT_WAIT_FOR_CONFIRMED_WRITE_MS
+      }
+    val waitForConfirmedWriteRetries =
+      if (producerConfiguration.containsKey(WAIT_FOR_CONFIRMED_WRITE_RETRIES)) {
+        producerConfiguration.get(WAIT_FOR_CONFIRMED_WRITE_RETRIES).asInstanceOf[Int]
+      } else {
+        DEFAULT_WAIT_FOR_CONFIRMED_WRITE_RETRIES
+      }
+    val maxOutstandingWrites =
+      if (producerConfiguration.containsKey(MAX_OUTSTANDING_WRITES)) {
+        producerConfiguration.get(MAX_OUTSTANDING_WRITES).asInstanceOf[Int]
+      } else {
+        DEFAULT_MAX_OUTSTANDING_WRITES
+      }
+    val outstandingWriteSet = new mutable.HashSet[KafkaCallback]
     var failedWrites = ListBuffer.empty[Throwable]
     val topicExpression = inputSchema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (defaultTopic == None) {
@@ -186,40 +227,58 @@ object KafkaWriter extends Logging {
     // Create a Kafka Producer
     producerConfiguration.put("key.serializer", classOf[ByteArraySerializer].getName)
     producerConfiguration.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val producer = new KafkaProducer[Any, Any](producerConfiguration)
+    val producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
 
     /**
      * Writes key value data out to topics.
      */
     def execute(iterator: Iterator[InternalRow]): Unit = {
-      import scala.concurrent.ExecutionContext.Implicits.global
       while (iterator.hasNext) {
         val currentRow = iterator.next()
         val projectedRow = projection(currentRow)
         val topic = projectedRow.get(0, StringType).toString
-        val key = projectedRow.get(1, BinaryType)
-        val value = projectedRow.get(2, BinaryType)
-        // TODO: check for null value topic, which can happen when
-        // we have a topic field and no default
-        val record = new ProducerRecord[Any, Any](topic, key, value)
-        val future = Future[RecordMetadata] {
-          blocking {
-            producer.send(record).get()
+        val key = projectedRow.get(1, BinaryType).asInstanceOf[Array[Byte]]
+        val value = projectedRow.get(2, BinaryType).asInstanceOf[Array[Byte]]
+        /* TODO: check for null value topic, which can happen when
+         * we have a topic field and no default */
+        val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
+        val callback = outstandingWriteSet.synchronized {
+          var waitRetries = waitForConfirmedWriteRetries
+          while (outstandingWriteSet.size >= maxOutstandingWrites && waitRetries > 0) {
+            waitRetries -= 1
+            outstandingWriteSet.wait(waitForConfirmedWriteMs)
           }
+          if (outstandingWriteSet.size >= maxOutstandingWrites) {
+            throw new SparkException(s"Outstanding Kafka writes not draining")
+          }
+          // okay we have head room now, create the callback and add to set
+          val callback = new KafkaCallback(ju.UUID.randomUUID())(outstandingWriteSet)
+          outstandingWriteSet.add(callback)
+          callback
         }
-        future.onSuccess {
-          case _ => confirmedWrites += 1
-        }
-        future.onFailure {
-          case e => failedWrites += e
-        }
-        scala.concurrent.Await.ready(future, scala.concurrent.duration.Duration.Inf)
+        producer.send(record, callback)
       }
       producer.flush()
-      println(s"Confirmed writes $confirmedWrites, Failures ${failedWrites.mkString}")
     }
 
     def releaseResources(): Unit = {
+      /* Ensure that all writes are confirmed */
+      outstandingWriteSet.synchronized {
+        var waitRetries = waitForConfirmedWriteRetries
+        while (outstandingWriteSet.size > 0 && waitRetries > 0) {
+          val currentSize = outstandingWriteSet.size
+          waitRetries -= 1
+          outstandingWriteSet.wait(waitForConfirmedWriteMs)
+          if (currentSize < outstandingWriteSet.size) {
+            /* we made progress so let's keep retrying */
+            waitRetries = waitForConfirmedWriteRetries
+          }
+        }
+        if (outstandingWriteSet.size > 0) {
+          throw new SparkException(s"Unable to confirm ${outstandingWriteSet.size} " +
+            s"record writes to Kafka")
+        }
+      }
       producer.close()
     }
   }
