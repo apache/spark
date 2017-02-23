@@ -529,7 +529,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty)
 
     backend.driverEndpoint.askSync[Boolean](message)
-
   }
 
   private def verifyDeclinedOffer(driver: SchedulerDriver,
