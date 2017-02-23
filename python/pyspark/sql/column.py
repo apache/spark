@@ -248,6 +248,7 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
+    contains = _bin_op("contains")
     rlike = _bin_op("rlike")
     like = _bin_op("like")
     startswith = _bin_op("startsWith")
