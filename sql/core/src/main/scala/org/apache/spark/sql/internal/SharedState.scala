@@ -42,7 +42,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val warehousePath = {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
-      logInfo(s"load config from hive-site.xml $configFile")
+      logInfo(s"loading hive config file $configFile")
       sparkContext.hadoopConfiguration.addResource(configFile)
     }
 
