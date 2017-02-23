@@ -24,6 +24,8 @@ import scala.collection.mutable
 import org.apache.spark.{Partition => RDDPartition, TaskContext, TaskKilledException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
+import org.apache.spark.scheduler.HDFSCacheTaskLocation
+import org.apache.spark.scheduler.HostTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
@@ -44,7 +46,8 @@ case class PartitionedFile(
     filePath: String,
     start: Long,
     length: Long,
-    locations: Array[String] = Array.empty) {
+    locations: Array[String] = Array.empty,
+    cachedLocations : Array[String] = Array.empty) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -205,7 +208,13 @@ class FileScanRDD(
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
     val files = split.asInstanceOf[FilePartition].files
-
+    if (files.size == 1) {
+      val cachedLocations = files.head.cachedLocations.map(HDFSCacheTaskLocation(_).toString)
+      val nonCachedLocations = files.head.locations.filterNot { x =>
+          files.head.cachedLocations.contains(x)
+        }.map(HostTaskLocation(_).toString)
+      return cachedLocations ++ nonCachedLocations
+    }
     // Computes total number of bytes can be retrieved from each host.
     val hostToNumBytes = mutable.HashMap.empty[String, Long]
     files.foreach { file =>

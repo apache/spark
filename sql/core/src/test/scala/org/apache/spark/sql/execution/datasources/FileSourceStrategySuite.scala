@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.scheduler.TaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -38,6 +39,8 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
+
+
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
@@ -276,10 +279,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
   test("Locality support for FileScanRDD") {
     val partition = FilePartition(0, Seq(
-      PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
-      PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2")),
-      PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3")),
-      PartitionedFile(InternalRow.empty, "fakePath2", 0, 5, Array("host4"))
+      PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1"),
+          Array("host0")),
+      PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2"),
+          Array("host1")),
+      PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3"), Array("host3")),
+      PartitionedFile(InternalRow.empty, "fakePath2", 0, 5, Array("host4"), Array("host4"))
     ))
 
     val fakeRDD = new FileScanRDD(
@@ -317,6 +322,33 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("Locality support for FileScanRDD - one file per partition - cached Hosts") {
+    withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        "fs.file.impl" -> classOf[CachingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 10,
+          "file2" -> 10
+        ))
+
+      checkScan(table) { partitions =>
+        val Seq(p1, p2) = partitions
+        assert(p1.files.length == 1)
+        assert(p1.files.flatMap(_.locations).length == 1)
+        assert(p2.files.length == 1)
+        assert(p2.files.flatMap(_.locations).length == 1)
+        val fileScanRDD = getFileScanRDD(table)
+        val pl1 = fileScanRDD.preferredLocations(p1)
+        assert( pl1.head.startsWith(TaskLocation.inMemoryLocationTag))
+        val pl2 = fileScanRDD.preferredLocations(p2)
+        assert( pl2.head.startsWith(TaskLocation.inMemoryLocationTag))
+        assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 2)
+      }
+    }
+  }
+
   test("Locality support for FileScanRDD - large file") {
     withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
@@ -335,12 +367,42 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         assert(p1.files.flatMap(_.locations).length == 1)
         assert(p2.files.length == 2)
         assert(p2.files.flatMap(_.locations).length == 2)
-
         val fileScanRDD = getFileScanRDD(table)
         assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 3)
       }
     }
   }
+
+  test("Locality support for FileScanRDD - large file - cached") {
+    withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
+        "fs.file.impl" -> classOf[CachingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 15,
+          "file2" -> 5
+        ))
+
+      checkScan(table) { partitions =>
+        val Seq(p1, p2) = partitions
+        assert(p1.files.length == 1)
+        assert(p1.files.flatMap(_.locations).length == 1)
+        assert(p2.files.length == 2)
+        assert(p2.files.flatMap(_.locations).length == 2)
+        val fileScanRDD = getFileScanRDD(table)
+        val pl1 = fileScanRDD.preferredLocations(p1)
+        val pl2 = fileScanRDD.preferredLocations(p2)
+        assert( pl1.head.startsWith(TaskLocation.inMemoryLocationTag))
+        pl2.foreach { x =>
+          assert(!x.startsWith(TaskLocation.inMemoryLocationTag))
+        }
+        assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 3)
+      }
+    }
+  }
+
 
   test("SPARK-15654 do not split non-splittable files") {
     // Check if a non-splittable file is not assigned into partitions
@@ -641,6 +703,22 @@ class LocalityTestFileSystem extends RawLocalFileSystem {
     require(!file.isDirectory, "The file path can not be a directory.")
     val count = invocations.getAndAdd(1)
     Array(new BlockLocation(Array(s"host$count:50010"), Array(s"host$count"), 0, len))
+  }
+}
+
+class CachingTestFileSystem extends RawLocalFileSystem {
+  private val invocations = new AtomicInteger(0)
+
+  override def getFileBlockLocations(
+      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+    require(!file.isDirectory, "The file path can not be a directory.")
+    val count = invocations.getAndAdd(1)
+    val name = s"host$count:50010"
+    val host = s"host$count"
+    val cachedHost = host
+    val blockLocation = new BlockLocation(Array(name), Array(host), 0, len)
+    blockLocation.setCachedHosts(Array(cachedHost))
+    Array(blockLocation )
   }
 }
 

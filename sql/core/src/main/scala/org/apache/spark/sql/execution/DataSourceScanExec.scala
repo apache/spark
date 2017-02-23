@@ -357,8 +357,8 @@ case class FileSourceScanExec(
     val bucketed =
       selectedPartitions.flatMap { p =>
         p.files.map { f =>
-          val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
+          val (hosts, cachedHosts) = getBlockHosts(getBlockLocations(f), 0, f.getLen)
+          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts, cachedHosts)
         }
       }.groupBy { f =>
         BucketingUtils
@@ -404,14 +404,14 @@ case class FileSourceScanExec(
           (0L until file.getLen by maxSplitBytes).map { offset =>
             val remaining = file.getLen - offset
             val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-            val hosts = getBlockHosts(blockLocations, offset, size)
+            val (hosts, cachedHosts) = getBlockHosts(blockLocations, offset, size)
             PartitionedFile(
-              partition.values, file.getPath.toUri.toString, offset, size, hosts)
+              partition.values, file.getPath.toUri.toString, offset, size, hosts, cachedHosts)
           }
         } else {
-          val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+          val (hosts, cachedHosts) = getBlockHosts(blockLocations, 0, file.getLen)
           Seq(PartitionedFile(
-            partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
+            partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts, cachedHosts ))
         }
       }
     }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
@@ -457,32 +457,35 @@ case class FileSourceScanExec(
   // fraction the segment, and returns location hosts of that block. If no such block can be found,
   // returns an empty array.
   private def getBlockHosts(
-      blockLocations: Array[BlockLocation], offset: Long, length: Long): Array[String] = {
+    blockLocations: Array[BlockLocation],
+    offset: Long,
+    length: Long): (Array[String], Array[String]) = {
+
     val candidates = blockLocations.map {
       // The fragment starts from a position within this block
       case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
-        b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
+        (b.getHosts, b.getCachedHosts, (b.getOffset + b.getLength - offset).min(length) )
 
       // The fragment ends at a position within this block
       case b if offset <= b.getOffset && offset + length < b.getLength =>
-        b.getHosts -> (offset + length - b.getOffset).min(length)
+        (b.getHosts, b.getCachedHosts, (offset + length - b.getOffset).min(length))
 
       // The fragment fully contains this block
       case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
-        b.getHosts -> b.getLength
+        (b.getHosts, b.getCachedHosts, b.getLength)
 
       // The fragment doesn't intersect with this block
       case b =>
-        b.getHosts -> 0L
-    }.filter { case (hosts, size) =>
+        (b.getHosts, b.getCachedHosts, 0L)
+    }.filter { case (hosts, _, size) =>
       size > 0L
     }
 
     if (candidates.isEmpty) {
-      Array.empty[String]
+      (Array.empty[String], Array.empty[String])
     } else {
-      val (hosts, _) = candidates.maxBy { case (_, size) => size }
-      hosts
+      val (hosts, cachedHosts, _) = candidates.maxBy { case (_, _, size) => size }
+      (hosts, cachedHosts)
     }
   }
 
