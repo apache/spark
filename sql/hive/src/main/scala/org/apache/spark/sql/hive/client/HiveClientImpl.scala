@@ -340,17 +340,10 @@ private[hive] class HiveClientImpl(
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
-      // default database's location always use the warehouse path,
-      // and since the location of database stored in metastore is qualified,
-      // here we also make qualify for warehouse location
-      val dbLocation = if (dbName == SessionCatalog.DEFAULT_DATABASE) {
-        SessionCatalog.makeQualifiedPath(sparkConf.get(WAREHOUSE_PATH), hadoopConf).toString
-      } else d.getLocationUri
-
       CatalogDatabase(
         name = d.getName,
         description = d.getDescription,
-        locationUri = dbLocation,
+        locationUri = d.getLocationUri,
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }

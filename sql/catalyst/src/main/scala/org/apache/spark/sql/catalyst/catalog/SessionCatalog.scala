@@ -193,7 +193,16 @@ class SessionCatalog(
   def getDatabaseMetadata(db: String): CatalogDatabase = {
     val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
-    externalCatalog.getDatabase(dbName)
+    val database = externalCatalog.getDatabase(dbName)
+
+    // default database's location always use the warehouse path,
+    // and since the location of database stored in metastore is qualified,
+    // here we also make qualify for warehouse location
+    val dbLocation = if (dbName == SessionCatalog.DEFAULT_DATABASE) {
+      SessionCatalog.makeQualifiedPath(conf.warehousePath, hadoopConf).toString
+    } else database.locationUri
+
+    database.copy(locationUri = dbLocation)
   }
 
   def databaseExists(db: String): Boolean = {
