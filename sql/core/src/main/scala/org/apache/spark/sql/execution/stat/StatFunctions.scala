@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Cast, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -103,7 +104,7 @@ object StatFunctions extends Logging {
       try {
         probabilities.map(summary.query)
       } catch {
-        case e: IllegalArgumentException => Seq.empty[Double]
+        case e: SparkException => Seq.empty[Double]
       }
     }
   }
