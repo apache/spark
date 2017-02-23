@@ -1276,4 +1276,15 @@ public class JavaDatasetSuite implements Serializable {
       spark.createDataset(data, Encoders.bean(NestedComplicatedJavaBean.class));
     ds.collectAsList();
   }
+
+  public static class EmptyBean implements Serializable {}
+
+  @Test
+  public void testEmptyBean() {
+    EmptyBean bean = new EmptyBean();
+    List<EmptyBean> data = Arrays.asList(bean);
+    Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.collectAsList().size(), 1);
+  }
 }

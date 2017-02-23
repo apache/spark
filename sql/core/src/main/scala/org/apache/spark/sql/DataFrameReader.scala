@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -323,6 +323,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param jsonRDD input RDD with one JSON object per record
    * @since 1.4.0
    */
+  @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: JavaRDD[String]): DataFrame = json(jsonRDD.rdd)
 
   /**
@@ -335,7 +336,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param jsonRDD input RDD with one JSON object per record
    * @since 1.4.0
    */
+  @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
+    json(sparkSession.createDataset(jsonRDD)(Encoders.STRING))
+  }
+
+  /**
+   * Loads a `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   *
+   * Unless the schema is specified using `schema` function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param jsonDataset input Dataset with one JSON object per record
+   * @since 2.2.0
+   */
+  def json(jsonDataset: Dataset[String]): DataFrame = {
     val parsedOptions = new JSONOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
@@ -344,12 +360,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val schema = userSpecifiedSchema.getOrElse {
       JsonInferSchema.infer(
-        jsonRDD,
+        jsonDataset.rdd,
         parsedOptions,
         createParser)
     }
 
-    val parsed = jsonRDD.mapPartitions { iter =>
+    // Check a field requirement for corrupt records here to throw an exception in a driver side
+    schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = schema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
+    }
+
+    val parsed = jsonDataset.rdd.mapPartitions { iter =>
       val parser = new JacksonParser(schema, parsedOptions)
       iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
     }

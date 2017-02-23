@@ -16,21 +16,30 @@
  */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs.container.{ContainerRequestContext, ContainerRequestFilter}
-import javax.ws.rs.core.Response
-import javax.ws.rs.ext.Provider
+import javax.ws.rs._
+import javax.ws.rs.core.MediaType
 
-@Provider
-private[v1] class SecurityFilter extends ContainerRequestFilter with ApiRequestContext {
-  override def filter(req: ContainerRequestContext): Unit = {
-    val user = httpRequest.getRemoteUser()
-    if (!uiRoot.securityManager.checkUIViewPermissions(user)) {
-      req.abortWith(
-        Response
-          .status(Response.Status.FORBIDDEN)
-          .entity(raw"""user "$user" is not authorized""")
-          .build()
-      )
+import org.apache.spark.ui.SparkUI
+
+@Produces(Array(MediaType.APPLICATION_JSON))
+private[v1] class ApplicationEnvironmentResource(ui: SparkUI) {
+
+  @GET
+  def getEnvironmentInfo(): ApplicationEnvironmentInfo = {
+    val listener = ui.environmentListener
+    listener.synchronized {
+      val jvmInfo = Map(listener.jvmInformation: _*)
+      val runtime = new RuntimeInfo(
+        jvmInfo("Java Version"),
+        jvmInfo("Java Home"),
+        jvmInfo("Scala Version"))
+
+      new ApplicationEnvironmentInfo(
+        runtime,
+        listener.sparkProperties,
+        listener.systemProperties,
+        listener.classpathEntries)
     }
   }
+
 }

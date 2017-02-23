@@ -14,23 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1
 
-import javax.ws.rs.container.{ContainerRequestContext, ContainerRequestFilter}
-import javax.ws.rs.core.Response
-import javax.ws.rs.ext.Provider
+package org.apache.spark.examples.streaming
 
-@Provider
-private[v1] class SecurityFilter extends ContainerRequestFilter with ApiRequestContext {
-  override def filter(req: ContainerRequestContext): Unit = {
-    val user = httpRequest.getRemoteUser()
-    if (!uiRoot.securityManager.checkUIViewPermissions(user)) {
-      req.abortWith(
-        Response
-          .status(Response.Status.FORBIDDEN)
-          .entity(raw"""user "$user" is not authorized""")
-          .build()
-      )
-    }
+import scala.collection.JavaConverters._
+
+import com.amazonaws.regions.RegionUtils
+import com.amazonaws.services.kinesis.AmazonKinesis
+
+private[streaming] object KinesisExampleUtils {
+  def getRegionNameByEndpoint(endpoint: String): String = {
+    val uri = new java.net.URI(endpoint)
+    RegionUtils.getRegionsForService(AmazonKinesis.ENDPOINT_PREFIX)
+      .asScala
+      .find(_.getAvailableEndpoints.asScala.toSeq.contains(uri.getHost))
+      .map(_.getName)
+      .getOrElse(
+        throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
   }
 }

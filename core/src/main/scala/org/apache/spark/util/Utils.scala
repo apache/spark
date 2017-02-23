@@ -2210,17 +2210,32 @@ private[spark] object Utils extends Logging {
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
-            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
-              s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
-              s"the appropriate port for the service$serviceString (for example spark.ui.port " +
-              s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            val exceptionMessage = if (startPort == 0) {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (on a random free port)! " +
+                s"Consider explicitly setting the appropriate binding address for " +
+                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"for SparkDriver) to the correct binding address."
+            } else {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
+                s"the appropriate port for the service$serviceString (for example spark.ui.port " +
+                s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            }
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
-            s"Attempting port ${tryPort + 1}.")
+          if (startPort == 0) {
+            // As startPort 0 is for a random free port, it is most possibly binding address is
+            // not correct.
+            logWarning(s"Service$serviceString could not bind on a random free port. " +
+              "You may check whether configuring an appropriate binding address.")
+          } else {
+            logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+              s"Attempting port ${tryPort + 1}.")
+          }
       }
     }
     // Should never happen
