@@ -18,12 +18,12 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.nio.ByteBuffer
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{blocking, Future}
 
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.common.serialization.{ByteArraySerializer, StringSerializer}
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -31,7 +31,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.types.{ByteType, DataTypes, StringType}
+import org.apache.spark.sql.types.{BinaryType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -55,14 +55,30 @@ object KafkaWriter extends Logging {
       if (defaultTopic == None) {
         throw new IllegalArgumentException(s"Default topic required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present")
+      } else {
+        Literal(defaultTopic.get, StringType)
       }
-    )
+    ).dataType match {
+      case StringType => // good
+      case _ =>
+        throw new IllegalArgumentException(s"Topic type must be a String")
+    }
     schema.find(p => p.name == KEY_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalArgumentException(s"Required attribute '$KEY_ATTRIBUTE_NAME' not found")
-    )
-    schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
+      Literal(null, StringType)
+    ).dataType match {
+      case StringType | BinaryType => // good
+      case _ =>
+        throw new IllegalArgumentException(s"$KEY_ATTRIBUTE_NAME attribute type " +
+          s"must be a String or BinaryType")
+    }
+    val valueField = schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new IllegalArgumentException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
-    )
+    ).dataType match {
+      case StringType | BinaryType => // good
+      case _ =>
+        throw new IllegalArgumentException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
+          s"must be a String or BinaryType")
+    }
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
       try {
         val ret = sparkSession.sparkContext.runJob(queryExecution.toRdd,
@@ -88,13 +104,13 @@ object KafkaWriter extends Logging {
 
   /** Writes data out in a single Spark task. */
   private def executeTask(
-    iterator: Iterator[InternalRow],
-    producerConfiguration: ju.Map[String, Object],
-    sparkStageId: Int,
-    sparkPartitionId: Int,
-    sparkAttemptNumber: Int,
-    inputSchema: Seq[Attribute],
-    defaultTopic: Option[String]): TaskCommitMessage = {
+      iterator: Iterator[InternalRow],
+      producerConfiguration: ju.Map[String, Object],
+      sparkStageId: Int,
+      sparkPartitionId: Int,
+      sparkAttemptNumber: Int,
+      inputSchema: Seq[Attribute],
+      defaultTopic: Option[String]): TaskCommitMessage = {
     val writeTask = new KafkaWriteTask(
       producerConfiguration, inputSchema, defaultTopic)
     try {
@@ -116,9 +132,6 @@ object KafkaWriter extends Logging {
     }
 
     if (writeTask.failedWrites.size == 0) {
-      assert(writeTask.confirmedWrites == writeTask.producerRecordCount,
-        s"Confirmed writes ${writeTask.confirmedWrites} != " +
-        s"records written ${writeTask.producerRecordCount}")
       TaskCommitMessage(sparkStageId, sparkPartitionId, writeCommitted = true)
     } else {
       TaskCommitMessage(sparkStageId, sparkPartitionId, writeCommitted = false)
@@ -131,16 +144,11 @@ object KafkaWriter extends Logging {
    * automatically trigger task aborts.
    */
   private class KafkaWriteTask(
-    producerConfiguration: ju.Map[String, Object],
-    inputSchema: Seq[Attribute],
-    defaultTopic: Option[String]) {
-    var producerRecordCount = 0
+      producerConfiguration: ju.Map[String, Object],
+      inputSchema: Seq[Attribute],
+      defaultTopic: Option[String]) {
     var confirmedWrites = 0
     var failedWrites = ListBuffer.empty[Throwable]
-
-    println(s"INPUT SCHEMA ${inputSchema.toString()}")
-
-    val producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
     val topicExpression = inputSchema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (defaultTopic == None) {
         throw new IllegalStateException(s"Default topic required when no " +
@@ -154,21 +162,31 @@ object KafkaWriter extends Logging {
       } else {
         // fall back on a default value in case we evaluate c to null
         If(IsNull(c), Literal(UTF8String.fromString(defaultTopic.get), StringType), c)
-      }}
-    //  Use to extract the topic from either the Row or default value
-    val getTopic = UnsafeProjection.create(topicExpression, inputSchema)
-
+      }
+    }
     val keyExpression = inputSchema.find(p => p.name == KEY_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalStateException(s"Required attribute '$KEY_ATTRIBUTE_NAME' not found")
+      Literal(null, BinaryType)
     )
-    // Use to extract the key from a Row
-    val getKey = UnsafeProjection.create(Seq(keyExpression), inputSchema)
-
+    keyExpression.dataType match {
+      case StringType | BinaryType => // good
+      case t =>
+        throw new IllegalStateException(s"$KEY_ATTRIBUTE_NAME attribute unsupported type $t")
+    }
     val valueExpression = inputSchema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new IllegalStateException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     )
-    // Use to extract the value from a Row
-    val getValue = UnsafeProjection.create(Seq(valueExpression), inputSchema)
+    valueExpression.dataType match {
+      case StringType | BinaryType => // good
+      case t =>
+        throw new IllegalStateException(s"$VALUE_ATTRIBUTE_NAME attribute unsupported type $t")
+    }
+    val projection = UnsafeProjection.create(topicExpression ++
+      Seq(Cast(keyExpression, BinaryType), Cast(valueExpression, BinaryType)), inputSchema)
+
+    // Create a Kafka Producer
+    producerConfiguration.put("key.serializer", classOf[ByteArraySerializer].getName)
+    producerConfiguration.put("value.serializer", classOf[ByteArraySerializer].getName)
+    val producer = new KafkaProducer[Any, Any](producerConfiguration)
 
     /**
      * Writes key value data out to topics.
@@ -177,25 +195,28 @@ object KafkaWriter extends Logging {
       import scala.concurrent.ExecutionContext.Implicits.global
       while (iterator.hasNext) {
         val currentRow = iterator.next()
-        val topic = getTopic(currentRow).get(0, StringType).toString
-        val key = getKey(currentRow).getBytes
-        val value = getValue(currentRow).getBytes
-        println(s"topic $topic, key ${new String(key)}, " +
-          s"value ${new String(value)}")
-        val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
+        val projectedRow = projection(currentRow)
+        val topic = projectedRow.get(0, StringType).toString
+        val key = projectedRow.get(1, BinaryType)
+        val value = projectedRow.get(2, BinaryType)
+        // TODO: check for null value topic, which can happen when
+        // we have a topic field and no default
+        val record = new ProducerRecord[Any, Any](topic, key, value)
         val future = Future[RecordMetadata] {
           blocking {
             producer.send(record).get()
           }
         }
         future.onSuccess {
-          case rm => confirmedWrites += 1
+          case _ => confirmedWrites += 1
         }
         future.onFailure {
           case e => failedWrites += e
         }
+        scala.concurrent.Await.ready(future, scala.concurrent.duration.Duration.Inf)
       }
       producer.flush()
+      println(s"Confirmed writes $confirmedWrites, Failures ${failedWrites.mkString}")
     }
 
     def releaseResources(): Unit = {

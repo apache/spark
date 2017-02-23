@@ -17,17 +17,25 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, StreamingQuery, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
+
+  case class AddMoreData(ms: MemoryStream[String], q: StreamingQuery,
+      values: String*) extends ExternalAction {
+    override def runAction(): Unit = {
+      ms.addData(values)
+      q.processAllAvailable()
+      Thread.sleep(5000) // wait for data to appear in Kafka
+    }
+  }
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -56,8 +64,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       val input = MemoryStream[String]
       val topic = newTopic()
 
-      val writer = input.toDF.map(s => s.get(0).toString.getBytes()).toDF("value")
-        .selectExpr("value as key", "value as value")
+      val writer = input.toDF().toDF("value")
         .writeStream
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
@@ -76,18 +83,36 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .option("subscribe", topic)
         .option("failOnDataLoss", "false")
         .load()
+      val kafka = reader
         .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
         .as[(String, String)]
+      val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.trim.toInt)
 
-      input.addData("1", "2", "3")
-      writer.processAllAvailable()
+      testStream(mapped, outputMode = OutputMode.Append)(
+        StartStream(ProcessingTime(0)),
+        AddMoreData(input, writer, "1", "2", "3", "4", "5"),
 
-      testStream(reader)(
-        AddData(input, "1", "2", "3"),
-        CheckAnswer(("1", "1"), ("2", "2"), ("3", "3")),
+        CheckAnswer(1, 2, 3, 4, 5),
+        AddMoreData(input, writer, "6", "7", "8", "9", "10"),
+        CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
         StopStream
       )
-
     }
+  }
+
+  test("write batch to kafka") {
+
+    val topic = newTopic()
+    val df = spark
+      .sparkContext
+      .parallelize(Seq("1", "2", "3", "4", "5"))
+      .map(v => (topic, v))
+      .toDF("topic", "value")
+
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("defaultTopic", topic)
+      .save()
   }
 }

@@ -159,9 +159,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String],
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
-    if (outputMode != OutputMode.Append()) {
-      throw new IllegalArgumentException(s"Kafka supports ${OutputMode.Append()} only")
-    }
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
     val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC).map(_.trim.toLowerCase)
     val specifiedKafkaParams =
