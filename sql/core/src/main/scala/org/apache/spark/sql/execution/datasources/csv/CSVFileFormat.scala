@@ -27,9 +27,9 @@ import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.sources._
@@ -96,10 +96,23 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    val csvOptions = new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
-
+    CSVUtils.verifySchema(dataSchema)
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+
+    val parsedOptions = new CSVOptions(
+      options,
+      sparkSession.sessionState.conf.sessionLocalTimeZone,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+
+    // Check a field requirement for corrupt records here to throw an exception in a driver side
+    dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = dataSchema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
+    }
 
     (file: PartitionedFile) => {
       val lines = {
@@ -107,20 +120,20 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         val linesReader = new HadoopFileLinesReader(file, conf)
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
         linesReader.map { line =>
-          new String(line.getBytes, 0, line.getLength, csvOptions.charset)
+          new String(line.getBytes, 0, line.getLength, parsedOptions.charset)
         }
       }
 
-      val linesWithoutHeader = if (csvOptions.headerFlag && file.start == 0) {
+      val linesWithoutHeader = if (parsedOptions.headerFlag && file.start == 0) {
         // Note that if there are only comments in the first block, the header would probably
         // be not dropped.
-        CSVUtils.dropHeaderLine(lines, csvOptions)
+        CSVUtils.dropHeaderLine(lines, parsedOptions)
       } else {
         lines
       }
 
-      val filteredLines = CSVUtils.filterCommentAndEmpty(linesWithoutHeader, csvOptions)
-      val parser = new UnivocityParser(dataSchema, requiredSchema, csvOptions)
+      val filteredLines = CSVUtils.filterCommentAndEmpty(linesWithoutHeader, parsedOptions)
+      val parser = new UnivocityParser(dataSchema, requiredSchema, parsedOptions)
       filteredLines.flatMap(parser.parse)
     }
   }
