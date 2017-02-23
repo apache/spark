@@ -251,6 +251,32 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
     assert(flatMappedRDD.dependencies.head.rdd != parCollection)
     assert(flatMappedRDD.collect() === result)
   }
+
+  protected def testCompression(checkpointDir: File, compressionCodec: String): Unit = {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.checkpoint.compress.codec", compressionCodec)
+    val sc = new SparkContext("local", "test", sparkConf)
+    sc.setCheckpointDir(checkpointDir.toString)
+    val initialSize = 20
+    // Use just one partition for now since compression works best on large data sets.
+    val collection = sc.makeRDD(1 to initialSize, numSlices = 1)
+    val flatMappedRDD = collection.flatMap(x => 1 to x)
+    checkpoint(flatMappedRDD, reliableCheckpoint = true)
+    assert(flatMappedRDD.collect().length == initialSize * (initialSize + 1)/2,
+      "The checkpoint was lossy!")
+    sc.stop()
+    val checkpointPath = new Path(flatMappedRDD.getCheckpointFile.get)
+    val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+    val fileStatus = fs.listStatus(checkpointPath).find(_.getPath.getName.startsWith("part-")).get
+    val compressedSize = fileStatus.getLen
+    assert(compressedSize > 0, "The checkpoint file was not written!")
+    val compressedInputStream = CompressionCodec.createCodec(sparkConf, compressionCodec)
+      .compressedInputStream(fs.open(fileStatus.getPath))
+    val uncompressedSize = ByteStreams.toByteArray(compressedInputStream).length
+    compressedInputStream.close()
+    assert(compressedSize < uncompressedSize, "The compression was not successful!")
+  }
+
 }
 
 /**
@@ -287,7 +313,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     testBasicCheckpoint(sc, reliableCheckpoint)
   }
 
-  runTest("compression with snappy", skipLocalCheckpoint = true) { reliableCheckpoint: Boolean =>
+  runTest("compression with snappy", skipLocalCheckpoint = true) { _: Boolean =>
     val sparkConf = new SparkConf()
     sparkConf.set("spark.checkpoint.compress.codec", "snappy")
     sc = new SparkContext("local", "test", sparkConf)
@@ -295,7 +321,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     testBasicCheckpoint(sc, reliableCheckpoint = true)
   }
 
-  runTest("compression with lz4", skipLocalCheckpoint = true) { reliableCheckpoint: Boolean =>
+  runTest("compression with lz4", skipLocalCheckpoint = true) { _: Boolean =>
     val sparkConf = new SparkConf()
     sparkConf.set("spark.checkpoint.compress.codec", "lz4")
     sc = new SparkContext("local", "test", sparkConf)
@@ -303,7 +329,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     testBasicCheckpoint(sc, reliableCheckpoint = true)
   }
 
-  runTest("compression with lzf", skipLocalCheckpoint = true) { reliableCheckpoint: Boolean =>
+  runTest("compression with lzf", skipLocalCheckpoint = true) { _: Boolean =>
     val sparkConf = new SparkConf()
     sparkConf.set("spark.checkpoint.compress.codec", "lzf")
     sc = new SparkContext("local", "test", sparkConf)
@@ -311,40 +337,16 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     testBasicCheckpoint(sc, reliableCheckpoint = true)
   }
 
-  private def testCompression(compressionCodec: String): Unit = {
-    val sparkConf = new SparkConf()
-    sparkConf.set("spark.checkpoint.compress.codec", compressionCodec)
-    sc = new SparkContext("local", "test", sparkConf)
-    sc.setCheckpointDir(checkpointDir.toString)
-    val initialSize = 20
-    // Use just one partition for now since compression works best on large data sets.
-    val collection = sc.makeRDD(1 to initialSize, numSlices = 1)
-    val flatMappedRDD = collection.flatMap(x => 1 to x)
-    checkpoint(flatMappedRDD, reliableCheckpoint = true)
-    assert(flatMappedRDD.collect().length == initialSize * (initialSize + 1)/2,
-      "The checkpoint was lossy!")
-    val checkpointPath = new Path(flatMappedRDD.getCheckpointFile.get)
-    val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
-    val fileStatus = fs.listStatus(checkpointPath).find(_.getPath.getName.startsWith("part-")).get
-    val compressedSize = fileStatus.getLen
-    assert(compressedSize > 0, "The checkpoint file was not written!")
-    val compressedInputStream = CompressionCodec.createCodec(sparkConf, compressionCodec)
-      .compressedInputStream(fs.open(fileStatus.getPath))
-    val uncompressedSize = ByteStreams.toByteArray(compressedInputStream).length
-    compressedInputStream.close()
-    assert(compressedSize < uncompressedSize, "The compression was not successful!")
-  }
-
   runTest("compression size snappy", skipLocalCheckpoint = true) { _: Boolean =>
-    testCompression("snappy")
+    testCompression(checkpointDir, "snappy")
   }
 
   runTest("compression size lzf", skipLocalCheckpoint = true) { _: Boolean =>
-    testCompression("lzf")
+    testCompression(checkpointDir, "lzf")
   }
 
   runTest("compression size lz4", skipLocalCheckpoint = true) { _: Boolean =>
-    testCompression("lz4")
+    testCompression(checkpointDir, "lz4")
   }
 
   runTest("checkpointing partitioners", skipLocalCheckpoint = true) { _: Boolean =>
