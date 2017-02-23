@@ -125,8 +125,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     // SHOW TABLES in Hive only output table names, while ours outputs database, table name, isTemp.
     case command: ExecutedCommandExec if command.cmd.isInstanceOf[ShowTablesCommand] =>
       command.executeCollect().map(_.getString(1))
-    case command: ExecutedCommandExec =>
-      command.executeCollect().map(_.getString(0))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
       // We need the types so we can output struct field names
