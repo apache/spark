@@ -108,7 +108,8 @@ private[hive] case class MetastoreRelation(
       sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
         catalogTable.database,
         catalogTable.identifier.table,
-        predicates)
+        predicates,
+        sparkSession.sessionState.conf.sessionLocalTimeZone)
     } else {
       allPartitions
     }

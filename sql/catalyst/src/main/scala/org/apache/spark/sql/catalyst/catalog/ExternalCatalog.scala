@@ -251,7 +251,8 @@ abstract class ExternalCatalog {
   def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition]
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions

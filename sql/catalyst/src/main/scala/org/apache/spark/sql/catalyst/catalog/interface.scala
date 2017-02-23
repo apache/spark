@@ -25,8 +25,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
 
 
@@ -112,11 +112,11 @@ case class CatalogTablePartition(
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
-  def toRow(partitionSchema: StructType): InternalRow = {
+  def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
+    val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
+    val timeZoneId = caseInsensitiveProperties.getOrElse("timeZone", defaultTimeZondId)
     InternalRow.fromSeq(partitionSchema.map { field =>
-      // TODO: use correct timezone for partition values.
-      Cast(Literal(spec(field.name)), field.dataType,
-        Option(DateTimeUtils.defaultTimeZone().getID)).eval()
+      Cast(Literal(spec(field.name)), field.dataType, Option(timeZoneId)).eval()
     })
   }
 }

@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
@@ -1014,7 +1014,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
     val partitionColumnNames = catalogTable.partitionColumnNames.toSet
@@ -1040,7 +1041,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             val index = partitionSchema.indexWhere(_.name == att.name)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
-      clientPrunedPartitions.filter { p => boundPredicate(p.toRow(partitionSchema)) }
+      clientPrunedPartitions.filter { p =>
+        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
+      }
     } else {
       client.getPartitions(catalogTable).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))

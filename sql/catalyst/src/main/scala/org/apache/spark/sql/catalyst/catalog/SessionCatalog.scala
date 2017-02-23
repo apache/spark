@@ -838,7 +838,7 @@ class SessionCatalog(
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.listPartitionsByFilter(db, table, predicates)
+    externalCatalog.listPartitionsByFilter(db, table, predicates, conf.sessionLocalTimeZone)
   }
 
   /**
