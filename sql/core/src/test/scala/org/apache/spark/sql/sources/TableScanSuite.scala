@@ -203,6 +203,9 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
   test("Schema and all fields") {
+    def hiveMetadata(dt: String): Metadata = {
+      new MetadataBuilder().putString(HIVE_TYPE_STRING, dt).build()
+    }
     val expectedSchema = StructType(
       StructField("string$%Field", StringType, true) ::
       StructField("binaryField", BinaryType, true) ::
@@ -217,8 +220,8 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       StructField("decimalField2", DecimalType(9, 2), true) ::
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::
-      StructField("varcharField", StringType, true) ::
-      StructField("charField", StringType, true) ::
+      StructField("varcharField", StringType, true, hiveMetadata("varchar(12)")) ::
+      StructField("charField", StringType, true, hiveMetadata("char(18)")) ::
       StructField("arrayFieldSimple", ArrayType(IntegerType), true) ::
       StructField("arrayFieldComplex",
         ArrayType(
