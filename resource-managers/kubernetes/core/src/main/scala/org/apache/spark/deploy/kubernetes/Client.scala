@@ -402,7 +402,7 @@ private[spark] class Client(
         .withLabels(driverKubernetesSelectors)
         .endMetadata()
       .withNewSpec()
-        .withRestartPolicy("OnFailure")
+        .withRestartPolicy("Never")
         .addNewVolume()
           .withName(SUBMISSION_APP_SECRET_VOLUME_NAME)
           .withNewSecret()
