@@ -37,6 +37,18 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
+
+  /**
+   * This method is used to make the given path qualified before we
+   * store this path in the underlying external catalog. So, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  def makeQualifiedPath(path: String, conf: Configuration): Path = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(conf)
+    fs.makeQualified(hadoopPath)
+  }
 }
 
 /**
@@ -125,18 +137,6 @@ class SessionCatalog(
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
   }
 
-  /**
-   * This method is used to make the given path qualified before we
-   * store this path in the underlying external catalog. So, when a path
-   * does not contain a scheme, this path will not be changed after the default
-   * FileSystem is changed.
-   */
-  private def makeQualifiedPath(path: String): Path = {
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(hadoopConf)
-    fs.makeQualified(hadoopPath)
-  }
-
   private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
@@ -170,7 +170,7 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri, hadoopConf).toString
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
       ignoreIfExists)
