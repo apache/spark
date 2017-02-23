@@ -332,8 +332,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
-    def numPartitions: Int = self.numPartitions
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
@@ -414,9 +412,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
-      case logical.RepartitionByExpression(expressions, child, nPartitions) =>
+      case logical.RepartitionByExpression(expressions, child, numPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
-          expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
+          expressions, numPartitions), planLater(child)) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

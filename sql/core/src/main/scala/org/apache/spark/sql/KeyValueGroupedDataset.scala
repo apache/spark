@@ -98,7 +98,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *   // Create Integer values grouped by String key from a Dataset<Tuple2<String, Integer>>
    *   Dataset<Tuple2<String, Integer>> ds = ...;
    *   KeyValueGroupedDataset<String, Integer> grouped =
-   *     ds.groupByKey(t -> t._1, Encoders.STRING()).mapValues(t -> t._2, Encoders.INT()); // Java 8
+   *     ds.groupByKey(t -> t._1, Encoders.STRING()).mapValues(t -> t._2, Encoders.INT());
    * }}}
    *
    * @since 2.1.0

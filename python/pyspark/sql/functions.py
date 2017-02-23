@@ -20,6 +20,7 @@ A collections of builtin functions
 """
 import math
 import sys
+import functools
 
 if sys.version < "3":
     from itertools import imap as map
@@ -27,7 +28,7 @@ if sys.version < "3":
 from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql.types import StringType
+from pyspark.sql.types import StringType, DataType, _parse_datatype_string
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 
@@ -1864,8 +1865,15 @@ class UserDefinedFunction(object):
     .. versionadded:: 1.3
     """
     def __init__(self, func, returnType, name=None):
+        if not callable(func):
+            raise TypeError(
+                "Not a function or callable (__call__ is not defined): "
+                "{0}".format(type(func)))
+
         self.func = func
-        self.returnType = returnType
+        self.returnType = (
+            returnType if isinstance(returnType, DataType)
+            else _parse_datatype_string(returnType))
         # Stores UserDefinedPythonFunctions jobj, once initialized
         self._judf_placeholder = None
         self._name = name or (
@@ -1901,22 +1909,48 @@ class UserDefinedFunction(object):
 
 
 @since(1.3)
-def udf(f, returnType=StringType()):
+def udf(f=None, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
         duplicate invocations may be eliminated or the function may even be invoked more times than
         it is present in the query.
 
-    :param f: python function
+    :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
-    >>> df.select(slen(df.name).alias('slen')).collect()
-    [Row(slen=5), Row(slen=3)]
+    >>> @udf
+    ... def to_upper(s):
+    ...     if s is not None:
+    ...         return s.upper()
+    ...
+    >>> @udf(returnType=IntegerType())
+    ... def add_one(x):
+    ...     if x is not None:
+    ...         return x + 1
+    ...
+    >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+    >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")).show()
+    +----------+--------------+------------+
+    |slen(name)|to_upper(name)|add_one(age)|
+    +----------+--------------+------------+
+    |         8|      JOHN DOE|          22|
+    +----------+--------------+------------+
     """
-    return UserDefinedFunction(f, returnType)
+    def _udf(f, returnType=StringType()):
+        return UserDefinedFunction(f, returnType)
+
+    # decorator @udf, @udf() or @udf(dataType())
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type)
+    else:
+        return _udf(f=f, returnType=returnType)
+
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
