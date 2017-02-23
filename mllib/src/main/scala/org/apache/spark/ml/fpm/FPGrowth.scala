@@ -47,7 +47,7 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
    */
   @Since("2.2.0")
   val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
-    "the minimal support level of the frequent pattern (Default: 0.3)",
+    "the minimal support level of a frequent pattern",
     ParamValidators.inRange(0.0, 1.0))
   setDefault(minSupport -> 0.3)
 
@@ -76,7 +76,7 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
    */
   @Since("2.2.0")
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
-    "minimal confidence for generating Association Rule (Default: 0.8)",
+    "minimal confidence for generating Association Rule",
     ParamValidators.inRange(0.0, 1.0))
   setDefault(minConfidence -> 0.8)
 
@@ -100,10 +100,15 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
 
 /**
  * :: Experimental ::
- * A parallel FP-growth algorithm to mine frequent itemsets.
+ * A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
+ * <a href="http://dx.doi.org/10.1145/1454008.1454027">Li et al., PFP: Parallel FP-Growth for Query
+ * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
+ * independent group of mining tasks. The FP-Growth algorithm is described in
+ * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
+ * candidate generation</a>.
  *
- * @see [[http://dx.doi.org/10.1145/1454008.1454027 Li et al., PFP: Parallel FP-Growth for Query
- *  Recommendation]]
+ * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
+ * Association rule learning (Wikipedia)</a>
  */
 @Since("2.2.0")
 @Experimental
@@ -122,9 +127,7 @@ class FPGrowth @Since("2.2.0") (
   @Since("2.2.0")
   def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
-  /** @group setParam
-   *  Note that minConfidence has no effect during fitting.
-   */
+  /** @group setParam */
   @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
 
@@ -145,7 +148,11 @@ class FPGrowth @Since("2.2.0") (
   private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
     val data = dataset.select($(featuresCol))
     val items = data.where(col($(featuresCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
-    val parentModel = new MLlibFPGrowth().setMinSupport($(minSupport)).run(items)
+    val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
+    if (isSet(numPartitions)) {
+      mllibFP.setNumPartitions($(numPartitions))
+    }
+    val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
 
     val schema = StructType(Seq(
@@ -176,13 +183,13 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
  * :: Experimental ::
  * Model fitted by FPGrowth.
  *
- * @param freqItemsets frequent items in the format of DataFrame("items", "freq")
+ * @param freqItemsets frequent items in the format of DataFrame("items"[Seq], "freq"[Long])
  */
 @Since("2.2.0")
 @Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    private val freqItemsets: DataFrame)
+    @transient val freqItemsets: DataFrame)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -200,36 +207,33 @@ class FPGrowthModel private[ml] (
   /**
    * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
    * with three fields, "antecedent", "consequent" and "confidence", where "antecedent" and
-   * "consequent" are Array[String] and "confidence" is Double.
+   * "consequent" are Array[T] and "confidence" is Double.
    */
   @Since("2.2.0")
-  @transient lazy val getAssociationRules: DataFrame = {
-    val freqItems = getFreqItemsets
+  @transient lazy val associationRules: DataFrame = {
+    val freqItems = freqItemsets
     AssociationRules.getAssociationRulesFromFP(freqItems, "items", "freq", $(minConfidence))
   }
 
   /**
-   * Get frequent items fitted by FPGrowth, in the format of DataFrame("items", "freq")
-   */
-  @Since("2.2.0")
-  @transient val getFreqItemsets: DataFrame = freqItemsets
-
-  /**
    * The transform method first generates the association rules according to the frequent itemsets.
    * Then for each association rule, it will examine the input items against antecedents and
-   * summarize the consequents as prediction.
+   * summarize the consequents as prediction. The prediction column has the same data type as the
+   * input column. (Array[T])
+   * Note that internally it uses Cartesian join and may exhaust memory for large datasets.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    genericTransform(dataset, getAssociationRules)
+    genericTransform(dataset)
   }
 
-  private def genericTransform[T](dataset: Dataset[_], associationRules: DataFrame): DataFrame = {
+  private def genericTransform[T](dataset: Dataset[_]): DataFrame = {
     // use index to perform the join and aggregateByKey, and keep the original order after join.
     val indexToItems = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[T](0))
-      .zipWithIndex().map(_.swap).cache()
-    val rulesRDD = associationRules.rdd.map(r => (r.getSeq[T](0), r.getSeq[T](1)))
+      .zipWithIndex().map(_.swap)
+    val rulesRDD = associationRules.select("antecedent", "consequent").rdd
+      .map(r => (r.getSeq[T](0), r.getSeq[T](1)))
 
     val indexToConsequents = indexToItems.cartesian(rulesRDD).map {
       case ((id, items), (antecedent, consequent)) =>
@@ -272,6 +276,7 @@ class FPGrowthModel private[ml] (
 
 @Since("2.2.0")
 object FPGrowthModel extends MLReadable[FPGrowthModel] {
+
   @Since("2.2.0")
   override def read: MLReader[FPGrowthModel] = new FPGrowthModelReader
 
@@ -283,10 +288,9 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val dataPath = new Path(path, "data").toString
-      instance.freqItemsets.write.save(dataPath)
+      instance.freqItemsets.write.parquet(dataPath)
     }
   }
 
@@ -298,7 +302,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
     override def load(path: String): FPGrowthModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val frequentItems = sparkSession.read.load(dataPath)
+      val frequentItems = sparkSession.read.parquet(dataPath)
       val model = new FPGrowthModel(metadata.uid, frequentItems)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -318,10 +322,11 @@ private[fpm] object AssociationRules {
    * @return a DataFrame("antecedent", "consequent", "confidence") containing the association
    *         rules.
    */
-  def getAssociationRulesFromFP[T: ClassTag](dataset: Dataset[_],
-        itemsCol: String = "items",
-        freqCol: String = "freq",
-        minConfidence: Double = 0.8): DataFrame = {
+  def getAssociationRulesFromFP[T: ClassTag](
+        dataset: Dataset[_],
+        itemsCol: String,
+        freqCol: String,
+        minConfidence: Double): DataFrame = {
 
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
       .map(row => new FreqItemset(row.getSeq[T](0).toArray, row.getLong(1)))

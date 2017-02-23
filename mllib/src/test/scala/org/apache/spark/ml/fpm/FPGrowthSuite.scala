@@ -36,7 +36,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     Array(IntegerType, StringType, ShortType, LongType, ByteType).foreach { dt =>
       val intData = dataset.withColumn("features", col("features").cast(ArrayType(dt)))
       val model = new FPGrowth().setMinSupport(0.5).fit(intData)
-      val generatedRules = model.setMinConfidence(0.5).getAssociationRules
+      val generatedRules = model.setMinConfidence(0.5).associationRules
       val expectedRules = spark.createDataFrame(Seq(
         (Array("2"), Array("1"), 1.0),
         (Array("1"), Array("2"), 0.75)
@@ -55,8 +55,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       )).toDF("id", "features", "prediction")
         .withColumn("features", col("features").cast(ArrayType(dt)))
         .withColumn("prediction", col("prediction").cast(ArrayType(dt)))
-      assert(expectedTransformed.sort("id").rdd.collect().sameElements(
-        transformed.sort("id").rdd.collect()))
+      assert(expectedTransformed.collect().toSet.equals(
+        transformed.collect().toSet))
     }
   }
 
@@ -66,12 +66,12 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       (Array("1"), 4L),
       (Array("2"), 3L),
       (Array("1", "2"), 3L),
-      (Array("2", "1"), 3L)
-    )).toDF("items", "freqExp")
-    val freqItems = model.getFreqItemsets
+      (Array("2", "1"), 3L) // duplicate as the items sequence is not guaranteed
+    )).toDF("items", "expectedFreq")
+    val freqItems = model.freqItemsets
 
     val checkDF = freqItems.join(expectedFreq, "items")
-    assert(checkDF.count() == 3 && checkDF.filter(col("freq") === col("freqExp")).count() == 3)
+    assert(checkDF.count() == 3 && checkDF.filter(col("freq") === col("expectedFreq")).count() == 3)
   }
 
   test("FPGrowth getFreqItems with Null") {
@@ -95,8 +95,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("read/write") {
     def checkModelData(model: FPGrowthModel, model2: FPGrowthModel): Unit = {
-      assert(model.getFreqItemsets.sort("items").collect() ===
-        model2.getFreqItemsets.sort("items").collect())
+      assert(model.freqItemsets.sort("items").collect() ===
+        model2.freqItemsets.sort("items").collect())
     }
     val fPGrowth = new FPGrowth()
     testEstimatorAndModelReadWrite(
