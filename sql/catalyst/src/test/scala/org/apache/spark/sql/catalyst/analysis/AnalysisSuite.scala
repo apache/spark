@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.TimeZone
+
 import org.scalatest.ShouldMatchers
 
 import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
@@ -59,23 +61,23 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
-        TableIdentifier("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
       Seq("cannot resolve"))
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(
-        TableIdentifier("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("TbL.a")),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
-        TableIdentifier("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
@@ -164,12 +166,12 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("resolve relations") {
-    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
+    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
+    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
@@ -258,7 +260,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val c = testRelation2.output(2)
 
     val plan = testRelation2.select('c).orderBy(Floor('a).asc)
-    val expected = testRelation2.select(c, a).orderBy(Floor(a.cast(DoubleType)).asc).select(c)
+    val expected = testRelation2.select(c, a)
+      .orderBy(Floor(Cast(a, DoubleType, Option(TimeZone.getDefault().getID))).asc).select(c)
 
     checkAnalysis(plan, expected)
   }
@@ -425,5 +428,15 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     assertAnalysisSuccess(r1)
     assertAnalysisSuccess(r2)
+  }
+
+  test("resolve as with an already existed alias") {
+    checkAnalysis(
+      Project(Seq(UnresolvedAttribute("tbl2.a")),
+        SubqueryAlias("tbl", testRelation, None).as("tbl2")),
+      Project(testRelation.output, testRelation),
+      caseSensitive = false)
+
+    checkAnalysis(SubqueryAlias("tbl", testRelation, None).as("tbl2"), testRelation)
   }
 }

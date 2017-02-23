@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
 import org.apache.spark.sql.SparkSession
@@ -39,8 +41,9 @@ class IncrementalExecution(
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // TODO: make this always part of planning.
-  val stateStrategy =
+  val streamingExtraStrategies =
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+    sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
@@ -49,7 +52,7 @@ class IncrementalExecution(
     new SparkPlanner(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
-      stateStrategy)
+      streamingExtraStrategies)
 
   /**
    * See [SPARK-18339]
@@ -58,7 +61,7 @@ class IncrementalExecution(
    */
   override lazy val optimizedPlan: LogicalPlan = {
     sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
-      case ts @ CurrentBatchTimestamp(timestamp, _) =>
+      case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
         logInfo(s"Current batch timestamp = $timestamp")
         ts.toLiteral
     }
@@ -68,7 +71,7 @@ class IncrementalExecution(
    * Records the current id for a given stateful operator in the query plan as the `state`
    * preparation walks the query plan.
    */
-  private var operatorId = 0
+  private val operatorId = new AtomicInteger(0)
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
@@ -77,8 +80,8 @@ class IncrementalExecution(
       case StateStoreSaveExec(keys, None, None, None,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
-        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
-        operatorId += 1
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
 
         StateStoreSaveExec(
           keys,
@@ -90,6 +93,12 @@ class IncrementalExecution(
               keys,
               Some(stateId),
               child) :: Nil))
+      case MapGroupsWithStateExec(
+             f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+        MapGroupsWithStateExec(
+          f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
     }
   }
 

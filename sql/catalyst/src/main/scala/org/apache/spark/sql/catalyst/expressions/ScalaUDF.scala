@@ -35,17 +35,20 @@ import org.apache.spark.sql.types.DataType
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
  *                    type coercion. However, that would require more refactoring of the codebase.
+ * @param udfName   The user-specified name of this UDF.
  */
 case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    inputTypes: Seq[DataType] = Nil)
+    inputTypes: Seq[DataType] = Nil,
+    udfName: Option[String] = None)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"UDF(${children.mkString(", ")})"
+  override def toString: String =
+    s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 

@@ -180,6 +180,26 @@ trait ProgressReporter extends Logging {
     currentStatus = currentStatus.copy(isTriggerActive = false)
   }
 
+  /** Extract statistics about stateful operators from the executed query plan. */
+  private def extractStateOperatorMetrics(hasNewData: Boolean): Seq[StateOperatorProgress] = {
+    if (lastExecution == null) return Nil
+    // lastExecution could belong to one of the previous triggers if `!hasNewData`.
+    // Walking the plan again should be inexpensive.
+    val stateNodes = lastExecution.executedPlan.collect {
+      case p if p.isInstanceOf[StateStoreWriter] => p
+    }
+    stateNodes.map { node =>
+      val numRowsUpdated = if (hasNewData) {
+        node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L)
+      } else {
+        0L
+      }
+      new StateOperatorProgress(
+        numRowsTotal = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
+        numRowsUpdated = numRowsUpdated)
+    }
+  }
+
   /** Extracts statistics from the most recent query execution. */
   private def extractExecutionStats(hasNewData: Boolean): ExecutionStats = {
     val hasEventTime = logicalPlan.collect { case e: EventTimeWatermark => e }.nonEmpty
@@ -187,8 +207,11 @@ trait ProgressReporter extends Logging {
       if (hasEventTime) Map("watermark" -> formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
       else Map.empty[String, String]
 
+    // SPARK-19378: Still report metrics even though no data was processed while reporting progress.
+    val stateOperators = extractStateOperatorMetrics(hasNewData)
+
     if (!hasNewData) {
-      return ExecutionStats(Map.empty, Seq.empty, watermarkTimestamp)
+      return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp)
     }
 
     // We want to associate execution plan leaves to sources that generate them, so that we match
@@ -236,16 +259,6 @@ trait ProgressReporter extends Logging {
         }
         Map.empty
       }
-
-    // Extract statistics about stateful operators in the query plan.
-    val stateNodes = lastExecution.executedPlan.collect {
-      case p if p.isInstanceOf[StateStoreSaveExec] => p
-    }
-    val stateOperators = stateNodes.map { node =>
-      new StateOperatorProgress(
-        numRowsTotal = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
-        numRowsUpdated = node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L))
-    }
 
     val eventTimeStats = lastExecution.executedPlan.collect {
       case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>

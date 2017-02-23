@@ -95,18 +95,28 @@ class SparkSession private(
   /**
    * State shared across sessions, including the `SparkContext`, cached data, listener,
    * and a catalog that interacts with external systems.
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @since 2.2.0
    */
+  @InterfaceStability.Unstable
   @transient
-  private[sql] lazy val sharedState: SharedState = {
+  lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(new SharedState(sparkContext))
   }
 
   /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @since 2.2.0
    */
+  @InterfaceStability.Unstable
   @transient
-  private[sql] lazy val sessionState: SessionState = {
+  lazy val sessionState: SessionState = {
     SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
       self)
@@ -162,17 +172,6 @@ class SparkSession private(
    * }}}
    *
    * The following example registers a UDF in Java:
-   * {{{
-   *   sparkSession.udf().register("myUDF",
-   *       new UDF2<Integer, String, String>() {
-   *           @Override
-   *           public String call(Integer arg1, String arg2) {
-   *               return arg2 + arg1;
-   *           }
-   *      }, DataTypes.StringType);
-   * }}}
-   *
-   * Or, to use Java 8 lambda syntax:
    * {{{
    *   sparkSession.udf().register("myUDF",
    *       (Integer arg1, String arg2) -> arg2 + arg1,
@@ -323,7 +322,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a `DataFrame` from a [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -448,7 +447,7 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
    * that is generally created automatically through implicits from a `SparkSession`, or can be
    * created explicitly by calling static methods on [[Encoders]].
@@ -624,7 +623,6 @@ class SparkSession private(
    *
    * @since 2.1.0
    */
-  @InterfaceStability.Stable
   def time[T](f: => T): T = {
     val start = System.nanoTime()
     val ret = f
@@ -939,9 +937,19 @@ object SparkSession {
     defaultSession.set(null)
   }
 
-  private[sql] def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+  /**
+   * Returns the active SparkSession for the current thread, returned by the builder.
+   *
+   * @since 2.2.0
+   */
+  def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
 
-  private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+  /**
+   * Returns the default SparkSession that is returned by the builder.
+   *
+   * @since 2.2.0
+   */
+  def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
 
   /** A global SQL listener used for the SQL UI. */
   private[sql] val sqlListener = new AtomicReference[SQLListener]()

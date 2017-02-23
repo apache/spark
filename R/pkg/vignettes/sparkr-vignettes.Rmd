@@ -10,6 +10,23 @@ vignette: >
   \usepackage[utf8]{inputenc}
 ---
 
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
 ## Overview
 
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
@@ -27,6 +44,9 @@ library(SparkR)
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
+```{r, include=FALSE}
+install.spark()
+```
 ```{r, message=FALSE, results="hide"}
 sparkR.session()
 ```
@@ -449,6 +469,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Classification
 
+* Linear Support Vector Machine (SVM) Classifier
+
 * Logistic Regression
 
 * Multilayer Perceptron (MLP)
@@ -470,6 +492,8 @@ SparkR supports the following machine learning models and algorithms.
 * Random Forest
 
 #### Clustering
+
+* Bisecting $k$-means
 
 * Gaussian Mixture Model (GMM)
 
@@ -509,6 +533,26 @@ head(carsDF_test)
 ```
 
 ### Models and Algorithms
+
+#### Linear Support Vector Machine (SVM) Classifier
+
+[Linear Support Vector Machine (SVM)](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM) classifier is an SVM classifier with linear kernels.
+This is a binary classifier. We use a simple example to show how to use `spark.svmLinear`
+for binary classification.
+
+```{r}
+# load training data and create a DataFrame
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+# fit a Linear SVM classifier model
+model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
+summary(model)
+```
+
+Predict values on training data
+```{r}
+prediction <- predict(model, training)
+```
 
 #### Logistic Regression
 
@@ -721,6 +765,18 @@ summary(rfModel)
 predictions <- predict(rfModel, df)
 ```
 
+#### Bisecting k-Means
+
+`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+```{r, warning=FALSE}
+df <- createDataFrame(iris)
+model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+summary(model)
+fitted <- predict(model, df)
+head(select(fitted, "Sepal_Length", "prediction"))
+```
+
 #### Gaussian Mixture Model
 
 `spark.gaussianMixture` fits multivariate [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model) (GMM) against a `SparkDataFrame`. [Expectation-Maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) (EM) is used to approximate the maximum likelihood estimator (MLE) of the model.
@@ -906,9 +962,9 @@ The main method calls of actual computation happen in the Spark JVM of the drive
 
 Two kinds of RPCs are supported in the SparkR JVM backend: method invocation and creating new objects. Method invocation can be done in two ways.
 
-* `sparkR.invokeJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
+* `sparkR.callJMethod` takes a reference to an existing Java object and a list of arguments to be passed on to the method.
 
-* `sparkR.invokeJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
+* `sparkR.callJStatic` takes a class name for static method and a list of arguments to be passed on to the method.
 
 The arguments are serialized using our custom wire format which is then deserialized on the JVM side. We then use Java reflection to invoke the appropriate method.
 

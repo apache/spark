@@ -23,8 +23,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
-import scala.reflect.ClassTag
-import scala.util.Try
 
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
@@ -67,19 +65,18 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("default Yarn application classpath") {
-    getDefaultYarnApplicationClasspath should be(Some(Fixtures.knownDefYarnAppCP))
+    getDefaultYarnApplicationClasspath should be(Fixtures.knownDefYarnAppCP)
   }
 
   test("default MR application classpath") {
-    getDefaultMRApplicationClasspath should be(Some(Fixtures.knownDefMRAppCP))
+    getDefaultMRApplicationClasspath should be(Fixtures.knownDefMRAppCP)
   }
 
   test("resultant classpath for an application that defines a classpath for YARN") {
     withAppConf(Fixtures.mapYARNAppConf) { conf =>
       val env = newEnv
       populateHadoopClasspath(conf, env)
-      classpath(env) should be(
-        flatten(Fixtures.knownYARNAppCP, getDefaultMRApplicationClasspath))
+      classpath(env) should be(Fixtures.knownYARNAppCP +: getDefaultMRApplicationClasspath)
     }
   }
 
@@ -87,8 +84,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     withAppConf(Fixtures.mapMRAppConf) { conf =>
       val env = newEnv
       populateHadoopClasspath(conf, env)
-      classpath(env) should be(
-        flatten(getDefaultYarnApplicationClasspath, Fixtures.knownMRAppCP))
+      classpath(env) should be(getDefaultYarnApplicationClasspath :+ Fixtures.knownMRAppCP)
     }
   }
 
@@ -96,7 +92,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     withAppConf(Fixtures.mapAppConf) { conf =>
       val env = newEnv
       populateHadoopClasspath(conf, env)
-      classpath(env) should be(flatten(Fixtures.knownYARNAppCP, Fixtures.knownMRAppCP))
+      classpath(env) should be(Array(Fixtures.knownYARNAppCP, Fixtures.knownMRAppCP))
     }
   }
 
@@ -104,14 +100,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   private val USER = "local:/userJar"
   private val ADDED = "local:/addJar1,local:/addJar2,/addJar3"
 
-  private val PWD =
-    if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
-      "{{PWD}}"
-    } else if (Utils.isWindows) {
-      "%PWD%"
-    } else {
-      Environment.PWD.$()
-    }
+  private val PWD = "{{PWD}}"
 
   test("Local jar URIs") {
     val conf = new Configuration()
@@ -145,7 +134,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       .set("spark.yarn.dist.jars", ADDED)
     val client = createClient(sparkConf, args = Array("--jar", USER))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort(), anyBoolean(), any())
+      any(classOf[Path]), anyShort(), any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val tempDir = Utils.createTempDir()
     try {
@@ -251,11 +240,11 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
 
     val cp = classpath(client)
     cp should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
@@ -273,7 +262,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
-      anyBoolean(), any())
+      any(classOf[MutableHashMap[URI, Path]]), anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
     sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
@@ -388,26 +377,18 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
-      getFieldValue[Array[String], Seq[String]](classOf[YarnConfiguration],
-                                                "DEFAULT_YARN_APPLICATION_CLASSPATH",
-                                                Seq[String]())(a => a.toSeq)
-
+      YarnConfiguration.DEFAULT_YARN_APPLICATION_CLASSPATH.toSeq
 
     val knownDefMRAppCP: Seq[String] =
-      getFieldValue2[String, Array[String], Seq[String]](
-        classOf[MRJobConfig],
-        "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
-        Seq[String]())(a => a.split(","))(a => a.toSeq)
+      MRJobConfig.DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH.split(",").toSeq
 
-    val knownYARNAppCP = Some(Seq("/known/yarn/path"))
+    val knownYARNAppCP = "/known/yarn/path"
 
-    val knownMRAppCP = Some(Seq("/known/mr/path"))
+    val knownMRAppCP = "/known/mr/path"
 
-    val mapMRAppConf =
-      Map("mapreduce.application.classpath" -> knownMRAppCP.map(_.mkString(":")).get)
+    val mapMRAppConf = Map("mapreduce.application.classpath" -> knownMRAppCP)
 
-    val mapYARNAppConf =
-      Map(YarnConfiguration.YARN_APPLICATION_CLASSPATH -> knownYARNAppCP.map(_.mkString(":")).get)
+    val mapYARNAppConf = Map(YarnConfiguration.YARN_APPLICATION_CLASSPATH -> knownYARNAppCP)
 
     val mapAppConf = mapYARNAppConf ++ mapMRAppConf
   }
@@ -422,28 +403,6 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   def classpath(env: MutableHashMap[String, String]): Array[String] =
     env(Environment.CLASSPATH.name).split(":|;|<CPS>")
-
-  def flatten(a: Option[Seq[String]], b: Option[Seq[String]]): Array[String] =
-    (a ++ b).flatten.toArray
-
-  def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B = {
-    Try(clazz.getField(field))
-      .map(_.get(null).asInstanceOf[A])
-      .toOption
-      .map(mapTo)
-      .getOrElse(defaults)
-  }
-
-  def getFieldValue2[A: ClassTag, A1: ClassTag, B](
-        clazz: Class[_],
-        field: String,
-        defaults: => B)(mapTo: A => B)(mapTo1: A1 => B): B = {
-    Try(clazz.getField(field)).map(_.get(null)).map {
-      case v: A => mapTo(v)
-      case v1: A1 => mapTo1(v1)
-      case _ => defaults
-    }.toOption.getOrElse(defaults)
-  }
 
   private def createClient(
       sparkConf: SparkConf,
