@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
-import java.nio.channels.{SeekableByteChannel, Channels}
+import java.nio.channels.{Channels, SeekableByteChannel}
 
 import scala.collection.JavaConverters._
 
@@ -174,8 +174,7 @@ private[sql] object ArrowConverters {
     val fieldNodes = fieldAndBuf._1
     val buffers = fieldAndBuf._2.flatten
 
-    val rowLength = if(fieldNodes.nonEmpty) fieldNodes.head.getLength else 0
-
+    val rowLength = if (fieldNodes.nonEmpty) fieldNodes.head.getLength else 0
     val recordBatch = new ArrowRecordBatch(rowLength,
       fieldNodes.toList.asJava, buffers.toList.asJava)
 
