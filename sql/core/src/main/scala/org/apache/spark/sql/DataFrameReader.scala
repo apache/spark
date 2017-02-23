@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -363,6 +363,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         jsonDataset.rdd,
         parsedOptions,
         createParser)
+    }
+
+    // Check a field requirement for corrupt records here to throw an exception in a driver side
+    schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = schema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
     }
 
     val parsed = jsonDataset.rdd.mapPartitions { iter =>

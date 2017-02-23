@@ -58,7 +58,10 @@ class JacksonParser(
   private val emptyRow: Seq[InternalRow] = Seq(new GenericInternalRow(schema.length))
 
   private val corruptFieldIndex = schema.getFieldIndex(options.columnNameOfCorruptRecord)
-  corruptFieldIndex.foreach(idx => require(schema(idx).dataType == StringType))
+  corruptFieldIndex.foreach { corrFieldIndex =>
+    require(schema(corrFieldIndex).dataType == StringType)
+    require(schema(corrFieldIndex).nullable)
+  }
 
   @transient
   private[this] var isWarningPrinted: Boolean = false
