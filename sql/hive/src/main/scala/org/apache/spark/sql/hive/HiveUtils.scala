@@ -54,14 +54,6 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  /**
-   * The property key that is used to store the raw hive type string in the metadata of StructField.
-   * For example, in the case where the Hive type is varchar, the type gets mapped to a string type
-   * in Spark SQL, but we need to preserve the original type in order to invoke the correct object
-   * inspector in Hive.
-   */
-  val hiveTypeString: String = "HIVE_TYPE_STRING"
-
   val HIVE_METASTORE_VERSION = SQLConfigBuilder("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
