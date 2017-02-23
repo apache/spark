@@ -25,11 +25,22 @@
 sudo: required
 dist: trusty
 
-# 2. Choose language and target JDKs for parallel builds.
+# 2. Choose language, target JDK and env's for parallel builds.
 language: java
 jdk:
-  - oraclejdk7
   - oraclejdk8
+env:  # Used by the install section below.
+  # Configure the unit test build for spark core and kubernetes modules,
+  # while excluding some flaky unit tests using a regex pattern.
+  - PHASE=test  \
+    PROFILES="-Pmesos -Pyarn -Phadoop-2.7 -Pkubernetes"  \
+    MODULES="-pl core,resource-managers/kubernetes/core -am"  \
+    ARGS="-Dsuffixes='^org\.apache\.spark\.(?!rdd\.LocalCheckpointSuite$|deploy\.StandaloneDynamicAllocationSuite$).*'"
+  # Configure the full build.
+  - PHASE=install  \
+    PROFILES="-Pmesos -Pyarn -Phadoop-2.7 -Pkubernetes -Pkinesis-asl -Phive -Phive-thriftserver"  \
+    MODULES=""  \
+    ARGS="-T 4 -q -DskipTests"
 
 # 3. Setup cache directory for SBT and Maven.
 cache:
@@ -41,11 +52,12 @@ cache:
 notifications:
   email: false
 
-# 5. Run maven install before running lint-java.
+# 5. Run maven build before running lints.
 install:
   - export MAVEN_SKIP_RC=1
-  - build/mvn -T 4 -q -DskipTests -Pmesos -Pyarn -Phadoop-2.3 -Pkubernetes -Pkinesis-asl -Phive -Phive-thriftserver install
+  - build/mvn ${PHASE} ${PROFILES} ${MODULES} ${ARGS}
 
-# 6. Run lint-java.
+# 6. Run lints.
 script:
   - dev/lint-java
+  - dev/lint-scala
