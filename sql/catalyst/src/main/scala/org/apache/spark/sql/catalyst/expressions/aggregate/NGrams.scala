@@ -90,12 +90,12 @@ case class NGrams(child: Expression,
   }
 
   override def createAggregationBuffer(): NGramBuffer = {
-    new NGramBuffer(n, k, accuracy, new HashMap[List[UTF8String], Double]())
+    new NGramBuffer(n, k, accuracy, new HashMap[Array[UTF8String], Double]())
   }
 
   override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
     val genericArrayData: GenericArrayData = child.eval(inputRow).asInstanceOf[GenericArrayData]
-    val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toList
+    val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toArray
     if (values != null) {
       val nGrams = getNGrams(values, n)
       nGrams.foreach(buffer.add(_))
@@ -111,11 +111,11 @@ case class NGrams(child: Expression,
   }
 
   override def eval(buffer: NGramBuffer): Any = {
-    buffer.getTopKNGrams()
+    new GenericArrayData(buffer.getTopKNGrams())
   }
 
-  private def getNGrams(values: List[UTF8String], n: Int): List[List[UTF8String]] = {
-    values.sliding(n).toList
+  private def getNGrams(values: Array[UTF8String], n: Int): Array[Array[UTF8String]] = {
+    values.sliding(n).toArray
   }
 
   override def withNewMutableAggBufferOffset(newOffset: Int): NGrams =
@@ -159,8 +159,8 @@ object NGrams {
   class NGramBuffer(val n: Int,
                     val k: Int,
                     val precisionFactor: Int,
-                    val frequencyMap: HashMap[List[UTF8String], Double]) {
-    def add(ng: List[UTF8String]): Unit = {
+                    val frequencyMap: HashMap[Array[UTF8String], Double]) {
+    def add(ng: Array[UTF8String]): Unit = {
       var currentFrequency: Double = frequencyMap.get(ng)
       if (currentFrequency == null.asInstanceOf[Double]) {
         currentFrequency = 1.0D
@@ -171,7 +171,7 @@ object NGrams {
     }
 
     def merge(other: NGramBuffer): Unit = {
-      other.frequencyMap.asScala.foreach((keyValuePair: (List[UTF8String], Double)) => {
+      other.frequencyMap.asScala.foreach((keyValuePair: (Array[UTF8String], Double)) => {
         val key = keyValuePair._1
         val value = keyValuePair._2
         val originalValue = frequencyMap.getOrDefault(key, 0.0D)
@@ -181,14 +181,18 @@ object NGrams {
 
     def trim(): Unit = {
       if (frequencyMap.size() > 2 * k * precisionFactor) {
-        val orderedWithIndex = frequencyMap.asScala.iterator.toList.sortWith(_._2 < _._2).zipWithIndex
+        val orderedWithIndex = frequencyMap.asScala.iterator.toArray.sortWith(_._2 < _._2).zipWithIndex
         orderedWithIndex.takeWhile(_._2 < frequencyMap.size() - k * precisionFactor).map(_._1).
           foreach(keyValuePair => frequencyMap.remove(keyValuePair._1))
       }
     }
 
-    def getTopKNGrams() = {
-      frequencyMap.asScala.iterator.toList.sortWith(_._2 > _._2).zipWithIndex.takeWhile(_._2 < k).map(_._1).toList
+    def getTopKNGrams(): Seq[Any] = {
+      frequencyMap.asScala.iterator.toArray.sortWith(_._2 > _._2).zipWithIndex.takeWhile(_._2 < k).
+        map(_._1).map((keyValuePair: (Array[UTF8String], Double)) => {
+
+        Map[Array[UTF8String], Double]((keyValuePair._1, keyValuePair._2))
+      }).toSeq
     }
 
   }
