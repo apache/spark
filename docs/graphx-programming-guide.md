@@ -710,7 +710,7 @@ messages remaining.
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
 of its implementation (note: to avoid stackOverflowError due to long lineage chains, graph and 
 messages are periodically checkpoint and the checkpoint interval is set by
-"spark.graphx.pregel.checkpointInterval"):
+"spark.graphx.pregel.checkpointInterval", it can be disable by set as -1):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -723,30 +723,22 @@ class GraphOps[VD, ED] {
        mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     // Receive the initial message at each vertex
-    var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg))
-    val graphCheckpointer = new PeriodicGraphCheckpointer[VD, ED](
-      checkpointInterval, graph.vertices.sparkContext)
-    graphCheckpointer.update(g)
+    var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
 
     // compute the messages
-    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
-    val messageCheckpointer = new PeriodicRDDCheckpointer[(VertexId, A)](
-      checkpointInterval, graph.vertices.sparkContext)
-    messageCheckpointer.update(messages.asInstanceOf[RDD[(VertexId, A)]])
+    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)    
     var activeMessages = messages.count()
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages and update the vertices.
-      g = g.joinVertices(messages)(vprog)
-      graphCheckpointer.update(g)
+      g = g.joinVertices(messages)(vprog).cache()
       val oldMessages = messages
       // Send new messages, skipping edges where neither side received a message. We must cache
       // and periodic checkpoint messages so it can be materialized on the next line, and avoid
       // to have a long lineage chain.
       messages = GraphXUtils.mapReduceTriplets(
-        g, sendMsg, mergeMsg, Some((oldMessages, activeDirection)))
-      messageCheckpointer.update(messages.asInstanceOf[RDD[(VertexId, A)]])
+        g, sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       activeMessages = messages.count()
       i += 1
     }
