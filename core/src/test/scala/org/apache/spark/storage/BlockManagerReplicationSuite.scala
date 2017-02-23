@@ -457,6 +457,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
   val conf = new SparkConf(false).set("spark.app.id", "test")
   conf.set("spark.kryoserializer.buffer", "1m")
   conf.set("spark.storage.replication.proactive", "true")
+  conf.set("spark.storage.exceptionOnPinLeak", "true")
 
   (2 to 5).foreach{ i =>
     test(s"proactive block replication - $i replicas - ${i - 1} block manager deletions") {
@@ -494,5 +495,10 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     // there should only be one common block manager between initial and new locations
     assert(newLocations.intersect(blockLocations.toSet).size === 1)
 
+    // check if all the read locks have been released
+    initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
+      val locks = bm.releaseAllLocksForTask(BlockInfo.NON_TASK_WRITER)
+      assert(locks.size === 0)
+    }
   }
 }
