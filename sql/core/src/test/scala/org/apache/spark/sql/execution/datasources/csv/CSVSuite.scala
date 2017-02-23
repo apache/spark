@@ -987,7 +987,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Nil)
 
     // We put a `columnNameOfCorruptRecord` field in the middle of a schema
-    new StructType
     val schemaWithCorrField2 = new StructType()
       .add("a", IntegerType)
       .add(columnNameOfCorruptRecord, StringType)

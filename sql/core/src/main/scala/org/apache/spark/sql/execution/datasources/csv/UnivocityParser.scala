@@ -208,7 +208,7 @@ private[csv] class UnivocityParser(
   }
 
   private def convertWithParseMode(
-    input: String)(convert: Array[String] => InternalRow): Option[InternalRow] = {
+      input: String)(convert: Array[String] => InternalRow): Option[InternalRow] = {
     val tokens = parser.parseLine(input)
     if (options.dropMalformed && inputSchema.length != tokens.length) {
       if (numMalformedRecords < options.maxMalformedLogPerPartition) {

@@ -246,7 +246,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *    during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. If users
-   *     set a string-type field named `columnNameOfCorruptRecord` in a user-specified `schema`,
+   *     set a string type field named `columnNameOfCorruptRecord` in a user-specified `schema`,
    *     it puts the malformed string into the field. When a `schema` is set by user, it sets `null`
    *     for extra fields.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>

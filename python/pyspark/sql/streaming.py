@@ -558,7 +558,8 @@ class DataStreamReader(OptionUtils):
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None):
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
+            columnNameOfCorruptRecord=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -619,9 +620,17 @@ class DataStreamReader(OptionUtils):
                          If None is set, it uses the default value, session local timezone.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
-                    When a schema is set by user, it sets ``null`` for extra fields.
+                    If users set a string type field named ``columnNameOfCorruptRecord`` in a
+                    user-specified ``schema``, it puts the malformed string into the field. When
+                    a ``schema`` is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
+
+        :param columnNameOfCorruptRecord: defines a field name for malformed strings created
+                                          by ``PERMISSIVE`` mode. If a user-specified `schema`
+                                          has this named field, Spark puts malformed strings
+                                          in this field. This overrides
+                                          `spark.sql.columnNameOfCorruptRecord`.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -636,7 +645,8 @@ class DataStreamReader(OptionUtils):
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
-            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone)
+            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:

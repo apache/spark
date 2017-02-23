@@ -368,7 +368,7 @@ class DataFrameReader(OptionUtils):
                          If None is set, it uses the default value, session local timezone.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
-                    If users set a string-type field named ``columnNameOfCorruptRecord`` in a
+                    If users set a string type field named ``columnNameOfCorruptRecord`` in a
                     user-specified ``schema``, it puts the malformed string into the field. When
                     a ``schema`` is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
