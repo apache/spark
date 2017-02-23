@@ -465,8 +465,9 @@ class DataStreamReader(OptionUtils):
 
                 *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
                   record and puts the malformed string into a new field configured by \
-                 ``columnNameOfCorruptRecord``. When a schema is set by user, it sets \
-                 ``null`` for extra fields.
+                 ``columnNameOfCorruptRecord``. An user-defined schema can include \
+                 a string type field named ``columnNameOfCorruptRecord`` for corrupt records. \
+                 When a schema is set by user, it sets ``null`` for extra fields.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -619,18 +620,19 @@ class DataStreamReader(OptionUtils):
         :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
                          If None is set, it uses the default value, session local timezone.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
-                    If users set a string type field named ``columnNameOfCorruptRecord`` in a
-                    user-specified ``schema``, it puts the malformed string into the field. When
-                    a ``schema`` is set by user, it sets ``null`` for extra fields.
+                *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                  record and puts the malformed string into a new field configured by \
+                 ``columnNameOfCorruptRecord``. An user-defined schema can include \
+                 a string type field named ``columnNameOfCorruptRecord`` for corrupt records. \
+                 When a schema is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
-        :param columnNameOfCorruptRecord: defines a field name for malformed strings created
-                                          by ``PERMISSIVE`` mode. If a user-specified `schema`
-                                          has this named field, Spark puts malformed strings
-                                          in this field. This overrides
-                                          `spark.sql.columnNameOfCorruptRecord`.
+        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
+                                          created by ``PERMISSIVE`` mode. This overrides
+                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+                                          it uses the value specified in
+                                          ``spark.sql.columnNameOfCorruptRecord``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming

@@ -286,8 +286,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`.
+   *     An user-defined schema can include a string type field named `columnNameOfCorruptRecord`
+   *     for corrupt records. When a schema is set by user, it sets `null` for extra fields.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -422,18 +423,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. If users
-   *     set a string type field named `columnNameOfCorruptRecord` in a user-specified `schema`,
-   *     it puts the malformed string into the field. When a `schema` is set by user, it sets `null`
-   *     for extra fields.</li>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`.
+   *     An user-defined schema can include a string type field named `columnNameOfCorruptRecord`
+   *     for corrupt records. When a schema is set by user, it sets `null` for extra fields.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
    * </li>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
-   * `spark.sql.columnNameOfCorruptRecord`): defines a field name for malformed strings created by
-   * `PERMISSIVE` mode. If a user-specified `schema` has this named field, Spark puts malformed
-   * strings in this field. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    * </ul>
    * @since 2.0.0
    */
