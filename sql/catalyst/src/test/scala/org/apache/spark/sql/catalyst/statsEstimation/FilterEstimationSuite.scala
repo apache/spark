@@ -399,9 +399,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         assert(filteredStats.attributeStats(ar) == expectedColStats)
     }
 
-    // If the fitler has a binary operator (including those nested inside
-    // AND/OR/NOT), swap the sides of the attribte and the literal, reverse
-    // the operator, and then check again.
+    // If the filter has a binary operator (including those nested inside
+    // AND/OR/NOT), swap the sides of the attribte and the literal, reverse the
+    // operator, and then check again.
     val rewrittenFilter = filterNode transformExpressionsDown {
       case op @ EqualTo(ar: AttributeReference, l: Literal) =>
         EqualTo(l, ar)
