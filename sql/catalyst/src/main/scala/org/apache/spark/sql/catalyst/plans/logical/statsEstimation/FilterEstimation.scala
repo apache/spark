@@ -283,14 +283,14 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   }
 
   /**
-    * For a SQL data type, its internal data type may be different from its external type.
-    * For DateType, its internal type is Int, and its external data type is Java Date type.
-    * The min/max values in ColumnStat are saved in their corresponding external type.
-    *
-    * @param attrDataType the column data type
-    * @param litValue the literal value
-    * @return a BigDecimal value
-    */
+   * For a SQL data type, its internal data type may be different from its external type.
+   * For DateType, its internal type is Int, and its external data type is Java Date type.
+   * The min/max values in ColumnStat are saved in their corresponding external type.
+   *
+   * @param attrDataType the column data type
+   * @param litValue the literal value
+   * @return a BigDecimal value
+   */
   def convertBoundValue(attrDataType: DataType, litValue: Any): Option[Any] = {
     attrDataType match {
       case DateType =>
