@@ -347,3 +347,4 @@ private[kafka010] object KafkaSource {
     if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
   }
 }
+

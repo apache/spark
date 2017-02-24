@@ -19,10 +19,11 @@ package org.apache.spark.sql.kafka010
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.kafka.common.errors.TimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, StreamingQuery, StreamTest}
+import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class KafkaSinkSuite extends StreamTest with SharedSQLContext {
@@ -43,7 +44,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    testUtils = new KafkaTestUtils
+    testUtils = new KafkaTestUtils(withBrokerProps = Map("auto.create.topics.enable" -> "false"))
     testUtils.setup()
   }
 
@@ -59,18 +60,19 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
-  test("write to stream") {
+  test("write to stream with topic field") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[String]
       val topic = newTopic()
+      testUtils.createTopic(topic)
 
-      val writer = input.toDF().toDF("value")
+      val writer = input.toDF()
+        .selectExpr(s"'$topic' as topic", "value")
         .writeStream
         .format("kafka")
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .outputMode(OutputMode.Append)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("defaultTopic", topic)
         .queryName("kafkaStream")
         .start()
 
@@ -101,10 +103,11 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("write structured streaming aggregation") {
+  test("write structured streaming aggregation w/o topic field, with default topic") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[String]
       val topic = newTopic()
+      testUtils.createTopic(topic)
 
       val writer = input.toDF()
         .groupBy("value")
@@ -146,8 +149,118 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
+  test("write data with bad schema") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+
+      /* No topic field or default topic */
+      var writer: StreamingQuery = null
+      var ex = intercept[StreamingQueryException] {
+        writer = input.toDF()
+          .selectExpr("value as key", "value")
+          .writeStream
+          .format("kafka")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .queryName("kafkaNoTopicFieldStream")
+          .start()
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+      writer.stop()
+      assert(ex.getMessage
+        .toLowerCase
+        .contains("default topic required when no 'topic' attribute is present"))
+
+      /* No value field */
+      ex = intercept[StreamingQueryException] {
+        writer = input.toDF()
+          .selectExpr(s"'$topic' as topic", "value as key")
+          .writeStream
+          .format("kafka")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .queryName("kafkaNoValueFieldStream")
+          .start()
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+      writer.stop()
+      assert(ex.getMessage.toLowerCase.contains("required attribute 'value' not found"))
+    }
+  }
+
+  test("write data with valid schema but wrong types") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+
+      /* value field wrong type */
+      var writer: StreamingQuery = null
+      var ex = intercept[StreamingQueryException] {
+        writer = input.toDF()
+          .selectExpr(s"'$topic' as topic", "CAST(value as INT) as value")
+          .writeStream
+          .format("kafka")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .queryName("kafkaIntValueFieldStream")
+          .start()
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+      writer.stop()
+      assert(ex.getMessage.toLowerCase.contains(
+        "value attribute type must be a string or binarytype"))
+
+      /* key field wrong type */
+      ex = intercept[StreamingQueryException] {
+        writer = input.toDF()
+          .selectExpr(s"'$topic' as topic", "CAST(value as INT) as key", "value")
+          .writeStream
+          .format("kafka")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .queryName("kafkaIntValueFieldStream")
+          .start()
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+      writer.stop()
+      assert(ex.getMessage.toLowerCase.contains(
+        "key attribute type must be a string or binarytype"))
+    }
+  }
+
+  test("write to non-existing topic") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      val topic = newTopic()
+
+      var writer: StreamingQuery = null
+      val ex = intercept[StreamingQueryException] {
+        writer = input.toDF()
+          .writeStream
+          .format("kafka")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("defaultTopic", topic)
+          .queryName("kafkaBadTopicStream")
+          .start()
+        input.addData("1", "2", "3", "4", "5")
+        writer.processAllAvailable()
+      }
+      writer.stop()
+      assert(ex.getMessage.toLowerCase.contains("job aborted"))
+    }
+  }
+
   test("write batch to kafka") {
     val topic = newTopic()
+    testUtils.createTopic(topic)
     val df = spark
       .sparkContext
       .parallelize(Seq("1", "2", "3", "4", "5"))

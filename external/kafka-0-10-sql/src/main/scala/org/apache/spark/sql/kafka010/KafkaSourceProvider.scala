@@ -38,8 +38,11 @@ import org.apache.spark.sql.types.StructType
  * missing options even before the query is started.
  */
 private[kafka010] class KafkaSourceProvider extends DataSourceRegister
-  with StreamSourceProvider with StreamSinkProvider
-  with RelationProvider with CreatableRelationProvider with Logging {
+    with StreamSourceProvider
+    with StreamSinkProvider
+    with RelationProvider
+    with CreatableRelationProvider
+    with Logging {
   import KafkaSourceProvider._
 
   override def shortName(): String = "kafka"
@@ -160,7 +163,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC).map(_.trim.toLowerCase)
+    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC_KEY).map(_.trim.toLowerCase)
     val specifiedKafkaParams =
       parameters
         .keySet
@@ -178,9 +181,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-    logInfo(s"Save mode = $mode")
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC).map(_.trim.toLowerCase)
+    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC_KEY).map(_.trim.toLowerCase)
     val specifiedKafkaParams =
       parameters
         .keySet
@@ -194,7 +196,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     new BaseRelation {
       override def sqlContext: SQLContext = outerSQLContext
-
       override def schema: StructType = KafkaOffsetReader.kafkaSchema
     }
   }
@@ -424,11 +425,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 }
 
 private[kafka010] object KafkaSourceProvider {
-  private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
-  private val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
-  private val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
-  private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
-  private val DEFAULT_TOPIC = "defaulttopic"
+  val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
+  val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
+  val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
+  val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
+  val DEFAULT_TOPIC_KEY = "defaulttopic"
 
-  private val deserClassName = classOf[ByteArrayDeserializer].getName
+  val deserClassName = classOf[ByteArrayDeserializer].getName
 }
