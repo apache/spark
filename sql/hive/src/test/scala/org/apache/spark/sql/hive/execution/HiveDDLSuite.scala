@@ -1589,25 +1589,87 @@ class HiveDDLSuite
   }
 
   test("CTAS for data source table with a created location") {
-    withTable("t") {
+    withTable("t", "t1") {
       withTempDir {
         dir =>
           spark.sql(
             s"""
                |CREATE TABLE t
                |USING parquet
-               |PARTITIONED BY(a, b)
                |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+          assert(table.location.stripSuffix("/") == expectedPath)
+
+          checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+      }
+      // partition table
+      withTempDir {
+        dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE t1
+               |USING parquet
+               |PARTITIONED BY(a, b)
+               |LOCATION 'file:$dir'
+               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+          assert(table.location.stripSuffix("/") == expectedPath)
 
           val partDir = new File(dir.getAbsolutePath + "/a=3")
           assert(partDir.exists())
 
-          checkAnswer(spark.table("t"), Row(1, 2, 3, 4))
+          checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+      }
+    }
+  }
+
+  test("CTAS for hive table with a created location") {
+    withTable("t", "t1") {
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        withTempDir {
+          dir =>
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING hive
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+            assert(table.location.stripSuffix("/") == expectedPath)
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING hive
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+            assert(table.location.stripSuffix("/") == expectedPath)
+
+            val partDir = new File(dir.getAbsolutePath + "/a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
       }
     }
   }
