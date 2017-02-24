@@ -59,11 +59,12 @@ object LogQuery {
     }
 
     def extractKey(line: String): (String, String, String) = {
+      var default: String = _
       apacheLogRegex.findFirstIn(line) match {
         case Some(apacheLogRegex(ip, _, user, dateTime, query, status, bytes, referer, ua)) =>
           if (user != "\"-\"") (ip, user, query)
-          else (null, null, null)
-        case _ => (null, null, null)
+          else (default, default, default)
+        case _ => (default, default, default)
       }
     }
 
