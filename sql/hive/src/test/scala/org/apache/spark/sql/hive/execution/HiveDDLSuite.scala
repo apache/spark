@@ -1587,4 +1587,107 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("CTAS for data source table with a created default location throw an exception") {
+    withTable("t", "t1", "t2") {
+      val warehousePath = spark.sharedState.warehousePath
+      val tFile = new File(warehousePath, "t")
+      tFile.mkdirs()
+      assert(tFile.exists)
+
+      val e = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t
+             |USING parquet
+             |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(s"path file:${tFile.getAbsolutePath} already exists."))
+
+      // partition table(table path exists)
+      val tFile1 = new File(warehousePath, "t1")
+      tFile1.mkdirs()
+      assert(tFile1.exists)
+      val e1 = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t1
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e1.contains(s"path file:${tFile1.getAbsolutePath} already exists."))
+
+      // partition table(partition path exists)
+      val tFile2 = new File(warehousePath, "t2")
+      val tPartFile = new File(tFile2, "a=3/b=4")
+      tPartFile.mkdirs()
+      assert(tPartFile.exists)
+      val e2 = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t2
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e2.contains(s"path file:${tFile2.getAbsolutePath} already exists."))
+    }
+  }
+
+  test("CTAS for hive table with a created default location throw an exception") {
+    withTable("t", "t1", "t2") {
+      val warehousePath = spark.sharedState.warehousePath
+      val tFile = new File(warehousePath, "t")
+      tFile.mkdirs()
+      assert(tFile.exists)
+
+      val e = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t
+             |USING hive
+             |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(s"the location('file:${tFile.getAbsolutePath}') of table" +
+        s"('`default`.`t`')  already exists."))
+
+      // partition table(table path exists)
+      val tFile1 = new File(warehousePath, "t1")
+      tFile1.mkdirs()
+      assert(tFile1.exists)
+      val e1 = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t1
+             |USING hive
+             |PARTITIONED BY(a, b)
+             |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e1.contains(s"the location('file:${tFile1.getAbsolutePath}') of table" +
+        s"('`default`.`t1`')  already exists."))
+
+      // partition table(partition path exists)
+      val tFile2 = new File(warehousePath, "t2")
+      val tPartFile = new File(tFile2, "a=3/b=4")
+      tPartFile.mkdirs()
+      assert(tPartFile.exists)
+      val e2 = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t2
+             |USING hive
+             |PARTITIONED BY(a, b)
+             |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e1.contains(s"the location('file:${tFile1.getAbsolutePath}') of table" +
+        s"('`default`.`t1`')  already exists."))
+    }
+  }
 }

@@ -19,9 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
 
@@ -68,9 +70,22 @@ case class CreateHiveTableAsSelectCommand(
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       assert(tableDesc.schema.isEmpty)
-      sparkSession.sessionState.catalog.createTable(
-        tableDesc.copy(schema = query.schema), ignoreIfExists = false)
 
+      // As discussed in SPARK-19583, in CTAS the default location of a managed
+      // table should not exists
+      if (mode == SaveMode.ErrorIfExists && tableDesc.tableType == CatalogTableType.MANAGED) {
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
+        val tblLocationPath =
+          new Path(sparkSession.sessionState.catalog.defaultTablePath(tableIdentifier))
+        val fs = tblLocationPath.getFileSystem(hadoopConf)
+        if (fs.exists(tblLocationPath)) {
+          throw new AnalysisException(s"the location('$tblLocationPath') of table" +
+            s"('$tableIdentifier')  already exists.")
+        }
+      }
+
+      sparkSession.sessionState.catalog.createTable(
+          tableDesc.copy(schema = query.schema), ignoreIfExists = false)
       try {
         sparkSession.sessionState.executePlan(
           InsertIntoTable(
