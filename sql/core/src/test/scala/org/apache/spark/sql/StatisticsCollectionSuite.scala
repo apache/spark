@@ -178,7 +178,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
  * when using the Hive external catalog) as well as in the sql/core module.
  */
 abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils {
-  import testImplicits._
 
   private val dec1 = new java.math.BigDecimal("1.000000000000000000")
   private val dec2 = new java.math.BigDecimal("8.000000000000000000")
