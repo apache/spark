@@ -76,10 +76,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
 
-  def checkHiveHash(value: Any, dataType: DataType, expected: Long): Unit = {
+  def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
-    val actual = HiveHashFunction.hash(value, dataType, seed = 0)
-    assert(actual == expected)
+    val actual = HiveHashFunction.hash(input, dataType, seed = 0)
+
+    withClue(s"hash mismatch for input = `$input` of type `$dataType`.") {
+      assert(actual == expected)
+    }
   }
 
   def checkHiveHashForIntegralType(dataType: DataType): Unit = {
@@ -93,8 +96,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // random values
     for (_ <- 0 until 10) {
-      val value = random.nextInt()
-      checkHiveHash(value, dataType, value)
+      val input = random.nextInt()
+      checkHiveHash(input, dataType, input)
     }
   }
 
@@ -128,8 +131,8 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHash(Long.MinValue, LongType, -2147483648)
 
     for (_ <- 0 until 10) {
-      val value = random.nextLong()
-      checkHiveHash(value, LongType, ((value >>> 32) ^ value).toInt)
+      val input = random.nextLong()
+      checkHiveHash(input, LongType, ((input >>> 32) ^ input).toInt)
     }
   }
 
@@ -160,45 +163,47 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHash(UTF8String.fromString("!@#$%^&*()_+=-"), StringType, -613724358L)
     checkHiveHash(UTF8String.fromString("abcdefghijklmnopqrstuvwxyz"), StringType, 958031277L)
     checkHiveHash(UTF8String.fromString("AbCdEfGhIjKlMnOpQrStUvWxYz012"), StringType, -648013852L)
+    // scalastyle:off nonascii
     checkHiveHash(UTF8String.fromString("数据砖头"), StringType, -898686242L)
     checkHiveHash(UTF8String.fromString("नमस्ते"), StringType, 2006045948L)
+    // scalastyle:on nonascii
   }
 
   test("hive-hash for array") {
     // empty array
     checkHiveHash(
-      value = new GenericArrayData(Array[Int]()),
+      input = new GenericArrayData(Array[Int]()),
       dataType = ArrayType(IntegerType, containsNull = false),
       expected = 0)
 
     // basic case
     checkHiveHash(
-      value = new GenericArrayData(Array(1, 10000, Int.MaxValue)),
+      input = new GenericArrayData(Array(1, 10000, Int.MaxValue)),
       dataType = ArrayType(IntegerType, containsNull = false),
       expected = -2147172688L)
 
     // with negative values
     checkHiveHash(
-      value = new GenericArrayData(Array(-1L, 0L, 999L, Int.MinValue.toLong)),
+      input = new GenericArrayData(Array(-1L, 0L, 999L, Int.MinValue.toLong)),
       dataType = ArrayType(LongType, containsNull = false),
       expected = -2147452680L)
 
     // with nulls only
     val arrayTypeWithNull = ArrayType(IntegerType, containsNull = true)
     checkHiveHash(
-      value = new GenericArrayData(Array(null, null)),
+      input = new GenericArrayData(Array(null, null)),
       dataType = arrayTypeWithNull,
       expected = 0)
 
     // mix with null
     checkHiveHash(
-      value = new GenericArrayData(Array(-12221, 89, null, 767)),
+      input = new GenericArrayData(Array(-12221, 89, null, 767)),
       dataType = arrayTypeWithNull,
       expected = -363989515)
 
     // nested with array
     checkHiveHash(
-      value = new GenericArrayData(
+      input = new GenericArrayData(
         Array(
           new GenericArrayData(Array(1234L, -9L, 67L)),
           new GenericArrayData(Array(null, null)),
@@ -209,7 +214,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // nested with map
     checkHiveHash(
-      value = new GenericArrayData(
+      input = new GenericArrayData(
         Array(
           new ArrayBasedMapData(
             new GenericArrayData(Array(-99, 1234)),
@@ -227,13 +232,13 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // empty map
     checkHiveHash(
-      value = new ArrayBasedMapData(new GenericArrayData(Array()), new GenericArrayData(Array())),
+      input = new ArrayBasedMapData(new GenericArrayData(Array()), new GenericArrayData(Array())),
       dataType = mapType,
       expected = 0)
 
     // basic case
     checkHiveHash(
-      value = new ArrayBasedMapData(
+      input = new ArrayBasedMapData(
         new GenericArrayData(Array(1, 2)),
         new GenericArrayData(Array(UTF8String.fromString("foo"), UTF8String.fromString("bar")))),
       dataType = mapType,
@@ -241,7 +246,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // with null value
     checkHiveHash(
-      value = new ArrayBasedMapData(
+      input = new ArrayBasedMapData(
         new GenericArrayData(Array(55, -99)),
         new GenericArrayData(Array(UTF8String.fromString("apache spark"), null))),
       dataType = mapType,
@@ -250,7 +255,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // nesting (only values can be nested as keys have to be primitive datatype)
     val nestedMapType = MapType(IntegerType, MapType(IntegerType, StringType))
     checkHiveHash(
-      value = new ArrayBasedMapData(
+      input = new ArrayBasedMapData(
         new GenericArrayData(Array(1, -100)),
         new GenericArrayData(
           Array(
@@ -269,7 +274,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // basic
     val row = new GenericInternalRow(Array[Any](1, 2, 3))
     checkHiveHash(
-      value = row,
+      input = row,
       dataType =
         new StructType()
           .add("col1", IntegerType)
@@ -306,7 +311,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val row2 = new GenericInternalRow(rowValues.toArray)
     checkHiveHash(
-      value = row2,
+      input = row2,
       dataType = structType,
       expected = -2119012447)
   }
