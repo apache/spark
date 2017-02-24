@@ -50,27 +50,30 @@ private[kubernetes] class LoggingPodStatusWatcher(podCompletedFuture: CountDownL
   }
 
   private var pod: Option[Pod] = Option.empty
-  private var prevPhase: String = null
   private def phase: String = pod.map(_.getStatus().getPhase()).getOrElse("unknown")
+  private def status: String = pod.map(_.getStatus().getContainerStatuses().toString())
+    .getOrElse("unknown")
 
   override def eventReceived(action: Action, pod: Pod): Unit = {
     this.pod = Option(pod)
+    action match {
+      case Action.DELETED =>
+        closeWatch()
 
-    logShortStatus()
-    if (prevPhase != phase) {
-      logLongStatus()
-    }
-    prevPhase = phase
+      case Action.ERROR =>
+        closeWatch()
 
-    if (phase == "Succeeded" || phase == "Failed") {
-      podCompletedFuture.countDown()
-      scheduler.shutdown()
+      case _ =>
+        logLongStatus()
+        if (hasCompleted()) {
+          closeWatch()
+        }
     }
   }
 
   override def onClose(e: KubernetesClientException): Unit = {
-    scheduler.shutdown()
-    logDebug(s"Stopped watching application $appId with last-observed phase $phase")
+    logDebug(s"Stopping watching application $appId with last-observed phase $phase")
+    closeWatch()
   }
 
   private def logShortStatus() = {
@@ -78,7 +81,16 @@ private[kubernetes] class LoggingPodStatusWatcher(podCompletedFuture: CountDownL
   }
 
   private def logLongStatus() = {
-    logInfo("Phase changed, new state: " + pod.map(formatPodState(_)).getOrElse("unknown"))
+    logInfo("State changed, new state: " + pod.map(formatPodState(_)).getOrElse("unknown"))
+  }
+
+  private def hasCompleted(): Boolean = {
+    phase == "Succeeded" || phase == "Failed"
+  }
+
+  private def closeWatch(): Unit = {
+    podCompletedFuture.countDown()
+    scheduler.shutdown()
   }
 
   private def formatPodState(pod: Pod): String = {
@@ -103,7 +115,8 @@ private[kubernetes] class LoggingPodStatusWatcher(podCompletedFuture: CountDownL
             .asScala
             .map(_.getImage)
             .mkString(", ")),
-      ("phase", pod.getStatus.getPhase())
+      ("phase", pod.getStatus.getPhase()),
+      ("status", pod.getStatus.getContainerStatuses().toString)
     )
 
     // Use more loggable format if value is null or empty
