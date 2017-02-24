@@ -32,7 +32,7 @@ class HiveSessionStateSuite extends SessionStateSuite
   override def afterEach(): Unit = {}
 
   override def createSession(): Unit = {
-    activeSession = hiveContext.sparkSession
+    activeSession = spark.newSession()
   }
 
 }
