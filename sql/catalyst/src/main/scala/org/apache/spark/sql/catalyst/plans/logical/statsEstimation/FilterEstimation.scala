@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import java.sql.{Date, Timestamp}
-
 import scala.collection.immutable.{HashSet, Map}
 import scala.collection.mutable
 
