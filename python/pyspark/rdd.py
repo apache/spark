@@ -68,7 +68,8 @@ def portable_hash(x):
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
-    if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
+
+    if sys.version_info >= (3, 2, 3) and 'PYTHONHASHSEED' not in os.environ:
         raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
