@@ -283,35 +283,24 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   }
 
   /**
-   * This method converts a Literal value of numeric type to a BigDecimal value.
-   * In order to avoid type casting error such as Java int to Java long, we need to
-   * convert a numeric integer value to String, and then convert it to long,
-   * and then convert it to BigDecimal.
-   *
-   * @param attrDataType the column data type
-   * @param litValue the literal value
-   * @return a BigDecimal value
-   */
-  def numericLiteralToBigDecimal(
-       attrDataType: DataType,
-       litValue: Any)
-    : BigDecimal = {
+    * For a SQL data type, its internal data type may be different from its external type.
+    * For DateType, its internal type is Int, and its external data type is Java Date type.
+    * The min/max values in ColumnStat are saved in their corresponding external type.
+    *
+    * @param attrDataType the column data type
+    * @param litValue the literal value
+    * @return a BigDecimal value
+    */
+  def convertBoundValue(attrDataType: DataType, litValue: Any): Option[Any] = {
     attrDataType match {
-      case _: IntegralType =>
-        BigDecimal(litValue.toString)
-
-      case _: FractionalType =>
-        BigDecimal(litValue.toString.toDouble)
-
       case DateType =>
-        val dateLiteral =
-          DateTimeUtils.fromJavaDate(litValue.asInstanceOf[Date]).toString
-        BigDecimal(java.lang.Long.valueOf(dateLiteral))
-
+        Some(DateTimeUtils.toJavaDate(litValue.toString.toInt))
       case TimestampType =>
-        val tsLiteral =
-          DateTimeUtils.fromJavaTimestamp(litValue.asInstanceOf[Timestamp]).toString
-        BigDecimal(java.lang.Long.valueOf(tsLiteral))
+        Some(DateTimeUtils.toJavaTimestamp(litValue.toString.toLong))
+      case StringType | BinaryType =>
+        None
+      case _ =>
+        Some(litValue)
     }
   }
 
@@ -338,29 +327,17 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     // We currently don't store min/max for binary/string type.
     // Hence, we assume it is in boundary for binary/string type.
     val statsRange = Range(aColStat.min, aColStat.max, attrRef.dataType)
-    val litRange = Range(Some(literal.value), Some(literal.value), literal.dataType)
-    val inBoundary: Boolean = Range.isIntersected(statsRange, litRange)
+    val inBoundary: Boolean = Range.rangeContainsLiteral(statsRange, literal)
 
     if (inBoundary) {
 
       if (update) {
         // We update ColumnStat structure after apply this equality predicate.
         // Set distinctCount to 1.  Set nullCount to 0.
-        val newStats = attrRef.dataType match {
-          case _: NumericType =>
-            val newValue = Some(literal.value)
-            aColStat.copy(distinctCount = 1, min = newValue,
-              max = newValue, nullCount = 0)
-          case DateType =>
-            val dateValue = Some(literal.value)
-            aColStat.copy(distinctCount = 1, min = dateValue,
-              max = dateValue, nullCount = 0)
-          case TimestampType =>
-            val tsValue = Some(literal.value)
-            aColStat.copy(distinctCount = 1, min = tsValue,
-              max = tsValue, nullCount = 0)
-          case _ => aColStat.copy(distinctCount = 1, nullCount = 0)
-        }
+        // Need to save new min/max using the external type value of the literal
+        val newValue = convertBoundValue(attrRef.dataType, literal.value)
+        val newStats = aColStat.copy(distinctCount = 1, min = newValue,
+          max = newValue, nullCount = 0)
         mutableColStats += (attrRef.exprId -> newStats)
       }
 
@@ -406,18 +383,20 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
         // To facilitate finding the min and max values in hSet, we map hSet values to BigDecimal.
         // Using hSetBigdec, we can find the min and max values quickly in the ordered hSetBigdec.
+        val hSetBigdec = hSet.map(e => BigDecimal(e.toString))
+        val validQuerySet = hSetBigdec.filter(e => e >= statsRange.min && e <= statsRange.max)
         // We use hSetBigdecToAnyMap to help us find the original hSet value.
         val hSetBigdecToAnyMap: Map[BigDecimal, Any] =
-          hSet.map(e => numericLiteralToBigDecimal(aType, e) -> e).toMap
-        val hSetBigdec = hSet.map(e => numericLiteralToBigDecimal(aType, e))
-        val validQuerySet = hSetBigdec.filter(e => e >= statsRange.min && e <= statsRange.max)
+          hSet.map(e => BigDecimal(e.toString) -> e).toMap
 
         if (validQuerySet.isEmpty) {
           return Some(0.0)
         }
 
-        val newMax = Some(hSetBigdecToAnyMap(validQuerySet.max))
-        val newMin = Some(hSetBigdecToAnyMap(validQuerySet.min))
+        // Need to save new min/max using the external type value of the literal
+        val newMax = convertBoundValue(attrRef.dataType, hSetBigdecToAnyMap(validQuerySet.max))
+        val newMin = convertBoundValue(attrRef.dataType, hSetBigdecToAnyMap(validQuerySet.min))
+
         // newNdv should not be greater than the old ndv.  For example, column has only 2 values
         // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
         newNdv = math.min(validQuerySet.size.toLong, ndv.longValue())
@@ -465,10 +444,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val statsRange =
       Range(aColStat.min, aColStat.max, attrRef.dataType).asInstanceOf[NumericRange]
 
-    val literalValueBD =
-      numericLiteralToBigDecimal(attrRef.dataType, literal.value)
-
     // determine the overlapping degree between predicate range and column's range
+    val literalValueBD = BigDecimal(literal.value.toString)
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
       case _: LessThan =>
         (literalValueBD <= statsRange.min, literalValueBD > statsRange.max)
@@ -509,12 +486,15 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           else (maxToDouble - literalToDouble) / (maxToDouble - minToDouble)
       }
 
+      // Need to save new min/max using the external type value of the literal
+      val newValue = convertBoundValue(attrRef.dataType, literal.value)
+
       if (update) {
         op match {
-          case _: GreaterThan => newMin = Some(literal.value)
-          case _: GreaterThanOrEqual => newMin = Some(literal.value)
-          case _: LessThan => newMax = Some(literal.value)
-          case _: LessThanOrEqual => newMax = Some(literal.value)
+          case _: GreaterThan => newMin = newValue
+          case _: GreaterThanOrEqual => newMin = newValue
+          case _: LessThan => newMax = newValue
+          case _: LessThanOrEqual => newMax = newValue
         }
 
         newNdv = math.max(math.round(ndv.toDouble * percent), 1)
