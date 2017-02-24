@@ -663,10 +663,10 @@ streamingContext.textFileStream(dataDirectory)
 
 Spark Streaming will monitor the directory `dataDirectory` and process any files created in that directory.
 
-   * A simple directory can be monitored, such as `hdfs://namenode:8040/logs/`.
+   * A simple directory can be monitored, such as `"hdfs://namenode:8040/logs/"`.
      All files directly under such a path will be processed as they are discovered.
    + A [POSIX glob pattern](http://pubs.opengroup.org/onlinepubs/009695399/utilities/xcu_chap02.html#tag_02_13_02) can be supplied, such as
-     `hdfs://namenode:8040/logs/2017/*`.
+     `"hdfs://namenode:8040/logs/2017/*"`.
      Here, the DStream will consist of all files in the directories
      matching the pattern.
      That is: it is a pattern of directories, not of files in directories.
@@ -677,7 +677,7 @@ Spark Streaming will monitor the directory `dataDirectory` and process any files
      That is: *updates are ignored*.
    + The more files under a directory, the longer it will take to
      scan for changes —even if no files have been modified.
-   * If a wildcard is used to identify directories, such as `hdfs://namenode:8040/logs/2016-*`,
+   * If a wildcard is used to identify directories, such as `"hdfs://namenode:8040/logs/2016-*"`,
      renaming an entire directory to match the path will add the directory to the list of
      monitored directories. Only the files in the directory whose modification time is
      within the current window will be included in the stream.
