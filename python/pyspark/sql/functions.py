@@ -1940,7 +1940,16 @@ def udf(f=None, returnType=StringType()):
     +----------+--------------+------------+
     """
     def _udf(f, returnType=StringType()):
-        return UserDefinedFunction(f, returnType)
+        udf_obj = UserDefinedFunction(f, returnType)
+
+        @functools.wraps(f)
+        def wrapper(*args):
+            return udf_obj(*args)
+
+        wrapper.func = udf_obj.func
+        wrapper.returnType = udf_obj.returnType
+
+        return wrapper
 
     # decorator @udf, @udf() or @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
