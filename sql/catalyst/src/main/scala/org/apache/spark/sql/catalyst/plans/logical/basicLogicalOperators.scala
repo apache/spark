@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, JoinEstimation, ProjectEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -128,6 +128,14 @@ case class Filter(condition: Expression, child: LogicalPlan)
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
+  }
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      FilterEstimation(this, conf).estimate.getOrElse(super.computeStats(conf))
+    } else {
+      super.computeStats(conf)
+    }
   }
 }
 
