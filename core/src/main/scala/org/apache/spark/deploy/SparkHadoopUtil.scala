@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{FileNotFoundException, IOException}
-import java.lang.reflect.Method
+import java.io.IOException
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
