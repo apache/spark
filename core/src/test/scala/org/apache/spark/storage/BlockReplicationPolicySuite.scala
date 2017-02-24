@@ -24,7 +24,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 
-trait RandomBlockReplicationPolicyBehavior extends SparkFunSuite
+class RandomBlockReplicationPolicyBehavior extends SparkFunSuite
     with Matchers
     with BeforeAndAfter
     with LocalSparkContext {
@@ -32,7 +32,7 @@ trait RandomBlockReplicationPolicyBehavior extends SparkFunSuite
   // Implicitly convert strings to BlockIds for test clarity.
   protected implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
 
-  val replicationPolicy: BlockReplicationPolicy
+  val replicationPolicy: BlockReplicationPolicy = new RandomBlockReplicationPolicy
 
   val blockId = "test-block"
   /**
@@ -77,7 +77,9 @@ trait RandomBlockReplicationPolicyBehavior extends SparkFunSuite
   }
 }
 
-trait TopologyAwareBlockReplicationPolicyBehavior extends RandomBlockReplicationPolicyBehavior {
+class TopologyAwareBlockReplicationPolicyBehavior extends RandomBlockReplicationPolicyBehavior {
+  override val replicationPolicy = new BasicBlockReplicationPolicy
+
   test("All peers in the same rack") {
     val racks = Seq("/default-rack")
     val numBlockManager = 10
@@ -122,68 +124,4 @@ trait TopologyAwareBlockReplicationPolicyBehavior extends RandomBlockReplication
       }
     }
   }
-}
-
-class RandomBlockReplicationPolicySuite extends RandomBlockReplicationPolicyBehavior {
-  override val replicationPolicy = new RandomBlockReplicationPolicy
-}
-
-class BasicBlockReplicationPolicySuite extends TopologyAwareBlockReplicationPolicyBehavior {
-  override val replicationPolicy = new BasicBlockReplicationPolicy
-}
-
-class ObjectivesBasedReplicationPolicySuite extends TopologyAwareBlockReplicationPolicyBehavior {
-  override val replicationPolicy = new ObjectivesBasedReplicationPolicy
-
-  val objectives: Set[BlockReplicationObjective] = Set(
-    ReplicateToADifferentHost,
-    ReplicateBlockOutsideRack,
-    ReplicateBlockWithinRack,
-    NoTwoReplicasInSameRack
-  )
-
-  test("peers are all in the same rack") {
-    val blockManagerIds = generateBlockManagerIds(10, List("Default-rack"))
-
-    val blockId = BlockId("test_block")
-
-    val candidateBMId = generateBlockManagerIds(1, List("Default-rack")).head
-
-    val numReplicas = 2
-
-    val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
-      objectives,
-      blockManagerIds,
-      mutable.HashSet.empty,
-      blockId,
-      candidateBMId,
-      numReplicas)
-
-    logDebug(s"Optimal peers : ${optimalPeers}")
-    logDebug(s"Objectives met : ${objectivesMet}")
-    assert(optimalPeers.size == 1)
-    assert(objectivesMet.size == 3)
-  }
-
-  test("peers in 3 racks") {
-    val racks = List("/Rack1", "/Rack2", "/Rack3")
-    val blockManagerIds = generateBlockManagerIds(10, racks)
-    val candidateBMId = generateBlockManagerIds(1, racks).head
-    val blockId = BlockId("test_block")
-    val numReplicas = 2
-    val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
-      objectives,
-      blockManagerIds,
-      mutable.HashSet.empty,
-      blockId,
-      candidateBMId,
-      numReplicas)
-
-    logDebug(s"Optimal peers : ${optimalPeers}")
-    logDebug(s"Objectives met : ${objectivesMet}")
-    assert(optimalPeers.size == 2)
-    assert(objectivesMet.size == 4)
-    assert(objectives.forall(_.isObjectiveMet(candidateBMId, optimalPeers)))
-  }
-
 }
