@@ -1832,4 +1832,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       }
     }
   }
+
+  test("CTAS for data source table with a created location") {
+    withTable("t") {
+      withTempDir {
+        dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE t
+               |USING parquet
+               |PARTITIONED BY(a, b)
+               |LOCATION '$dir'
+               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+
+          val partDir = new File(dir.getAbsolutePath + "/a=3")
+          assert(partDir.exists())
+
+          checkAnswer(spark.table("t"), Row(1, 2, 3, 4))
+      }
+    }
+  }
 }

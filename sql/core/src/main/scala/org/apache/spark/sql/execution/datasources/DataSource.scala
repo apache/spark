@@ -440,7 +440,9 @@ case class DataSource(
 
           if (mode == SaveMode.Append) false
           else if (mode == SaveMode.Overwrite) true
-          else throw new IllegalStateException(s"unsupported save mode $mode")
+          else {
+            throw new IllegalStateException(s"unsupported save mode $mode")
+          }
         } else true
     }
 
