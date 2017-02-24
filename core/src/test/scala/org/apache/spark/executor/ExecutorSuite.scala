@@ -134,7 +134,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     failReason match {
       case ef: ExceptionFailure =>
         assert(ef.exception.isDefined)
-        assert(ef.exception.get.getMessage() === "failure in deserialization")
+        assert(ef.exception.get.getMessage() === NonDeserializableTask.errorMsg)
       case _ =>
         fail(s"unexpected failure type: $failReason")
     }
@@ -211,6 +211,10 @@ private class ExecutorSuiteHelper {
 private class NonDeserializableTask extends FakeTask(0, 0) with Externalizable {
   def writeExternal(out: ObjectOutput): Unit = {}
   def readExternal(in: ObjectInput): Unit = {
-    throw new RuntimeException("failure in deserialization")
+    throw new RuntimeException(NonDeserializableTask.errorMsg)
   }
+}
+
+private object NonDeserializableTask {
+  val errorMsg = "failure in deserialization"
 }
