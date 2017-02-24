@@ -1985,7 +1985,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
 
-          val partDir = new File(dir.getAbsolutePath + "/a=3")
+          val partDir = new File(dir, "a=3")
           assert(partDir.exists())
 
           checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))

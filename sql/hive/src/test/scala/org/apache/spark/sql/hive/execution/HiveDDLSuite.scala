@@ -1601,8 +1601,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
-          assert(table.location.stripSuffix("/") == expectedPath)
+          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
 
           checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
       }
@@ -1614,15 +1613,14 @@ class HiveDDLSuite
                |CREATE TABLE t1
                |USING parquet
                |PARTITIONED BY(a, b)
-               |LOCATION 'file:$dir'
+               |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
-          assert(table.location.stripSuffix("/") == expectedPath)
+          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
 
-          val partDir = new File(dir.getAbsolutePath + "/a=3")
+          val partDir = new File(dir, "a=3")
           assert(partDir.exists())
 
           checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
@@ -1665,7 +1663,7 @@ class HiveDDLSuite
             val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
             assert(table.location.stripSuffix("/") == expectedPath)
 
-            val partDir = new File(dir.getAbsolutePath + "/a=3")
+            val partDir = new File(dir, "a=3")
             assert(partDir.exists())
 
             checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
