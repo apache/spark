@@ -240,14 +240,16 @@ package object config {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  private[spark] val SECRET_REDACTION_PROPERTY = "spark.redaction.regex"
+  private[spark] val SECRET_REDACTION_DEFAULT = "(?i)secret|password"
   private[spark] val SECRET_REDACTION_PATTERN =
-    ConfigBuilder("spark.redaction.regex")
+    ConfigBuilder(SECRET_REDACTION_PROPERTY)
       .doc("Regex to decide which Spark configuration properties and environment variables in " +
         "driver and executor environments contain sensitive information. When this regex matches " +
         "a property, its value is redacted from the environment UI and various logs like YARN " +
         "and event logs.")
       .stringConf
-      .createWithDefault("(?i)secret|password")
+      .createWithDefault(SECRET_REDACTION_DEFAULT)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
