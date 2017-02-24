@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
@@ -22,11 +22,8 @@ import java.util.concurrent.{Executors, TimeUnit}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.ThreadUtils
@@ -51,7 +48,7 @@ import org.apache.spark.util.ThreadUtils
  * appeared, it will read the credentials and update the currently running UGI with it. This
  * process happens again once 80% of the validity of this has expired.
  */
-private[yarn] class AMCredentialRenewer(
+private[spark] class AMCredentialRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     credentialManager: ConfigurableCredentialManager) extends Logging {
@@ -62,7 +59,7 @@ private[yarn] class AMCredentialRenewer(
     Executors.newSingleThreadScheduledExecutor(
       ThreadUtils.namedThreadFactory("Credential Refresh Thread"))
 
-  private val hadoopUtil = YarnSparkHadoopUtil.get
+  private val hadoopUtil = SparkHadoopUtil.get
 
   private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val daysToKeepFiles = sparkConf.get(CREDENTIALS_FILE_MAX_RETENTION)

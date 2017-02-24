@@ -17,18 +17,23 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.io.File
+import java.util.UUID
 import java.util.concurrent.Semaphore
 
-import scala.concurrent.Future
-
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.{ApplicationDescription, Command}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
+import org.apache.spark.deploy.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.{ApplicationDescription, Command, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.concurrent.Future
 
 /**
  * A [[SchedulerBackend]] implementation for Spark's standalone cluster manager.
@@ -55,9 +60,42 @@ private[spark] class StandaloneSchedulerBackend(
   private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
   private val totalExpectedCores = maxCores.getOrElse(0)
 
+
+  private var loginFromKeytab = false
+  private var principal: String = null
+  private var keytab: String = null
+  private var credentials: Credentials = null
+
+  def setupCredentials(): Unit = {
+    loginFromKeytab = sc.conf.contains(PRINCIPAL.key)
+    if (loginFromKeytab) {
+      principal = sc.conf.get(PRINCIPAL).get
+      keytab = sc.conf.get(KEYTAB).orNull
+
+      require(keytab != null, "Keytab must be specified when principal is specified.")
+      logInfo("Attempting to login to the Kerberos" +
+        s" using principal: $principal and keytab: $keytab")
+      val f = new File(keytab)
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
+      sc.conf.set(KEYTAB.key, keytabFileName)
+      sc.conf.set(PRINCIPAL.key, principal)
+    }
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+  }
+
+
+
+
+
+
   override def start() {
     super.start()
     launcherBackend.connect()
+
+    setupCredentials()
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
@@ -110,6 +148,17 @@ private[spark] class StandaloneSchedulerBackend(
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
+
+
+
+
+    if (conf.contains("spark.yarn.credentials.file")) {
+      val newConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val cu = new ConfigurableCredentialManager(conf, newConf).credentialUpdater()
+      cu.start()
+    }
+
+
   }
 
   override def stop(): Unit = synchronized {
