@@ -408,12 +408,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def defaultTablePath(tableIdent: TableIdentifier): String = {
-    // default database's location always use the warehouse path,
-    // and since the location of database stored in metastore is qualified,
-    // here we also make qualify for warehouse location
+    // The default database's location always uses the warehouse path.
+    // Since the location of database stored in metastore is qualified,
+    // we also make the warehouse location qualified.
     val dbLocation = if (tableIdent.database.orNull == SessionCatalog.DEFAULT_DATABASE) {
       SessionCatalog.makeQualifiedPath(conf.get(WAREHOUSE_PATH), hadoopConf).toString
-    } else getDatabase(tableIdent.database.get).locationUri
+    } else {
+      getDatabase(tableIdent.database.get).locationUri
+    }
 
     new Path(new Path(dbLocation), tableIdent.table).toString
   }
