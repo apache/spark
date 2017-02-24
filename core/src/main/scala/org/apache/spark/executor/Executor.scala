@@ -148,6 +148,8 @@ private[spark] class Executor(
 
   startDriverHeartbeater()
 
+  private[executor] def numRunningTasks: Int = runningTasks.size()
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
