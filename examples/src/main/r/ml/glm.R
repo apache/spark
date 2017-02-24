@@ -27,9 +27,9 @@ sparkR.session(appName = "SparkR-ML-glm-example")
 # $example on$
 training <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 # Fit a generalized linear model of family "gaussian" with spark.glm
-set.seed(2)
-gaussianDF <- sample(training, TRUE, 0.7)
-gaussianTestDF <- sample(training, TRUE, 0.3)
+df_list <- randomSplit(training, c(7,3), 2)
+gaussianDF <- df_list[[1]]
+gaussianTestDF <- df_list[[2]]
 gaussianGLM <- spark.glm(gaussianDF, label ~ features, family = "gaussian")
 
 # Model summary
@@ -45,8 +45,9 @@ summary(gaussianGLM2)
 
 # Fit a generalized linear model of family "binomial" with spark.glm
 training2 <- read.df("data/mllib/sample_binary_classification_data.txt", source = "libsvm")
-binomialDF <- sample(training2, TRUE, 0.7)
-binomialTestDF <- sample(training2, TRUE, 0.3)
+df_list2 <- randomSplit(training2, c(7,3), 2)
+binomialDF <- df_list2[[1]]
+binomialTestDF <- df_list2[[2]]
 binomialGLM <- spark.glm(binomialDF, label ~ features, family = "binomial")
 
 # Model summary

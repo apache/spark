@@ -28,9 +28,9 @@ sparkR.session(appName = "SparkR-ML-example")
 # $example on:read_write$
 training <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 # Fit a generalized linear model of family "gaussian" with spark.glm
-set.seed(2)
-gaussianDF <- sample(training, TRUE, 0.7)
-gaussianTestDF <- sample(training, TRUE, 0.3)
+df_list <- randomSplit(training, c(7,3), 2)
+gaussianDF <- df_list[[1]]
+gaussianTestDF <- df_list[[2]]
 gaussianGLM <- spark.glm(gaussianDF, label ~ features, family = "gaussian")
 
 # Save and then load a fitted MLlib model
