@@ -1588,7 +1588,7 @@ class HiveDDLSuite
     }
   }
 
-  test("CTAS for data source table with a created default location throw an exception") {
+  test("CTAS for managed data source table with a created default location throw an exception") {
     withTable("t", "t1", "t2") {
       val warehousePath = spark.sharedState.warehousePath
       val tFile = new File(warehousePath, "t")
@@ -1638,7 +1638,7 @@ class HiveDDLSuite
     }
   }
 
-  test("CTAS for hive table with a created default location throw an exception") {
+  test("CTAS for managed hive table with a created default location throw an exception") {
     withTable("t", "t1", "t2") {
       val warehousePath = spark.sharedState.warehousePath
       val tFile = new File(warehousePath, "t")

@@ -1953,7 +1953,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("CTAS for data source table with a created default location throw an exception") {
+  test("CTAS for managed data source table with a created default location throw an exception") {
     withTable("t", "t1", "t2") {
       val warehousePath = spark.sharedState.warehousePath.stripPrefix("file:")
       val tFile = new File(warehousePath, "t")
