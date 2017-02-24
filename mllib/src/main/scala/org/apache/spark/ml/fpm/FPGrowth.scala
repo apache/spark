@@ -105,7 +105,7 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
  * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
- * candidate generation</a>.
+ * candidate generation</a>. Note null values in the feature column are ignored during fit().
  *
  * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
  * Association rule learning (Wikipedia)</a>
@@ -219,8 +219,9 @@ class FPGrowthModel private[ml] (
    * The transform method first generates the association rules according to the frequent itemsets.
    * Then for each association rule, it will examine the input items against antecedents and
    * summarize the consequents as prediction. The prediction column has the same data type as the
-   * input column. (Array[T])
-   * Note that internally it uses Cartesian join and may exhaust memory for large datasets.
+   * input column(Array[T]) and will not contain existing items in the input column.
+   * Note that internally it uses Cartesian join and may exhaust memory for large datasets. The null
+   * values in the feature columns are treated as empty sets.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -252,7 +253,7 @@ class FPGrowthModel private[ml] (
      .map { case (index, cons) => (index, cons.distinct) }
 
     val rowAndConsequents = dataset.toDF().rdd.zipWithIndex().map(_.swap)
-      .join(indexToConsequents).sortByKey(ascending = true, dataset.rdd.getNumPartitions)
+      .join(indexToConsequents)
       .map(_._2).map(t => Row.merge(t._1, Row(t._2)))
     val mergedSchema = dataset.schema.add(StructField($(predictionCol),
       dataset.schema($(featuresCol)).dataType, dataset.schema($(featuresCol)).nullable))
