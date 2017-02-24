@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.kafka.common.errors.TimeoutException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PrettyAttribute, SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
