@@ -185,9 +185,6 @@ res7: linesWithSpark.type = MapPartitionsRDD[2] at filter at <console>:27
 
 scala> linesWithSpark.count()
 res8: Long = 15
-
-scala> linesWithSpark.count()
-res9: Long = 15
 {% endhighlight %}
 
 It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
