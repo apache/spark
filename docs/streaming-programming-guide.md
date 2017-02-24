@@ -676,13 +676,13 @@ Spark Streaming will monitor the directory `dataDirectory` and process any files
    + Once processed, changes to a file within the current window will not cause the file to be reread.
      That is: *updates are ignored*.
    + The more files under a directory, the longer it will take to
-     scan for changes —even if no files have been modified.
+     scan for changes — even if no files have been modified.
    * If a wildcard is used to identify directories, such as `"hdfs://namenode:8040/logs/2016-*"`,
      renaming an entire directory to match the path will add the directory to the list of
      monitored directories. Only the files in the directory whose modification time is
      within the current window will be included in the stream.
-   + Calling `FileSystem.setTimes()` to fix the timestamp is a way to have the file picked
-     up in a later window, even if its contents have not changed.
+   + Calling [`FileSystem.setTimes()`](https://hadoop.apache.org/docs/current/api/org/apache/hadoop/fs/FileSystem.html#setTimes-org.apache.hadoop.fs.Path-long-long-)
+     to fix the timestamp is a way to have the file picked up in a later window, even if its contents have not changed.
 
 
 ##### Streaming to FileSystems vs Object stores
@@ -700,11 +700,17 @@ rename it into the destination directory.
 Provided the renamed file appears in the scanned destination directory during the window
 of its creation, the new data will be picked up.
 
-In contrast, Object Stores have very slow rename operations (the data is usually copied),
-and the renamed object may have the time of the copy operation as its modification time.
+In contrast, Object Stores such as Amazon S3 and Azure Storage usually have slow rename operations, as the
+data is actually copied.
+Furthermore, renamed object may have the time of the `rename()` operation as its modification time, so
+may not be considered part of the window which the original create time implied they were.
+
 Careful testing is needed against the target object store to verify that the timestamp behavior
-of the store is consistent with that expected by Spark Streaming. For more details on this topic,
-consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
+of the store is consistent with that expected by Spark Streaming. It may be
+that writing directly into a destination directory is the appropriate strategy for
+streaming data via the chosen object store.
+
+For more details on this topic, consult the [Hadoop Filesystem Specification](https://hadoop.apache.org/docs/stable2/hadoop-project-dist/hadoop-common/filesystem/introduction.html).
 
 
 #### Streams based on Custom Receivers
