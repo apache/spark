@@ -38,6 +38,7 @@ import org.apache.spark.sql.types._
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
+  // these are def_s and not val/lazy val since the latter would introduce circular references
   private def sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
   private def tableRelationCache = sparkSession.sessionState.catalog.tableRelationCache
 

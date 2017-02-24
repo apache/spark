@@ -107,7 +107,7 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
   }
 
-  test("fork new session and run query on inherited table") {
+  test("fork new sessions and run query on inherited table") {
     def checkTableExists(sparkSession: SparkSession): Unit = {
       QueryTest.checkAnswer(sparkSession.sql(
         """
@@ -131,6 +131,8 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(forkedSession ne activeSession)
     SparkSession.setActiveSession(forkedSession)
     checkTableExists(forkedSession)
+    checkTableExists(activeSession.cloneSession())
+    checkTableExists(forkedSession.cloneSession())
 
     SparkSession.clearActiveSession()
   }

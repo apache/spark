@@ -17,15 +17,25 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.SessionStateSuite
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveSessionStateSuite extends SessionStateSuite with TestHiveSingleton {
+class HiveSessionStateSuite
+  extends SessionStateSuite
+  with TestHiveSingleton
+  with BeforeAndAfterEach {
 
-  override def createSession(): Unit = {
-    activeSession = hiveContext.newSession().sparkSession
+
+  override def beforeEach(): Unit = {
+    createSession()
   }
 
   override def afterEach(): Unit = {}
+
+  override def createSession(): Unit = {
+    activeSession = hiveContext.sparkSession
+  }
 
 }

@@ -85,7 +85,7 @@ class TestHiveContext(
     new TestHiveContext(sparkSession.newSession())
   }
 
-  override def sessionState: TestHiveSessionState = sparkSession.sessionState
+  override def sessionState: HiveSessionState = sparkSession.sessionState
 
   def setCacheTables(c: Boolean): Unit = {
     sparkSession.setCacheTables(c)
@@ -116,13 +116,8 @@ class TestHiveContext(
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
     @transient private val existingSharedState: Option[SharedState],
-    @transient private val parentSessionState: Option[SessionState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
-
-  def this(sc: SparkContext, existingSharedState: Option[SharedState], loadTestTables: Boolean) {
-    this(sc, existingSharedState, None, loadTestTables)
-  }
 
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
@@ -150,25 +145,42 @@ private[hive] class TestHiveSparkSession(
     existingSharedState.getOrElse(new SharedState(sc))
   }
 
-  // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
-  // logic based on the setting of CATALOG_IMPLEMENTATION.
-  @transient
-  override lazy val sessionState: TestHiveSessionState = {
-    parentSessionState
-      .map(_.clone(this))
-      .getOrElse(TestHiveSessionState(self))
-      .asInstanceOf[TestHiveSessionState]
+  private def createHiveSessionState: HiveSessionState = {
+    val testConf =
+      new SQLConf {
+        clear()
+        override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+        override def clear(): Unit = {
+          super.clear()
+          TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
+        }
+      }
+    val queryExecutionCreator = (plan: LogicalPlan) => new TestHiveQueryExecution(this, plan)
+    val initHelper = HiveSessionState(this, Some(testConf))
+    sparkContext.getConf.getAll.foreach { case (k, v) =>
+      testConf.setConfString(k, v)
+    }
+
+    new HiveSessionState(
+      sparkContext,
+      sharedState,
+      testConf,
+      initHelper.experimentalMethods,
+      initHelper.functionRegistry,
+      initHelper.catalog,
+      initHelper.sqlParser,
+      initHelper.metadataHive,
+      initHelper.analyzer,
+      initHelper.streamingQueryManager,
+      queryExecutionCreator,
+      initHelper.plannerCreator)
   }
+
+  @transient
+  override lazy val sessionState: HiveSessionState = createHiveSessionState
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
-  }
-
-  override def cloneSession(): TestHiveSparkSession = {
-    val clonedSession =
-      new TestHiveSparkSession(sc, Some(sharedState), Some(sessionState), loadTestTables)
-    clonedSession.sessionState // force initialization
-    clonedSession
   }
 
   private var cacheTables: Boolean = false
@@ -507,87 +519,6 @@ private[hive] class TestHiveQueryExecution(
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.execute(logical)
   }
-}
-
-private[hive] class TestHiveSessionState(
-    sparkContext: SparkContext,
-    sharedState: SharedState,
-    conf: SQLConf,
-    experimentalMethods: ExperimentalMethods,
-    functionRegistry: org.apache.spark.sql.catalyst.analysis.FunctionRegistry,
-    catalog: HiveSessionCatalog,
-    sqlParser: ParserInterface,
-    metadataHive: HiveClient,
-    analyzer: Analyzer,
-    streamingQueryManager: StreamingQueryManager,
-    queryExecutionCreator: LogicalPlan => TestHiveQueryExecution,
-    plannerCreator: () => SparkPlanner)
-  extends HiveSessionState(
-      sparkContext,
-      sharedState,
-      conf,
-      experimentalMethods,
-      functionRegistry,
-      catalog,
-      sqlParser,
-      metadataHive,
-      analyzer,
-      streamingQueryManager,
-      queryExecutionCreator,
-      plannerCreator) {
-
-  override def clone(newSparkSession: SparkSession): TestHiveSessionState = {
-    val copyHelper = super.clone(newSparkSession)
-    new TestHiveSessionState(
-      sparkContext,
-      sharedState,
-      copyHelper.conf,
-      copyHelper.experimentalMethods,
-      copyHelper.functionRegistry,
-      copyHelper.catalog,
-      copyHelper.sqlParser,
-      copyHelper.metadataHive,
-      copyHelper.analyzer,
-      copyHelper.streamingQueryManager,
-      queryExecutionCreator,
-      plannerCreator)
-  }
-}
-
-private[hive] object TestHiveSessionState {
-
-  def createTestConf: SQLConf = {
-    new SQLConf {
-      clear()
-      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-      override def clear(): Unit = {
-        super.clear()
-        TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
-      }
-    }
-  }
-
-  def apply(sparkSession: TestHiveSparkSession): TestHiveSessionState = {
-    val sqlConf = createTestConf
-    val initHelper = HiveSessionState(sparkSession, Some(sqlConf))
-    val queryExecutionCreator = (plan: LogicalPlan) =>
-      new TestHiveQueryExecution(sparkSession, plan)
-
-    new TestHiveSessionState(
-      sparkSession.sparkContext,
-      sparkSession.sharedState,
-      sqlConf,
-      initHelper.experimentalMethods,
-      initHelper.functionRegistry,
-      initHelper.catalog,
-      initHelper.sqlParser,
-      initHelper.metadataHive,
-      initHelper.analyzer,
-      initHelper.streamingQueryManager,
-      queryExecutionCreator,
-      initHelper.plannerCreator)
-  }
-
 }
 
 

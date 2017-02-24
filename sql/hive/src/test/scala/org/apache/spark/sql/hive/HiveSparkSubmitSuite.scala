@@ -217,8 +217,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  // TODO: SPARK-19540 re-enable this test
-  ignore("set hive.metastore.warehouse.dir") {
+  test("set hive.metastore.warehouse.dir") {
     // In this test, we set hive.metastore.warehouse.dir in hive-site.xml but
     // not set spark.sql.warehouse.dir. So, the warehouse dir should be
     // the value of hive.metastore.warehouse.dir. Also, the value of
@@ -298,8 +297,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  // TODO: SPARK-19540 re-enable this test
-  ignore("SPARK-18360: default table path of tables in default database should depend on the " +
+  test("SPARK-18360: default table path of tables in default database should depend on the " +
     "location of default database") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
