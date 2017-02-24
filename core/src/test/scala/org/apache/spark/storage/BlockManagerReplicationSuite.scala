@@ -489,6 +489,9 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
       Thread.sleep(200)
     }
 
+    // giving enough time for replication complete and locks released
+    Thread.sleep(500)
+
     val newLocations = master.getLocations(blockId).toSet
     logInfo(s"New locations : $newLocations")
     assert(newLocations.size === replicationFactor)
@@ -498,7 +501,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     // check if all the read locks have been released
     initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
       val locks = bm.releaseAllLocksForTask(BlockInfo.NON_TASK_WRITER)
-      assert(locks.size === 0)
+      assert(locks.size === 0, "Read locks unreleased!")
     }
   }
 }
