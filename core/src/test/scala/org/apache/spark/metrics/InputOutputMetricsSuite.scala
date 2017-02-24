@@ -259,7 +259,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
   test("output metrics on records written") {
     val file = new File(tmpDir, getClass.getSimpleName)
-    val filePath = "file://" + file.getAbsolutePath
+    val filePath = file.toURI.toURL.toString
 
     val records = runAndReturnRecordsWritten {
       sc.parallelize(1 to numRecords).saveAsTextFile(filePath)
@@ -269,7 +269,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
   test("output metrics on records written - new Hadoop API") {
     val file = new File(tmpDir, getClass.getSimpleName)
-    val filePath = "file://" + file.getAbsolutePath
+    val filePath = file.toURI.toURL.toString
 
     val records = runAndReturnRecordsWritten {
       sc.parallelize(1 to numRecords).map(key => (key.toString, key.toString))

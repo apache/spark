@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.mutable.ArrayBuffer
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -158,11 +158,10 @@ class StreamExecution(
   }
 
   /** Defines the internal state of execution */
-  @volatile
-  private var state: State = INITIALIZING
+  private val state = new AtomicReference[State](INITIALIZING)
 
   @volatile
-  var lastExecution: QueryExecution = _
+  var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
   protected var newData: Map[Source, DataFrame] = _
@@ -179,8 +178,8 @@ class StreamExecution(
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
-   * [[org.apache.spark.util.UninterruptibleThread]] to avoid potential deadlocks in using
-   * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
+   * [[org.apache.spark.util.UninterruptibleThread]] to workaround KAFKA-1894: interrupting a
+   * running `KafkaConsumer` may cause endless loop.
    */
   val microBatchThread =
     new StreamExecutionThread(s"stream execution thread for $prettyIdString") {
@@ -201,10 +200,10 @@ class StreamExecution(
   val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
 
   /** Whether all fields of the query have been initialized */
-  private def isInitialized: Boolean = state != INITIALIZING
+  private def isInitialized: Boolean = state.get != INITIALIZING
 
   /** Whether the query is currently active or not */
-  override def isActive: Boolean = state != TERMINATED
+  override def isActive: Boolean = state.get != TERMINATED
 
   /** Returns the [[StreamingQueryException]] if the query was terminated by an exception. */
   override def exception: Option[StreamingQueryException] = Option(streamDeathCause)
@@ -250,53 +249,56 @@ class StreamExecution(
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
-      state = ACTIVE
-      // Unblock `awaitInitialization`
-      initializationLatch.countDown()
+      if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+        // Unblock `awaitInitialization`
+        initializationLatch.countDown()
 
-      triggerExecutor.execute(() => {
-        startTrigger()
+        triggerExecutor.execute(() => {
+          startTrigger()
 
-        val isTerminated =
-          if (isActive) {
-            reportTimeTaken("triggerExecution") {
-              if (currentBatchId < 0) {
-                // We'll do this initialization only once
-                populateStartOffsets()
-                logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-              } else {
-                constructNextBatch()
+          val continueToRun =
+            if (isActive) {
+              reportTimeTaken("triggerExecution") {
+                if (currentBatchId < 0) {
+                  // We'll do this initialization only once
+                  populateStartOffsets()
+                  logDebug(s"Stream running from $committedOffsets to $availableOffsets")
+                } else {
+                  constructNextBatch()
+                }
+                if (dataAvailable) {
+                  currentStatus = currentStatus.copy(isDataAvailable = true)
+                  updateStatusMessage("Processing new data")
+                  runBatch()
+                }
               }
+
+              // Report trigger as finished and construct progress object.
+              finishTrigger(dataAvailable)
               if (dataAvailable) {
-                currentStatus = currentStatus.copy(isDataAvailable = true)
-                updateStatusMessage("Processing new data")
-                runBatch()
+                // We'll increase currentBatchId after we complete processing current batch's data
+                currentBatchId += 1
+              } else {
+                currentStatus = currentStatus.copy(isDataAvailable = false)
+                updateStatusMessage("Waiting for data to arrive")
+                Thread.sleep(pollingDelayMs)
               }
-            }
-
-            // Report trigger as finished and construct progress object.
-            finishTrigger(dataAvailable)
-            if (dataAvailable) {
-              // We'll increase currentBatchId after we complete processing current batch's data
-              currentBatchId += 1
+              true
             } else {
-              currentStatus = currentStatus.copy(isDataAvailable = false)
-              updateStatusMessage("Waiting for data to arrive")
-              Thread.sleep(pollingDelayMs)
+              false
             }
-            true
-          } else {
-            false
-          }
 
-        // Update committed offsets.
-        committedOffsets ++= availableOffsets
-        updateStatusMessage("Waiting for next trigger")
-        isTerminated
-      })
-      updateStatusMessage("Stopped")
+          // Update committed offsets.
+          committedOffsets ++= availableOffsets
+          updateStatusMessage("Waiting for next trigger")
+          continueToRun
+        })
+        updateStatusMessage("Stopped")
+      } else {
+        // `stop()` is already called. Let `finally` finish the cleanup.
+      }
     } catch {
-      case _: InterruptedException if state == TERMINATED => // interrupted by stop()
+      case _: InterruptedException if state.get == TERMINATED => // interrupted by stop()
         updateStatusMessage("Stopped")
       case e: Throwable =>
         streamDeathCause = new StreamingQueryException(
@@ -319,7 +321,7 @@ class StreamExecution(
       initializationLatch.countDown()
 
       try {
-        state = TERMINATED
+        state.set(TERMINATED)
         currentStatus = status.copy(isTriggerActive = false, isDataAvailable = false)
 
         // Update metrics and status
@@ -563,7 +565,7 @@ class StreamExecution(
   override def stop(): Unit = {
     // Set the state to TERMINATED so that the batching thread knows that it was interrupted
     // intentionally
-    state = TERMINATED
+    state.set(TERMINATED)
     if (microBatchThread.isAlive) {
       microBatchThread.interrupt()
       microBatchThread.join()
@@ -673,7 +675,7 @@ class StreamExecution(
     if (lastExecution == null) {
       "No physical plan. Waiting for data."
     } else {
-      val explain = ExplainCommand(lastExecution.logical, extended = extended)
+      val explain = StreamingExplainCommand(lastExecution, extended = extended)
       sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect()
         .map(_.getString(0)).mkString("\n")
     }

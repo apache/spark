@@ -127,7 +127,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
     // DynamoDB of the same region as the Kinesis stream
-    String regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName();
+    String regionName = KinesisExampleUtils.getRegionNameByEndpoint(endpointUrl);
 
     // Setup the Spark config and StreamingContext
     SparkConf sparkConfig = new SparkConf().setAppName("JavaKinesisWordCountASL");

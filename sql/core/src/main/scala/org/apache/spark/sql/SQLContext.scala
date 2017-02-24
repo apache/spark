@@ -190,17 +190,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * The following example registers a UDF in Java:
    * {{{
    *   sqlContext.udf().register("myUDF",
-   *       new UDF2<Integer, String, String>() {
-   *           @Override
-   *           public String call(Integer arg1, String arg2) {
-   *               return arg2 + arg1;
-   *           }
-   *      }, DataTypes.StringType);
-   * }}}
-   *
-   * Or, to use Java 8 lambda syntax:
-   * {{{
-   *   sqlContext.udf().register("myUDF",
    *       (Integer arg1, String arg2) -> arg2 + arg1,
    *       DataTypes.StringType);
    * }}}
@@ -1101,14 +1090,14 @@ object SQLContext {
    */
   private[sql] def beansToRows(
         data: Iterator[_],
-        beanInfo: BeanInfo,
+        beanClass: Class[_],
         attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
-      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+      JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
     val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
       (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
     }
-    data.map{ element =>
+    data.map { element =>
       new GenericInternalRow(
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
       ): InternalRow

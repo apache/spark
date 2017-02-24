@@ -507,6 +507,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
+    assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
   }
 
   test("nonLocalPaths") {
@@ -919,7 +920,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(pidExists(pid))
         val terminated = Utils.terminateProcess(process, 5000)
         assert(terminated.isDefined)
-        Utils.waitForProcess(process, 5000)
+        process.waitFor(5, TimeUnit.SECONDS)
         val durationMs = System.currentTimeMillis() - startTimeMs
         assert(durationMs < 5000)
         assert(!pidExists(pid))
@@ -932,7 +933,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       var majorVersion = versionParts(0).toInt
       if (majorVersion == 1) majorVersion = versionParts(1).toInt
       if (majorVersion >= 8) {
-        // Java8 added a way to forcibly terminate a process. We'll make sure that works by
+        // We'll make sure that forcibly terminating a process works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
         val file = File.createTempFile("temp-file-name", ".tmp")
@@ -953,7 +954,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
           val start = System.currentTimeMillis()
           val terminated = Utils.terminateProcess(process, 5000)
           assert(terminated.isDefined)
-          Utils.waitForProcess(process, 5000)
+          process.waitFor(5, TimeUnit.SECONDS)
           val duration = System.currentTimeMillis() - start
           assert(duration < 6000) // add a little extra time to allow a force kill to finish
           assert(!pidExists(pid))

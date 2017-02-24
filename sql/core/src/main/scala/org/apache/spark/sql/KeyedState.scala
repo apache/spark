@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.lang.IllegalArgumentException
-
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
 
@@ -36,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  * `Dataset.groupByKey()`) while maintaining user-defined per-group state between invocations.
  * For a static batch Dataset, the function will be invoked once per group. For a streaming
  * Dataset, the function will be invoked for each group repeatedly in every trigger.
- * That is, in every batch of the [[streaming.StreamingQuery StreamingQuery]],
+ * That is, in every batch of the `streaming.StreamingQuery`,
  * the function will be invoked once for each group that has data in the batch.
  *
  * The function is invoked with following parameters.
@@ -65,7 +63,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  * Scala example of using KeyedState in `mapGroupsWithState`:
  * {{{
- * /* A mapping function that maintains an integer state for string keys and returns a string. */
+ * // A mapping function that maintains an integer state for string keys and returns a string.
  * def mappingFunction(key: String, value: Iterator[Int], state: KeyedState[Int]): String = {
  *   // Check if state exists
  *   if (state.exists) {
@@ -88,7 +86,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  * Java example of using `KeyedState`:
  * {{{
- * /* A mapping function that maintains an integer state for string keys and returns a string. */
+ * // A mapping function that maintains an integer state for string keys and returns a string.
  * MapGroupsWithStateFunction<String, Integer, Integer, String> mappingFunction =
  *    new MapGroupsWithStateFunction<String, Integer, Integer, String>() {
  *
