@@ -27,6 +27,19 @@ import org.apache.spark.sql.test.SQLTestUtils
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
+  test("show cost in explain command") {
+    // Only has sizeInBytes before ANALYZE command
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
+    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
+
+    // Has both sizeInBytes and rowCount after ANALYZE command
+    sql("ANALYZE TABLE src COMPUTE STATISTICS")
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes", "rowCount")
+
+    // No cost information
+    checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
+  }
+
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
                    "== Physical Plan ==")

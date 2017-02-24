@@ -115,6 +115,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     Statistics(sizeInBytes = children.map(_.stats(conf).sizeInBytes).product)
   }
 
+  override def verboseStringWithSuffix: String = {
+    super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
+  }
+
   /**
    * Returns the maximum number of rows that this plan may compute.
    *
