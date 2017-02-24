@@ -301,9 +301,9 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     testUtils.createTopic(topic, 1)
     val options = new java.util.HashMap[String, Object]
     options.put("bootstrap.servers", testUtils.brokerAddress)
-    options.put("buffer.memory", "16384")
+    options.put("buffer.memory", "16384") // min buffer size
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
-    val data = new Array[Byte](15000)
+    val data = new Array[Byte](15000) // large value
     val writeTask = new KafkaWriteTask(options, inputSchema, Some(topic))
     writeTask.execute(new Iterator[InternalRow]() {
       var count = 0
