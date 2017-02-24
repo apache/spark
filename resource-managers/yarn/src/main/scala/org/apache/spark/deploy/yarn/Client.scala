@@ -100,6 +100,7 @@ private[spark] class Client(
   private var principal: String = null
   private var keytab: String = null
   private var credentials: Credentials = null
+  private var amKeytabFileName: String = null
 
   private val launcherBackend = new LauncherBackend() {
     override def onStopRequest(): Unit = {
@@ -471,7 +472,7 @@ private[spark] class Client(
       logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
         " via the YARN Secure Distributed Cache.")
       val (_, localizedPath) = distribute(keytab,
-        destName = sparkConf.get(KEYTAB),
+        destName = Some(amKeytabFileName),
         appMasterOnly = true)
       require(localizedPath != null, "Keytab file already distributed.")
     }
@@ -708,6 +709,9 @@ private[spark] class Client(
       // Save Spark configuration to a file in the archive.
       val props = new Properties()
       sparkConf.getAll.foreach { case (k, v) => props.setProperty(k, v) }
+      // Override spark.yarn.key to point to the location in distributed cache which will be used
+      // by AM.
+      Option(amKeytabFileName).foreach { k => props.setProperty(KEYTAB.key, k) }
       confStream.putNextEntry(new ZipEntry(SPARK_CONF_FILE))
       val writer = new OutputStreamWriter(confStream, StandardCharsets.UTF_8)
       props.store(writer, "Spark configuration.")
@@ -995,8 +999,7 @@ private[spark] class Client(
       val f = new File(keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
-      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      sparkConf.set(KEYTAB.key, keytabFileName)
+      amKeytabFileName = f.getName + "-" + UUID.randomUUID().toString
       sparkConf.set(PRINCIPAL.key, principal)
     }
     // Defensive copy of the credentials
