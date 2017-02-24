@@ -249,6 +249,10 @@ class SessionCatalog(
   /**
    * Create a metastore table in the database specified in `tableDefinition`.
    * If no such database is specified, create it in the current database.
+   * suggestIgnoreIfPathExists suggest whether should check if the path of table
+   * exists when ignoreIfExists is false, if it is false, it will only check the
+   * path of a managed table, if it is true, it will not do the check for all
+   * type tables.
    */
   def createTable(
     tableDefinition: CatalogTable,
