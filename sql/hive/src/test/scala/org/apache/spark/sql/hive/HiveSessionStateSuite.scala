@@ -22,11 +22,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveSessionStateSuite
-  extends SessionStateSuite
-  with TestHiveSingleton
-  with BeforeAndAfterEach {
-
+class HiveSessionStateSuite extends SessionStateSuite
+  with TestHiveSingleton with BeforeAndAfterEach {
 
   override def beforeEach(): Unit = {
     createSession()

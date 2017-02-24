@@ -1004,7 +1004,7 @@ object SparkSession {
 
   /**
    * Helper method to create an instance of `SessionState` based on `className` from conf.
-   * The result is either `SessionState` or `HiveSessionState`
+   * The result is either `SessionState` or `HiveSessionState`.
    */
   private def instantiateSessionState(
       className: String,

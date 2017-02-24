@@ -274,6 +274,7 @@ private[hive] class HiveClientImpl(
     val original = Thread.currentThread().getContextClassLoader
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
+    // replace conf in cached hive with current conf
     Hive.get(conf)
     // The classloader in clientLoader could be changed after addJar, always use the latest
     // classloader
