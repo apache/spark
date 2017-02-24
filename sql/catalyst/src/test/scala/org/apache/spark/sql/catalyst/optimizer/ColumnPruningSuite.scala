@@ -246,7 +246,7 @@ class ColumnPruningSuite extends PlanTest {
       x.select('a)
         .sortBy(SortOrder('a, Ascending)).analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
 
     // push down invalid
     val originalQuery1 = {
@@ -261,7 +261,7 @@ class ColumnPruningSuite extends PlanTest {
         .sortBy(SortOrder('a, Ascending))
         .select('b).analyze
 
-    comparePlans(optimized1, analysis.EliminateSubqueryAliases(correctAnswer1))
+    comparePlans(optimized1, correctAnswer1)
   }
 
   test("Column pruning on Window with useless aggregate functions") {

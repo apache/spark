@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -353,8 +353,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             relation.catalogTable.identifier
         }
 
-        val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
-        EliminateSubqueryAliases(tableRelation) match {
+        val tableRelation =
+          df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed.canonicalized
+        tableRelation match {
           // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(

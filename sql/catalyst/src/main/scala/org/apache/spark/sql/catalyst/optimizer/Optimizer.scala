@@ -48,8 +48,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
-    // However, because we also use the analyzer to canonicalized queries (for view definition),
-    // we do not eliminate subqueries or compute current time in the analyzer.
+    // However, because we always do eager analysis in Dataset, we do not eliminate subqueries
+    // or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
       EliminateSubqueryAliases,
       EliminateView,

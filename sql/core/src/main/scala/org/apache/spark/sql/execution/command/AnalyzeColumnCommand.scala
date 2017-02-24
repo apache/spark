@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -40,8 +39,7 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val relation =
-      EliminateSubqueryAliases(sparkSession.table(tableIdentWithDB).queryExecution.analyzed)
+    val relation = sparkSession.table(tableIdentWithDB).queryExecution.analyzed.canonicalized
 
     // Compute total size
     val (catalogTable: CatalogTable, sizeInBytes: Long) = relation match {
