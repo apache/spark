@@ -167,7 +167,7 @@ class GradientBoostedTreesModel @Since("1.2.0") (
       (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
     .map(_ / dataCount)
 
-    broadcastTrees.destroy()
+    broadcastTrees.destroy(blocking = false)
     evaluation.toArray
   }
 

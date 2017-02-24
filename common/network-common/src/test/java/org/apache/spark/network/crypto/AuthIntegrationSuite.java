@@ -18,11 +18,11 @@
 package org.apache.spark.network.crypto;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import org.junit.After;
 import org.junit.Test;
@@ -163,20 +163,17 @@ public class AuthIntegrationSuite {
     }
 
     void createServer(String secret, boolean enableAes) throws Exception {
-      TransportServerBootstrap introspector = new TransportServerBootstrap() {
-        @Override
-        public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
-          AuthTestCtx.this.serverChannel = channel;
-          if (rpcHandler instanceof AuthRpcHandler) {
-            AuthTestCtx.this.authRpcHandler = (AuthRpcHandler) rpcHandler;
-          }
-          return rpcHandler;
+      TransportServerBootstrap introspector = (channel, rpcHandler) -> {
+        this.serverChannel = channel;
+        if (rpcHandler instanceof AuthRpcHandler) {
+          this.authRpcHandler = (AuthRpcHandler) rpcHandler;
         }
+        return rpcHandler;
       };
       SecretKeyHolder keyHolder = createKeyHolder(secret);
       TransportServerBootstrap auth = enableAes ? new AuthServerBootstrap(conf, keyHolder)
         : new SaslServerBootstrap(conf, keyHolder);
-      this.server = ctx.createServer(Lists.newArrayList(auth, introspector));
+      this.server = ctx.createServer(Arrays.asList(auth, introspector));
     }
 
     void createClient(String secret) throws Exception {
@@ -186,7 +183,7 @@ public class AuthIntegrationSuite {
     void createClient(String secret, boolean enableAes) throws Exception {
       TransportConf clientConf = enableAes ? conf
         : new TransportConf("rpc", MapConfigProvider.EMPTY);
-      List<TransportClientBootstrap> bootstraps = Lists.<TransportClientBootstrap>newArrayList(
+      List<TransportClientBootstrap> bootstraps = Arrays.asList(
         new AuthClientBootstrap(clientConf, appId, createKeyHolder(secret)));
       this.client = ctx.createClientFactory(bootstraps)
         .createClient(TestUtils.getLocalHost(), server.getPort());

@@ -152,10 +152,7 @@ class PlanParserSuite extends PlanTest {
     val orderSortDistrClusterClauses = Seq(
       ("", basePlan),
       (" order by a, b desc", basePlan.orderBy('a.asc, 'b.desc)),
-      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc)),
-      (" distribute by a, b", basePlan.distribute('a, 'b)()),
-      (" distribute by a sort by b", basePlan.distribute('a)().sortBy('b.asc)),
-      (" cluster by a, b", basePlan.distribute('a, 'b)().sortBy('a.asc, 'b.asc))
+      (" sort by a, b desc", basePlan.sortBy('a.asc, 'b.desc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -505,7 +502,13 @@ class PlanParserSuite extends PlanTest {
     val m2 = intercept[ParseException] {
       parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
     }.getMessage
-    assert(m2.contains("no viable alternative at input"))
+    assert(m2.contains("mismatched input '.' expecting {')', ','}"))
+
+    // Disallow space as the delimiter.
+    val m3 = intercept[ParseException] {
+      parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
+    }.getMessage
+    assert(m3.contains("mismatched input 'b' expecting {')', ','}"))
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
@@ -524,7 +527,7 @@ class PlanParserSuite extends PlanTest {
       Hint("STREAMTABLE", Seq("a", "b", "c"), table("t").select(star())))
 
     comparePlans(
-      parsePlan("SELECT /*+ INDEX(t emp_job_ix) */ * FROM t"),
+      parsePlan("SELECT /*+ INDEX(t, emp_job_ix) */ * FROM t"),
       Hint("INDEX", Seq("t", "emp_job_ix"), table("t").select(star())))
 
     comparePlans(
