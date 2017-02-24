@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal, RoundingMode}
 import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
@@ -580,7 +581,7 @@ object XxHash64Function extends InterpretedHashFunction {
  * We should use this hash function for both shuffle and bucket of Hive tables, so that
  * we can guarantee shuffle and bucketing have same data distribution
  *
- * TODO: Support Decimal and date related types
+ * TODO: Support date related types
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.")
@@ -634,6 +635,16 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashBytes(b: String, result: String): String =
     s"$result = $hasherClassName.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length);"
+
+  override protected def genHashDecimal(
+      ctx: CodegenContext,
+      d: DecimalType,
+      input: String,
+      result: String): String = {
+    s"""
+      $result = org.apache.spark.sql.catalyst.expressions.HiveHashFunction.normalizeDecimal(
+       $input.toJavaBigDecimal(), true).hashCode();"""
+  }
 
   override protected def genHashCalendarInterval(input: String, result: String): String = {
     s"""
@@ -732,6 +743,51 @@ object HiveHashFunction extends InterpretedHashFunction {
     HiveHasher.hashUnsafeBytes(base, offset, len)
   }
 
+  private val HiveDecimalMaxPrecision = 38
+  private val HiveDecimalMaxScale = 38
+
+  // Mimics normalization done for decimals in Hive at HiveDecimalV1.normalize()
+  def normalizeDecimal(input: BigDecimal, allowRounding: Boolean): BigDecimal = {
+    if (input == null) {
+      return null
+    }
+
+    def trimDecimal(input: BigDecimal) = {
+      var result = input
+      if (result.compareTo(BigDecimal.ZERO) == 0) {
+        // Special case for 0, because java doesn't strip zeros correctly on that number.
+        result = BigDecimal.ZERO
+      }
+      else {
+        result = result.stripTrailingZeros
+        if (result.scale < 0) {
+          // no negative scale decimals
+          result = result.setScale(0)
+        }
+      }
+      result
+    }
+
+    var result = trimDecimal(input)
+    val intDigits = result.precision - result.scale
+    if (intDigits > HiveDecimalMaxPrecision) {
+      return null
+    }
+
+    val maxScale =
+      Math.min(HiveDecimalMaxScale, Math.min(HiveDecimalMaxPrecision - intDigits, result.scale))
+    if (result.scale > maxScale) {
+      if (allowRounding) {
+        result = result.setScale(maxScale, RoundingMode.HALF_UP)
+        // Trimming is again necessary, because rounding may introduce new trailing 0's.
+        result = trimDecimal(result)
+      } else {
+        result = null
+      }
+    }
+    result
+  }
+
   override def hash(value: Any, dataType: DataType, seed: Long): Long = {
     value match {
       case null => 0
@@ -785,7 +841,10 @@ object HiveHashFunction extends InterpretedHashFunction {
         }
         result
 
-      case _ => super.hash(value, dataType, 0)
+      case d: Decimal =>
+        normalizeDecimal(d.toJavaBigDecimal, allowRounding = true).hashCode()
+
+      case _ => super.hash(value, dataType, seed)
     }
   }
 }
