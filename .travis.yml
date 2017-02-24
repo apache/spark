@@ -35,7 +35,7 @@ env:  # Used by the install section below.
   - PHASE=test  \
     PROFILES="-Pmesos -Pyarn -Phadoop-2.7 -Pkubernetes"  \
     MODULES="-pl core,resource-managers/kubernetes/core -am"  \
-    ARGS="-Dsuffixes='^org\.apache\.spark\.(?!rdd\.LocalCheckpointSuite$|deploy\.StandaloneDynamicAllocationSuite$).*'"
+    ARGS="-Dtest=none -Dsuffixes='^org\.apache\.spark\.(?!SortShuffleSuite$|rdd\.LocalCheckpointSuite$|deploy\.SparkSubmitSuite$|deploy\.StandaloneDynamicAllocationSuite$).*'"
   # Configure the full build.
   - PHASE=install  \
     PROFILES="-Pmesos -Pyarn -Phadoop-2.7 -Pkubernetes -Pkinesis-asl -Phive -Phive-thriftserver"  \
