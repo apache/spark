@@ -398,6 +398,27 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         // For all other SQL types, we compare the entire object directly.
         assert(filteredStats.attributeStats(ar) == expectedColStats)
     }
-  }
 
+    // If the filter has a binary operator (including those nested inside
+    // AND/OR/NOT), swap the sides of the attribte and the literal, reverse the
+    // operator, and then check again.
+    val rewrittenFilter = filterNode transformExpressionsDown {
+      case op @ EqualTo(ar: AttributeReference, l: Literal) =>
+        EqualTo(l, ar)
+
+      case op @ LessThan(ar: AttributeReference, l: Literal) =>
+        GreaterThan(l, ar)
+      case op @ LessThanOrEqual(ar: AttributeReference, l: Literal) =>
+        GreaterThanOrEqual(l, ar)
+
+      case op @ GreaterThan(ar: AttributeReference, l: Literal) =>
+        LessThan(l, ar)
+      case op @ GreaterThanOrEqual(ar: AttributeReference, l: Literal) =>
+        LessThanOrEqual(l, ar)
+    }
+
+    if (rewrittenFilter != filterNode) {
+      validateEstimatedStats(ar, rewrittenFilter, expectedColStats, rowCount)
+    }
+  }
 }
