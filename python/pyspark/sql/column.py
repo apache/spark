@@ -250,11 +250,39 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
+    _rlike_doc = """ Return a Boolean :class:`Column` based on a regex match.\n
+                :param other: an extended regex expression\n
+
+                >>> df.filter( df.name.rlike('ice$') ).collect()
+                [Row(name=u'Alice', age=1)]
+                """
+    _like_doc = """ Return a Boolean :class:`Column` based on a SQL LIKE match.\n
+               :param other: a SQL LIKE pattern\n
+               See :func:`pyspark.sql.Column.rlike` for a regex version\n
+
+               >>> df.filter( df.name.like('Al%') ).collect()
+               [Row(name=u'Alice', age=1)]
+                """
+    _startswith_doc = ''' Return a Boolean :class:`Column` based on a string match.\n
+                     :param other: string at end of line (do not use a regex `^`)\n
+                     >>> df.filter(df.name.startswith('Al')).collect()
+                     [Row(name=u'Alice', age=1)]
+                     >>> df.filter(df.name.startswith('^Al')).collect()
+                     []
+                     '''
+    _endswith_doc = ''' Return a Boolean :class:`Column` based on matching end of string.\n
+                   :param other: string at end of line (do not use a regex `$`)\n
+                   >>> df.filter(df.name.endswith('ice')).collect()
+                   [Row(name=u'Alice', age=1)]
+                   >>> df.filter(df.name.endswith('ice$')).collect()
+                   []
+                   '''
+
     contains = _bin_op("contains")
-    rlike = _bin_op("rlike")
-    like = _bin_op("like")
-    startswith = _bin_op("startsWith")
-    endswith = _bin_op("endsWith")
+    rlike = _bin_op("rlike", _rlike_doc)
+    like = _bin_op("like", _like_doc)
+    startswith = _bin_op("startsWith", _startswith_doc)
+    endswith = _bin_op("endsWith", _endswith_doc)
 
     @ignore_unicode_prefix
     @since(1.3)
