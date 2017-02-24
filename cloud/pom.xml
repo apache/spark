@@ -35,11 +35,12 @@
     dependencies; the exact versions of which will depend upon the hadoop version Spark was compiled
     against.
 
-    The imports of transitive dependencies (especially Jackson) are managed to make them consistent
+    The imports of transitive dependencies are managed to make them consistent
     with those of the Spark build.
 
-    WARNING: the signatures of methods in aws-java-sdk/aws-java-sdk-s3 can change between versions:
-    use the same version against which Hadoop was compiled.
+    WARNING: the signatures of methods in the AWS and Azure SDKs do change between
+    versions: use exactly the same version with which the Hadoop JARs were
+    built.
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
@@ -60,7 +61,6 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-
 
     <!-- Jets3t is needed for s3n and s3 classic to work-->
     <dependency>
