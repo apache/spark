@@ -421,32 +421,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(!dockerInfo.getForcePullImage)
   }
 
-  test("Do not call removeExecutor() after backend is stopped") {
-    setBackend()
-
-    // launches a task on a valid offer
-    val offers = List(Resources(backend.executorMemory(sc), 1))
-    offerResources(offers)
-    verifyTaskLaunched(driver, "o1")
-
-    // launches a thread simulating status update
-    val statusUpdateThread = new Thread {
-      override def run(): Unit = {
-        while (!stopCalled) {
-          Thread.sleep(100)
-        }
-
-        val status = createTaskStatus("0", "s1", TaskState.TASK_FINISHED)
-        backend.statusUpdate(driver, status)
-      }
-    }.start
-
-    backend.stop()
-    // Any method of the backend involving sending messages to the driver endpoint should not
-    // be called after the backend is stopped.
-    verify(driverEndpoint, never()).askSync(isA(classOf[RemoveExecutor]))(any[ClassTag[_]])
-  }
-
   test("mesos supports spark.executor.uri") {
     val url = "spark.spark.spark.com"
     setBackend(Map(
