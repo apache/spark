@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.kafka.common.errors.TimeoutException
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PrettyAttribute, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -278,30 +279,46 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       .save()
   }
 
+  test("write batch with null topic field value, and no default topic") {
+    val df = spark
+      .sparkContext
+      .parallelize(Seq("1"))
+      .map(v => (null.asInstanceOf[String], v))
+      .toDF("topic", "value")
+
+    val ex = intercept[SparkException] {
+      df.write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .save()
+    }
+    assert(ex.getMessage.toLowerCase.contains(
+      "null topic present in the data"))
+  }
+
   test("write big data with small producer buffer") {
     val topic = newTopic()
     testUtils.createTopic(topic, 1)
-      val options = new java.util.HashMap[String, Object]
-      options.put("bootstrap.servers", testUtils.brokerAddress)
-      options.put("buffer.memory", "16384")
-      // options.put("linger.ms", "1000")
-      val inputSchema = Seq(AttributeReference("value", BinaryType)())
-      val data = new Array[Byte](15000)
-      val writeTask = new KafkaWriteTask(options, inputSchema, Some(topic))
-      writeTask.execute(new Iterator[InternalRow]() {
-        var count = 0
-        override def hasNext: Boolean = count < 1
+    val options = new java.util.HashMap[String, Object]
+    options.put("bootstrap.servers", testUtils.brokerAddress)
+    options.put("buffer.memory", "16384")
+    val inputSchema = Seq(AttributeReference("value", BinaryType)())
+    val data = new Array[Byte](15000)
+    val writeTask = new KafkaWriteTask(options, inputSchema, Some(topic))
+    writeTask.execute(new Iterator[InternalRow]() {
+      var count = 0
+      override def hasNext: Boolean = count < 1000
 
-        override def next(): InternalRow = {
-          count += 1
-          val fieldTypes: Array[DataType] = Array(BinaryType)
-          val converter = UnsafeProjection.create(fieldTypes)
+      override def next(): InternalRow = {
+        count += 1
+        val fieldTypes: Array[DataType] = Array(BinaryType)
+        val converter = UnsafeProjection.create(fieldTypes)
 
-          val row = new SpecificInternalRow(fieldTypes)
-          row.update(0, data)
-          converter.apply(row)
-        }
-      })
-      writeTask.close()
+        val row = new SpecificInternalRow(fieldTypes)
+        row.update(0, data)
+        converter.apply(row)
+      }
+    })
+    writeTask.close()
   }
 }

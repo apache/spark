@@ -92,10 +92,14 @@ private[kafka010] class KafkaWriteTask(
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       val projectedRow = projection(currentRow)
-      val topic = projectedRow.get(0, StringType).toString
+      val topic = projectedRow.get(0, StringType)
       val key = projectedRow.get(1, BinaryType).asInstanceOf[Array[Byte]]
       val value = projectedRow.get(2, BinaryType).asInstanceOf[Array[Byte]]
-      val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
+      if (topic == null) {
+        throw new NullPointerException(s"null topic present in the data. Use the " +
+        s"${KafkaSourceProvider.DEFAULT_TOPIC_KEY} option for setting a default topic.")
+      }
+      val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
       val callback = new Callback() {
         override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
           if (failedWrite == null && e != null) {

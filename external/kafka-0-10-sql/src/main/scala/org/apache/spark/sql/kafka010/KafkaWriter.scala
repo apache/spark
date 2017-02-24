@@ -21,7 +21,7 @@ import java.{util => ju}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
@@ -41,7 +41,7 @@ private[kafka010] object KafkaWriter extends Logging {
     val schema = queryExecution.logical.output
     schema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (defaultTopic == None) {
-        throw new IllegalArgumentException(s"Default topic required when no " +
+        throw new AnalysisException(s"Default topic required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.DEFAULT_TOPIC_KEY} option for setting a default topic.")
       } else {
@@ -50,22 +50,22 @@ private[kafka010] object KafkaWriter extends Logging {
     ).dataType match {
       case StringType => // good
       case _ =>
-        throw new IllegalArgumentException(s"Topic type must be a String")
+        throw new AnalysisException(s"Topic type must be a String")
     }
     schema.find(p => p.name == KEY_ATTRIBUTE_NAME).getOrElse(
       Literal(null, StringType)
     ).dataType match {
       case StringType | BinaryType => // good
       case _ =>
-        throw new IllegalArgumentException(s"$KEY_ATTRIBUTE_NAME attribute type " +
+        throw new AnalysisException(s"$KEY_ATTRIBUTE_NAME attribute type " +
           s"must be a String or BinaryType")
     }
     schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalArgumentException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
+      throw new AnalysisException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     ).dataType match {
       case StringType | BinaryType => // good
       case _ =>
-        throw new IllegalArgumentException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
+        throw new AnalysisException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
           s"must be a String or BinaryType")
     }
     SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
