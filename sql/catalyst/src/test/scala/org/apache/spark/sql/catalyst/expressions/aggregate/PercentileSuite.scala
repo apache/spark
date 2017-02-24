@@ -38,12 +38,12 @@ class PercentileSuite extends SparkFunSuite {
     val agg = new Percentile(BoundReference(0, IntegerType, true), Literal(0.5))
 
     // Check empty serialize and deserialize
-    val buffer = new OpenHashMap[Number, Long]()
+    val buffer = new OpenHashMap[AnyRef, Long]()
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
 
     // Check non-empty buffer serializa and deserialize.
     data.foreach { key =>
-      buffer.changeValue(key, 1L, _ + 1L)
+      buffer.changeValue(new Integer(key), 1L, _ + 1L)
     }
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
@@ -233,7 +233,7 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   private def compareEquals(
-      left: OpenHashMap[Number, Long], right: OpenHashMap[Number, Long]): Boolean = {
+      left: OpenHashMap[AnyRef, Long], right: OpenHashMap[AnyRef, Long]): Boolean = {
     left.size == right.size && left.forall { case (key, count) =>
       right.apply(key) == count
     }
