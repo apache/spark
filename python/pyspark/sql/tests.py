@@ -2388,8 +2388,8 @@ class ArrowTests(ReusedPySparkTestCase):
 
     def test_pandas_round_trip(self):
         import pandas as pd
-        data_dict = {name: [self.data[i][j] for i in range(len(self.data))]
-                     for j, name in enumerate(self.schema.names)}
+        names = [(j, name) for j, name in enumerate(self.schema.names)]
+        data_dict = {name: [self.data[i][j] for i in range(len(self.data))] for j, name in names}
         pdf = pd.DataFrame(data=data_dict)
         pdf_arrow = self.spark.createDataFrame(pdf).toPandas(useArrow=True)
         self.assertFramesEqual(pdf_arrow, pdf)
