@@ -247,6 +247,7 @@ abstract class ExternalCatalog {
    * @param db database name
    * @param table table name
    * @param predicates partition-pruning predicates
+   * @param defaultTimeZoneId default timezone id to parse partition values of TimestampType
    */
   def listPartitionsByFilter(
       db: String,
