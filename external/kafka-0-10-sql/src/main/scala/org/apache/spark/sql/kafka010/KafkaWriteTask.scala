@@ -38,7 +38,8 @@ private[kafka010] class KafkaWriteTask(
     producerConfiguration: ju.Map[String, Object],
     inputSchema: Seq[Attribute],
     defaultTopic: Option[String]) {
-  var failedWrites = ListBuffer.empty[Throwable]
+  // var failedWrites = ListBuffer.empty[Throwable]
+  @volatile var failedWrite: Exception = null
   val topicExpression = inputSchema.find(p =>
     p.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (defaultTopic == None) {
@@ -88,7 +89,7 @@ private[kafka010] class KafkaWriteTask(
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    while (iterator.hasNext) {
+    while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       val projectedRow = projection(currentRow)
       val topic = projectedRow.get(0, StringType).toString
@@ -97,44 +98,25 @@ private[kafka010] class KafkaWriteTask(
       val record = new ProducerRecord[Array[Byte], Array[Byte]](topic, key, value)
       val callback = new Callback() {
         override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
-          failedWrites.synchronized {
-            if (e != null) {
-              failedWrites += e
-            }
+          if (failedWrite == null && e != null) {
+            failedWrite = e
           }
         }
       }
-      try {
-        producer.send(record, callback)
-      } catch {
-        case _: BufferExhaustedException => flushAndSend(record, callback)
-        case t: Throwable => throw t
-      } finally {
-        failedWrites.synchronized {
-          if (failedWrites.size > 0) {
-            throw new IllegalStateException(failedWrites.remove(0))
-          }
-        }
-      }
+      producer.send(record, callback)
     }
-    producer.flush()
   }
 
   def close(): Unit = {
+    checkForErrors()
     producer.close()
-    /* Ensure that all writes are confirmed */
-    failedWrites.synchronized {
-      if (failedWrites.size > 0) {
-        throw new IllegalStateException(failedWrites.remove(0))
-      }
-    }
+    checkForErrors()
   }
 
-  private def flushAndSend(
-      record: ProducerRecord[Array[Byte], Array[Byte]],
-      callback: Callback): Unit = {
-    producer.flush()
-    producer.send(record, callback)
+  private def checkForErrors() = {
+    if (failedWrite != null) {
+      throw failedWrite
+    }
   }
 }
 

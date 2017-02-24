@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.common.errors.TimeoutException
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PrettyAttribute, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{BinaryType, DataType}
 
 class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
@@ -272,5 +276,34 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("defaultTopic", topic)
       .save()
+  }
+
+  test("write big data with small producer buffer") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, 1)
+      val options = new java.util.HashMap[String, Object]
+      options.put("bootstrap.servers", testUtils.brokerAddress)
+      options.put("buffer.memory", "16384")
+      // options.put("linger.ms", "1000")
+      val inputSchema = Seq(AttributeReference("value", BinaryType)())
+      val data = new Array[Byte](15000)
+      val writeTask = new KafkaWriteTask(options, inputSchema, Some(topic))
+      writeTask.execute(new Iterator[InternalRow]() {
+        var count = 0
+        override def hasNext: Boolean = count < 1
+
+        override def next(): InternalRow = {
+          count += 1
+          val fieldTypes: Array[DataType] = Array(BinaryType)
+          val converter = UnsafeProjection.create(fieldTypes)
+
+          val row = new SpecificInternalRow(fieldTypes)
+          row.update(0, data)
+          converter.apply(row)
+        }
+      })
+      println("Calling close")
+      writeTask.close()
+      println("Close returns")
   }
 }
