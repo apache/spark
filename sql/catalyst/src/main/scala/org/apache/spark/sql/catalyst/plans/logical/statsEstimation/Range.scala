@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 import java.math.{BigDecimal => JDecimal}
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{BooleanType, DateType, TimestampType, _}
 
@@ -55,6 +56,20 @@ object Range {
       false
     case (n1: NumericRange, n2: NumericRange) =>
       n1.min.compareTo(n2.max) <= 0 && n1.max.compareTo(n2.min) >= 0
+  }
+
+  def rangeContainsLiteral(r: Range, lit: Literal): Boolean = r match {
+    case _: DefaultRange => true
+    case _: NullRange => false
+    case n: NumericRange =>
+      val literalValue = if (lit.dataType.isInstanceOf[BooleanType]) {
+        if (lit.value.asInstanceOf[Boolean]) new JDecimal(1) else new JDecimal(0)
+      } else {
+        assert(lit.dataType.isInstanceOf[NumericType] || lit.dataType.isInstanceOf[DateType] ||
+          lit.dataType.isInstanceOf[TimestampType])
+        new JDecimal(lit.value.toString)
+      }
+      n.min.compareTo(literalValue) <= 0 && n.max.compareTo(literalValue) >= 0
   }
 
   /**
@@ -113,4 +128,5 @@ object Range {
           DateTimeUtils.toJavaTimestamp(n.max.longValue()))
     }
   }
+
 }
