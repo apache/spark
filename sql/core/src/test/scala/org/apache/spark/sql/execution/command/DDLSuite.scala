@@ -1953,42 +1953,51 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("CTAS for data source table with a created location") {
-    withTable("t", "t1") {
-      withTempDir {
-        dir =>
-          spark.sql(
-            s"""
-               |CREATE TABLE t
-               |USING parquet
-               |LOCATION '$dir'
-               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-             """.stripMargin)
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existent" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
 
-          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
 
-          checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
-      }
-      // partition table
-      withTempDir {
-        dir =>
-          spark.sql(
-            s"""
-               |CREATE TABLE t1
-               |USING parquet
-               |PARTITIONED BY(a, b)
-               |LOCATION '$dir'
-               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-             """.stripMargin)
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
 
-          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
 
-          val partDir = new File(dir, "a=3")
-          assert(partDir.exists())
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
 
-          checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
       }
     }
   }
