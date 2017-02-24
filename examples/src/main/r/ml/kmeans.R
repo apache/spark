@@ -28,8 +28,9 @@ sparkR.session(appName = "SparkR-ML-kmeans-example")
 # Fit a k-means model with spark.kmeans
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
-kmeansDF <- training
-kmeansTestDF <- training
+set.seed(2)
+kmeansDF <- sample(training, TRUE, 0.7)
+kmeansTestDF <- sample(training, TRUE, 0.3)
 kmeansModel <- spark.kmeans(kmeansDF, ~ Class + Sex + Age + Freq,
                             k = 3)
 

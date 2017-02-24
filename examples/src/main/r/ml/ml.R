@@ -26,12 +26,12 @@ sparkR.session(appName = "SparkR-ML-example")
 
 ############################ model read/write ##############################################
 # $example on:read_write$
-t <- as.data.frame(Titanic)
-training <- createDataFrame(t)
+training <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 # Fit a generalized linear model of family "gaussian" with spark.glm
-gaussianDF <- training
-gaussianTestDF <- training
-gaussianGLM <- spark.glm(gaussianDF, Freq ~ Sex + Age, family = "gaussian")
+set.seed(2)
+gaussianDF <- sample(training, TRUE, 0.7)
+gaussianTestDF <- sample(training, TRUE, 0.3)
+gaussianGLM <- spark.glm(gaussianDF, label ~ features, family = "gaussian")
 
 # Save and then load a fitted MLlib model
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")

@@ -25,12 +25,12 @@ library(SparkR)
 sparkR.session(appName = "SparkR-ML-glm-example")
 
 # $example on$
-t <- as.data.frame(Titanic)
-training <- createDataFrame(t)
+training <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 # Fit a generalized linear model of family "gaussian" with spark.glm
-gaussianDF <- training
-gaussianTestDF <- training
-gaussianGLM <- spark.glm(gaussianDF, Freq ~ Sex + Age, family = "gaussian")
+set.seed(2)
+gaussianDF <- sample(training, TRUE, 0.7)
+gaussianTestDF <- sample(training, TRUE, 0.3)
+gaussianGLM <- spark.glm(gaussianDF, label ~ features, family = "gaussian")
 
 # Model summary
 summary(gaussianGLM)
@@ -40,13 +40,14 @@ gaussianPredictions <- predict(gaussianGLM, gaussianTestDF)
 head(gaussianPredictions)
 
 # Fit a generalized linear model with glm (R-compliant)
-gaussianGLM2 <- glm(Freq ~ Sex + Age, gaussianDF, family = "gaussian")
+gaussianGLM2 <- glm(label ~ features, gaussianDF, family = "gaussian")
 summary(gaussianGLM2)
 
 # Fit a generalized linear model of family "binomial" with spark.glm
-binomialDF <- training
-binomialTestDF <- training
-binomialGLM <- spark.glm(binomialDF, Survived ~ Age + Sex, family = "binomial")
+training2 <- read.df("data/mllib/sample_binary_classification_data.txt", source = "libsvm")
+binomialDF <- sample(training2, TRUE, 0.7)
+binomialTestDF <- sample(training2, TRUE, 0.3)
+binomialGLM <- spark.glm(binomialDF, label ~ features, family = "binomial")
 
 # Model summary
 summary(binomialGLM)
