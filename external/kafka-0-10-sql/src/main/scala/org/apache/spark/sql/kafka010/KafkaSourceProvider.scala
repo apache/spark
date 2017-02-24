@@ -26,7 +26,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, BytesSerializer}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -163,7 +163,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC_KEY).map(_.trim.toLowerCase)
+    val defaultTopic = caseInsensitiveParams.get(TOPIC_OPTION_KEY).map(_.trim.toLowerCase)
     val specifiedKafkaParams =
       parameters
         .keySet
@@ -181,8 +181,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
+    mode match {
+      case SaveMode.Overwrite | SaveMode.Ignore =>
+        throw new AnalysisException(s"save mode $mode not allowed for Kafka. " +
+          s"Allowable save modes are ${SaveMode.Append} and " +
+          s"${SaveMode.ErrorIfExists} (default).")
+      case _ => // good
+    }
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val defaultTopic = caseInsensitiveParams.get(DEFAULT_TOPIC_KEY).map(_.trim.toLowerCase)
+    val defaultTopic = caseInsensitiveParams.get(TOPIC_OPTION_KEY).map(_.trim.toLowerCase)
     val specifiedKafkaParams =
       parameters
         .keySet
@@ -429,7 +436,7 @@ private[kafka010] object KafkaSourceProvider {
   val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
-  val DEFAULT_TOPIC_KEY = "defaulttopic"
+  val TOPIC_OPTION_KEY = "topic"
 
   val deserClassName = classOf[ByteArrayDeserializer].getName
 }

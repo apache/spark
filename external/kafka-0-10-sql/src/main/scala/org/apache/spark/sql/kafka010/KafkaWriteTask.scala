@@ -19,13 +19,11 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, If, IsNull, Literal, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.types.{BinaryType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -37,24 +35,18 @@ import org.apache.spark.unsafe.types.UTF8String
 private[kafka010] class KafkaWriteTask(
     producerConfiguration: ju.Map[String, Object],
     inputSchema: Seq[Attribute],
-    defaultTopic: Option[String]) {
-  // var failedWrites = ListBuffer.empty[Throwable]
+    topic: Option[String]) {
+  // used to synchronize with Kafka callbacks
   @volatile var failedWrite: Exception = null
-  val topicExpression = inputSchema.find(p =>
-    p.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME).getOrElse(
-      if (defaultTopic == None) {
-        throw new IllegalStateException(s"Default topic required when no " +
-          s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present")
-      } else {
-        Literal(null, StringType)
-      }
-    ).map{c =>
-      if (defaultTopic == None) {
-        c   // return null if we can't fall back on a default value
-      } else {
-        // fall back on a default value in case we evaluate c to null
-        If(IsNull(c), Literal(UTF8String.fromString(defaultTopic.get), StringType), c)
-      }
+  val topicExpression =
+    if (topic.isDefined) {
+      // topic option overrides topic field
+      Literal(UTF8String.fromString(topic.get), StringType)
+    } else {
+    inputSchema.find(p =>
+      p.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME).getOrElse(
+        throw new IllegalStateException(s"topic option required when no " +
+          s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present"))
     }
   val keyExpression = inputSchema.find(p =>
     p.name == KafkaWriter.KEY_ATTRIBUTE_NAME).getOrElse(
@@ -77,8 +69,9 @@ private[kafka010] class KafkaWriteTask(
       throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
         s"attribute unsupported type $t")
   }
-  val projection = UnsafeProjection.create(topicExpression ++
-    Seq(Cast(keyExpression, BinaryType), Cast(valueExpression, BinaryType)), inputSchema)
+  val projection = UnsafeProjection.create(
+    Seq(topicExpression, Cast(keyExpression, BinaryType),
+      Cast(valueExpression, BinaryType)), inputSchema)
 
   // Create a Kafka Producer
   producerConfiguration.put("key.serializer", classOf[ByteArraySerializer].getName)
@@ -97,7 +90,7 @@ private[kafka010] class KafkaWriteTask(
       val value = projectedRow.get(2, BinaryType).asInstanceOf[Array[Byte]]
       if (topic == null) {
         throw new NullPointerException(s"null topic present in the data. Use the " +
-        s"${KafkaSourceProvider.DEFAULT_TOPIC_KEY} option for setting a default topic.")
+        s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
       }
       val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
       val callback = new Callback() {

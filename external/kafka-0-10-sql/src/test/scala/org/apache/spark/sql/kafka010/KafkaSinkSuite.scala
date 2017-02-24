@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -32,7 +33,9 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
 class KafkaSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
-  case class AddMoreData(ms: MemoryStream[String], q: StreamingQuery,
+  case class AddMoreData(
+      ms: MemoryStream[String],
+      q: StreamingQuery,
       values: String*) extends ExternalAction {
     override def runAction(): Unit = {
       ms.addData(values)
@@ -47,7 +50,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    testUtils = new KafkaTestUtils(withBrokerProps = Map("auto.create.topics.enable" -> "false"))
+    testUtils = new KafkaTestUtils(
+      withBrokerProps = Map("auto.create.topics.enable" -> "false"))
     testUtils.setup()
   }
 
@@ -106,7 +110,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("write structured streaming aggregation w/o topic field, with default topic") {
+  test("write structured streaming aggregation w/o topic field, with topic option") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[String]
       val topic = newTopic()
@@ -121,7 +125,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .outputMode(OutputMode.Update)
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .option("defaultTopic", topic)
+        .option("topic", topic)
         .queryName("kafkaAggStream")
         .start()
 
@@ -152,13 +156,68 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
+  test("write structured streaming aggregation with topic field and topic option") {
+    /* The purpose of this test is to ensure that the topic option
+     * overrides the topic field. We begin by writing some data that
+     * includes a topic field and value (e.g., 'foo') along with a topic
+     * option. Then when we read from the topic specified in the option
+     * we should see the data i.e., the data was written to the topic
+     * option, and not to the topic in the data e.g., foo
+     */
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[String]
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+
+      val writer = input.toDF()
+        .groupBy("value")
+        .count()
+        .selectExpr("'foo' as topic",
+          "CAST(value as STRING) key", "CAST(count as STRING) value")
+        .writeStream
+        .format("kafka")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .outputMode(OutputMode.Update)
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("topic", topic)
+        .queryName("kafkaAggStream")
+        .start()
+
+      // Create Kafka source that reads from earliest to latest offset
+      val reader = spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.metadata.max.age.ms", "1")
+        .option("startingOffsets", "earliest")
+        .option("subscribe", topic)
+        .option("failOnDataLoss", "true")
+        .load()
+      val kafka = reader
+        .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+        .selectExpr("CAST(key AS INT)", "CAST(value AS INT)")
+        .as[(Int, Int)]
+
+      testStream(kafka, outputMode = OutputMode.Update)(
+        StartStream(ProcessingTime(0)),
+        AddMoreData(input, writer, "1", "2", "2", "3", "3", "3"),
+
+        CheckAnswer((1, 1), (2, 2), (3, 3)),
+        AddMoreData(input, writer, "1", "2", "3"),
+        CheckAnswer((1, 1), (2, 2), (3, 3), (1, 2), (2, 3), (3, 4)),
+        StopStream
+      )
+      writer.stop()
+    }
+  }
+
+
   test("write data with bad schema") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[String]
       val topic = newTopic()
       testUtils.createTopic(topic)
 
-      /* No topic field or default topic */
+      /* No topic field or topic option */
       var writer: StreamingQuery = null
       var ex = intercept[StreamingQueryException] {
         writer = input.toDF()
@@ -175,7 +234,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       writer.stop()
       assert(ex.getMessage
         .toLowerCase
-        .contains("default topic required when no 'topic' attribute is present"))
+        .contains("topic option required when no 'topic' attribute is present"))
 
       /* No value field */
       ex = intercept[StreamingQueryException] {
@@ -250,7 +309,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
           .format("kafka")
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-          .option("defaultTopic", topic)
+          .option("topic", topic)
           .queryName("kafkaBadTopicStream")
           .start()
         input.addData("1", "2", "3", "4", "5")
@@ -273,11 +332,11 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     df.write
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("defaultTopic", topic)
+      .option("topic", topic)
       .save()
   }
 
-  test("write batch with null topic field value, and no default topic") {
+  test("write batch with null topic field value, and no topic option") {
     val df = spark
       .sparkContext
       .parallelize(Seq("1"))
@@ -292,6 +351,38 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
     assert(ex.getMessage.toLowerCase.contains(
       "null topic present in the data"))
+  }
+
+  test("write batch unsupported save modes") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+    val df = spark
+      .sparkContext
+      .parallelize(Seq("1"))
+      .map(v => (null.asInstanceOf[String], v))
+      .toDF("topic", "value")
+
+    // Test bad save mode Ignore
+    var ex = intercept[AnalysisException] {
+      df.write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .mode(SaveMode.Ignore)
+        .save()
+    }
+    assert(ex.getMessage.toLowerCase.contains(
+      "save mode ignore not allowed for kafka"))
+
+    // Test bad save mode Overwrite
+    ex = intercept[AnalysisException] {
+      df.write
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .mode(SaveMode.Overwrite)
+        .save()
+    }
+    assert(ex.getMessage.toLowerCase.contains(
+      "save mode overwrite not allowed for kafka"))
   }
 
   test("write big data with small producer buffer") {

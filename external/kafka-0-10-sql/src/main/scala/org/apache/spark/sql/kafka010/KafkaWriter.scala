@@ -37,15 +37,15 @@ private[kafka010] object KafkaWriter extends Logging {
       sparkSession: SparkSession,
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
-      defaultTopic: Option[String] = None): Unit = {
+      topic: Option[String] = None): Unit = {
     val schema = queryExecution.logical.output
     schema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
-      if (defaultTopic == None) {
-        throw new AnalysisException(s"Default topic required when no " +
+      if (topic == None) {
+        throw new AnalysisException(s"topic option required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
-          s"${KafkaSourceProvider.DEFAULT_TOPIC_KEY} option for setting a default topic.")
+          s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a topic.")
       } else {
-        Literal(defaultTopic.get, StringType)
+        Literal(topic.get, StringType)
       }
     ).dataType match {
       case StringType => // good
@@ -78,7 +78,7 @@ private[kafka010] object KafkaWriter extends Logging {
             sparkPartitionId = taskContext.partitionId(),
             sparkAttemptNumber = taskContext.attemptNumber(),
             inputSchema = schema,
-            defaultTopic = defaultTopic)
+            defaultTopic = topic)
         })
     }
   }
