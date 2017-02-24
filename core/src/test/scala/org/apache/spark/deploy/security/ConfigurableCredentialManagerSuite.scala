@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.Token
-import org.apache.spark.deploy.security.{ConfigurableCredentialManager, HBaseCredentialProvider, HiveCredentialProvider, ServiceCredentialProvider}
-import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config._
+import org.scalatest.{BeforeAndAfter, Matchers}
 
 class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   private var credentialManager: ConfigurableCredentialManager = null
