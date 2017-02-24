@@ -1587,4 +1587,96 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("create datasource table with an non-existent location") {
+    withTable("t", "t1") {
+      withTempDir {
+        dir =>
+          dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a int, b int)
+               |USING parquet
+               |LOCATION '$dir'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+
+          spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+          assert(dir.exists())
+
+          checkAnswer(spark.table("t"), Row(1, 2))
+      }
+      // partition table
+      withTempDir {
+        dir =>
+          dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a int, b int)
+               |USING parquet
+               |PARTITIONED BY(a)
+               |LOCATION '$dir'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+
+          spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
+
+          val partDir = new File(dir, "a=1")
+          assert(partDir.exists())
+
+          checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
+
+  test("create hive table with an non-existent location") {
+    withTable("t", "t1") {
+      withTempDir {
+        dir =>
+          dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a int, b int)
+               |USING hive
+               |LOCATION '$dir'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+          assert(table.location.stripSuffix("/") == expectedPath)
+
+          spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+          assert(dir.exists())
+
+          checkAnswer(spark.table("t"), Row(1, 2))
+      }
+      // partition table
+      withTempDir {
+        dir =>
+          dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a int, b int)
+               |USING hive
+               |PARTITIONED BY(a)
+               |LOCATION '$dir'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
+          assert(table.location.stripSuffix("/") == expectedPath)
+
+          spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
+
+          val partDir = new File(dir, "a=1")
+          assert(partDir.exists())
+
+          checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
 }
