@@ -186,11 +186,7 @@ class InMemoryCatalog(
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
-    if (tableExists(db, table)) {
-      if (!ignoreIfExists) {
-        throw new TableAlreadyExistsException(db = db, table = table)
-      }
-    } else {
+    if (!tableExists(db, table)) {
       // Set the default table location if this is a managed table and its location is not
       // specified.
       // Ideally we should not create a managed table with location, but Hive serde table can

@@ -71,21 +71,8 @@ case class CreateHiveTableAsSelectCommand(
       // processing.
       assert(tableDesc.schema.isEmpty)
 
-      // As discussed in SPARK-19583, in CTAS the default location of a managed
-      // table should not exists
-      if (mode == SaveMode.ErrorIfExists && tableDesc.tableType == CatalogTableType.MANAGED) {
-        val hadoopConf = sparkSession.sessionState.newHadoopConf()
-        val tblLocationPath =
-          new Path(sparkSession.sessionState.catalog.defaultTablePath(tableIdentifier))
-        val fs = tblLocationPath.getFileSystem(hadoopConf)
-        if (fs.exists(tblLocationPath)) {
-          throw new AnalysisException(s"the location('$tblLocationPath') of table" +
-            s"('$tableIdentifier')  already exists.")
-        }
-      }
-
       sparkSession.sessionState.catalog.createTable(
-          tableDesc.copy(schema = query.schema), ignoreIfExists = false)
+        tableDesc.copy(schema = query.schema), ignoreIfExists = false)
       try {
         sparkSession.sessionState.executePlan(
           InsertIntoTable(

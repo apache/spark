@@ -250,12 +250,32 @@ class SessionCatalog(
    * Create a metastore table in the database specified in `tableDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
+  def createTable(
+    tableDefinition: CatalogTable,
+    ignoreIfExists: Boolean,
+    suggestIgnoreIfPathExists: Boolean = false): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     validateName(table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     requireDbExists(db)
+
+    if (!ignoreIfExists) {
+      if (tableExists(newTableDefinition.identifier)) {
+        throw new TableAlreadyExistsException(db = db, table = table)
+      }
+      // As discussed in SPARK-19583, the default location of a managed table should not exists
+      if (!suggestIgnoreIfPathExists && tableDefinition.tableType == CatalogTableType.MANAGED) {
+        val tblLocationPath =
+          new Path(defaultTablePath(tableDefinition.identifier))
+        val fs = tblLocationPath.getFileSystem(hadoopConf)
+        if (fs.exists(tblLocationPath)) {
+          throw new AnalysisException(s"the location('$tblLocationPath') of table" +
+            s"('${newTableDefinition.identifier}')  already exists.")
+        }
+      }
+    }
+
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 

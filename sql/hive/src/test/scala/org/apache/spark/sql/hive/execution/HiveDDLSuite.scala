@@ -1289,7 +1289,7 @@ class HiveDDLSuite
     import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PREFIX
     import org.apache.spark.sql.hive.HiveExternalCatalog.STATISTICS_PREFIX
 
-    withTable("tbl") {
+    withTable("tbl", "tbl1") {
       sql("CREATE TABLE tbl(a INT) STORED AS parquet")
 
       Seq(DATASOURCE_PREFIX, STATISTICS_PREFIX).foreach { forbiddenPrefix =>
@@ -1304,7 +1304,7 @@ class HiveDDLSuite
         assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
 
         val e3 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tbl (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
+          sql(s"CREATE TABLE tbl1 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
         }
         assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
       }
@@ -1588,7 +1588,7 @@ class HiveDDLSuite
     }
   }
 
-  test("CTAS for managed data source table with a created default location throw an exception") {
+  test("CTAS for managed datasource table with a created default location throw an exception") {
     withTable("t", "t1", "t2") {
       val warehousePath = spark.sharedState.warehousePath
       val tFile = new File(warehousePath, "t")
@@ -1684,6 +1684,72 @@ class HiveDDLSuite
              |USING hive
              |PARTITIONED BY(a, b)
              |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+           """.stripMargin)
+      }.getMessage
+      assert(e1.contains(s"the location('file:${tFile1.getAbsolutePath}') of table" +
+        s"('`default`.`t1`')  already exists."))
+    }
+  }
+
+  test("create table for managed datasource table with a created location throw an exception") {
+    withTable("t", "t1") {
+      val warehousePath = spark.sharedState.warehousePath
+      val tFile = new File(warehousePath, "t")
+      tFile.mkdirs()
+      assert(tFile.exists)
+
+      val e = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b string)
+             |USING parquet
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(s"the location('file:${tFile.getAbsolutePath}') of table" +
+        s"('`default`.`t`')  already exists."))
+      // partition table(table path exists)
+      val tFile1 = new File(warehousePath, "t1")
+      tFile1.mkdirs()
+      assert(tFile1.exists)
+      val e1 = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a string, b string)
+             |USING parquet
+             |PARTITIONED BY(a)
+           """.stripMargin)
+      }.getMessage
+      assert(e1.contains(s"the location('file:${tFile1.getAbsolutePath}') of table" +
+        s"('`default`.`t1`')  already exists."))
+    }
+  }
+
+  test("create table for managed hive table with a created location throw an exception") {
+    withTable("t", "t1") {
+      val warehousePath = spark.sharedState.warehousePath
+      val tFile = new File(warehousePath, "t")
+      tFile.mkdirs()
+      assert(tFile.exists)
+
+      val e = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b string)
+             |USING hive
+           """.stripMargin)
+      }.getMessage
+      assert(e.contains(s"the location('file:${tFile.getAbsolutePath}') of table" +
+        s"('`default`.`t`')  already exists."))
+      // partition table(table path exists)
+      val tFile1 = new File(warehousePath, "t1")
+      tFile1.mkdirs()
+      assert(tFile1.exists)
+      val e1 = intercept[AnalysisException] {
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a string, b string)
+             |USING hive
+             |PARTITIONED BY(a)
            """.stripMargin)
       }.getMessage
       assert(e1.contains(s"the location('file:${tFile1.getAbsolutePath}') of table" +

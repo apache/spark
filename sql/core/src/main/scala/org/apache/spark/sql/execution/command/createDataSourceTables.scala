@@ -158,7 +158,8 @@ case class CreateDataSourceTableAsSelectCommand(
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false,
+        suggestIgnoreIfPathExists = true)
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
