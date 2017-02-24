@@ -421,12 +421,13 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     withTable("ds_relationProvider") {
       sql(
         """
-          |CREATE TABLE ds_relationProvider
-          |USING org.apache.spark.sql.sources.SimpleScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10'
-          |)""".stripMargin)
+         |CREATE TABLE ds_relationProvider
+         |USING org.apache.spark.sql.sources.SimpleScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10'
+         |)
+        """.stripMargin)
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE ds_relationProvider ADD COLUMNS (c3 int)")
       }.getMessage

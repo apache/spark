@@ -72,19 +72,6 @@ class JDBCSuite extends SparkFunSuite
     conn.prepareStatement(
       "insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
 
-    conn.prepareStatement("create table test.t_alter_add(c1 int, c2 int)").executeUpdate()
-    conn.prepareStatement("insert into test.t_alter_add values (1, 2)").executeUpdate()
-    conn.prepareStatement("insert into test.t_alter_add values (2, 4)").executeUpdate()
-    conn.commit()
-
-    sql("DROP TABLE IF EXISTS ds_jdbc")
-    sql(
-      s"""
-        |CREATE TABLE IF NOT EXISTS ds_jdbc
-        |USING org.apache.spark.sql.jdbc
-        |OPTIONS (url '$url', dbtable 'TEST.T_ALTER_ADD', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
-
     sql(
       s"""
         |CREATE OR REPLACE TEMPORARY VIEW foobar
@@ -984,11 +971,20 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("ALTER TABLE ADD COLUMNS") {
-    conn.prepareStatement("ALTER TABLE test.t_alter_add ADD COLUMN (C3 int)").executeUpdate()
-    conn.commit()
-    val e = intercept[AnalysisException] {
-      sql("ALTER TABLE ds_jdbc ADD COLUMNS (C3 int)")
-    }.getMessage
-    assert(e.contains("does not support ALTER ADD COLUMNS"))
+    withTable("ds_jdbc") {
+      sql(
+        s"""
+          |CREATE TABLE IF NOT EXISTS ds_jdbc
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+         """.stripMargin.replaceAll("\n", " "))
+
+      conn.prepareStatement("ALTER TABLE TEST.PEOPLE ADD COLUMN (C3 int)").executeUpdate()
+      conn.commit()
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE ds_jdbc ADD COLUMNS (C3 int)")
+      }.getMessage
+      assert(e.contains("does not support ALTER ADD COLUMNS"))
+    }
   }
 }

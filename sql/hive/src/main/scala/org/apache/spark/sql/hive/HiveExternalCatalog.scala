@@ -518,7 +518,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(newTableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
-    val maybeWithStatsPropsTable: CatalogTable = if (newTableDefinition.stats.isDefined) {
+    val withStatsProps = if (newTableDefinition.stats.isDefined) {
       val stats = newTableDefinition.stats.get
       var statsProperties: Map[String, String] =
         Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
@@ -536,19 +536,27 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     if (newTableDefinition.tableType == VIEW) {
-      client.alterTable(maybeWithStatsPropsTable)
+      client.alterTable(withStatsProps)
     } else {
       val oldRawTableDef = getRawTable(db, newTableDefinition.identifier.table)
 
       // restore the table metadata in spark sql format for comparing with the input
       // table metadata that is also in spark sql format
       val oldRestoredTableDef = restoreTableMetadata(oldRawTableDef)
-      val (newSchema, schemaChange) =
+      val (newSchema, dataSourceProps) =
         if (!oldRestoredTableDef.schema.equals(newTableDefinition.schema)) {
-          (newTableDefinition.schema, true)
+          val props =
+            tableMetaToTableProps(newTableDefinition).filter(_._1.startsWith(DATASOURCE_PREFIX))
+          if (newTableDefinition.provider.isDefined &&
+            newTableDefinition.provider.get.toLowerCase != DDLUtils.HIVE_PROVIDER) {
+            // we only need to populate non-hive provider to the tableprops
+            props.put(DATASOURCE_PROVIDER, newTableDefinition.provider.get)
+          }
+          (newTableDefinition.schema, props)
         } else {
           // maintain the original format of the table schema
-          (oldRawTableDef.schema, false)
+          (oldRawTableDef.schema,
+            oldRawTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX)))
         }
 
       val newStorage = if (DDLUtils.isHiveTable(newTableDefinition)) {
@@ -602,20 +610,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Sets the `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
-      val dataSourceProps = if (schemaChange) {
-        val props =
-          tableMetaToTableProps(newTableDefinition).filter(_._1.startsWith(DATASOURCE_PREFIX))
-        if (newTableDefinition.provider.isDefined
-          && newTableDefinition.provider.get.toLowerCase != DDLUtils.HIVE_PROVIDER) {
-          // we only need to populate non-hive provider to the tableprops
-          props.put(DATASOURCE_PROVIDER, newTableDefinition.provider.get)
-        }
-        props
-      } else {
-        oldRawTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
-      }
       val newTableProps =
-        dataSourceProps ++ maybeWithStatsPropsTable.properties + partitionProviderProp
+        dataSourceProps ++ withStatsProps.properties + partitionProviderProp
       val newDef = oldRestoredTableDef.copy(
         storage = newStorage,
         schema = newSchema,

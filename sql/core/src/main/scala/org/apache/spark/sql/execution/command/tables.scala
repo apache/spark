@@ -217,10 +217,11 @@ case class AlterTableAddColumnsCommand(
   /**
    * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
    * view, or datasource table with text, orc formats or external provider.
+   * For datasource table, it currently only supports parquet, json, csv.
    */
   private def verifyAlterTableAddColumn(
-    catalog: SessionCatalog,
-    table: TableIdentifier): CatalogTable = {
+      catalog: SessionCatalog,
+      table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
     if (catalogTable.tableType == CatalogTableType.VIEW) {
@@ -239,7 +240,7 @@ case class AlterTableAddColumnsCommand(
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
         case s =>
           throw new AnalysisException(
-            s"""${table.toString} is a datasource table with type $s,
+            s"""${table} is a datasource table with type $s,
                |which does not support ALTER ADD COLUMNS.
             """.stripMargin)
       }
