@@ -568,7 +568,7 @@ Binomial logistic regression
 ```{r}
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
-model <- spark.logit(training, Sex ~ ., regParam = 0.00042)
+model <- spark.logit(training, Sex ~ ., regParam = 0.05805813)
 summary(model)
 ```
 
@@ -582,7 +582,7 @@ Multinomial logistic regression against three classes
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
 # Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
-model <- spark.logit(training, Class ~ ., regParam = 0.056)
+model <- spark.logit(training, Class ~ ., regParam = 0.07815179)
 summary(model)
 ```
 

@@ -145,13 +145,13 @@ print.summary.treeEnsemble <- function(x) {
 #' # label must be binary - Only binary classification is supported for GBT.
 #' t <- as.data.frame(Titanic)
 #' df <- createDataFrame(t)
-#' model <- spark.gbt(df, Sex ~ Age + Freq, "classification")
+#' model <- spark.gbt(df, Survived ~ Age + Freq, "classification")
 #'
 #' # numeric label is also supported
 #' t2 <- as.data.frame(Titanic)
-#' t2$NumericGener <- ifelse(t2$Sex == "Male", 0, 1)
+#' t2$NumericGender <- ifelse(t2$Sex == "Male", 0, 1)
 #' df <- createDataFrame(t2)
-#' model <- spark.gbt(df, NumericGener ~ ., type = "classification")
+#' model <- spark.gbt(df, NumericGender ~ ., type = "classification")
 #' }
 #' @note spark.gbt since 2.1.0
 setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
