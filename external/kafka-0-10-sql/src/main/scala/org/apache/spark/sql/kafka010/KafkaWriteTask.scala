@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A simple trait for writing out data in a single Spark task, without any concerns about how
- * to commit or abort tasks. Exceptions thrown by the implementation of this trait will
+ * to commit or abort tasks. Exceptions thrown by the implementation of this class will
  * automatically trigger task aborts.
  */
 private[kafka010] class KafkaWriteTask(

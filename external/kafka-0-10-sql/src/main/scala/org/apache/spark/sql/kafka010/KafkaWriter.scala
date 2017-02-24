@@ -18,23 +18,14 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.TimeUnit
-import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
-
-import org.apache.kafka.clients.producer._
-import org.apache.kafka.common.serialization.ByteArraySerializer
-
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.types.{BinaryType, StringType}
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[kafka010] object KafkaWriter extends Logging {
@@ -69,7 +60,7 @@ private[kafka010] object KafkaWriter extends Logging {
         throw new IllegalArgumentException(s"$KEY_ATTRIBUTE_NAME attribute type " +
           s"must be a String or BinaryType")
     }
-    val valueField = schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
+    schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new IllegalArgumentException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     ).dataType match {
       case StringType | BinaryType => // good
