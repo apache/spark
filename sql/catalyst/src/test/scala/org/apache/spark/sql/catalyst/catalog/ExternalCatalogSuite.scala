@@ -162,15 +162,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(actual.tableType === CatalogTableType.EXTERNAL)
   }
 
-  test("create table when the table already exists") {
-    val catalog = newBasicCatalog()
-    assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    val table = newTable("tbl1", "db2")
-    intercept[TableAlreadyExistsException] {
-      catalog.createTable(table, ignoreIfExists = false)
-    }
-  }
-
   test("drop table") {
     val catalog = newBasicCatalog()
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
