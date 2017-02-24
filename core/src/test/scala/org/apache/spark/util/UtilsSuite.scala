@@ -484,6 +484,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4")
     }
+    assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
   }
 
   test("nonLocalPaths") {
