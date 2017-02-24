@@ -82,12 +82,20 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
    * out of integer range.
    */
-  protected val checkedCast = udf { (n: Double) =>
-    if (n > Int.MaxValue || n < Int.MinValue) {
-      throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
-        s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
-    } else {
-      n.toInt
+  protected val checkedCast = udf { (n: Any) =>
+    n match {
+      case v: Int => v // Avoid unnecessary casting
+      case v: Number =>
+        val intV = v.intValue()
+        if (v == intV) { // True for Byte/Short, Long within the Int range and Double/Float with no fractional part.
+          intV
+        }
+        else {
+          throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+            s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
+        }
+      case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+        s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n is not numeric.")
     }
   }
 }
@@ -262,9 +270,9 @@ class ALSModel private[ml] (
     }
     dataset
       .join(userFactors,
-        checkedCast(dataset($(userCol)).cast(DoubleType)) === userFactors("id"), "left")
+        checkedCast(dataset($(userCol))) === userFactors("id"), "left")
       .join(itemFactors,
-        checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
+        checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
@@ -451,8 +459,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(checkedCast(col($(userCol)).cast(DoubleType)),
-        checkedCast(col($(itemCol)).cast(DoubleType)), r)
+      .select(checkedCast(col($(userCol))),
+        checkedCast(col($(itemCol))), r)
       .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
