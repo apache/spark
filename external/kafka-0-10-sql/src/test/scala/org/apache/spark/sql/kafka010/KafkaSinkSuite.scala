@@ -302,8 +302,6 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
           converter.apply(row)
         }
       })
-      println("Calling close")
       writeTask.close()
-      println("Close returns")
   }
 }
