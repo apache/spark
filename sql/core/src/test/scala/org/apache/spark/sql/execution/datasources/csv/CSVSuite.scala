@@ -305,7 +305,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(result.schema.fieldNames.size === 1)
   }
 
-  test("test with empty file an unknown schema") {
+  test("test with empty file without schema") {
     val result = spark.read
       .csv(testFile(emptyFile))
 
