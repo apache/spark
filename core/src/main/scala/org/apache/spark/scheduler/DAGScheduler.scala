@@ -149,6 +149,7 @@ class DAGScheduler(
    */
   private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
+  private[scheduler] val execIdToHost = new HashMap[String, String]
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
@@ -1331,7 +1332,7 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
+            handleExecutorLost(bmAddress.executorId, slaveLost = true, Some(task.epoch))
           }
         }
 
@@ -1365,7 +1366,7 @@ class DAGScheduler(
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
-      filesLost: Boolean,
+      slaveLost: Boolean,
       maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
@@ -1373,11 +1374,18 @@ class DAGScheduler(
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
 
-      if (filesLost || !env.blockManager.externalShuffleServiceEnabled) {
-        logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
+      if (slaveLost || !env.blockManager.externalShuffleServiceEnabled) {
         // TODO: This will be really slow if we keep accumulating shuffle map stages
         for ((shuffleId, stage) <- shuffleIdToMapStage) {
-          stage.removeOutputsOnExecutor(execId)
+          if (slaveLost) {
+            val host = execIdToHost.get(execId).get
+            logInfo(("Shuffle files lost for executor: %s (epoch %d)," +
+              " removing shuffle files on host: %s").format(execId, currentEpoch, host ))
+            stage.removeOutputsOnHost(host)
+          } else {
+            logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
+            stage.removeOutputsOnExecutor(execId)
+          }
           mapOutputTracker.registerMapOutputs(
             shuffleId,
             stage.outputLocInMapOutputTrackerFormat(),
@@ -1400,6 +1408,7 @@ class DAGScheduler(
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
+    execIdToHost.put(execId, host)
   }
 
   private[scheduler] def handleStageCancellation(stageId: Int, reason: Option[String]) {
