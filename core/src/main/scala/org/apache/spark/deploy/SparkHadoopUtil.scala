@@ -108,12 +108,8 @@ class SparkHadoopUtil extends Logging {
           hadoopConf.set(key.substring("spark.hadoop.".length), value)
         }
         // fix added for SPARK-13979
-	// Copy any "fs.swift2d.foo=bar" or "fs.swift.foo=bar" properties into conf 
-        else if (key.startsWith("fs.swift")){
-          hadoopConf.set(key, value)
-        }
-        // Copy any "fs.s3.foo=bar" or "fs.s3a.foo=bar" or "fs.s3n.foo=bar" properties into conf 
-        else if (key.startsWith("fs.s3")){
+	// Copy any "fs.*=bar" properties into conf it will cover almost all filesystem 
+        else if (key.startsWith("fs.")){
           hadoopConf.set(key, value)
         }
       }
