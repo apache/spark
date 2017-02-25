@@ -211,17 +211,17 @@ class FPGrowthModel private[ml] (
    */
   @Since("2.2.0")
   @transient lazy val associationRules: DataFrame = {
-    val freqItems = freqItemsets
-    AssociationRules.getAssociationRulesFromFP(freqItems, "items", "freq", $(minConfidence))
+    AssociationRules.getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
   }
 
   /**
    * The transform method first generates the association rules according to the frequent itemsets.
    * Then for each association rule, it will examine the input items against antecedents and
    * summarize the consequents as prediction. The prediction column has the same data type as the
-   * input column(Array[T]) and will not contain existing items in the input column.
-   * Note that internally it uses Cartesian join and may exhaust memory for large datasets. The null
+   * input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the feature columns are treated as empty sets.
+   * WARNING: internally it collects association rules to the driver and uses broadcast for
+   * efficiency. This may bring pressure to driver memory for large set of association rules.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -229,35 +229,27 @@ class FPGrowthModel private[ml] (
     genericTransform(dataset)
   }
 
-  private def genericTransform[T](dataset: Dataset[_]): DataFrame = {
-    // use index to perform the join and aggregateByKey, and keep the original order after join.
-    val indexToItems = dataset.select($(featuresCol)).rdd.map(r => r.getSeq[T](0))
-      .zipWithIndex().map(_.swap)
-    val rulesRDD = associationRules.select("antecedent", "consequent").rdd
-      .map(r => (r.getSeq[T](0), r.getSeq[T](1)))
+  private def genericTransform(dataset: Dataset[_]): DataFrame = {
+    val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
+      .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
+      .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
+    val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
 
-    val indexToConsequents = indexToItems.cartesian(rulesRDD).map {
-      case ((id, items), (antecedent, consequent)) =>
-        val consequents = if (items != null) {
-          val itemSet = items.toSet
-          if (antecedent.forall(itemSet.contains)) {
-            consequent.filterNot(itemSet.contains)
+    val dt = dataset.schema($(featuresCol)).dataType
+    // For each rule, examine the input items and summarize the consequents
+    val predictUDF = udf((items: Seq[_]) => {
+      if (items != null) {
+        val itemset = items.toSet
+        brRules.value.flatMap(rule =>
+          if (items != null && rule._1.forall(item => itemset.contains(item))) {
+            rule._2.filter(item => !itemset.contains(item))
           } else {
             Seq.empty
-          }
-        } else {
-          Seq.empty
-        }
-        (id, consequents)
-    }.aggregateByKey(new ArrayBuffer[T])((ar, seq) => ar ++= seq, (ar, seq) => ar ++= seq)
-     .map { case (index, cons) => (index, cons.distinct) }
-
-    val rowAndConsequents = dataset.toDF().rdd.zipWithIndex().map(_.swap)
-      .join(indexToConsequents)
-      .map(_._2).map(t => Row.merge(t._1, Row(t._2)))
-    val mergedSchema = dataset.schema.add(StructField($(predictionCol),
-      dataset.schema($(featuresCol)).dataType, dataset.schema($(featuresCol)).nullable))
-    dataset.sparkSession.createDataFrame(rowAndConsequents, mergedSchema)
+          })
+      } else {
+        Seq.empty
+      }.distinct }, dt)
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   @Since("2.2.0")
