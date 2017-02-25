@@ -22,7 +22,7 @@ import java.util.Calendar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, ParseModes}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -370,6 +370,42 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStruct(schema, Map("mode" -> ParseModes.PERMISSIVE_MODE), Literal(jsonData), gmtId),
       null
     )
+  }
+
+  test("from_json - array") {
+    val jsonDataArr = """[{"a": 1}, {"a": 2}]"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val expected =
+      InternalRow.fromSeq(1 :: Nil) ::
+      InternalRow.fromSeq(2 :: Nil) :: Nil
+    checkEvaluation(JsonToStruct(
+      schema, Map.empty, Literal(jsonDataArr), gmtId), expected)
+
+    // Empty array produces empty collection.
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal("[ ]"), gmtId), Nil)
+  }
+
+  test("from_json empty object") {
+    val jsonData = """{  }"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId), InternalRow(null))
+  }
+
+  test("from_json schema mismatch - struct") {
+    val jsonData = """[{"a" 1}]"""
+    val schema = new StructType().add("a", IntegerType)
+
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId), null)
+  }
+
+  test("from_json schema mismatch - array") {
+    val jsonData = """{"a" 1}"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId), null)
   }
 
   test("from_json null input column") {

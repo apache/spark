@@ -39,7 +39,12 @@ private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeE
  */
 class JacksonParser(
     schema: StructType,
-    options: JSONOptions) extends Logging {
+    options: JSONOptions,
+    arraySupport: Boolean = true,
+    objectSupport: Boolean = true) extends Logging {
+
+  // One of both should be true. Otherwise, this parser can't parse any json.
+  require(arraySupport || objectSupport)
 
   import JacksonUtils._
   import ParseModes._
@@ -166,7 +171,7 @@ class JacksonParser(
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
-      case START_OBJECT => convertObject(parser, st, fieldConverters) :: Nil
+      case START_OBJECT if objectSupport => convertObject(parser, st, fieldConverters) :: Nil
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -180,7 +185,7 @@ class JacksonParser(
         // List([str_a_1,null])
         // List([str_a_2,null], [null,str_b_3])
         //
-      case START_ARRAY =>
+      case START_ARRAY if arraySupport =>
         val array = convertArray(parser, elementConverter)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.

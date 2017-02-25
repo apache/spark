@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.ParseModes
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ParseModes}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -480,24 +480,54 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]] with the specified schema.
+ * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
  */
 case class JsonToStruct(
-    schema: StructType,
+    schema: DataType,
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
-  def this(schema: StructType, options: Map[String, String], child: Expression) =
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
     this(schema, options, child, None)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes()
+    schema match {
+      case st: StructType => TypeCheckResult.TypeCheckSuccess
+      case ArrayType(st: StructType, _) => TypeCheckResult.TypeCheckSuccess
+      case _ => TypeCheckResult.TypeCheckFailure(
+        s"Input schema ${schema.simpleString} must be a struct or an array of struct.")
+    }
+  }
+
+  @transient
+  lazy val rowSchema = schema match {
+    case st: StructType => st
+    case ArrayType(st: StructType, _) => st
+  }
+
+  // This converts parsed rows to the desired output by the given schema.
+  @transient
+  lazy val converter = schema match {
+    case _: StructType =>
+      // These are always produced from json objects by `objectSupport` in `JacksonParser`.
+      (rows: Seq[InternalRow]) => rows.head
+
+    case ArrayType(_: StructType, _) =>
+      // These are always produced from json arrays by `arraySupport` in `JacksonParser`.
+      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+  }
 
   @transient
   lazy val parser =
     new JacksonParser(
-      schema,
-      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
+      rowSchema,
+      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get),
+      objectSupport = schema.isInstanceOf[StructType],
+      arraySupport = schema.isInstanceOf[ArrayType])
 
   override def dataType: DataType = schema
 
@@ -505,11 +535,27 @@ case class JsonToStruct(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
+    // `null` related behavior of this expression is as below:
+    // When input is,
+    //   - `null`: the output is `null`.
+    //   - invalid json: the output is `null`.
+    //   - empty string: the output is `null`.
+    //   - empty json object: the output is Row(`null`).
+    //   - empty json array: the output is `Nil`.
+    //
+    // Note that, it returns `null` if the schema is not matched. If the schema is
+    // `StructType`, then the json string should be json objects. If the schema is
+    // array of structs, then the string should be json arrays.
+
+    // We need `null` if the input string is an empty string. `JacksonParser` can
+    // deal with this but produces `Nil`.
+    if (json.toString.trim.isEmpty) return null
+
     try {
-      parser.parse(
+      converter(parser.parse(
         json.asInstanceOf[UTF8String],
         CreateJacksonParser.utf8String,
-        identity[UTF8String]).headOption.orNull
+        identity[UTF8String]))
     } catch {
       case _: SparkSQLJsonProcessingException => null
     }

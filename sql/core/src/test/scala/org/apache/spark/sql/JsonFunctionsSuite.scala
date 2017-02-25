@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -133,12 +135,39 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil)
   }
 
+  test("from_json invalid schema") {
+    val df = Seq("""{"a" 1}""").toDS()
+    val schema = ArrayType(StringType)
+    val message = intercept[IllegalArgumentException] {
+      df.select(from_json($"value", schema.json, Map.empty[String, String].asJava))
+    }.getMessage
+
+    assert(message.contains(
+      "Input schema array<string> must be a struct or an array of struct."))
+  }
+
   test("to_json") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 
     checkAnswer(
       df.select(to_json($"a")),
       Row("""{"_1":1}""") :: Nil)
+  }
+
+  test("from_json array support") {
+    val df = Seq("""[{"a": 1, "b": "a"}, {"a": 2}, { }]""").toDS()
+    val schema = ArrayType(
+      StructType(
+        StructField("a", IntegerType) ::
+        StructField("b", StringType) :: Nil))
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
+
+    checkAnswer(
+      df.select(from_json($"value", schema.json, Map.empty[String, String].asJava)),
+      Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
   }
 
   test("to_json with option") {
