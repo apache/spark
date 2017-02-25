@@ -41,6 +41,7 @@ conf/java-opts
 conf/slaves
 dependency-reduced-pom.xml
 derby.log
+dev/sphinx-report.txt
 dev/create-release/*final
 dev/create-release/*txt
 dist/
