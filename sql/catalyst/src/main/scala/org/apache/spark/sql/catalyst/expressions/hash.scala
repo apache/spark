@@ -573,10 +573,9 @@ object XxHash64Function extends InterpretedHashFunction {
   }
 }
 
-
 /**
- * Simulates Hive's hashing function at
- * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode() in Hive
+ * Simulates Hive's hashing function from Hive v1.2.1 at
+ * org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils#hashcode()
  *
  * We should use this hash function for both shuffle and bucket of Hive tables, so that
  * we can guarantee shuffle and bucketing have same data distribution
@@ -595,7 +594,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override protected def hasherClassName: String = classOf[HiveHasher].getName
 
   override protected def computeHash(value: Any, dataType: DataType, seed: Int): Int = {
-    HiveHashFunction.hash(value, dataType, seed).toInt
+    HiveHashFunction.hash(value, dataType, this.seed).toInt
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -781,12 +780,12 @@ object HiveHashFunction extends InterpretedHashFunction {
         var i = 0
         val length = struct.numFields
         while (i < length) {
-          result = (31 * result) + hash(struct.get(i, types(i)), types(i), seed + 1).toInt
+          result = (31 * result) + hash(struct.get(i, types(i)), types(i), 0).toInt
           i += 1
         }
         result
 
-      case _ => super.hash(value, dataType, seed)
+      case _ => super.hash(value, dataType, 0)
     }
   }
 }

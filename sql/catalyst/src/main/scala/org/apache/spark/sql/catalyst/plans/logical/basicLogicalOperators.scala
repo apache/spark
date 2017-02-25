@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, JoinEstimation, ProjectEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -128,6 +128,14 @@ case class Filter(condition: Expression, child: LogicalPlan)
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
+  }
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      FilterEstimation(this, conf).estimate.getOrElse(super.computeStats(conf))
+    } else {
+      super.computeStats(conf)
+    }
   }
 }
 
@@ -844,18 +852,13 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
  * information about the number of partitions during execution. Used when a specific ordering or
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
- * If `numPartitions` is not specified, the number of partitions will be the number set by
- * `spark.sql.shuffle.partitions`.
  */
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Option[Int] = None) extends UnaryNode {
+    numPartitions: Int) extends UnaryNode {
 
-  numPartitions match {
-    case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
-    case None => // Ok
-  }
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
@@ -868,4 +871,13 @@ case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
   override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
+}
+
+/** A logical plan for `dropDuplicates`. */
+case class Deduplicate(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    streaming: Boolean) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
 }
