@@ -101,7 +101,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       if (version == "2.0") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
       }
-      client = buildClient(version, hadoopConf)
+      client = buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
     }
 
     def table(database: String, tableName: String): CatalogTable = {
