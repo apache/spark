@@ -96,7 +96,6 @@ private[client] sealed abstract class Shim {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit
@@ -106,7 +105,6 @@ private[client] sealed abstract class Shim {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit
 
   def loadDynamicPartitions(
@@ -116,7 +114,6 @@ private[client] sealed abstract class Shim {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
 
   def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit
@@ -332,12 +329,11 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit = {
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      holdDDLTime: JBoolean, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean)
+      JBoolean.FALSE, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean)
   }
 
   override def loadTable(
@@ -345,9 +341,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
-    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime: JBoolean)
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, JBoolean.FALSE)
   }
 
   override def loadDynamicPartitions(
@@ -357,10 +352,9 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean)
+      numDP: JInteger, JBoolean.FALSE, listBucketingEnabled: JBoolean)
   }
 
   override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
@@ -703,12 +697,11 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit = {
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      holdDDLTime: JBoolean, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      JBoolean.FALSE, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, JBoolean.FALSE)
   }
 
@@ -717,9 +710,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
-    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime: JBoolean,
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, JBoolean.FALSE,
       isSrcLocal: JBoolean, JBoolean.FALSE, JBoolean.FALSE)
   }
 
@@ -730,10 +722,9 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE)
+      numDP: JInteger, JBoolean.FALSE, listBucketingEnabled: JBoolean, JBoolean.FALSE)
   }
 
   override def dropTable(
@@ -818,10 +809,9 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE,
+      numDP: JInteger, JBoolean.FALSE, listBucketingEnabled: JBoolean, JBoolean.FALSE,
       0L: JLong)
   }
 

@@ -123,7 +123,8 @@ statement
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
-    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
+    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
+        statement                                                      #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
@@ -693,7 +694,7 @@ nonReserved
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
-    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
+    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN | COST
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
     | SET | RESET
     | VIEW | REPLACE
@@ -794,6 +795,7 @@ EXPLAIN: 'EXPLAIN';
 FORMAT: 'FORMAT';
 LOGICAL: 'LOGICAL';
 CODEGEN: 'CODEGEN';
+COST: 'COST';
 CAST: 'CAST';
 SHOW: 'SHOW';
 TABLES: 'TABLES';
