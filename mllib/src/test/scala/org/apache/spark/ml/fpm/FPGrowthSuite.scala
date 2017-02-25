@@ -34,8 +34,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("FPGrowth fit and transform with different data types") {
     Array(IntegerType, StringType, ShortType, LongType, ByteType).foreach { dt =>
-      val intData = dataset.withColumn("features", col("features").cast(ArrayType(dt)))
-      val model = new FPGrowth().setMinSupport(0.5).fit(intData)
+      val data = dataset.withColumn("features", col("features").cast(ArrayType(dt)))
+      val model = new FPGrowth().setMinSupport(0.5).fit(data)
       val generatedRules = model.setMinConfidence(0.5).associationRules
       val expectedRules = spark.createDataFrame(Seq(
         (Array("2"), Array("1"), 1.0),
@@ -46,7 +46,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       assert(expectedRules.sort("antecedent").rdd.collect().sameElements(
         generatedRules.sort("antecedent").rdd.collect()))
 
-      val transformed = model.transform(intData)
+      val transformed = model.transform(data)
       val expectedTransformed = spark.createDataFrame(Seq(
         (0, Array("1", "2"), Array.emptyIntArray),
         (0, Array("1", "2"), Array.emptyIntArray),
