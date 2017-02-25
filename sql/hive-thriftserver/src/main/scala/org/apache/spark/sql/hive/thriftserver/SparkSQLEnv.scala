@@ -40,6 +40,7 @@ private[hive] object SparkSQLEnv extends Logging {
       val maybeAppName = sparkConf
         .getOption("spark.app.name")
         .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
+        .filterNot(_ == classOf[HiveThriftServer2].getName)
 
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
