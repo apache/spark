@@ -251,8 +251,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("hive-hash for CalendarInterval type") {
     def checkHiveHashForTimestampType(interval: String, expected: Long): Unit = {
-      val foo = CalendarInterval.fromString(interval)
-      checkHiveHash(foo, CalendarIntervalType, expected)
+      checkHiveHash(CalendarInterval.fromString(interval), CalendarIntervalType, expected)
     }
 
     checkHiveHashForTimestampType("interval 1 day", 3220073)
