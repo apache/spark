@@ -876,7 +876,6 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit = {
@@ -890,7 +889,6 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
     loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, isSrcLocal: JBoolean,
       JBoolean.FALSE, JBoolean.FALSE)
@@ -903,7 +901,6 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, JBoolean.FALSE, 0L: JLong)
