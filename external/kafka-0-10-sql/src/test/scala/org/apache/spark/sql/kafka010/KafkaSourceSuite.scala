@@ -204,7 +204,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
           override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
             out.write(0)
             val writer = new BufferedWriter(new OutputStreamWriter(out, UTF_8))
-            writer.write(s"v0\n${metadata.json}")
+            writer.write(s"v99999\n${metadata.json}")
             writer.flush
           }
         }
@@ -226,7 +226,15 @@ class KafkaSourceSuite extends KafkaSourceTest {
         source.getOffset.get // Read initial offset
       }
 
-      assert(e.getMessage.contains("Please upgrade your Spark"))
+      Seq(
+        s"Failed to read log file ${metadataPath.getCanonicalPath}/0",
+        s"UnsupportedLogVersion: maximum supported log version is v${KafkaSource.VERSION}, but " +
+          s"encountered v99999",
+        "The log file was produced by a newer version of Spark and cannot be read by this version",
+        "Please upgrade"
+      ).foreach { message =>
+        assert(e.getMessage.contains(message))
+      }
     }
   }
 
