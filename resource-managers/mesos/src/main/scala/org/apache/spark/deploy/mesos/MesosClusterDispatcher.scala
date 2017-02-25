@@ -25,7 +25,7 @@ import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.mesos._
-import org.apache.spark.util.{CommandLineUtils, ShutdownHookManager, Utils}
+import org.apache.spark.util.{CommandLineUtils, ShutdownHookManager, SparkUncaughtExceptionHandler, Utils}
 
 /*
  * A dispatcher that is responsible for managing and launching drivers, and is intended to be
@@ -97,6 +97,7 @@ private[mesos] object MesosClusterDispatcher
   with CommandLineUtils {
 
   override def main(args: Array[String]) {
+    Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
     Utils.initDaemon(log)
     val conf = new SparkConf
     val dispatcherArgs = new MesosClusterDispatcherArguments(args, conf)
