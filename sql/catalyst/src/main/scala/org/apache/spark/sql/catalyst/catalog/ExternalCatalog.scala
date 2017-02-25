@@ -125,7 +125,6 @@ abstract class ExternalCatalog {
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit
 
   /**
@@ -140,7 +139,6 @@ abstract class ExternalCatalog {
       loadPath: String,
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit
 
@@ -150,8 +148,7 @@ abstract class ExternalCatalog {
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit
+      numDP: Int): Unit
 
   // --------------------------------------------------------------------------
   // Partitions

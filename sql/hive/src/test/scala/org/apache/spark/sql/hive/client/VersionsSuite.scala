@@ -175,7 +175,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         emptyDir,
         tableName = "src",
         replace = false,
-        holdDDLTime = false,
         isSrcLocal = false)
     }
 
@@ -313,7 +312,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         "src_part",
         partSpec,
         replace = false,
-        holdDDLTime = false,
         inheritTableSpecs = false,
         isSrcLocal = false)
     }
@@ -329,8 +327,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         "src_part",
         partSpec,
         replace = false,
-        numDP = 1,
-        holdDDLTime = false)
+        numDP = 1)
     }
 
     test(s"$version: renamePartitions") {

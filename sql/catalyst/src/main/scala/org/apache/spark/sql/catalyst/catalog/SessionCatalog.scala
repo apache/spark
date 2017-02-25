@@ -322,13 +322,12 @@ class SessionCatalog(
       name: TableIdentifier,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime, isSrcLocal)
+    externalCatalog.loadTable(db, table, loadPath, isOverwrite, isSrcLocal)
   }
 
   /**
@@ -341,7 +340,6 @@ class SessionCatalog(
       loadPath: String,
       spec: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -350,7 +348,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Some(db)))
     requireNonEmptyValueInPartitionSpec(Seq(spec))
     externalCatalog.loadPartition(
-      db, table, loadPath, spec, isOverwrite, holdDDLTime, inheritTableSpecs, isSrcLocal)
+      db, table, loadPath, spec, isOverwrite, inheritTableSpecs, isSrcLocal)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {

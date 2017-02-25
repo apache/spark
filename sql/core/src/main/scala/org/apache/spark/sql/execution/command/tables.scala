@@ -312,7 +312,6 @@ case class LoadDataCommand(
         loadPath.toString,
         partition.get,
         isOverwrite,
-        holdDDLTime = false,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)
     } else {
@@ -320,7 +319,6 @@ case class LoadDataCommand(
         targetTable.identifier,
         loadPath.toString,
         isOverwrite,
-        holdDDLTime = false,
         isSrcLocal = isLocal)
     }
 
