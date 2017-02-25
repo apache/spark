@@ -668,7 +668,6 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
@@ -678,7 +677,6 @@ private[hive] class HiveClientImpl(
       s"$dbName.$tableName",
       partSpec,
       replace,
-      holdDDLTime,
       inheritTableSpecs,
       isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories,
       isSrcLocal = isSrcLocal)
@@ -688,14 +686,12 @@ private[hive] class HiveClientImpl(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     shim.loadTable(
       client,
       new Path(loadPath),
       tableName,
       replace,
-      holdDDLTime,
       isSrcLocal)
   }
 
@@ -705,8 +701,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit = withHiveState {
+      numDP: Int): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadDynamicPartitions(
       client,
@@ -715,7 +710,6 @@ private[hive] class HiveClientImpl(
       partSpec,
       replace,
       numDP,
-      holdDDLTime,
       listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
   }
 
