@@ -298,11 +298,19 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test with empty file and known schema") {
     val result = spark.read
       .format("csv")
-      .schema(StructType(List(StructField("column", StringType, false))))
+      .schema(StructType(List(StructField("column", StringType, nullable = false))))
       .load(testFile(emptyFile))
 
-    assert(result.collect.size === 0)
+    assert(result.collect().isEmpty)
     assert(result.schema.fieldNames.size === 1)
+  }
+
+  test("test with empty file an unknown schema") {
+    val result = spark.read
+      .csv(testFile(emptyFile))
+
+    assert(result.collect().isEmpty)
+    assert(result.schema.fieldNames.isEmpty)
   }
 
   test("DDL test with empty file") {

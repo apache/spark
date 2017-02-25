@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.math.BigDecimal
 
 import scala.util.control.Exception._
+import scala.util.{Failure, Success, Try}
 
 import com.univocity.parsers.csv.CsvParser
 
@@ -40,7 +41,19 @@ private[csv] object CSVInferSchema {
       csv: Dataset[String],
       caseSensitive: Boolean,
       options: CSVOptions): StructType = {
-    val firstLine: String = CSVUtils.filterCommentAndEmpty(csv, options).first()
+    val lines = CSVUtils.filterCommentAndEmpty(csv, options)
+    Try(lines.first()) match {
+      case Success(firstLine) => infer(csv, caseSensitive, options, firstLine)
+      case Failure(e: NoSuchElementException) => StructType(Seq())
+      case Failure(e) => throw e
+    }
+  }
+
+  private def infer(
+      csv: Dataset[String],
+      caseSensitive: Boolean,
+      options: CSVOptions,
+      firstLine: String): StructType = {
     val firstRow = new CsvParser(options.asParserSettings).parseLine(firstLine)
     val header = makeSafeHeader(firstRow, caseSensitive, options)
 
