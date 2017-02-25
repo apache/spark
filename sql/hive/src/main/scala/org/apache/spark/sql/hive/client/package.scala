@@ -62,6 +62,13 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "net.hydromatic:linq4j",
         "net.hydromatic:quidem"))
+
+    case object v2_0 extends HiveVersion("2.0.1",
+      exclusions = Seq("eigenbase:eigenbase-properties",
+        "org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "net.hydromatic:linq4j",
+        "net.hydromatic:quidem"))
   }
   // scalastyle:on
 
