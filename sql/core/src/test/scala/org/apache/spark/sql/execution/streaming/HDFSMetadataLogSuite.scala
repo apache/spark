@@ -128,6 +128,33 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
+  test("HDFSMetadataLog: parseVersion") {
+    withTempDir { dir =>
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      def assertLogFileMalformed(func: => Int): Unit = {
+        val e = intercept[IllegalStateException] { func }
+        assert(e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
+      }
+      assertLogFileMalformed { metadataLog.parseVersion("", 100) }
+      assertLogFileMalformed { metadataLog.parseVersion("xyz", 100) }
+      assertLogFileMalformed { metadataLog.parseVersion("v10.x", 100) }
+      assertLogFileMalformed { metadataLog.parseVersion("10", 100) }
+      assertLogFileMalformed { metadataLog.parseVersion("v0", 100) }
+      assertLogFileMalformed { metadataLog.parseVersion("v-10", 100) }
+
+      assert(metadataLog.parseVersion("v10", 10) === 10)
+      assert(metadataLog.parseVersion("v10", 100) === 10)
+
+      val e = intercept[IllegalStateException] { metadataLog.parseVersion("v200", 100) }
+      Seq(
+        "maximum supported log version is v100, but encountered v200",
+        "produced by a newer version of Spark and cannot be read by this version"
+      ).foreach { message =>
+        assert(e.getMessage.contains(message))
+      }
+    }
+  }
+
   testWithUninterruptibleThread("HDFSMetadataLog: restart") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
