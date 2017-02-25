@@ -87,7 +87,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
       case v: Int => v // Avoid unnecessary casting
       case v: Number =>
         val intV = v.intValue()
-        if (v == intV) { // True for Byte/Short, Long within the Int range and Double/Float with no fractional part.
+        // True for Byte/Short, Long within the Int range and Double/Float with no fractional part.
+        if (v == intV) {
           intV
         }
         else {
