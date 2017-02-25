@@ -177,7 +177,7 @@ set spark.sql.groupByOrdinal=false
 -- !query 17 schema
 struct<key:string,value:string>
 -- !query 17 output
-spark.sql.groupByOrdinal
+spark.sql.groupByOrdinal	false
 
 
 -- !query 18
