@@ -634,4 +634,28 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       assert(getNumInMemoryRelations(cachedPlan2) == 4)
     }
   }
+
+  test("refreshByPath should refresh all cached plans with the specified path") {
+    def f(path: String, spark: SparkSession, dataCount: Int): DataFrame = {
+      spark.catalog.refreshByPath(path)
+      val data = spark.read.parquet(path)
+      assert(data.count == dataCount)
+      val df = data.filter("id > 10")
+      df.cache
+      assert(df.count == dataCount - 11)
+      val df1 = df.filter("id > 11")
+      df1.cache
+      assert(df1.count == dataCount - 12)
+      df1
+    }
+
+    withTempDir { dir =>
+      val path = dir.getPath()
+      spark.range(100).write.mode("overwrite").parquet(path)
+      assert(f(path, spark, 100).count == 88)
+
+      spark.range(1000).write.mode("overwrite").parquet(path)
+      assert(f(path, spark, 1000).count == 988)
+    }
+  }
 }
