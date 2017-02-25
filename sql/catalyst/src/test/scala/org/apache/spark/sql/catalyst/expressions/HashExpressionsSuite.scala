@@ -18,18 +18,20 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
+import java.util.TimeZone
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
@@ -166,6 +168,97 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHash(UTF8String.fromString("数据砖头"), StringType, -898686242L)
     checkHiveHash(UTF8String.fromString("नमस्ते"), StringType, 2006045948L)
     // scalastyle:on nonascii
+  }
+
+  test("hive-hash for date type") {
+    def checkHiveHashForDateType(dateString: String, expected: Long): Unit = {
+      checkHiveHash(
+        DateTimeUtils.stringToDate(UTF8String.fromString(dateString)).get,
+        DateType,
+        expected)
+    }
+
+    // basic case
+    checkHiveHashForDateType("2017-01-01", 17167)
+
+    // boundary cases
+    checkHiveHashForDateType("0000-01-01", -719530)
+    checkHiveHashForDateType("9999-12-31", 2932896)
+
+    // epoch
+    checkHiveHashForDateType("1970-01-01", 0)
+
+    // before epoch
+    checkHiveHashForDateType("1800-01-01", -62091)
+
+    // Invalid input: bad date string. Hive returns 0 for such cases
+    intercept[NoSuchElementException](checkHiveHashForDateType("0-0-0", 0))
+    intercept[NoSuchElementException](checkHiveHashForDateType("-1212-01-01", 0))
+    intercept[NoSuchElementException](checkHiveHashForDateType("2016-99-99", 0))
+
+    // Invalid input: Empty string. Hive returns 0 for this case
+    intercept[NoSuchElementException](checkHiveHashForDateType("", 0))
+
+    // Invalid input: February 30th for a leap year. Hive supports this but Spark doesn't
+    intercept[NoSuchElementException](checkHiveHashForDateType("2016-02-30", 16861))
+  }
+
+  test("hive-hash for timestamp type") {
+    def checkHiveHashForTimestampType(
+        timestamp: String,
+        expected: Long,
+        timeZone: TimeZone = TimeZone.getTimeZone("UTC")): Unit = {
+      checkHiveHash(
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), timeZone).get,
+        TimestampType,
+        expected)
+    }
+
+    // basic case
+    checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445725271)
+
+    // with higher precision
+    checkHiveHashForTimestampType("2017-02-24 10:56:29.111111", 1353936655)
+
+    // with different timezone
+    checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
+      TimeZone.getTimeZone("US/Pacific"))
+
+    // boundary cases
+    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645926784)
+    checkHiveHashForTimestampType("9999-01-01 00:00:00", -1081818240)
+
+    // epoch
+    checkHiveHashForTimestampType("1970-01-01 00:00:00", 0)
+
+    // before epoch
+    checkHiveHashForTimestampType("1800-01-01 03:12:45", -267420885)
+
+    // Invalid input: bad timestamp string. Hive returns 0 for such cases
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("0-0-0 0:0:0", 0))
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("-99-99-99 99:99:45", 0))
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("555555-55555-5555", 0))
+
+    // Invalid input: Empty string. Hive returns 0 for this case
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("", 0))
+
+    // Invalid input: February 30th for a leap year. Hive supports this but Spark doesn't
+    intercept[NoSuchElementException](checkHiveHashForTimestampType("2016-02-30 00:00:00", 0))
+
+    // Invalid input: Hive accepts upto 9 decimal place precision but Spark uses upto 6
+    intercept[TestFailedException](checkHiveHashForTimestampType("2017-02-24 10:56:29.11111111", 0))
+  }
+
+  test("hive-hash for CalendarInterval type") {
+    def checkHiveHashForTimestampType(interval: String, expected: Long): Unit = {
+      val foo = CalendarInterval.fromString(interval)
+      checkHiveHash(foo, CalendarIntervalType, expected)
+    }
+
+    checkHiveHashForTimestampType("interval 1 day", 3220073)
+    checkHiveHashForTimestampType("interval 6 day 15 hour", 21202073)
+    checkHiveHashForTimestampType("interval -23 day 56 hour -1111113 minute 9898989 second",
+      -2128468593)
   }
 
   test("hive-hash for array") {

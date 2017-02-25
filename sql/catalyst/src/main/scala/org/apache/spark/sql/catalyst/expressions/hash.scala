@@ -335,6 +335,8 @@ abstract class HashExpression[E] extends Expression {
     }
   }
 
+  protected def genHashTimestamp(t: String, result: String): String = genHashLong(t, result)
+
   protected def genHashCalendarInterval(input: String, result: String): String = {
     val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
@@ -400,7 +402,8 @@ abstract class HashExpression[E] extends Expression {
     case NullType => ""
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
-    case LongType | TimestampType => genHashLong(input, result)
+    case LongType => genHashLong(input, result)
+    case TimestampType => genHashTimestamp(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
@@ -580,8 +583,6 @@ object XxHash64Function extends InterpretedHashFunction {
  *
  * We should use this hash function for both shuffle and bucket of Hive tables, so that
  * we can guarantee shuffle and bucketing have same data distribution
- *
- * TODO: Support date related types
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.")
@@ -648,10 +649,13 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashCalendarInterval(input: String, result: String): String = {
     s"""
-        $result = (31 * $hasherClassName.hashInt($input.months)) +
-          $hasherClassName.hashLong($input.microseconds);"
+      $result =
+        org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashCalendarInterval($input);
      """
   }
+
+  override protected def genHashTimestamp(input: String, result: String): String =
+    s"$result = org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashTimestamp($input);"
 
   override protected def genHashString(input: String, result: String): String = {
     val baseObject = s"$input.getBaseObject()"
@@ -781,6 +785,38 @@ object HiveHashFunction extends InterpretedHashFunction {
     result
   }
 
+  /**
+   * Mimics TimestampWritable.hashCode() in Hive
+   */
+  def hashTimestamp(timestamp: Long): Long = {
+    val timestampInSeconds = timestamp / 1000000
+    val nanoSecondsPortion = (timestamp % 1000000) * 1000
+
+    var result = timestampInSeconds
+    result <<= 30 // the nanosecond part fits in 30 bits
+    result |= nanoSecondsPortion
+    ((result >>> 32) ^ result).toInt
+  }
+
+  /**
+   * Hive allows input intervals to be defined using units below but the intervals
+   * have to be from the same category:
+   * - year, month (stored as HiveIntervalYearMonth)
+   * - day, hour, minute, second, nanosecond (stored as HiveIntervalDayTime)
+   *
+   * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
+   *
+   * This method mimics HiveIntervalDayTime.hashCode() in Hive. If the `INTERVAL` is backed as
+   * HiveIntervalYearMonth in Hive, then this method will not produce Hive compatible result.
+   * The reason being Spark's representation of calendar does not have such categories based on
+   * the interval and is unified.
+   */
+  def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
+    val totalSeconds = calendarInterval.milliseconds() / 1000
+    val result = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
+    result * 37
+  }
+
   override def hash(value: Any, dataType: DataType, seed: Long): Long = {
     value match {
       case null => 0
@@ -834,10 +870,10 @@ object HiveHashFunction extends InterpretedHashFunction {
         }
         result
 
-      case d: Decimal =>
-        normalizeDecimal(d.toJavaBigDecimal).hashCode()
-
-      case _ => super.hash(value, dataType, seed)
+      case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
+      case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
+      case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
+      case _ => super.hash(value, dataType, 0)
     }
   }
 }
