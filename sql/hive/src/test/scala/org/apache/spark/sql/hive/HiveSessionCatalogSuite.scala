@@ -30,21 +30,16 @@ import org.apache.spark.sql.internal.SQLConf
 class HiveSessionCatalogSuite extends SessionCatalogSuite {
 
   test("clone HiveSessionCatalog") {
-    val sparkSession = SparkSession.builder().master("local").enableHiveSupport().getOrCreate()
-    val original = HiveSessionCatalog(
-      sparkSession,
-      DummyFunctionResourceLoader,
-      new SimpleFunctionRegistry,
-      new SQLConf,
-      new Configuration(),
-      CatalystSqlParser)
+    val hiveSession = SparkSession.builder().master("local").enableHiveSupport().getOrCreate()
+    assert(hiveSession.sessionState.catalog.isInstanceOf[HiveSessionCatalog])
+    val original = hiveSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
 
     val tempTable1 = Range(1, 10, 1, 10)
     original.createTempView("copytest1", tempTable1, overrideIfExists = false)
 
     // check if tables copied over
     val clone = original.clone(
-      sparkSession,
+      hiveSession,
       new SQLConf,
       new Configuration(),
       new SimpleFunctionRegistry,
@@ -60,5 +55,4 @@ class HiveSessionCatalogSuite extends SessionCatalogSuite {
     original.createTempView("copytest2", tempTable2, overrideIfExists = false)
     assert(clone.getTempView("copytest2").isEmpty)
   }
-
 }

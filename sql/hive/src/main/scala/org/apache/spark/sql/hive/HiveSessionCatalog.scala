@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
@@ -77,7 +77,7 @@ private[sql] class HiveSessionCatalog(
    * The table relation cache will not be populated.
    * @note `externalCatalog` and `globalTempViewManager` are from shared state, don't need
    * deep copy. `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
-   * All arguments passed in should be associated with `sparkSession`.
+   * All arguments passed in should be associated with `newSparkSession`.
    * This should ideally override `SessionCatalog.clone()` but does not at present, since
    * `HiveMetastoreCatalog` is dependent on `SparkSession`.
    */
@@ -104,6 +104,13 @@ private[sql] class HiveSessionCatalog(
 
     catalog
   }
+
+  override def clone(
+    conf: CatalystConf,
+    hadoopConf: Configuration,
+    functionRegistry: FunctionRegistry,
+    parser: ParserInterface): HiveSessionCatalog = throw new UnsupportedOperationException(
+    "to clone HiveSessionCatalog, use the other clone method that also accepts a SparkSession")
 
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {

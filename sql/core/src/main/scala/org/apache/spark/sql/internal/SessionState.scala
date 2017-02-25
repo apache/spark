@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
@@ -91,15 +88,16 @@ private[sql] class SessionState(
   def clone(newSparkSession: SparkSession): SessionState = {
     val sparkContext = newSparkSession.sparkContext
     val confCopy = conf.clone()
-    val hadoopConfCopy = SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy)
     val functionRegistryCopy = functionRegistry.clone()
     val sqlParser: ParserInterface = new SparkSqlParser(confCopy)
-    val catalogCopy = catalog.clone(confCopy, hadoopConfCopy, functionRegistryCopy, sqlParser)
-    val queryExecution = (plan: LogicalPlan) => new QueryExecution(newSparkSession, plan)
+    val catalogCopy = catalog.clone(
+      confCopy,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy),
+      functionRegistryCopy,
+      sqlParser)
+    val queryExecutionCreator = (plan: LogicalPlan) => new QueryExecution(newSparkSession, plan)
 
-    sparkContext.getConf.getAll.foreach { case (k, v) =>
-      confCopy.setConfString(k, v)
-    }
+    SessionState.mergeSparkConf(confCopy, sparkContext.getConf)
 
     new SessionState(
       sparkContext,
@@ -111,7 +109,7 @@ private[sql] class SessionState(
       sqlParser,
       SessionState.createAnalyzer(newSparkSession, catalogCopy, confCopy),
       new StreamingQueryManager(newSparkSession),
-      queryExecution)
+      queryExecutionCreator)
   }
 
   // ------------------------------------------------------
@@ -144,9 +142,7 @@ object SessionState {
     val sqlConf = conf.getOrElse(new SQLConf)
 
     // Automatically extract all entries and put them in our SQLConf
-    sparkContext.getConf.getAll.foreach { case (k, v) =>
-      sqlConf.setConfString(k, v)
-    }
+    mergeSparkConf(sqlConf, sparkContext.getConf)
 
     // Internal catalog for managing functions registered by the user.
     val functionRegistry = FunctionRegistry.builtin.clone()
@@ -232,4 +228,12 @@ object SessionState {
     }
   }
 
+  /**
+   * Extract entries from `SparkConf` and put them in the `SQLConf`
+   */
+  def mergeSparkConf(sqlConf: SQLConf, sparkConf: SparkConf): Unit = {
+    sparkConf.getAll.foreach { case (k, v) =>
+      sqlConf.setConfString(k, v)
+    }
+  }
 }

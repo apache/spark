@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
@@ -107,35 +107,47 @@ private[hive] class HiveSessionState(
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
+  /**
+   * Get an identical copy of the `HiveSessionState`.
+   * This should ideally reuse the `SessionState.clone` but cannot do so.
+   * Doing that will throw an exception when trying to clone the catalog.
+   */
   override def clone(newSparkSession: SparkSession): HiveSessionState = {
     val sparkContext = newSparkSession.sparkContext
-    val copyHelper = super.clone(newSparkSession)
+    val confCopy = conf.clone()
+    val functionRegistryCopy = functionRegistry.clone()
+    val experimentalMethodsCopy = experimentalMethods.clone()
+    val sqlParser: ParserInterface = new SparkSqlParser(confCopy)
     val catalogCopy = catalog.clone(
       newSparkSession,
-      copyHelper.conf,
-      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, copyHelper.conf),
-      copyHelper.functionRegistry,
-      copyHelper.sqlParser)
+      confCopy,
+      SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy),
+      functionRegistryCopy,
+      sqlParser)
+    val queryExecutionCreator = (plan: LogicalPlan) => new QueryExecution(newSparkSession, plan)
+
     val hiveClient =
       newSparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .newSession()
 
+    SessionState.mergeSparkConf(confCopy, sparkContext.getConf)
+
     new HiveSessionState(
       sparkContext,
       newSparkSession.sharedState,
-      copyHelper.conf,
-      copyHelper.experimentalMethods,
-      copyHelper.functionRegistry,
+      confCopy,
+      experimentalMethodsCopy,
+      functionRegistryCopy,
       catalogCopy,
-      copyHelper.sqlParser,
+      sqlParser,
       hiveClient,
-      HiveSessionState.createAnalyzer(newSparkSession, catalogCopy, copyHelper.conf),
-      copyHelper.streamingQueryManager,
-      copyHelper.queryExecutionCreator,
+      HiveSessionState.createAnalyzer(newSparkSession, catalogCopy, confCopy),
+      new StreamingQueryManager(newSparkSession),
+      queryExecutionCreator,
       HiveSessionState.createPlannerCreator(
         newSparkSession,
-        copyHelper.conf,
-        copyHelper.experimentalMethods))
+        confCopy,
+        experimentalMethodsCopy))
   }
 
 }

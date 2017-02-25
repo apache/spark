@@ -157,9 +157,7 @@ private[hive] class TestHiveSparkSession(
       }
     val queryExecutionCreator = (plan: LogicalPlan) => new TestHiveQueryExecution(this, plan)
     val initHelper = HiveSessionState(this, Some(testConf))
-    sparkContext.getConf.getAll.foreach { case (k, v) =>
-      testConf.setConfString(k, v)
-    }
+    SessionState.mergeSparkConf(testConf, sparkContext.getConf)
 
     new HiveSessionState(
       sparkContext,

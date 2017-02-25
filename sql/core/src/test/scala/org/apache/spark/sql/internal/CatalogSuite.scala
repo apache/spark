@@ -503,6 +503,7 @@ class CatalogSuite
     // inheritance
     val forkedSession = spark.cloneSession()
     assert(spark ne forkedSession)
+    assert(spark.catalog ne forkedSession.catalog)
     assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
 
     // independence
