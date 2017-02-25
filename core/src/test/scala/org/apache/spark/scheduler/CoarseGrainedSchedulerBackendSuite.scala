@@ -134,8 +134,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     val backend = new CoarseGrainedSchedulerBackend(taskScheduler, rpcEnv)
     backend.start()
-    backend.driverEndpoint.askWithRetry[Boolean](message)
-    backend.driverEndpoint.askWithRetry[Boolean](ReviveOffers)
+    backend.driverEndpoint.askSync[Boolean](message)
+    backend.driverEndpoint.askSync[Boolean](ReviveOffers)
     assert(taskIdToTaskSetManager(1L).isZombie === true)
     assert(taskIdToTaskSetManager(2L).isZombie === false)
     backend.stop()
