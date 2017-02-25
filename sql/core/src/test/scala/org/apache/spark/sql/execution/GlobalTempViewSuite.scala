@@ -160,7 +160,6 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       intercept[AnalysisException] {
         checkAnswer(spark.sql(s"SELECT $globalTempDB.t1.* FROM $globalTempDB.t1"), Row(1))
       }
-      
       checkAnswer(spark.sql(s"SELECT i1 FROM $globalTempDB.t1"), Row(1))
 
       // TODO: Fix this scenario

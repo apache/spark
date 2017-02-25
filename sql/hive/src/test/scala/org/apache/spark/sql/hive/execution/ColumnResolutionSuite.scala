@@ -130,12 +130,9 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
           withTempPath { f =>
             try {
               spark.catalog.setCurrentDatabase(db1)
-              spark.sql("CREATE TABLE t1(i1 INT)")
-              spark.sql("INSERT INTO t1 VALUES(1)")
+              spark.sql("CREATE TABLE t1 AS SELECT 1 AS i1")
               spark.catalog.setCurrentDatabase(db2)
-              spark.sql("CREATE TABLE t1(i1 INT)")
-              spark.sql("INSERT INTO t1 VALUES(20)")
-
+              spark.sql("CREATE TABLE t1 AS SELECT 20 AS i1")
               spark.catalog.setCurrentDatabase(db1)
 
               intercept[AnalysisException] {
@@ -219,8 +216,7 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
               """.stripMargin)
 
             spark.catalog.setCurrentDatabase(db2)
-            spark.sql("CREATE TABLE t1(i1 INT)")
-            spark.sql("INSERT INTO t1 VALUES(20)")
+            spark.sql("CREATE TABLE t1 AS SELECT 20 AS i1")
 
             spark.catalog.setCurrentDatabase(db1)
             checkAnswer(spark.sql("SELECT t1.* FROM t1"), Row(0))
@@ -277,13 +273,17 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
               |(path "$path2", header "false")
             """.stripMargin)
 
-          checkAnswer(spark.sql("SELECT * FROM t3 WHERE c1 IN " +
-            "(SELECT c2 FROM t4 WHERE t4.c3 = t3.c2)"), Row(4, 1))
+          checkAnswer(
+            spark.sql("SELECT * FROM t3 WHERE c1 IN (SELECT c2 FROM t4 WHERE t4.c3 = t3.c2)"),
+            Row(4, 1))
 
           // TODO: Support this scenario
           intercept[AnalysisException] {
-            spark.sql(s"SELECT * FROM $db1.t3 WHERE c1 IN " +
-              s"(SELECT $db1.t4.c2 FROM $db1.t4 WHERE $db1.t4.c3 = $db1.t3.c2)")
+            spark.sql(
+              s"""
+                |SELECT * FROM $db1.t3 WHERE c1 IN
+                |(SELECT $db1.t4.c2 FROM $db1.t4 WHERE $db1.t4.c3 = $db1.t3.c2)
+              """.stripMargin)
           }
 
         } finally {
