@@ -202,6 +202,21 @@ from the other deployment modes. See the [configuration page](configuration.html
     resource. Use alternatives such as Ingress if possible.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.submit.waitAppCompletion</code></td>
+  <td><code>true</code></td>
+  <td>
+    In cluster mode, whether to wait for the application to finish before exiting the launcher process.  When changed to
+    false, the launcher has a "fire-and-forget" behavior when launching the Spark job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.report.interval</code></td>
+  <td><code>1s</code></td>
+  <td>
+    Interval between reports of the current Spark job status in cluster mode.
+  </td>
+</tr>
 </table>
 
 ## Current Limitations
