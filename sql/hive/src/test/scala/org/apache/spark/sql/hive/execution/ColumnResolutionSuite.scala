@@ -322,7 +322,7 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
     withTempDatabase { db1 =>
       try {
         spark.catalog.setCurrentDatabase(db1)
-        spark.sql("CREATE TABLE t1(i1 INT, t1 struct<i1:INT, i2:INT>)")
+        spark.sql("CREATE TABLE t1(i1 INT, t1 STRUCT<i1:INT, i2:INT>)")
         spark.sql("INSERT INTO t1 VALUES(1, (2, 3))")
         checkAnswer(spark.sql(s"SELECT t1.i1 FROM t1"), Row(1))
         checkAnswer(spark.sql(s"SELECT t1.t1.i1 FROM t1"), Row(2))
