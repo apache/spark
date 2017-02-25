@@ -396,6 +396,31 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
+  test("All shuffle files should on the slave should be cleaned up when slave lost") {
+    // reset the test context with the right shuffle service config
+    afterEach()
+    val conf = new SparkConf()
+    conf.set("spark.shuffle.service.enabled", "true")
+    init(conf)
+    runEvent(ExecutorAdded("exec-hostA1", "hostA"))
+    runEvent(ExecutorAdded("exec-hostA2", "hostA"))
+    runEvent(ExecutorAdded("exec-hostB", "hostB"))
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 1))))
+    runEvent(ExecutorLost("exec-hostA1", SlaveLost("", true)))
+    val mapStatus = mapOutputTracker.mapStatuses.get(0).get.filter(_!= null)
+    assert(mapStatus.size === 1)
+    assert(mapStatus(0).location.executorId === "exec-hostB")
+    assert(mapStatus(0).location.host === "hostB")
+  }
+
   test("zero split job") {
     var numResults = 0
     var failureReason: Option[Exception] = None
