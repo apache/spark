@@ -120,8 +120,12 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .map(parsePortMappingsSpec)
         .getOrElse(List.empty)
 
+      val executorUser = conf
+        .getOption("spark.mesos.executor.docker.user")
+
       if (containerType == ContainerInfo.Type.DOCKER) {
-        containerInfo.setDocker(dockerInfo(image, forcePullImage, portMaps))
+        containerInfo
+          .setDocker(dockerInfo(image, forcePullImage, portMaps, executorUser))
       } else {
         containerInfo.setMesos(mesosInfo(image, forcePullImage))
       }
@@ -144,11 +148,20 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   private def dockerInfo(
       image: String,
       forcePullImage: Boolean,
-      portMaps: List[ContainerInfo.DockerInfo.PortMapping]): DockerInfo = {
+      portMaps: List[ContainerInfo.DockerInfo.PortMapping],
+      executorUser: Option[String] = None): DockerInfo = {
     val dockerBuilder = ContainerInfo.DockerInfo.newBuilder()
       .setImage(image)
       .setForcePullImage(forcePullImage)
     portMaps.foreach(dockerBuilder.addPortMappings(_))
+
+    if (!executorUser.isEmpty) {
+      val parameter: DockerInfo.Parameter.Builder = DockerInfo.Parameter
+        .newBuilder()
+        .setKey("user")
+        .setValue(executorUser.get())
+      dockerBuilder.addParameter(parameter)
+    }
 
     dockerBuilder.build
   }
