@@ -23,11 +23,12 @@ import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Paths, StandardOpenOption}
 import java.util
-import java.util.{Arrays, Collections}
+import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
 import scala.language.implicitConversions
+
 import com.google.common.io.Files
 import org.mockito.Matchers.anyString
 import org.mockito.Mockito._
@@ -35,6 +36,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.mock.MockitoSugar
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
