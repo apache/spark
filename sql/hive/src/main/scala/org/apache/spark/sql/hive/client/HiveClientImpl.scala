@@ -106,10 +106,6 @@ private[hive] class HiveClientImpl(
 
     // Set up kerberos credentials for UserGroupInformation.loginUser within
     // current class loader
-    // Instead of using the spark conf of the current spark context, a new
-    // instance of SparkConf is needed for the original value of spark.yarn.keytab
-    // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
-    // keytab configuration for the link name in distributed cache
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")
       val keytabFileName = sparkConf.get("spark.yarn.keytab")
@@ -668,7 +664,6 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
@@ -678,7 +673,6 @@ private[hive] class HiveClientImpl(
       s"$dbName.$tableName",
       partSpec,
       replace,
-      holdDDLTime,
       inheritTableSpecs,
       isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories,
       isSrcLocal = isSrcLocal)
@@ -688,14 +682,12 @@ private[hive] class HiveClientImpl(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     shim.loadTable(
       client,
       new Path(loadPath),
       tableName,
       replace,
-      holdDDLTime,
       isSrcLocal)
   }
 
@@ -705,8 +697,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit = withHiveState {
+      numDP: Int): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadDynamicPartitions(
       client,
@@ -715,7 +706,6 @@ private[hive] class HiveClientImpl(
       partSpec,
       replace,
       numDP,
-      holdDDLTime,
       listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
   }
 

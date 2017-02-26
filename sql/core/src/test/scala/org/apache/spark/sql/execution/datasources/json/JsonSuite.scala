@@ -1944,4 +1944,35 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode"))
     }
   }
+
+  test("Throw an exception if a `columnNameOfCorruptRecord` field violates requirements") {
+    val columnNameOfCorruptRecord = "_unparsed"
+    val schema = StructType(
+      StructField(columnNameOfCorruptRecord, IntegerType, true) ::
+        StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+    val errMsg = intercept[AnalysisException] {
+      spark.read
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .schema(schema)
+        .json(corruptRecords)
+    }.getMessage
+    assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      corruptRecords.toDF("value").write.text(path)
+      val errMsg = intercept[AnalysisException] {
+        spark.read
+          .option("mode", "PERMISSIVE")
+          .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+          .schema(schema)
+          .json(path)
+          .collect
+      }.getMessage
+      assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+    }
+  }
 }

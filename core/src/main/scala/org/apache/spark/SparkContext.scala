@@ -605,7 +605,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Some(Utils.getThreadDump())
       } else {
         val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -961,12 +961,11 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[LongWritable],
       classOf[BytesWritable],
       conf = conf)
-    val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+    br.map { case (k, v) =>
+      val bytes = v.copyBytes()
       assert(bytes.length == recordLength, "Byte array does not have correct length")
       bytes
     }
-    data
   }
 
   /**
@@ -1816,10 +1815,18 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null | "file" =>
             try {
+              val file = new File(uri.getPath)
+              if (!file.exists()) {
+                throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
+              }
+              if (file.isDirectory) {
+                throw new IllegalArgumentException(
+                  s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
+              }
               env.rpcEnv.fileServer.addJar(new File(uri.getPath))
             } catch {
-              case exc: FileNotFoundException =>
-                logError(s"Jar not found at $path")
+              case NonFatal(e) =>
+                logError(s"Failed to add $path to Spark environment", e)
                 null
             }
           // A JAR file which exists locally on every worker node
