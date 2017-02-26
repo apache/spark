@@ -76,9 +76,8 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
   }
 
   /**
-   * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
-   * `postToAll` in the same thread for all events. also remove the query id after all listeners
-   * process the QueryTerminatedEvent
+   * Override the parent `postToAll` to remove the query id from `activeQueryRunIds` after all
+   * the listeners process `QueryTerminatedEvent`. (SPARK-19594)
    */
   override def postToAll(event: Event): Unit = {
     super.postToAll(event)

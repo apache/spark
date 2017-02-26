@@ -133,50 +133,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("multiple listeners, check trigger events are generated correctly") {
-    val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
-    val df = inputData.toDS().as[Long].map { 10 / _ }
-    val numOfListenersToTest = 5
-    val listeners = (1 to numOfListenersToTest).map(_ => new EventCollector)
+  test("SPARK-19594: all of listeners should receive QueryTerminatedEvent") {
+    val df = MemoryStream[Int].toDS().as[Long]
+    val listeners = (1 to 5).map(_ => new EventCollector)
     try {
-      // No events until started
       listeners.foreach(listener => spark.streams.addListener(listener))
-      listeners.foreach(listener => assert(listener.startEvent === null))
-      listeners.foreach(listener => assert(listener.progressEvents.isEmpty))
-        listeners.foreach(listener => assert(listener.terminationEvent === null))
-
       testStream(df, OutputMode.Append)(
-
-        // Start event generated when query started
-        StartStream(ProcessingTime(100), triggerClock = clock),
-        AssertOnQuery { query =>
-          listeners.foreach(listener => assert(listener.startEvent !== null))
-          listeners.foreach(listener => assert(listener.startEvent.id === query.id))
-          listeners.foreach(listener => assert(listener.startEvent.runId === query.runId))
-          listeners.foreach(listener => assert(listener.startEvent.name === query.name))
-          listeners.foreach(listener => assert(listener.progressEvents.isEmpty))
-          listeners.foreach(listener => assert(listener.terminationEvent === null))
-          true
-        },
-
-        // Progress event generated when data processed
-        AddData(inputData, 1, 2),
-        AdvanceManualClock(100),
-        CheckAnswer(10, 5),
-        AssertOnQuery { query =>
-          listeners.foreach(listener => assert(listener.progressEvents.nonEmpty))
-          // SPARK-18868: We can't use query.lastProgress, because in progressEvents, we filter
-          // out non-zero input rows, but the lastProgress may be a zero input row trigger
-          val lastNonZeroProgress = query.recentProgress.filter(_.numInputRows > 0).lastOption
-            .getOrElse(fail("No progress updates received in StreamingQuery!"))
-          listeners.foreach(listener =>
-            assert(listener.progressEvents.last.json === lastNonZeroProgress.json))
-          listeners.foreach(listener => assert(listener.terminationEvent === null))
-          true
-        },
-
-        // Termination event generated when stopped cleanly
+        StartStream(),
         StopStream,
         AssertOnQuery { query =>
           eventually(Timeout(streamingTimeout)) {
@@ -188,35 +151,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
           true
-        },
-
-        // Termination event generated with exception message when stopped with error
-        StartStream(ProcessingTime(100), triggerClock = clock),
-        AddData(inputData, 0),
-        AdvanceManualClock(100),
-        ExpectFailure[SparkException](),
-        AssertOnQuery { query =>
-          eventually(Timeout(streamingTimeout)) {
-            listeners.foreach(listener => assert(listener.terminationEvent !== null))
-            listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
-            listeners.foreach(listener => assert(listener.terminationEvent.exception.nonEmpty))
-            // Make sure that the exception message reported through listener
-            // contains the actual exception and relevant stack trace
-            listeners.foreach(listener =>
-              assert(!listener.terminationEvent.exception.get.contains("StreamingQueryException")))
-            listeners.foreach(listener =>
-              assert(
-                listener.terminationEvent.exception.get.contains("java.lang.ArithmeticException")))
-            listeners.foreach(listener =>
-              assert(
-                listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite")))
-          }
-          listeners.foreach(listener => listener.checkAsyncErrors())
-          true
         }
       )
     } finally {
-      listeners.foreach(listener => spark.streams.removeListener(listener))
+      listeners.foreach(spark.streams.removeListener)
     }
   }
 
