@@ -138,10 +138,7 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
         if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
           import scala.collection.JavaConverters._
           val prevLastReportTimestamp = lastReportTimestamp
-          logWarning(s"At least the following SparkListenerEvents were dropped since " +
-            s"${new java.util.Date(prevLastReportTimestamp)}: " +
-            s"${droppedEvents.asScala.take(100).toArray.mkString(",")}")
-          logDebug(s"The dropped events (incomplete) since" +
+          logTrace(s"The dropped events (incomplete) since" +
             s" ${new java.util.Date(prevLastReportTimestamp)}: " +
             s"${droppedEvents.asScala.toArray.mkString(",")}")
           lastReportTimestamp = System.currentTimeMillis()
@@ -212,7 +209,7 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   def onDropEvent(event: SparkListenerEvent): Unit = {
     if (logDroppedEvent.compareAndSet(false, true)) {
       // Only log the following message once to avoid duplicated annoying logs.
-      logError(s"Dropping $event because no remaining room in event queue. " +
+      logError(s"Dropping SparkListenerEvent because no remaining room in event queue. " +
         "This likely means one of the SparkListeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
     }
