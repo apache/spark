@@ -28,6 +28,7 @@ import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.apache.commons.lang3.SerializationUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
@@ -65,7 +66,7 @@ abstract class BaseYarnClusterSuite
 
   var oldSystemProperties: Properties = null
 
-  def newYarnConfig(): YarnConfiguration
+  def newYarnConfig(): Configuration
 
   override def beforeAll() {
     super.beforeAll()
