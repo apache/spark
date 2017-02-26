@@ -26,19 +26,33 @@ import org.apache.spark.sql.types.{BooleanType, DateType, TimestampType, _}
 
 
 /** Value range of a column. */
-trait Range
+trait Range {
+  def contains(l: Literal): Boolean
+}
 
 /** For simplicity we use decimal to unify operations of numeric ranges. */
-case class NumericRange(min: JDecimal, max: JDecimal) extends Range
+case class NumericRange(min: JDecimal, max: JDecimal) extends Range {
+  override def contains(l: Literal): Boolean = {
+    val decimal = l.dataType match {
+      case BooleanType => if (l.value.asInstanceOf[Boolean]) new JDecimal(1) else new JDecimal(0)
+      case _ => new JDecimal(l.value.toString)
+    }
+    min.compareTo(decimal) <= 0 && max.compareTo(decimal) >= 0
+  }
+}
 
 /**
  * This version of Spark does not have min/max for binary/string types, we define their default
  * behaviors by this class.
  */
-class DefaultRange extends Range
+class DefaultRange extends Range {
+  override def contains(l: Literal): Boolean = true
+}
 
 /** This is for columns with only null values. */
-class NullRange extends Range
+class NullRange extends Range {
+  override def contains(l: Literal): Boolean = false
+}
 
 object Range {
   def apply(min: Option[Any], max: Option[Any], dataType: DataType): Range = dataType match {
@@ -56,20 +70,6 @@ object Range {
       false
     case (n1: NumericRange, n2: NumericRange) =>
       n1.min.compareTo(n2.max) <= 0 && n1.max.compareTo(n2.min) >= 0
-  }
-
-  def rangeContainsLiteral(r: Range, lit: Literal): Boolean = r match {
-    case _: DefaultRange => true
-    case _: NullRange => false
-    case n: NumericRange =>
-      val literalValue = if (lit.dataType.isInstanceOf[BooleanType]) {
-        if (lit.value.asInstanceOf[Boolean]) new JDecimal(1) else new JDecimal(0)
-      } else {
-        assert(lit.dataType.isInstanceOf[NumericType] || lit.dataType.isInstanceOf[DateType] ||
-          lit.dataType.isInstanceOf[TimestampType])
-        new JDecimal(lit.value.toString)
-      }
-      n.min.compareTo(literalValue) <= 0 && n.max.compareTo(literalValue) >= 0
   }
 
   /**
