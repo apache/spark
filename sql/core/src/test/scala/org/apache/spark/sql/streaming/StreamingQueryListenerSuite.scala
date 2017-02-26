@@ -133,6 +133,31 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("SPARK-19594: all of listeners should receive QueryTerminatedEvent") {
+    val df = MemoryStream[Int].toDS().as[Long]
+    val listeners = (1 to 5).map(_ => new EventCollector)
+    try {
+      listeners.foreach(listener => spark.streams.addListener(listener))
+      testStream(df, OutputMode.Append)(
+        StartStream(),
+        StopStream,
+        AssertOnQuery { query =>
+          eventually(Timeout(streamingTimeout)) {
+            listeners.foreach(listener => assert(listener.terminationEvent !== null))
+            listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
+            listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
+            listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
+          }
+          listeners.foreach(listener => listener.checkAsyncErrors())
+          listeners.foreach(listener => listener.reset())
+          true
+        }
+      )
+    } finally {
+      listeners.foreach(spark.streams.removeListener)
+    }
+  }
+
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
