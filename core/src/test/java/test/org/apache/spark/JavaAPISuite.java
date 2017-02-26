@@ -1071,7 +1071,7 @@ public class JavaAPISuite implements Serializable {
 
     rdd.mapToPair(pair -> new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2())))
       .saveAsNewAPIHadoopFile(outputDir, IntWritable.class, Text.class,
-      org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
+        org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
 
     JavaPairRDD<IntWritable, Text> output =
       sc.sequenceFile(outputDir, IntWritable.class, Text.class);
