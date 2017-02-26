@@ -3056,7 +3056,7 @@ object functions {
       case at @ ArrayType(_: StructType, _) => from_json(e, at, options)
       case dt =>
         throw new IllegalArgumentException(
-          s"Input schema ${dt.simpleString} must be a struct or an array of struct.")
+          s"Input schema ${dt.simpleString} must be a struct or an array of structs.")
     }
   }
 

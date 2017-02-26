@@ -143,7 +143,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage
 
     assert(message.contains(
-      "Input schema array<string> must be a struct or an array of struct."))
+      "Input schema array<string> must be a struct or an array of structs."))
   }
 
   test("to_json") {

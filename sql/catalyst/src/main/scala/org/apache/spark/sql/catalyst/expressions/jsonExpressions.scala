@@ -496,10 +496,10 @@ case class JsonToStruct(
   override def checkInputDataTypes(): TypeCheckResult = {
     super.checkInputDataTypes()
     schema match {
-      case st: StructType => TypeCheckResult.TypeCheckSuccess
-      case ArrayType(st: StructType, _) => TypeCheckResult.TypeCheckSuccess
+      case _: StructType => TypeCheckResult.TypeCheckSuccess
+      case ArrayType(_: StructType, _) => TypeCheckResult.TypeCheckSuccess
       case _ => TypeCheckResult.TypeCheckFailure(
-        s"Input schema ${schema.simpleString} must be a struct or an array of struct.")
+        s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
     }
   }
 
