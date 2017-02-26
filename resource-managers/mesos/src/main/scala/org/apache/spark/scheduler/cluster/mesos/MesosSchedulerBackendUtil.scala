@@ -99,6 +99,27 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
+  /**
+   * Parse a comma-delimited list of arbitrary parameters, each of which
+   * takes the form key=value
+   */
+  def parseParamsSpec(params: String): List[DockerInfo.Parameter] = {
+    params.split(",").map(_.split("=")).flatMap { kv: Array[String] =>
+      val param: DockerInfo.Parameter.Builder = DockerInfo.Parameter
+        .newBuilder()
+      kv match {
+        case Array(key, value) =>
+          Some(param.setKey(key).setValue(value))
+        case kv =>
+          logWarning(s"Unable to parse arbitary parameters: $params. "
+            + "Expected form: \"key=value(, ...)\"")
+          None
+      }
+    }
+    .map { _.build() }
+    .toList
+  }
+
   def containerInfo(conf: SparkConf): ContainerInfo = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
@@ -120,12 +141,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .map(parsePortMappingsSpec)
         .getOrElse(List.empty)
 
-      val executorUser = conf
-        .getOption("spark.mesos.executor.docker.user")
+      val params = conf
+        .getOption("spark.mesos.executor.docker.params")
+        .map(parseParamsSpec)
+        .getOrElse(List.empty)
 
       if (containerType == ContainerInfo.Type.DOCKER) {
         containerInfo
-          .setDocker(dockerInfo(image, forcePullImage, portMaps, executorUser))
+          .setDocker(dockerInfo(image, forcePullImage, portMaps, params))
       } else {
         containerInfo.setMesos(mesosInfo(image, forcePullImage))
       }
@@ -149,19 +172,12 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       image: String,
       forcePullImage: Boolean,
       portMaps: List[ContainerInfo.DockerInfo.PortMapping],
-      executorUser: Option[String] = None): DockerInfo = {
+      params: List[ContainerInfo.DockerInfo.Parameter]): DockerInfo = {
     val dockerBuilder = ContainerInfo.DockerInfo.newBuilder()
       .setImage(image)
       .setForcePullImage(forcePullImage)
     portMaps.foreach(dockerBuilder.addPortMappings(_))
-
-    if (!executorUser.isEmpty) {
-      val parameter: DockerInfo.Parameter.Builder = DockerInfo.Parameter
-        .newBuilder()
-        .setKey("user")
-        .setValue(executorUser.get())
-      dockerBuilder.addParameter(parameter)
-    }
+    params.foreach(dockerBuilder.addParameter(_))
 
     dockerBuilder.build
   }
