@@ -227,11 +227,8 @@ class KafkaSourceSuite extends KafkaSourceTest {
       }
 
       Seq(
-        s"Failed to read log file ${metadataPath.getCanonicalPath}/0",
-        s"UnsupportedLogVersion: maximum supported log version is v${KafkaSource.VERSION}, but " +
-          s"encountered v99999",
-        "The log file was produced by a newer version of Spark and cannot be read by this version",
-        "Please upgrade"
+        s"maximum supported log version is v${KafkaSource.VERSION}, but encountered v99999",
+        "produced by a newer version of Spark and cannot be read by this version"
       ).foreach { message =>
         assert(e.getMessage.contains(message))
       }

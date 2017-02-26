@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io._
-import java.lang.IllegalStateException
 import java.nio.charset.StandardCharsets
 import java.util.{ConcurrentModificationException, EnumSet, UUID}
 
@@ -283,8 +282,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   private[sql] def parseVersion(text: String, maxSupportedVersion: Int): Int = {
     if (text.length > 0 && text(0) == 'v') {
       val version =
-        try { text.substring(1, text.length).toInt }
-        catch {
+        try {
+          text.substring(1, text.length).toInt
+        } catch {
           case _: NumberFormatException =>
             throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
               s"version from $text.")
@@ -294,8 +294,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
             s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
             s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
-        }
-        else {
+        } else {
           return version
         }
       }

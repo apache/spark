@@ -79,11 +79,8 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
         log.get(0)
       }
       Seq(
-        s"Failed to read log file ${dir.getCanonicalPath}/0",
-        s"UnsupportedLogVersion: maximum supported log version is v${OffsetSeqLog.VERSION}, but " +
-          s"encountered v99999",
-        "The log file was produced by a newer version of Spark and cannot be read by this version",
-        "Please upgrade"
+        s"maximum supported log version is v${OffsetSeqLog.VERSION}, but encountered v99999",
+        "produced by a newer version of Spark and cannot be read by this version"
       ).foreach { message =>
         assert(e.getMessage.contains(message))
       }

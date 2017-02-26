@@ -146,9 +146,8 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
       val e = intercept[IllegalStateException] { metadataLog.parseVersion("v200", 100) }
       Seq(
-        s"UnsupportedLogVersion: maximum supported log version is v100, but encountered v200",
-        "The log file was produced by a newer version of Spark and cannot be read by this version",
-        "Please upgrade"
+        "maximum supported log version is v100, but encountered v200",
+        "produced by a newer version of Spark and cannot be read by this version"
       ).foreach { message =>
         assert(e.getMessage.contains(message))
       }

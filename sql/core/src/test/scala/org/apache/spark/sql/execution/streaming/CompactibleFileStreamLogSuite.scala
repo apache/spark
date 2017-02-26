@@ -174,10 +174,8 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
         reader.get(0)
       }
       Seq(
-        s"Failed to read log file ${dir.getCanonicalPath}/0",
-        "UnsupportedLogVersion: maximum supported log version is v1, but encountered v2",
-        "The log file was produced by a newer version of Spark and cannot be read by this version",
-        "Please upgrade"
+        "maximum supported log version is v1, but encountered v2",
+        "produced by a newer version of Spark and cannot be read by this version"
       ).foreach { message =>
         assert(e.getMessage.contains(message))
       }

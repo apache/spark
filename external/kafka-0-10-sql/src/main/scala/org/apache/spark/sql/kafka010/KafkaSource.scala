@@ -100,8 +100,7 @@ private[kafka010] class KafkaSource(
         override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
           out.write(0) // A zero byte is written to support Spark 2.1.0 (SPARK-19517)
           val writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8))
-          writer.write("v" + VERSION)
-          writer.write("\n")
+          writer.write("v" + VERSION + "\n")
           writer.write(metadata.json)
           writer.flush
         }
