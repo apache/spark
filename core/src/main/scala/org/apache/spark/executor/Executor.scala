@@ -148,6 +148,8 @@ private[spark] class Executor(
 
   startDriverHeartbeater()
 
+  private[executor] def numRunningTasks: Int = runningTasks.size()
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
@@ -677,7 +679,7 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
     try {
-      val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
+      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")
