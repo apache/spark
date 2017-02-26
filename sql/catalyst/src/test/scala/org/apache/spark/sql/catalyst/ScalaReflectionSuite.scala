@@ -337,6 +337,31 @@ class ScalaReflectionSuite extends SparkFunSuite {
       MapType(LongType, StringType, valueContainsNull = true))
     val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
     assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
+
+    import java.util.{Map => JMap}
+
+    val jmapSerializer = serializerFor[JMap[Int, Int]](BoundReference(
+      0, ObjectType(classOf[JMap[Int, Int]]), nullable = false))
+    assert(jmapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val jmapDeserializer = deserializerFor[JMap[Int, Int]]
+    assert(jmapDeserializer.dataType == ObjectType(classOf[JMap[_, _]]))
+
+    import java.util.{LinkedHashMap => JLHMap}
+    val jLHMapSerializer = serializerFor[JLHMap[Int, Int]](BoundReference(
+      0, ObjectType(classOf[JLHMap[Int, Int]]), nullable = false))
+    assert(jLHMapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val jLHMapDeserializer = deserializerFor[JLHMap[Int, Int]]
+    assert(jLHMapDeserializer.dataType == ObjectType(classOf[JLHMap[_, _]]))
+
+    import java.util.{TreeMap => JTreeMap}
+    val jTreeMapSerializer = serializerFor[JTreeMap[Long, String]](BoundReference(
+      0, ObjectType(classOf[JTreeMap[Long, String]]), nullable = false))
+    assert(jTreeMapSerializer.dataType.head.dataType ==
+      MapType(LongType, StringType, valueContainsNull = true))
+    val jTreeMapDeserializer = deserializerFor[JTreeMap[Long, String]]
+    assert(jTreeMapDeserializer.dataType == ObjectType(classOf[JTreeMap[_, _]]))
   }
 
   private val dataTypeForComplexData = dataTypeFor[ComplexData]

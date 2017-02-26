@@ -329,14 +329,9 @@ object ScalaReflection extends ScalaReflection {
         }
         UnresolvedMapObjects(mapFunction, getPath, Some(cls))
 
-      case t if t <:< localTypeOf[Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] || t <:< localTypeOf[java.util.Map[_, _]] =>
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
-
-        val cls = t.companion.member(TermName("newBuilder")) match {
-          case NoSymbol => classOf[Map[_, _]]
-          case _ => mirror.runtimeClass(t.typeSymbol.asClass)
-        }
 
         CollectObjectsToMap(
           p => deserializerFor(keyType, Some(p), walkedTypePath),
@@ -345,7 +340,7 @@ object ScalaReflection extends ScalaReflection {
           p => deserializerFor(valueType, Some(p), walkedTypePath),
           Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
           schemaFor(valueType).dataType,
-          cls
+          mirror.runtimeClass(t.typeSymbol.asClass)
         )
 
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
@@ -489,7 +484,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         toCatalystArray(inputObject, elementType)
 
-      case t if t <:< localTypeOf[Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] || t <:< localTypeOf[java.util.Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val keyClsName = getClassNameFromType(keyType)
         val valueClsName = getClassNameFromType(valueType)
@@ -703,7 +698,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if t <:< localTypeOf[Map[_, _]] =>
+      case t if t <:< localTypeOf[Map[_, _]] || t <:< localTypeOf[java.util.Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
         val Schema(valueDataType, valueNullable) = schemaFor(valueType)
         Schema(MapType(schemaFor(keyType).dataType,

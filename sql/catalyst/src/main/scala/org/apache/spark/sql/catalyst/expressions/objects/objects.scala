@@ -22,6 +22,7 @@ import java.lang.reflect.Modifier
 import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
@@ -714,7 +715,7 @@ object CollectObjectsToMap {
  *                            a lambda function to handle collection elements.
  * @param valueInputData An expression that when evaluated returns a collection object.
  * @param tupleLoopValue the name of the loop variable that holds the tuple to be added to the
-  *                      resulting map
+  *                      resulting map (used only for Scala Map)
  * @param collClass The type of the resulting collection.
  * @param builderValue The name of the builder variable used to construct the resulting collection.
  */
@@ -744,8 +745,6 @@ case class CollectObjectsToMap private(
   override def dataType: DataType = ObjectType(collClass)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collObjectName = s"${collClass.getName}$$.MODULE$$"
-    val getBuilderVar = s"$collObjectName.newBuilder()"
     val keyElementJavaType = ctx.javaType(keyLoopVarDataType)
     ctx.addMutableState("boolean", keyLoopIsNull, "")
     ctx.addMutableState(keyElementJavaType, keyLoopValue, "")
@@ -842,7 +841,61 @@ case class CollectObjectsToMap private(
     val valueLoopNullCheck =
       loopNullCheck(genValueInputData, valueInputDataType, valueLoopIsNull, valueLoopValue)
 
-    val tupleClass = classOf[(_, _)].getName
+    val constructBuilder = collClass match {
+      // Scala Map
+      case cls if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
+        val builderClass = classOf[Builder[_, _]].getName
+        s"""
+          $builderClass $builderValue = ${collClass.getName}$$.MODULE$$.newBuilder();
+          $builderValue.sizeHint($dataLength);
+        """
+      // Java Map, AbstractMap => HashMap
+      case cls if classOf[java.util.Map[_, _]] == cls ||
+        classOf[java.util.AbstractMap[_, _]] == cls =>
+        val builderClass = classOf[java.util.HashMap[_, _]].getName
+        s"$builderClass $builderValue = new $builderClass($dataLength);"
+      // Java SortedMap, NavigableMap => TreeMap
+      case cls if classOf[java.util.SortedMap[_, _]] == cls ||
+        classOf[java.util.NavigableMap[_, _]] == cls =>
+        val builderClass = classOf[java.util.TreeMap[_, _]].getName
+        s"$builderClass $builderValue = new $builderClass();"
+      // Java ConcurrentMap => ConcurrentHashMap
+      case cls if classOf[java.util.concurrent.ConcurrentMap[_, _]] == cls =>
+        val builderClass = classOf[java.util.concurrent.ConcurrentHashMap[_, _]].getName
+        s"$builderClass $builderValue = new $builderClass();"
+      // Java ConcurrentNavigableMap => ConcurrentSkipListMap
+      case cls if classOf[java.util.concurrent.ConcurrentNavigableMap[_, _]] == cls =>
+        val builderClass = classOf[java.util.concurrent.ConcurrentSkipListMap[_, _]].getName
+        s"$builderClass $builderValue = new $builderClass();"
+      // Java concrete Map implementation
+      case cls =>
+        val builderClass = classOf[java.util.Map[_, _]].getName
+        // Check for constructor with capacity specification
+        if (Try(cls.getConstructor(Integer.TYPE)).isSuccess) {
+          s"$builderClass $builderValue = new ${cls.getName}($dataLength);"
+        } else {
+          s"$builderClass $builderValue = new ${cls.getName}();"
+        }
+    }
+
+    val (appendToBuilder, getBuilderResult) =
+      if (classOf[scala.collection.Map[_, _]].isAssignableFrom(collClass)) {
+        val tupleClass = classOf[(_, _)].getName
+        s"""
+          $tupleClass $tupleLoopValue;
+
+          if (${genValueFunction.isNull}) {
+            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
+          } else {
+            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, $genValueFunctionValue);
+          }
+
+          $builderValue.$$plus$$eq($tupleLoopValue);
+         """ -> s"${ev.value} = (${collClass.getName}) $builderValue.result();"
+      } else {
+        s"$builderValue.put($genKeyFunctionValue, $genValueFunctionValue);" ->
+          s"${ev.value} = (${collClass.getName}) $builderValue;"
+      }
 
     val code = s"""
       ${genKeyInputData.code}
@@ -861,8 +914,7 @@ case class CollectObjectsToMap private(
           throw new RuntimeException("Invalid state: Inconsistent lengths of key-value arrays");
         }
         int $dataLength = $getKeyLength;
-        ${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
-        $builderValue.sizeHint($dataLength);
+        $constructBuilder
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
@@ -874,24 +926,16 @@ case class CollectObjectsToMap private(
           ${genKeyFunction.code}
           ${genValueFunction.code}
 
-          $tupleClass $tupleLoopValue;
-
           if (${genKeyFunction.isNull}) {
             throw new RuntimeException("Found null in map key!");
           }
 
-          if (${genValueFunction.isNull}) {
-            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, null);
-          } else {
-            $tupleLoopValue = new $tupleClass($genKeyFunctionValue, $genValueFunctionValue);
-          }
-
-          $builderValue.$$plus$$eq($tupleLoopValue);
+          $appendToBuilder
 
           $loopIndex += 1;
         }
 
-        ${ev.value} = (${collClass.getName}) $builderValue.result();
+        $getBuilderResult
       }
     """
     ev.copy(code = code, isNull = genKeyInputData.isNull)

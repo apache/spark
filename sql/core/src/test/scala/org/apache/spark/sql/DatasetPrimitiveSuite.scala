@@ -289,6 +289,55 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(LHMap(Tuple1(1) -> Tuple1(2))).toDS(), LHMap(Tuple1(1) -> Tuple1(2)))
     checkDataset(Seq(LHMap(1 -> Tuple1(2))).toDS(), LHMap(1 -> Tuple1(2)))
     checkDataset(Seq(LHMap("test" -> 2.toLong)).toDS(), LHMap("test" -> 2.toLong))
+
+    def JMap[K, V](tuples: (K, V)*): java.util.Map[K, V] = {
+      import scala.collection.JavaConverters._
+      scala.collection.mutable.Map(tuples: _*).asJava
+    }
+
+    checkDataset(Seq(JMap(1 -> 2)).toDS(), JMap(1 -> 2))
+    checkDataset(Seq(JMap(1.toLong -> 2.toLong)).toDS(), JMap(1.toLong -> 2.toLong))
+    checkDataset(Seq(JMap(1.toDouble -> 2.toDouble)).toDS(), JMap(1.toDouble -> 2.toDouble))
+    checkDataset(Seq(JMap(1.toFloat -> 2.toFloat)).toDS(), JMap(1.toFloat -> 2.toFloat))
+    checkDataset(Seq(JMap(1.toByte -> 2.toByte)).toDS(), JMap(1.toByte -> 2.toByte))
+    checkDataset(Seq(JMap(1.toShort -> 2.toShort)).toDS(), JMap(1.toShort -> 2.toShort))
+    checkDataset(Seq(JMap(true -> false)).toDS(), JMap(true -> false))
+    checkDataset(Seq(JMap("test1" -> "test2")).toDS(), JMap("test1" -> "test2"))
+    checkDataset(Seq(JMap(Tuple1(1) -> Tuple1(2))).toDS(), JMap(Tuple1(1) -> Tuple1(2)))
+    checkDataset(Seq(JMap(1 -> Tuple1(2))).toDS(), JMap(1 -> Tuple1(2)))
+    checkDataset(Seq(JMap("test" -> 2.toLong)).toDS(), JMap("test" -> 2.toLong))
+
+    def JLHMap[K, V](tuples: (K, V)*): java.util.LinkedHashMap[K, V] = {
+      new java.util.LinkedHashMap[K, V](JMap(tuples: _*))
+    }
+
+    checkDataset(Seq(JLHMap(1 -> 2)).toDS(), JLHMap(1 -> 2))
+    checkDataset(Seq(JLHMap(1.toLong -> 2.toLong)).toDS(), JLHMap(1.toLong -> 2.toLong))
+    checkDataset(Seq(JLHMap(1.toDouble -> 2.toDouble)).toDS(), JLHMap(1.toDouble -> 2.toDouble))
+    checkDataset(Seq(JLHMap(1.toFloat -> 2.toFloat)).toDS(), JLHMap(1.toFloat -> 2.toFloat))
+    checkDataset(Seq(JLHMap(1.toByte -> 2.toByte)).toDS(), JLHMap(1.toByte -> 2.toByte))
+    checkDataset(Seq(JLHMap(1.toShort -> 2.toShort)).toDS(), JLHMap(1.toShort -> 2.toShort))
+    checkDataset(Seq(JLHMap(true -> false)).toDS(), JLHMap(true -> false))
+    checkDataset(Seq(JLHMap("test1" -> "test2")).toDS(), JLHMap("test1" -> "test2"))
+    checkDataset(Seq(JLHMap(Tuple1(1) -> Tuple1(2))).toDS(), JLHMap(Tuple1(1) -> Tuple1(2)))
+    checkDataset(Seq(JLHMap(1 -> Tuple1(2))).toDS(), JLHMap(1 -> Tuple1(2)))
+    checkDataset(Seq(JLHMap("test" -> 2.toLong)).toDS(), JLHMap("test" -> 2.toLong))
+
+    def JTreeMap[K, V](tuples: (K, V)*): java.util.TreeMap[K, V] = {
+      new java.util.TreeMap[K, V](JMap(tuples: _*))
+    }
+
+    checkDataset(Seq(JTreeMap(1 -> 2)).toDS(), JTreeMap(1 -> 2))
+    checkDataset(Seq(JTreeMap(1.toLong -> 2.toLong)).toDS(), JTreeMap(1.toLong -> 2.toLong))
+    checkDataset(Seq(JTreeMap(1.toDouble -> 2.toDouble)).toDS(),
+      JTreeMap(1.toDouble -> 2.toDouble))
+    checkDataset(Seq(JTreeMap(1.toFloat -> 2.toFloat)).toDS(), JTreeMap(1.toFloat -> 2.toFloat))
+    checkDataset(Seq(JTreeMap(1.toByte -> 2.toByte)).toDS(), JTreeMap(1.toByte -> 2.toByte))
+    checkDataset(Seq(JTreeMap(1.toShort -> 2.toShort)).toDS(), JTreeMap(1.toShort -> 2.toShort))
+    checkDataset(Seq(JTreeMap(true -> false)).toDS(), JTreeMap(true -> false))
+    checkDataset(Seq(JTreeMap("test1" -> "test2")).toDS(), JTreeMap("test1" -> "test2"))
+    checkDataset(Seq(JTreeMap(1 -> Tuple1(2))).toDS(), JTreeMap(1 -> Tuple1(2)))
+    checkDataset(Seq(JTreeMap("test" -> 2.toLong)).toDS(), JTreeMap("test" -> 2.toLong))
   }
 
   ignore("SPARK-19104: map and product combinations") {
