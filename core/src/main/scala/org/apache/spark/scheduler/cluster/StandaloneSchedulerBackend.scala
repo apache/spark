@@ -18,15 +18,18 @@
 package org.apache.spark.scheduler.cluster
 
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.deploy.{ApplicationDescription, Command, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
+import org.apache.spark.internal.config.{CREDENTIALS_RENEWAL_TIME, CREDENTIALS_UPDATE_TIME, KEYTAB, PRINCIPAL}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
@@ -65,6 +68,8 @@ private[spark] class StandaloneSchedulerBackend(
   private var principal: String = null
   private var keytab: String = null
   private var credentials: Credentials = null
+  private val credentialManager = new ConfigurableCredentialManager(sc.conf, sc.hadoopConfiguration)
+
 
   def setupCredentials(): Unit = {
     loginFromKeytab = sc.conf.contains(PRINCIPAL.key)
@@ -84,6 +89,7 @@ private[spark] class StandaloneSchedulerBackend(
     }
     // Defensive copy of the credentials
     credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+    logInfo("Credentials loaded: " + UserGroupInformation.getCurrentUser)
   }
 
 
@@ -143,7 +149,62 @@ private[spark] class StandaloneSchedulerBackend(
       }
     val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
-    client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
+
+
+
+
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    // Merge credentials obtained from registered providers
+    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(sc.hadoopConfiguration, credentials)
+
+    if (credentials != null) {
+      logDebug(SparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
+
+    // If we use principal and keytab to login, also credentials can be renewed some time
+    // after current time, we should pass the next renewal and updating time to credential
+    // renewer and updater.
+    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
+      nearestTimeOfNextRenewal != Long.MaxValue) {
+
+      // Valid renewal time is 75% of next renewal time, and the valid update time will be
+      // slightly later then renewal time (80% of next renewal time). This is to make sure
+      // credentials are renewed and updated before expired.
+      val currTime = System.currentTimeMillis()
+      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
+      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
+
+      sc.conf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
+      sc.conf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
+    }
+
+
+    def setupSecurityToken(appDesc: ApplicationDescription): ApplicationDescription = {
+      val dob = new DataOutputBuffer
+      credentials.writeTokenStorageToStream(dob)
+      appDesc.copy(tokens = Some(ByteBuffer.wrap(dob.getData)))
+    }
+
+    val secureAppDesc = setupSecurityToken(appDesc)
+
+    // If we passed in a keytab, make sure we copy the keytab to the staging directory on
+    // HDFS, and setup the relevant environment vars, so the AM can login again.
+//    if (loginFromKeytab) {
+//      logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
+//        " via the YARN Secure Distributed Cache.")
+//      val (_, localizedPath) = distribute(keytab,
+//        destName = sparkConf.get(KEYTAB),
+//        appMasterOnly = true)
+//      require(localizedPath != null, "Keytab file already distributed.")
+//    }
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+
+
+
+
+    client = new StandaloneAppClient(sc.env.rpcEnv, masters, secureAppDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()

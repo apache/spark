@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.scalatest.{Matchers, PrivateMethodTester}
 
-class HadoopFSCredentialProviderSuite 
+class HadoopFSCredentialProviderSuite
     extends SparkFunSuite
     with PrivateMethodTester
     with Matchers {

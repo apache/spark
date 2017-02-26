@@ -981,6 +981,7 @@ private[spark] class Client(
     amContainer
   }
 
+  // TODO - doesn't actually login from keytab!  That's done in SparkSubmit!
   def setupCredentials(): Unit = {
     loginFromKeytab = sparkConf.contains(PRINCIPAL.key)
     if (loginFromKeytab) {
