@@ -119,7 +119,8 @@ public class JavaRankingMetricsExample {
     JavaRDD<Tuple2<Object, Object>> ratesAndPreds =
       JavaPairRDD.fromJavaRDD(ratings.map(r ->
         new Tuple2<Tuple2<Integer, Integer>, Object>(
-          new Tuple2<>(r.user(), r.product()), r.rating())
+          new Tuple2<>(r.user(), r.product()),
+          r.rating())
       )).join(predictions).values();
 
     // Create regression metrics object

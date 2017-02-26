@@ -69,8 +69,7 @@ public class JavaTokenizerExample {
         .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 
     spark.udf().register(
-      "countTokens",
-      (WrappedArray<?> words) -> words.size(), DataTypes.IntegerType);
+      "countTokens", (WrappedArray<?> words) -> words.size(), DataTypes.IntegerType);
 
     Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
     tokenized.select("sentence", "words")
