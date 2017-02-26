@@ -142,8 +142,9 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       Arrays.asList(24));
 
     JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream<Integer> reducedWindowed = stream.reduceByWindow((x, y) -> x + y,
-                                                                 (x, y) -> x - y, new Duration(2000), new Duration(1000));
+    JavaDStream<Integer> reducedWindowed = stream.reduceByWindow(
+      (x, y) -> x + y,
+      (x, y) -> x - y, new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 4, 4);
 

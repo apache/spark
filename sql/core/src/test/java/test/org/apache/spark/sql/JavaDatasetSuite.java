@@ -110,7 +110,8 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(Arrays.asList("hello"), filtered.collectAsList());
 
 
-    Dataset<Integer> mapped = ds.map((MapFunction<String, Integer>) v -> v.length(), Encoders.INT());
+    Dataset<Integer> mapped =
+      ds.map((MapFunction<String, Integer>) v -> v.length(), Encoders.INT());
     Assert.assertEquals(Arrays.asList(5, 5), mapped.collectAsList());
 
     Dataset<String> parMapped = ds.mapPartitions((MapPartitionsFunction<String, String>) it -> {
@@ -161,13 +162,14 @@ public class JavaDatasetSuite implements Serializable {
         (MapFunction<String, Integer>) v -> v.length(),
       Encoders.INT());
 
-    Dataset<String> mapped = grouped.mapGroups((MapGroupsFunction<Integer, String, String>) (key, values) -> {
-      StringBuilder sb = new StringBuilder(key.toString());
-      while (values.hasNext()) {
-        sb.append(values.next());
-      }
-      return sb.toString();
-    }, Encoders.STRING());
+    Dataset<String> mapped =
+      grouped.mapGroups((MapGroupsFunction<Integer, String, String>) (key, values) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      }, Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
 
@@ -209,7 +211,8 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
-    Dataset<Tuple2<Integer, String>> reduced = grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);
+    Dataset<Tuple2<Integer, String>> reduced =
+      grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);
 
     Assert.assertEquals(
       asSet(tuple2(1, "a"), tuple2(3, "foobar")),

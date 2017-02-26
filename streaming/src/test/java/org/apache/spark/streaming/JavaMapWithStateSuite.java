@@ -146,7 +146,8 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
     int numBatches = expectedOutputs.size();
     JavaDStream<K> inputStream = JavaTestUtils.attachTestInputStream(ssc, input, 2);
     JavaMapWithStateDStream<K, Integer, S, T> mapWithStateDStream =
-        JavaPairDStream.fromJavaDStream(inputStream.map(x -> new Tuple2<>(x, 1))).mapWithState(mapWithStateSpec);
+        JavaPairDStream.fromJavaDStream(
+            inputStream.map(x -> new Tuple2<>(x, 1))).mapWithState(mapWithStateSpec);
 
     List<Set<T>> collectedOutputs =
         Collections.synchronizedList(new ArrayList<Set<T>>());
