@@ -529,7 +529,7 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addListener(logger)
+        listenerBus.addListener(logger, ListenerEventExecutor.EventLoggingGroup)
         Some(logger)
       } else {
         None
@@ -1878,7 +1878,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
-        s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
+        s"Cannot stop SparkContext within listener event executor thread")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
@@ -2355,7 +2355,7 @@ class SparkContext(config: SparkConf) extends Logging {
                 " parameter from breaking Spark's ability to find a valid constructor.")
           }
         }
-        listenerBus.addListener(listener)
+        listenerBus.addListener(listener, ListenerEventExecutor.DefaultUserEventListenerGroup)
         logInfo(s"Registered listener $className")
       }
     } catch {
