@@ -61,6 +61,7 @@ abstract class BaseYarnClusterSuite
   private var fakeSparkJar: File = _
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
+  protected var numNodeManagers: Int = 1
 
   var oldSystemProperties: Properties = null
 
@@ -84,7 +85,7 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage",
       "100.0")
 
-    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
+    yarnCluster = new MiniYARNCluster(getClass().getName(), numNodeManagers, 1, 1)
     yarnCluster.init(yarnConf)
     yarnCluster.start()
 
