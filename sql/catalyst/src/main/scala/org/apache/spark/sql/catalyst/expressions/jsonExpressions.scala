@@ -493,14 +493,11 @@ case class JsonToStruct(
   def this(schema: DataType, options: Map[String, String], child: Expression) =
     this(schema, options, child, None)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes()
-    schema match {
-      case _: StructType => TypeCheckResult.TypeCheckSuccess
-      case ArrayType(_: StructType, _) => TypeCheckResult.TypeCheckSuccess
-      case _ => TypeCheckResult.TypeCheckFailure(
-        s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
-    }
+  override def checkInputDataTypes(): TypeCheckResult = schema match {
+    case _: StructType | ArrayType(_: StructType, _) =>
+      super.checkInputDataTypes()
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
   }
 
   @transient
