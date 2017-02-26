@@ -22,7 +22,6 @@ import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet
 import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
@@ -165,7 +164,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
@@ -484,6 +483,79 @@ object JdbcUtils extends Logging {
   // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
   // `PreparedStatement`. The last argument `Int` means the index for the value to be set
   // in the SQL statement and also used for the value in `Row`.
+  private type JDBCInternalValueSetter = (PreparedStatement, InternalRow, Int) => Unit
+
+  def makeInternalSetter(
+                          conn: Connection,
+                          dialect: JdbcDialect,
+                          dataType: DataType): JDBCInternalValueSetter = dataType match {
+    case IntegerType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setInt(pos + 1, row.getInt(pos))
+
+    case LongType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setLong(pos + 1, row.getLong(pos))
+
+    case DoubleType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setDouble(pos + 1, row.getDouble(pos))
+
+    case FloatType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setFloat(pos + 1, row.getFloat(pos))
+
+    case ShortType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setInt(pos + 1, row.getShort(pos))
+
+    case ByteType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setInt(pos + 1, row.getByte(pos))
+
+    case BooleanType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setBoolean(pos + 1, row.getBoolean(pos))
+
+    case StringType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setString(pos + 1, row.getString(pos))
+
+    case BinaryType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setBytes(pos + 1, row.getBinary(pos))
+
+    case TimestampType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setTimestamp(pos + 1, row.get(pos, dataType).asInstanceOf[java.sql.Timestamp])
+
+    case DateType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setDate(pos + 1, row.get(pos, dataType).asInstanceOf[java.sql.Date])
+
+    case t: DecimalType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setBigDecimal(pos + 1, row.getDecimal(pos, 20, 4).toJavaBigDecimal)
+
+    case ArrayType(et, _) =>
+      // remove type length parameters from end of type name
+      val typeName = getJdbcType(et, dialect).databaseTypeDefinition
+        .toLowerCase.split("\\(")(0)
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        val array = conn.createArrayOf(
+          typeName,
+          row.getArray(pos).toObjectArray(et))
+        stmt.setArray(pos + 1, array)
+
+    case _ =>
+      (_: PreparedStatement, _: InternalRow, pos: Int) =>
+        throw new IllegalArgumentException(
+          s"Can't translate non-null value for field $pos")
+  }
+
+  // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
+  // `PreparedStatement`. The last argument `Int` means the index for the value to be set
+  // in the SQL statement and also used for the value in `Row`.
   private type JDBCValueSetter = (PreparedStatement, Row, Int) => Unit
 
   private def makeSetter(
@@ -676,6 +748,130 @@ object JdbcUtils extends Logging {
       }
     }
   }
+
+  /**
+   * Saves a partition of a DataFrame to the JDBC database.  This is done in
+   * a single database transaction (unless isolation level is "NONE")
+   * in order to avoid repeatedly inserting data as much as possible.
+   *
+   * It is still theoretically possible for rows in a DataFrame to be
+   * inserted into the database more than once if a stage somehow fails after
+   * the commit occurs but before the stage can return successfully.
+   *
+   * This is not a closure inside saveTable() because apparently cosmetic
+   * implementation changes elsewhere might easily render such a closure
+   * non-Serializable.  Instead, we explicitly close over all variables that
+   * are used.
+   */
+  def saveInternalPartition(
+                             getConnection: () => Connection,
+                             table: String,
+                             iterator: Iterator[InternalRow],
+                             rddSchema: StructType,
+                             insertStmt: String,
+                             batchSize: Int,
+                             dialect: JdbcDialect,
+                             isolationLevel: Int): Iterator[Byte] = {
+    val conn = getConnection()
+    var committed = false
+
+    var finalIsolationLevel = Connection.TRANSACTION_NONE
+    if (isolationLevel != Connection.TRANSACTION_NONE) {
+      try {
+        val metadata = conn.getMetaData
+        if (metadata.supportsTransactions()) {
+          // Update to at least use the default isolation, if any transaction level
+          // has been chosen and transactions are supported
+          val defaultIsolation = metadata.getDefaultTransactionIsolation
+          finalIsolationLevel = defaultIsolation
+          if (metadata.supportsTransactionIsolationLevel(isolationLevel))  {
+            // Finally update to actually requested level if possible
+            finalIsolationLevel = isolationLevel
+          } else {
+            logWarning(s"Requested isolation level $isolationLevel is not supported; " +
+              s"falling back to default isolation level $defaultIsolation")
+          }
+        } else {
+          logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
+        }
+      } catch {
+        case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
+      }
+    }
+    val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
+
+    try {
+      if (supportsTransactions) {
+        conn.setAutoCommit(false) // Everything in the same db transaction.
+        conn.setTransactionIsolation(finalIsolationLevel)
+      }
+      val stmt = conn.prepareStatement(insertStmt)
+      val setters = rddSchema.fields.map(f => makeInternalSetter(conn, dialect, f.dataType))
+      val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
+      val numFields = rddSchema.fields.length
+
+      try {
+        var rowCount = 0
+        while (iterator.hasNext) {
+          val row = iterator.next()
+          var i = 0
+          while (i < numFields) {
+            if (row.isNullAt(i)) {
+              stmt.setNull(i + 1, nullTypes(i))
+            } else {
+              setters(i).apply(stmt, row, i)
+            }
+            i = i + 1
+          }
+          stmt.addBatch()
+          rowCount += 1
+          if (rowCount % batchSize == 0) {
+            stmt.executeBatch()
+            rowCount = 0
+          }
+        }
+        if (rowCount > 0) {
+          stmt.executeBatch()
+        }
+      } finally {
+        stmt.close()
+      }
+      if (supportsTransactions) {
+        conn.commit()
+      }
+      committed = true
+      Iterator.empty
+    } catch {
+      case e: SQLException =>
+        val cause = e.getNextException
+        if (cause != null && e.getCause != cause) {
+          if (e.getCause == null) {
+            e.initCause(cause)
+          } else {
+            e.addSuppressed(cause)
+          }
+        }
+        throw e
+    } finally {
+      if (!committed) {
+        // The stage must fail.  We got here through an exception path, so
+        // let the exception through unless rollback() or close() want to
+        // tell the user about another problem.
+        if (supportsTransactions) {
+          conn.rollback()
+        }
+        conn.close()
+      } else {
+        // The stage must succeed.  We cannot propagate any exception close() might throw.
+        try {
+          conn.close()
+        } catch {
+          case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
+        }
+      }
+    }
+  }
+
 
   /**
    * Compute the schema string for this RDD.

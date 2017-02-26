@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Properties
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
+import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -212,6 +214,44 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    */
   def start(path: String): StreamingQuery = {
     option("path", path).start()
+  }
+
+  /**
+   * Saves the content of the `DataFrame` to an external database table via JDBC. In the case the
+   * table already exists in the external database, behavior of this function depends on the
+   * save mode, specified by the `mode` function (default to throwing an exception).
+   *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * You can set the following JDBC-specific option(s) for storing JDBC:
+   * <ul>
+   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
+   * </ul>
+   *
+   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
+   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this
+   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
+   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
+   * the user option `truncate` is ignored.
+   *
+   * @param url                  JDBC database url of the form `jdbc:subprotocol:subname`
+   * @param table                Name of the table in the external database.
+   * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
+   *                             tag/value. Normally at least a "user" and "password" property
+   *                             should be included. "batchsize" can be used to control the
+   *                             number of rows per insert. "isolationLevel" can be one of
+   *                             "NONE", "READ_COMMITTED", "READ_UNCOMMITTED", "REPEATABLE_READ",
+   *                             or "SERIALIZABLE", corresponding to standard transaction
+   *                             isolation levels defined by JDBC's Connection object, with default
+   *                             of "READ_UNCOMMITTED".
+   */
+  def jdbc(url: String, table: String, connectionProperties: Properties): StreamingQuery = {
+    // connectionProperties should override settings in extraOptions.
+    this.extraOptions ++= connectionProperties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").start()
   }
 
   /**

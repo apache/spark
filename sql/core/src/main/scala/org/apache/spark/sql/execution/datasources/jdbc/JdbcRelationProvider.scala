@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
-import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
+import org.apache.spark.sql.execution.streaming.{JdbcSink, Sink}
+import org.apache.spark.sql.sources._
+import org.apache.spark.sql.streaming.OutputMode
 
 class JdbcRelationProvider extends CreatableRelationProvider
-  with RelationProvider with DataSourceRegister {
+  with RelationProvider with DataSourceRegister with StreamSinkProvider{
 
   override def shortName(): String = "jdbc"
 
@@ -61,7 +63,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
       if (tableExists) {
         mode match {
           case SaveMode.Overwrite =>
-            if (options.isTruncate && isCascadingTruncateTable(options.url) == Some(false)) {
+            if (options.isTruncate && isCascadingTruncateTable(options.url).contains(false)) {
               // In this case, we should truncate table and then load.
               truncateTable(conn, options.table)
               val tableSchema = JdbcUtils.getSchemaOption(conn, options)
@@ -96,4 +98,34 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
     createRelation(sqlContext, parameters)
   }
+
+//  class JdbcSink(sqlContext: SQLContext,
+//                 parameters: Map[String, String],
+//                 partitionColumns: Seq[String],
+//                 outputMode: OutputMode) extends Sink {
+//    def addBatch(batchId: Long, data: DataFrame): Unit = {
+//      // TODO add code to log if batch is written and ignore committed batches
+//
+//      createRelation(sqlContext, saveMode(outputMode), parameters, data)
+//    }
+//
+//    def saveMode(outputMode: OutputMode): SaveMode = {
+//      if (outputMode==OutputMode.Append()) {
+//        SaveMode.Append
+//      } else if (outputMode==OutputMode.Complete()) {
+//        SaveMode.Overwrite
+//      } else {
+//        throw new IllegalArgumentException(s"Output mode $outputMode is not supported by JdbcSink")
+//      }
+//    }
+//  }
+
+  def createSink(sqlContext: SQLContext,
+                  parameters: Map[String, String],
+                  partitionColumns: Seq[String],
+                  outputMode: OutputMode): Sink = {
+    new JdbcSink(sqlContext, parameters, partitionColumns, outputMode)
+
+  }
+
 }
