@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Volume}
+import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -103,10 +103,13 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * Parse a comma-delimited list of arbitrary parameters, each of which
    * takes the form key=value
    */
-  def parseParamsSpec(params: String): List[DockerInfo.Parameter] = {
+  def parseParamsSpec(params: String): List[Parameter] = {
+    logWarning(s"DEBUG: parseParamsSpec() params=$params")
     params.split(",").map(_.split("=")).flatMap { kv: Array[String] =>
-      val param: DockerInfo.Parameter.Builder = DockerInfo.Parameter
-        .newBuilder()
+      val param: Parameter.Builder = Parameter.newBuilder()
+      val k = kv(0)
+      val v = kv(1)
+      logWarning(s"DEBUG: k=$k, v=$v")
       kv match {
         case Array(key, value) =>
           Some(param.setKey(key).setValue(value))
@@ -146,6 +149,9 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .map(parseParamsSpec)
         .getOrElse(List.empty)
 
+      val size = params.length
+      logWarning(s"DEBUG: param size is $size")
+
       if (containerType == ContainerInfo.Type.DOCKER) {
         containerInfo
           .setDocker(dockerInfo(image, forcePullImage, portMaps, params))
@@ -172,12 +178,12 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       image: String,
       forcePullImage: Boolean,
       portMaps: List[ContainerInfo.DockerInfo.PortMapping],
-      params: List[ContainerInfo.DockerInfo.Parameter]): DockerInfo = {
+      params: List[Parameter]): DockerInfo = {
     val dockerBuilder = ContainerInfo.DockerInfo.newBuilder()
       .setImage(image)
       .setForcePullImage(forcePullImage)
     portMaps.foreach(dockerBuilder.addPortMappings(_))
-    params.foreach(dockerBuilder.addParameter(_))
+    params.foreach(dockerBuilder.addParameters(_))
 
     dockerBuilder.build
   }
