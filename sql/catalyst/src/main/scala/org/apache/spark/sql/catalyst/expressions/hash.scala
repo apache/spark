@@ -649,13 +649,16 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
   override protected def genHashCalendarInterval(input: String, result: String): String = {
     s"""
-      $result =
+      $result = (int)
         org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashCalendarInterval($input);
      """
   }
 
   override protected def genHashTimestamp(input: String, result: String): String =
-    s"$result = org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashTimestamp($input);"
+    s"""
+      $result = (int)
+        org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashTimestamp($input);
+     """
 
   override protected def genHashString(input: String, result: String): String = {
     val baseObject = s"$input.getBaseObject()"
