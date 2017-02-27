@@ -17,7 +17,6 @@
 
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.regions.RegionUtils;
 import com.amazonaws.services.kinesis.model.Record;
 import org.junit.Test;
 
@@ -91,7 +90,8 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
     JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "testApp", "mySparkStream",
         "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
         new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, String.class,
-        "fakeAccessKey", "fakeSecretKey", "fakeSTSRoleArn", "fakeSTSSessionName", "fakeSTSExternalId");
+        "fakeAccessKey", "fakeSecretKey", "fakeSTSRoleArn", "fakeSTSSessionName",
+        "fakeSTSExternalId");
 
     ssc.stop();
   }

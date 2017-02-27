@@ -358,7 +358,7 @@ public class JavaAPISuite implements Serializable {
     // Regression test for SPARK-4459
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
     Function<Tuple2<Integer, Integer>, Boolean> areOdd =
-        x -> (x._1() % 2 == 0) && (x._2() % 2 == 0);
+      x -> (x._1() % 2 == 0) && (x._2() % 2 == 0);
     JavaPairRDD<Integer, Integer> pairRDD = rdd.zip(rdd);
     JavaPairRDD<Boolean, Iterable<Tuple2<Integer, Integer>>> oddsAndEvens = pairRDD.groupBy(areOdd);
     assertEquals(2, oddsAndEvens.count());
@@ -528,14 +528,14 @@ public class JavaAPISuite implements Serializable {
         new Tuple2<>(5, 3)), 2);
 
     Map<Integer, HashSet<Integer>> sets = pairs.aggregateByKey(new HashSet<Integer>(),
-         (a, b) -> {
-           a.add(b);
-           return a;
-         },
-         (a, b) -> {
-           a.addAll(b);
-           return a;
-         }).collectAsMap();
+       (a, b) -> {
+         a.add(b);
+         return a;
+       },
+       (a, b) -> {
+         a.addAll(b);
+         return a;
+       }).collectAsMap();
     assertEquals(3, sets.size());
     assertEquals(new HashSet<>(Arrays.asList(1)), sets.get(1));
     assertEquals(new HashSet<>(Arrays.asList(2)), sets.get(3));
@@ -666,8 +666,8 @@ public class JavaAPISuite implements Serializable {
     assertArrayEquals(expected_counts, histogram);
     // SPARK-5744
     assertArrayEquals(
-        new long[] {0},
-        sc.parallelizeDoubles(new ArrayList<>(0), 1).histogram(new double[]{0.0, 1.0}));
+      new long[] {0},
+      sc.parallelizeDoubles(new ArrayList<>(0), 1).histogram(new double[]{0.0, 1.0}));
   }
 
   private static class DoubleComparator implements Comparator<Double>, Serializable {
@@ -807,7 +807,7 @@ public class JavaAPISuite implements Serializable {
 
     // Regression test for SPARK-668:
     JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
-        item -> Collections.singletonList(item.swap()).iterator());
+      item -> Collections.singletonList(item.swap()).iterator());
     swapped.collect();
 
     // There was never a bug here, but it's worth testing:
@@ -845,11 +845,13 @@ public class JavaAPISuite implements Serializable {
   public void getNumPartitions(){
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
     JavaDoubleRDD rdd2 = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0), 2);
-    JavaPairRDD<String, Integer> rdd3 = sc.parallelizePairs(Arrays.asList(
-            new Tuple2<>("a", 1),
-            new Tuple2<>("aa", 2),
-            new Tuple2<>("aaa", 3)
-    ), 2);
+    JavaPairRDD<String, Integer> rdd3 = sc.parallelizePairs(
+      Arrays.asList(
+        new Tuple2<>("a", 1),
+        new Tuple2<>("aa", 2),
+        new Tuple2<>("aaa", 3)
+      ),
+      2);
     assertEquals(3, rdd1.getNumPartitions());
     assertEquals(2, rdd2.getNumPartitions());
     assertEquals(2, rdd3.getNumPartitions());
@@ -977,7 +979,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
     rdd.mapToPair(pair -> new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2())))
-        .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
+      .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
 
     // Try reading the output back as an object file
     JavaPairRDD<Integer, String> readRDD = sc.sequenceFile(outputDir, IntWritable.class,
@@ -1068,11 +1070,11 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
     rdd.mapToPair(pair -> new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2())))
-        .saveAsNewAPIHadoopFile(outputDir, IntWritable.class, Text.class,
+      .saveAsNewAPIHadoopFile(outputDir, IntWritable.class, Text.class,
         org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat.class);
 
     JavaPairRDD<IntWritable, Text> output =
-        sc.sequenceFile(outputDir, IntWritable.class, Text.class);
+      sc.sequenceFile(outputDir, IntWritable.class, Text.class);
     assertEquals(pairs.toString(), output.map(Tuple2::toString).collect().toString());
   }
 
@@ -1088,11 +1090,11 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
     rdd.mapToPair(pair -> new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2())))
-        .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
+      .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
 
     JavaPairRDD<IntWritable, Text> output = sc.newAPIHadoopFile(outputDir,
-        org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class,
-        IntWritable.class, Text.class, Job.getInstance().getConfiguration());
+      org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat.class,
+      IntWritable.class, Text.class, Job.getInstance().getConfiguration());
     assertEquals(pairs.toString(), output.map(Tuple2::toString).collect().toString());
   }
 
@@ -1135,10 +1137,10 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
     rdd.mapToPair(pair -> new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2())))
-        .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
+      .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
 
     JavaPairRDD<IntWritable, Text> output = sc.hadoopFile(outputDir,
-        SequenceFileInputFormat.class, IntWritable.class, Text.class);
+      SequenceFileInputFormat.class, IntWritable.class, Text.class);
     assertEquals(pairs.toString(), output.map(Tuple2::toString).collect().toString());
   }
 
@@ -1154,10 +1156,11 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
     rdd.mapToPair(pair -> new Tuple2<>(new IntWritable(pair._1()), new Text(pair._2())))
-        .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class,  DefaultCodec.class);
+      .saveAsHadoopFile(outputDir, IntWritable.class, Text.class,
+        SequenceFileOutputFormat.class, DefaultCodec.class);
 
     JavaPairRDD<IntWritable, Text> output = sc.hadoopFile(outputDir,
-        SequenceFileInputFormat.class, IntWritable.class, Text.class);
+      SequenceFileInputFormat.class, IntWritable.class, Text.class);
 
     assertEquals(pairs.toString(), output.map(Tuple2::toString).collect().toString());
   }
@@ -1263,23 +1266,23 @@ public class JavaAPISuite implements Serializable {
     Function2<Integer, Integer, Integer> mergeValueFunction = (v1, v2) -> v1 + v2;
 
     JavaPairRDD<Integer, Integer> combinedRDD = originalRDD.keyBy(keyFunction)
-        .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction);
+      .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction);
     Map<Integer, Integer> results = combinedRDD.collectAsMap();
     ImmutableMap<Integer, Integer> expected = ImmutableMap.of(0, 9, 1, 5, 2, 7);
     assertEquals(expected, results);
 
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
-        combinedRDD.rdd(),
-        JavaConverters.collectionAsScalaIterableConverter(
-            Collections.<RDD<?>>emptyList()).asScala().toSeq());
+      combinedRDD.rdd(),
+      JavaConverters.collectionAsScalaIterableConverter(
+        Collections.<RDD<?>>emptyList()).asScala().toSeq());
     combinedRDD = originalRDD.keyBy(keyFunction)
-        .combineByKey(
-             createCombinerFunction,
-             mergeValueFunction,
-             mergeValueFunction,
-             defaultPartitioner,
-             false,
-             new KryoSerializer(new SparkConf()));
+      .combineByKey(
+        createCombinerFunction,
+        mergeValueFunction,
+        mergeValueFunction,
+        defaultPartitioner,
+        false,
+        new KryoSerializer(new SparkConf()));
     results = combinedRDD.collectAsMap();
     assertEquals(expected, results);
   }
@@ -1291,11 +1294,10 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(i -> new Tuple2<>(i, i % 2));
     JavaPairRDD<Integer, Integer> rdd3 = rdd2.mapToPair(in -> new Tuple2<>(in._2(), in._1()));
     assertEquals(Arrays.asList(
-        new Tuple2<>(1, 1),
-        new Tuple2<>(0, 2),
-        new Tuple2<>(1, 3),
-        new Tuple2<>(0, 4)), rdd3.collect());
-
+      new Tuple2<>(1, 1),
+      new Tuple2<>(0, 2),
+      new Tuple2<>(1, 3),
+      new Tuple2<>(0, 4)), rdd3.collect());
   }
 
   @SuppressWarnings("unchecked")
@@ -1312,16 +1314,18 @@ public class JavaAPISuite implements Serializable {
     assertEquals(Arrays.asList(3, 4), parts[0]);
     assertEquals(Arrays.asList(5, 6, 7), parts[1]);
 
-    assertEquals(Arrays.asList(new Tuple2<>(1, 1),
-                                      new Tuple2<>(2, 0)),
-                        rdd2.collectPartitions(new int[] {0})[0]);
+    assertEquals(
+      Arrays.asList(new Tuple2<>(1, 1), new Tuple2<>(2, 0)),
+      rdd2.collectPartitions(new int[] {0})[0]);
 
     List<Tuple2<Integer,Integer>>[] parts2 = rdd2.collectPartitions(new int[] {1, 2});
     assertEquals(Arrays.asList(new Tuple2<>(3, 1), new Tuple2<>(4, 0)), parts2[0]);
-    assertEquals(Arrays.asList(new Tuple2<>(5, 1),
-                                      new Tuple2<>(6, 0),
-                                      new Tuple2<>(7, 1)),
-                        parts2[1]);
+    assertEquals(
+      Arrays.asList(
+        new Tuple2<>(5, 1),
+        new Tuple2<>(6, 0),
+        new Tuple2<>(7, 1)),
+      parts2[1]);
   }
 
   @Test
@@ -1352,7 +1356,6 @@ public class JavaAPISuite implements Serializable {
       double error = Math.abs((resCount - count) / count);
       assertTrue(error < 0.1);
     }
-
   }
 
   @Test
@@ -1531,8 +1534,8 @@ public class JavaAPISuite implements Serializable {
     SparkConf conf = new SparkConf();
     conf.registerKryoClasses(new Class<?>[]{ Class1.class, Class2.class });
     assertEquals(
-        Class1.class.getName() + "," + Class2.class.getName(),
-        conf.get("spark.kryo.classesToRegister"));
+      Class1.class.getName() + "," + Class2.class.getName(),
+      conf.get("spark.kryo.classesToRegister"));
   }
 
   @Test
