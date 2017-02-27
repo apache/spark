@@ -182,7 +182,7 @@ class FileIndexSuite extends SharedSQLContext {
   test("refresh for InMemoryFileIndex with FileStatusCache") {
     withTempDir { dir =>
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
-      val dirPath = new Path(dir.getCanonicalPath)
+      val dirPath = new Path(dir.getAbsolutePath)
       val catalog = new InMemoryFileIndex(spark, Seq(dirPath), Map.empty,
         None, fileStatusCache) {
         def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
@@ -197,11 +197,13 @@ class FileIndexSuite extends SharedSQLContext {
 
       catalog.refresh()
 
-      val path = new Path(file.getCanonicalPath)
-      assert(catalog.leafFilePaths.nonEmpty && catalog
-        .leafFilePaths.forall(p => p.toString.startsWith("file:/")))
-      assert(catalog.leafDirPaths.nonEmpty && catalog
-        .leafDirPaths.forall(p => p.toString.startsWith("file:/")))
+      assert(catalog.leafFilePaths.size == 1)
+      assert(catalog.leafFilePaths.head.toString.stripSuffix("/") ==
+        s"file:${file.getAbsolutePath.stripSuffix("/")}")
+
+      assert(catalog.leafDirPaths.size == 1)
+      assert(catalog.leafDirPaths.head.toString.stripSuffix("/") ==
+        s"file:${dir.getAbsolutePath.stripSuffix("/")}")
     }
   }
 }
