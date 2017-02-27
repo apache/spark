@@ -20,7 +20,7 @@ import org.apache.spark.ml.linalg._
 
 private[ml] trait DifferentiableLossAggregator[
     Datum,
-    Agg <: DifferentiableLossAggregator[Datum, Agg]] {
+    Agg <: DifferentiableLossAggregator[Datum, Agg]] extends Serializable {
 
   self: Agg =>
 

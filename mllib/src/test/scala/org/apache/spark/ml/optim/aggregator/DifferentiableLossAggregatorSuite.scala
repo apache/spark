@@ -21,22 +21,6 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.TestingUtils._
 
-class TestAggregator(numFeatures: Int)(coefficients: Vector)
-  extends DifferentiableLossAggregator[Instance, TestAggregator] {
-
-  protected override val dim: Int = numFeatures
-
-  override def add(instance: Instance): TestAggregator = {
-    val error = instance.label - BLAS.dot(coefficients, instance.features)
-    weightSum += instance.weight
-    lossSum += instance.weight * error * error / 2.0
-    (0 until dim).foreach { j =>
-      gradientSumArray(j) += error * instance.features(j)
-    }
-    this
-  }
-}
-
 class LossAggregatorSuite extends SparkFunSuite {
 
   val instances1 = Array(
@@ -140,6 +124,20 @@ class LossAggregatorSuite extends SparkFunSuite {
     assert(agg.loss ~== expectedLoss.sum / agg.weight absTol 1e-5)
     assert(agg.gradient ~== expectedGradient absTol 1e-5)
   }
+}
 
+class TestAggregator(numFeatures: Int)(coefficients: Vector)
+  extends DifferentiableLossAggregator[Instance, TestAggregator] {
 
+  protected override val dim: Int = numFeatures
+
+  override def add(instance: Instance): TestAggregator = {
+    val error = instance.label - BLAS.dot(coefficients, instance.features)
+    weightSum += instance.weight
+    lossSum += instance.weight * error * error / 2.0
+    (0 until dim).foreach { j =>
+      gradientSumArray(j) += error * instance.features(j)
+    }
+    this
+  }
 }
