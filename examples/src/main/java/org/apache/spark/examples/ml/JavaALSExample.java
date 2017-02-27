@@ -25,7 +25,6 @@ import org.apache.spark.sql.SparkSession;
 import java.io.Serializable;
 
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
@@ -88,11 +87,7 @@ public class JavaALSExample {
     // $example on$
     JavaRDD<Rating> ratingsRDD = spark
       .read().textFile("data/mllib/als/sample_movielens_ratings.txt").javaRDD()
-      .map(new Function<String, Rating>() {
-        public Rating call(String str) {
-          return Rating.parseRating(str);
-        }
-      });
+      .map(Rating::parseRating);
     Dataset<Row> ratings = spark.createDataFrame(ratingsRDD, Rating.class);
     Dataset<Row>[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
     Dataset<Row> training = splits[0];

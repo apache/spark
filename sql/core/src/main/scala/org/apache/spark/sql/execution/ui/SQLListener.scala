@@ -343,10 +343,13 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
                accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
             (accumulatorUpdate._1, accumulatorUpdate._2)
           }
-        }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
+        }
 
         val driverUpdates = executionUIData.driverAccumUpdates.toSeq
-        mergeAccumulatorUpdates(accumulatorUpdates ++ driverUpdates, accumulatorId =>
+        val totalUpdates = (accumulatorUpdates ++ driverUpdates).filter {
+          case (id, _) => executionUIData.accumulatorMetrics.contains(id)
+        }
+        mergeAccumulatorUpdates(totalUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).metricType)
       case None =>
         // This execution has been dropped
