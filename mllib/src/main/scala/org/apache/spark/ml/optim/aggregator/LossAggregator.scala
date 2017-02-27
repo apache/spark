@@ -21,13 +21,18 @@ import org.apache.spark.ml.linalg._
 
 private[ml] trait LossAggregator[Datum, Agg <: LossAggregator[Datum, Agg]] extends Serializable {
 
+  self: Agg =>
+
+  /** Weighted count of instances in this aggregator. */
   protected var weightSum: Double = 0.0
 
   protected var lossSum: Double = 0.0
 
-  def add(instance: Datum): this.type
+  /** Add a single instance to this aggregator. */
+  def add(instance: Datum): Agg
 
-  def merge(other: Agg): this.type = {
+  /** Merge two aggregators, updating the `this` aggregator in place. */
+  def merge(other: Agg): Agg = {
     if (other.weightSum != 0) {
       weightSum += other.weightSum
       lossSum += other.lossSum
@@ -35,6 +40,7 @@ private[ml] trait LossAggregator[Datum, Agg <: LossAggregator[Datum, Agg]] exten
     this
   }
 
+  /** The current loss value of this aggregator. */
   def loss: Double = {
     require(weightSum > 0.0, s"The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
@@ -42,15 +48,20 @@ private[ml] trait LossAggregator[Datum, Agg <: LossAggregator[Datum, Agg]] exten
   }
 }
 
-private[ml] trait DifferentiableLossAggregator[Datum,
-  Agg <: DifferentiableLossAggregator[Datum, Agg]]
+private[ml] trait DifferentiableLossAggregator[
+    Datum,
+    Agg <: DifferentiableLossAggregator[Datum, Agg]]
   extends LossAggregator[Datum, Agg] {
 
+  self: Agg =>
+
+  /** The dimension of the gradient array. */
   protected val dim: Int
 
+  /** Array of gradient values that are mutated when new instances are added to the aggregator. */
   protected lazy val gradientSumArray: Array[Double] = Array.ofDim[Double](dim)
 
-  override def merge(other: Agg): this.type = {
+  override def merge(other: Agg): Agg = {
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
@@ -69,6 +80,7 @@ private[ml] trait DifferentiableLossAggregator[Datum,
     this
   }
 
+  /** The current weighted averaged gradient. */
   def gradient: Vector = {
     require(weightSum > 0.0, s"The effective number of instances should be " +
       s"greater than 0.0, but was $weightSum.")

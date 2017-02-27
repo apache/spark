@@ -38,9 +38,8 @@ private[ml] class LinearSVCAggregator(
     fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, LinearSVCAggregator] {
 
-  private val numFeatures: Int = bcFeaturesStd.value.length
-  // TODO: think about dim abstraction
-  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
+  private val numFeatures = bcFeaturesStd.value.length
+  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   protected override val dim: Int = numFeaturesPlusIntercept
 //  require(numFeaturesPlusIntercept == coefficients.size, s"Dimension mismatch. Coefficients " +
 //  s"length ${coefficients.size}, FeaturesStd length ${numFeatures}, fitIntercept: $fitIntercept")
@@ -51,7 +50,6 @@ private[ml] class LinearSVCAggregator(
       throw new IllegalArgumentException(
         s"coefficients only supports dense vector but got type ${bcCoefficients.value.getClass}.")
   }
-  protected override lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
 
   /**
    * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
@@ -60,8 +58,10 @@ private[ml] class LinearSVCAggregator(
    * @param instance The instance of data point to be added.
    * @return This LinearSVCAggregator object.
    */
-  def add(instance: Instance): this.type = {
+  def add(instance: Instance): LinearSVCAggregator = {
     instance match { case Instance(label, weight, features) =>
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficientsArray

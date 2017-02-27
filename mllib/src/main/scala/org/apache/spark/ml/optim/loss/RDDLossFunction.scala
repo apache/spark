@@ -35,7 +35,6 @@ private[ml] class RDDLossFunction[Agg <: DifferentiableLossAggregator[Instance, 
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val bcCoefficients = instances.context.broadcast(Vectors.dense(coefficients.data))
-//    val thisAgg = aggregator.create(bcCoefficients)
     val thisAgg = getAggregator(bcCoefficients)
     val seqOp = (agg: Agg, x: Instance) => agg.add(x)
     val combOp = (agg1: Agg, agg2: Agg) => agg1.merge(agg2)

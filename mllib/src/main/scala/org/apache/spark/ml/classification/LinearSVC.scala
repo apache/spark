@@ -213,8 +213,6 @@ class LinearSVC @Since("2.2.0") (
       }
       val costFun = new RDDLossFunction[LinearSVCAggregator](instances, getAggregatorFunc,
         regularization, $(aggregationDepth))
-//      val costFun = new LinearSVCCostFun(instances, $(fitIntercept),
-//        $(standardization), bcFeaturesStd, regParamL2, $(aggregationDepth))
 
       def regParamL1Fun = (_: Int) => 0D
       val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))

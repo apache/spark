@@ -151,7 +151,6 @@ import org.apache.spark.ml.linalg._
  * @param bcFeaturesMean The broadcast mean values of the features.
  */
 private[ml] class LeastSquaresAggregator(
-    numFeatures: Int,
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
@@ -159,7 +158,8 @@ private[ml] class LeastSquaresAggregator(
     bcFeaturesMean: Broadcast[Array[Double]])(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, LeastSquaresAggregator] {
 
-  protected val dim: Int = numFeatures
+  private val numFeatures = bcFeaturesStd.value.length
+  protected override val dim: Int = numFeatures
   // make transient so we do not serialize between aggregation stages
   @transient private lazy val featuresStd = bcFeaturesStd.value
   @transient private lazy val effectiveCoefAndOffset = {
@@ -184,8 +184,6 @@ private[ml] class LeastSquaresAggregator(
   @transient private lazy val effectiveCoefficientsVector = effectiveCoefAndOffset._1
   @transient private lazy val offset = effectiveCoefAndOffset._2
 
-  override lazy val gradientSumArray = Array.ofDim[Double](dim)
-
   /**
    * Add a new training instance to this LeastSquaresAggregator, and update the loss and gradient
    * of the objective function.
@@ -193,10 +191,10 @@ private[ml] class LeastSquaresAggregator(
    * @param instance The instance of data point to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(instance: Instance): this.type = {
+  def add(instance: Instance): LeastSquaresAggregator = {
     instance match { case Instance(label, weight, features) =>
-      require(dim == features.size, s"Dimensions mismatch when adding new sample." +
-        s" Expecting $dim but got ${features.size}.")
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new sample." +
+        s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
