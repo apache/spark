@@ -94,20 +94,15 @@ class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
       StructField("intfield", IntegerType, nullable = false)))
   }
 
-  override def serialize(obj: IExampleBaseType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
+  override def writeRow(obj: IExampleBaseType): Row = {
+    Row(obj.field)
   }
 
-  override def deserialize(datum: Any): IExampleBaseType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleBaseTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleBaseClass(field)
-    }
+  override def readRow(row: Row): ExampleBaseClass = {
+    require(row.length == 1,
+      "ExampleBaseTypeUDT requires row with length == 1")
+    val field = row.getInt(0)
+    new ExampleBaseClass(field)
   }
 
   override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
@@ -121,20 +116,15 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
       StructField("intfield", IntegerType, nullable = false)))
   }
 
-  override def serialize(obj: IExampleSubType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
+  override def writeRow(obj: IExampleSubType): Row = {
+    Row(obj.field)
   }
 
-  override def deserialize(datum: Any): IExampleSubType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleSubTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleSubClass(field)
-    }
+  override def readRow(row: Row): ExampleSubClass = {
+    require(row.length == 1,
+      "ExampleSubTypeUDT requires row with length == 1")
+    val field = row.getInt(0)
+    new ExampleSubClass(field)
   }
 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
