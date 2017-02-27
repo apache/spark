@@ -581,6 +581,7 @@ class ALSSuite
       .select("prediction").as[Float].collect()
     assert(dropPredictions.length == 1)
     assert(!dropPredictions.head.isNaN)
+    assert(dropPredictions.head ~== defaultPredictions.last relTol 1e-14)
   }
 
   test("case insensitive cold start param value") {
