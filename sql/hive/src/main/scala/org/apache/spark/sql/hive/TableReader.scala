@@ -83,6 +83,8 @@ class HadoopTableReader(
   private val _broadcastedHadoopConf =
     sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
+  private lazy val STORAGE_HANDLER_KEY = "storage_handler"
+
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
@@ -117,8 +119,12 @@ class HadoopTableReader(
     val locationPath = new Path(inputPathStr)
     val fs = locationPath.getFileSystem(broadcastedHadoopConf.value.value)
 
-    // if the table location does not exist, return an empty RDD
-    if (!fs.exists(locationPath)) {
+    // if the location of the table which is not created by 'stored by' does not exist,
+    // return an empty RDD
+    // TODO: after SparkSQL supports 'stored by', we should check if this condition
+    // is still proper.
+    val storageHandler = hiveTable.getParameters.getOrDefault(STORAGE_HANDLER_KEY, null)
+    if (storageHandler == null && !fs.exists(locationPath)) {
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
       // logDebug("Table input: %s".format(tablePath))
