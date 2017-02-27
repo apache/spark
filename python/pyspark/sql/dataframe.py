@@ -1309,6 +1309,15 @@ class DataFrame(object):
         """
         # Helper functions
         def all_of(types):
+            """Given a type or tuple of types
+            and sequence of xs check if each x
+            is instance of type(s)
+
+            >>> all_of(bool)([True, False])
+            True
+            >>> all_of(basestring)(["a", 1])
+            False
+            """
             def all_of_(xs):
                 return all(isinstance(x, types) for x in xs)
             return all_of_
@@ -1357,7 +1366,7 @@ class DataFrame(object):
         if isinstance(subset, basestring):
             subset = [subset]
 
-        # Check if we won't pass mixed type generics
+        # Verify we were not passed in mixed type generics."
         if not any(all_of_type(rep_dict.keys()) and all_of_type(rep_dict.values())
                    for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
             raise ValueError("Mixed type replacements are not supported")
