@@ -577,6 +577,12 @@ class DataFrameWriter(OptionUtils):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
 
+        if not isinstance(numBuckets, int):
+            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+
+        if not all(isinstance(c, basestring) for c in cols):
+            raise TypeError("cols argument should be a string or a sequence of strings.")
+
         col = cols[0]
         cols = cols[1:]
 
@@ -596,6 +602,9 @@ class DataFrameWriter(OptionUtils):
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
+
+        if not all(isinstance(c, basestring) for c in cols):
+            raise TypeError("cols argument should be a string or a sequence of strings.")
 
         col = cols[0]
         cols = cols[1:]
