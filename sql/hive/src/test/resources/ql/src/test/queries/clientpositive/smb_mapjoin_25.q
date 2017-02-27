@@ -19,7 +19,7 @@ select * from (select a.key from smb_bucket_1 a join smb_bucket_2 b on (a.key = 
 
 set hive.optimize.bucketmapjoin=true;
 set hive.optimize.bucketmapjoin.sortedmerge=true;
-set hive.mapreduce.job.reduces.speculative.execution=false;
+set hive.mapred.reduce.tasks.speculative.execution=false;
 set hive.auto.convert.join=true;
 set hive.auto.convert.sortmerge.join=true;
 set hive.auto.convert.sortmerge.join.noconditionaltask=true;

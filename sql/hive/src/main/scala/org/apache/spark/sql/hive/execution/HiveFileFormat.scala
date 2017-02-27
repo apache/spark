@@ -65,7 +65,7 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
     val tableDesc = fileSinkConf.getTableInfo
-    conf.set("mapred.output.format.class", tableDesc.getOutputFileFormatClassName)
+    conf.set("mapreduce.job.outputformat.class", tableDesc.getOutputFileFormatClassName)
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
