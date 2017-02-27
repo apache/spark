@@ -442,6 +442,11 @@ private class LinearSVCAggregator(
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
   private var weightSum: Double = 0.0
   private var lossSum: Double = 0.0
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
+      s" but got type ${bcCoefficients.value.getClass}.")
+  }
   private lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
 
   /**
@@ -457,7 +462,7 @@ private class LinearSVCAggregator(
         s" Expecting $numFeatures but got ${features.size}.")
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value
-      val localCoefficients = bcCoefficients.value.toArray
+      val localCoefficients = coefficientsArray
       val localGradientSumArray = gradientSumArray
 
       val dotProduct = {
