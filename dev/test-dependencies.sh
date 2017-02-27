@@ -32,7 +32,7 @@ export LC_ALL=C
 HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pyarn -Phive"
 MVN="build/mvn"
 HADOOP_PROFILES=(
-    hadoop-2.7
+    hadoop-palantir
 )
 
 # We'll switch the version to a temp. one, publish POMs using that new version, then switch back to

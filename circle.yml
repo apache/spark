@@ -22,7 +22,7 @@ dependencies:
     - PYENV_VERSION=3.4.4 pip install numpy
     #- PYENV_VERSION=pypy-4.0.1 pip install numpy
   override:
-    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
+    - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
 
 general:
   artifacts:
@@ -31,9 +31,9 @@ general:
 
 test:
   override:
-    - set -o pipefail && HADOOP_PROFILE=hadoop2.7 ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log" | grep -v -i info:
+    - set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log" | grep -v -i info:
         parallel: true
-        timeout: 1200
+        timeout: 1800
         max-runtime: 14400
     - ? |
           set -euo pipefail
@@ -47,7 +47,7 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-palantir -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
           }
 
           make_dist() {
@@ -64,7 +64,7 @@ test:
             publish_artifacts
             ;;
           1)
-            make_dist hadoop-2.7 "-Phadoop-2.7 -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
+            make_dist hadoop-2.8.0-palantir2 "-Phadoop-palantir -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
             ;;
           2)
             make_dist without-hadoop "-Phadoop-provided -Pmesos -Pyarn -Psparkr"

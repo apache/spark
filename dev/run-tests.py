@@ -310,6 +310,7 @@ def get_hadoop_profiles(hadoop_version):
         "hadoop2.4": ["-Phadoop-2.4"],
         "hadoop2.6": ["-Phadoop-2.6"],
         "hadoop2.7": ["-Phadoop-2.7"],
+        "hadooppalantir": ["-Phadoop-palantir"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
