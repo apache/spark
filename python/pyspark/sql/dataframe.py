@@ -26,6 +26,8 @@ if sys.version >= '3':
 else:
     from itertools import imap as map
 
+import warnings
+
 from pyspark import copy_func, since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
