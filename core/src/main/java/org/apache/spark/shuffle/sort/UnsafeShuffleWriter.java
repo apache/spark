@@ -82,7 +82,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private ShuffleExternalSorter sorter;
   private long peakMemoryUsedBytes = 0;
 
-  private int numOfRecords = 0;
+  private long numOfRecords = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
   private static final class MyByteArrayOutputStream extends ByteArrayOutputStream {

@@ -28,4 +28,4 @@ package org.apache.spark
 private[spark] class MapOutputStatistics(
     val shuffleId: Int,
     val bytesByPartitionId: Array[Long],
-    val numberOfOutput: Array[Int])
+    val numberOfOutput: Array[Long])

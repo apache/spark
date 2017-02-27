@@ -146,7 +146,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // included in the shuffle write time.
     writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
-    int numOfRecords = 0;
+    long numOfRecords = 0;
     while (records.hasNext()) {
       final Product2<K, V> record = records.next();
       final K key = record._1();

@@ -113,7 +113,7 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
       childRDD.getNumPartitions)
     val shuffleDependency = ShuffleExchange.prepareShuffleDependency(
       childRDD, child.output, partitioner, serializer)
-    val numberOfOutput: Seq[Int] = if (shuffleDependency.rdd.getNumPartitions != 0) {
+    val numberOfOutput: Seq[Long] = if (shuffleDependency.rdd.getNumPartitions != 0) {
       // submitMapStage does not accept RDD with 0 partition.
       // So, we will not submit this dependency.
       val submittedStageFuture = sparkContext.submitMapStage(shuffleDependency)
@@ -133,15 +133,15 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
     } else if (!respectChildParallelism) {
       // This is mainly for tests.
       // We take the rows of each partition until we reach the required limit number.
-      var countForRows = 0
+      var numTakenRow = 0
       val takeAmounts = new mutable.HashMap[Int, Int]()
       numberOfOutput.zipWithIndex.foreach { case (num, index) =>
-        if (countForRows + num < limit) {
-          countForRows += num
-          takeAmounts += ((index, num))
+        if (numTakenRow + num < limit) {
+          numTakenRow += num.toInt
+          takeAmounts += ((index, num.toInt))
         } else {
-          val toTake = limit - countForRows
-          countForRows += toTake
+          val toTake = limit - numTakenRow
+          numTakenRow += toTake
           takeAmounts += ((index, toTake))
         }
       }
@@ -153,39 +153,40 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
       }
     } else {
       // We try to distribute the required limit number of rows across all child rdd's partitions.
-      var numToReduce = (sumOfOutput - limit)
-      val reduceAmounts = new mutable.HashMap[Int, Int]()
+      var numTakenRow = 0
+      val takeAmounts = new mutable.HashMap[Int, Int]()
       val nonEmptyParts = numberOfOutput.filter(_ > 0).size
-      val reducePerPart = numToReduce / nonEmptyParts
+      val takePerPart = limit / nonEmptyParts
       numberOfOutput.zipWithIndex.foreach { case (num, index) =>
-        if (num >= reducePerPart) {
-          numToReduce -= reducePerPart
-          reduceAmounts += ((index, reducePerPart))
+        if (num >= takePerPart) {
+          numTakenRow += takePerPart
+          takeAmounts += ((index, takePerPart))
         } else {
-          numToReduce -= num
-          reduceAmounts += ((index, num))
+          numTakenRow += num.toInt
+          takeAmounts += ((index, num.toInt))
         }
       }
-      while (numToReduce > 0) {
+      var remainingRow = limit - numTakenRow
+      while (remainingRow > 0) {
         numberOfOutput.zipWithIndex.foreach { case (num, index) =>
-          val toReduce = if (numToReduce / nonEmptyParts > 0) {
-            numToReduce / nonEmptyParts
+          val toTake = if (remainingRow / nonEmptyParts > 0) {
+            remainingRow / nonEmptyParts
           } else {
-            numToReduce
+            remainingRow
           }
-          if (num - reduceAmounts(index) >= toReduce) {
-            reduceAmounts(index) = reduceAmounts(index) + toReduce
-            numToReduce -= toReduce
-          } else if (num - reduceAmounts(index) > 0) {
-            reduceAmounts(index) = reduceAmounts(index) + 1
-            numToReduce -= 1
+          if (num - takeAmounts(index) >= toTake) {
+            takeAmounts(index) = takeAmounts(index) + toTake
+            remainingRow -= toTake
+          } else if (num - takeAmounts(index) > 0) {
+            takeAmounts(index) = takeAmounts(index) + 1
+            remainingRow -= 1
           }
         }
       }
-      val broadMap = sparkContext.broadcast(reduceAmounts)
+      val broadMap = sparkContext.broadcast(takeAmounts)
       shuffled.mapPartitionsWithIndexInternal { case (index, iter) =>
         broadMap.value.get(index).map { size =>
-          iter.drop(size)
+          iter.take(size)
         }.get
       }
     }

@@ -176,11 +176,11 @@ private[spark] class ExternalSorter[K, V, C](
    */
   private[spark] def numSpills: Int = spills.size
 
-  def insertAll(records: Iterator[Product2[K, V]]): Int = {
+  def insertAll(records: Iterator[Product2[K, V]]): Long = {
     // TODO: stop combining if we find that the reduction factor isn't high
     val shouldCombine = aggregator.isDefined
 
-    var numOfRecords: Int = 0
+    var numOfRecords: Long = 0
 
     if (shouldCombine) {
       // Combine values in-memory first using our AppendOnlyMap
