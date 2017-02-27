@@ -384,7 +384,8 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
-          new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
+          new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema),
+            fileStatusCache)
         }
 
         HadoopFsRelation(
