@@ -22,22 +22,22 @@ package org.apache.spark.mllib.evaluation.binary
  */
 private[evaluation] trait BinaryConfusionMatrix {
   /** number of true positives */
-  def numTruePositives: Long
+  def numTruePositives: Double
 
   /** number of false positives */
-  def numFalsePositives: Long
+  def numFalsePositives: Double
 
   /** number of false negatives */
-  def numFalseNegatives: Long
+  def numFalseNegatives: Double
 
   /** number of true negatives */
-  def numTrueNegatives: Long
+  def numTrueNegatives: Double
 
   /** number of positives */
-  def numPositives: Long = numTruePositives + numFalseNegatives
+  def numPositives: Double = numTruePositives + numFalseNegatives
 
   /** number of negatives */
-  def numNegatives: Long = numFalsePositives + numTrueNegatives
+  def numNegatives: Double = numFalsePositives + numTrueNegatives
 }
 
 /**
@@ -51,20 +51,20 @@ private[evaluation] case class BinaryConfusionMatrixImpl(
     totalCount: BinaryLabelCounter) extends BinaryConfusionMatrix {
 
   /** number of true positives */
-  override def numTruePositives: Long = count.numPositives
+  override def numTruePositives: Double = count.numPositives
 
   /** number of false positives */
-  override def numFalsePositives: Long = count.numNegatives
+  override def numFalsePositives: Double = count.numNegatives
 
   /** number of false negatives */
-  override def numFalseNegatives: Long = totalCount.numPositives - count.numPositives
+  override def numFalseNegatives: Double = totalCount.numPositives - count.numPositives
 
   /** number of true negatives */
-  override def numTrueNegatives: Long = totalCount.numNegatives - count.numNegatives
+  override def numTrueNegatives: Double = totalCount.numNegatives - count.numNegatives
 
   /** number of positives */
-  override def numPositives: Long = totalCount.numPositives
+  override def numPositives: Double = totalCount.numPositives
 
   /** number of negatives */
-  override def numNegatives: Long = totalCount.numNegatives
+  override def numNegatives: Double = totalCount.numNegatives
 }

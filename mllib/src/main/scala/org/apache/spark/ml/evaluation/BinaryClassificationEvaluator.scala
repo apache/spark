@@ -36,10 +36,16 @@ import org.apache.spark.sql.types.DoubleType
 @Since("1.2.0")
 @Experimental
 class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Evaluator with HasRawPredictionCol with HasLabelCol with DefaultParamsWritable {
+  extends Evaluator with HasRawPredictionCol with HasLabelCol
+    with HasWeightCol with DefaultParamsWritable {
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("binEval"))
+
+  /**
+   * Default number of bins to use for binary classification evaluation.
+   */
+  val defaultNumberOfBins = 1000
 
   /**
    * param for metric name in evaluation (supports `"areaUnderROC"` (default), `"areaUnderPR"`)
@@ -68,6 +74,10 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   setDefault(metricName -> "areaUnderROC")
 
   @Since("2.0.0")
@@ -77,12 +87,16 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
     SchemaUtils.checkNumericType(schema, $(labelCol))
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels =
-      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
-        case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
-        case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
+    val scoreAndLabelsWithWeights =
+      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType),
+        if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol)))
+        .rdd.map {
+        case Row(rawPrediction: Vector, label: Double, weight: Double) =>
+          (rawPrediction(1), (label, weight))
+        case Row(rawPrediction: Double, label: Double, weight: Double) =>
+          (rawPrediction, (label, weight))
       }
-    val metrics = new BinaryClassificationMetrics(scoreAndLabels)
+    val metrics = new BinaryClassificationMetrics(defaultNumberOfBins, scoreAndLabelsWithWeights)
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()
       case "areaUnderPR" => metrics.areaUnderPR()

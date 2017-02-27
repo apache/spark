@@ -26,7 +26,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for binary classification.
  *
- * @param scoreAndLabels an RDD of (score, label) pairs.
+ * @param scoreAndLabelsWithWeights an RDD of (score, (label, weight)) pairs.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
  *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
  *                This is useful because the curve contains a point for each distinct score
@@ -41,11 +41,25 @@ import org.apache.spark.sql.DataFrame
  *                partition boundaries.
  */
 @Since("1.0.0")
-class BinaryClassificationMetrics @Since("1.3.0") (
-    @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
-    @Since("1.3.0") val numBins: Int) extends Logging {
+class BinaryClassificationMetrics @Since("2.2.0") (
+    val numBins: Int,
+    @Since("2.2.0") val scoreAndLabelsWithWeights: RDD[(Double, (Double, Double))])
+  extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")
+
+  /**
+   * Retrieves the score and labels (for binary compatibility).
+   * @return The score and labels.
+   */
+  @Since("1.0.0")
+  def scoreAndLabels: RDD[(Double, Double)] = {
+    scoreAndLabelsWithWeights.map(values => (values._1, values._2._1))
+  }
+
+  @Since("1.0.0")
+  def this(@Since("1.3.0") scoreAndLabels: RDD[(Double, Double)], @Since("1.3.0") numBins: Int) =
+    this(numBins, scoreAndLabels.map(scoreAndLabel => (scoreAndLabel._1, (scoreAndLabel._2, 1.0))))
 
   /**
    * Defaults `numBins` to 0.
@@ -146,11 +160,13 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   private lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
-    // Create a bin for each distinct score value, count positives and negatives within each bin,
-    // and then sort by score values in descending order.
-    val counts = scoreAndLabels.combineByKey(
-      createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
-      mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
+    // Create a bin for each distinct score value, count weighted positives and
+    // negatives within each bin, and then sort by score values in descending order.
+    val counts = scoreAndLabelsWithWeights.combineByKey(
+      createCombiner = (labelAndWeight: (Double, Double)) =>
+        new BinaryLabelCounter(0L, 0L) += (labelAndWeight._1, labelAndWeight._2),
+      mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
+        c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = false)
 
