@@ -178,6 +178,32 @@ class FileIndexSuite extends SharedSQLContext {
       assert(catalog2.allFiles().nonEmpty)
     }
   }
+
+  test("refresh for InMemoryFileIndex with FileStatusCache") {
+    withTempDir { dir =>
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      val dirPath = new Path(dir.getCanonicalPath)
+      val catalog = new InMemoryFileIndex(spark, Seq(dirPath), Map.empty,
+        None, fileStatusCache) {
+        def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+        def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+      }
+
+      assert(catalog.leafDirPaths.isEmpty)
+      assert(catalog.leafFilePaths.isEmpty)
+
+      val file = new File(dir, "text.txt")
+      stringToFile(file, "text")
+
+      catalog.refresh()
+
+      val path = new Path(file.getCanonicalPath)
+      assert(catalog.leafFilePaths.nonEmpty && catalog
+        .leafFilePaths.forall(p => p.toString.startsWith("file:/")))
+      assert(catalog.leafDirPaths.nonEmpty && catalog
+        .leafDirPaths.forall(p => p.toString.startsWith("file:/")))
+    }
+  }
 }
 
 class FakeParentPathFileSystem extends RawLocalFileSystem {
