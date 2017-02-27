@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 class InMemoryCatalog(
     conf: SparkConf = new SparkConf,
     hadoopConfig: Configuration = new Configuration)
-  extends ExternalCatalog {
+  extends ExternalCatalog(conf, hadoopConfig) {
 
   import CatalogTypes.TablePartitionSpec
 
@@ -93,6 +93,8 @@ class InMemoryCatalog(
     }
   }
 
+  protected override def warehousePath: String =
+    catalog(SessionCatalog.DEFAULT_DATABASE).db.locationUri
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -156,7 +158,7 @@ class InMemoryCatalog(
     catalog(dbDefinition.name).db = dbDefinition
   }
 
-  override def getDatabase(db: String): CatalogDatabase = synchronized {
+  protected override def getDatabaseInternal(db: String): CatalogDatabase = synchronized {
     requireDbExists(db)
     catalog(db).db
   }

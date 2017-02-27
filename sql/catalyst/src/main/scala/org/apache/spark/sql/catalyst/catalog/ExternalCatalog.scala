@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
@@ -30,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *
  * Implementations should throw [[NoSuchDatabaseException]] when databases don't exist.
  */
-abstract class ExternalCatalog {
+abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
   import CatalogTypes.TablePartitionSpec
 
   protected def requireDbExists(db: String): Unit = {
@@ -74,7 +77,19 @@ abstract class ExternalCatalog {
    */
   def alterDatabase(dbDefinition: CatalogDatabase): Unit
 
-  def getDatabase(db: String): CatalogDatabase
+  def getDatabase(db: String): CatalogDatabase = {
+    val database = getDatabaseInternal(db)
+    // The default database's location always uses the warehouse path.
+    // Since the location of database stored in metastore is qualified,
+    // we also make the warehouse location qualified.
+    if (db == SessionCatalog.DEFAULT_DATABASE) {
+      val qualifiedWarehousePath = SessionCatalog
+        .makeQualifiedPath(warehousePath, hadoopConf).toString
+      database.copy(locationUri = qualifiedWarehousePath)
+    } else {
+      database
+    }
+  }
 
   def databaseExists(db: String): Boolean
 
@@ -269,4 +284,7 @@ abstract class ExternalCatalog {
 
   def listFunctions(db: String, pattern: String): Seq[String]
 
+  protected def getDatabaseInternal(db: String): CatalogDatabase
+
+  protected def warehousePath: String
 }
