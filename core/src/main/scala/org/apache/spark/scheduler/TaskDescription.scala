@@ -25,8 +25,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Map}
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.TaskNotSerializableException
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
