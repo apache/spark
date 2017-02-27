@@ -48,8 +48,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private type StageId = Int
   private type PartitionId = Int
   private type TaskAttemptNumber = Int
-  private case class StageState(authorizedCommitters: Array[TaskAttemptNumber],
-                                failures: mutable.Map[PartitionId, mutable.Set[TaskAttemptNumber]])
+  private case class StageState(
+      authorizedCommitters: Array[TaskAttemptNumber],
+      failures: mutable.Map[PartitionId, mutable.Set[TaskAttemptNumber]])
 
   private val NO_AUTHORIZED_COMMITTER: TaskAttemptNumber = -1
 
@@ -142,10 +143,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
           s"attempt: $attemptNumber")
       case otherReason =>
         // Mark the attempt as failed to blacklist from future commit protocol
-        stageState.failures.get(partition) match {
-          case Some(failures) => failures += attemptNumber
-          case None => stageState.failures(partition) = mutable.Set(attemptNumber)
-        }
+        stageState.failures.getOrElseUpdate(partition, mutable.Set()) += attemptNumber
         if (stageState.authorizedCommitters(partition) == attemptNumber) {
           logDebug(s"Authorized committer (attemptNumber=$attemptNumber, stage=$stage, " +
             s"partition=$partition) failed; clearing lock")
@@ -169,7 +167,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       attemptNumber: TaskAttemptNumber): Boolean = synchronized {
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(stage, partition, attemptNumber) =>
-        logWarning(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage," +
+        logInfo(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage," +
         s" partition=$partition as task attempt $attemptNumber has already failed.")
         false
       case Some(state) =>
@@ -200,9 +198,10 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     }
   }
 
-  private def attemptFailed(stage: StageId,
-                            partition: PartitionId,
-                            attempt: TaskAttemptNumber): Boolean = synchronized {
+  private def attemptFailed(
+      stage: StageId,
+      partition: PartitionId,
+      attempt: TaskAttemptNumber): Boolean = synchronized {
     stageStates.get(stage).exists { state =>
       state.failures.get(partition).exists(_.contains(attempt))
     }
