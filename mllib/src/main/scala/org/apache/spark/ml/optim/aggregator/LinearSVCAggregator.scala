@@ -16,3 +16,91 @@
  */
 package org.apache.spark.ml.optim.aggregator
 
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg._
+
+/**
+ * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
+ * in binary classification for instances in sparse or dense vector in an online fashion.
+ *
+ * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
+ * the corresponding joint dataset.
+ *
+ * This class standardizes feature values during computation using bcFeaturesStd.
+ *
+ * @param bcCoefficients The coefficients corresponding to the features.
+ * @param fitIntercept Whether to fit an intercept term.
+ * @param bcFeaturesStd The standard deviation values of the features.
+ */
+private[ml] class LinearSVCAggregator(
+    bcFeaturesStd: Broadcast[Array[Double]],
+    fitIntercept: Boolean)(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[Instance, LinearSVCAggregator] {
+
+  private val numFeatures: Int = bcFeaturesStd.value.length
+  // TODO: think about dim abstraction
+  private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
+  protected override val dim: Int = numFeaturesPlusIntercept
+//  require(numFeaturesPlusIntercept == coefficients.size, s"Dimension mismatch. Coefficients " +
+//  s"length ${coefficients.size}, FeaturesStd length ${numFeatures}, fitIntercept: $fitIntercept")
+
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ =>
+      throw new IllegalArgumentException(
+        s"coefficients only supports dense vector but got type ${bcCoefficients.value.getClass}.")
+  }
+  protected override lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
+
+  /**
+   * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
+   * of the objective function.
+   *
+   * @param instance The instance of data point to be added.
+   * @return This LinearSVCAggregator object.
+   */
+  def add(instance: Instance): this.type = {
+    instance match { case Instance(label, weight, features) =>
+      if (weight == 0.0) return this
+      val localFeaturesStd = bcFeaturesStd.value
+      val localCoefficients = coefficientsArray
+      val localGradientSumArray = gradientSumArray
+
+      val dotProduct = {
+        var sum = 0.0
+        features.foreachActive { (index, value) =>
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            sum += localCoefficients(index) * value / localFeaturesStd(index)
+          }
+        }
+        if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
+        sum
+      }
+      // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
+      // Therefore the gradient is -(2y - 1)*x
+      val labelScaled = 2 * label - 1.0
+      val loss = if (1.0 > labelScaled * dotProduct) {
+        weight * (1.0 - labelScaled * dotProduct)
+      } else {
+        0.0
+      }
+
+      if (1.0 > labelScaled * dotProduct) {
+        val gradientScale = -labelScaled * weight
+        features.foreachActive { (index, value) =>
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
+          }
+        }
+        if (fitIntercept) {
+          localGradientSumArray(localGradientSumArray.length - 1) += gradientScale
+        }
+      }
+
+      lossSum += loss
+      weightSum += weight
+      this
+    }
+  }
+}

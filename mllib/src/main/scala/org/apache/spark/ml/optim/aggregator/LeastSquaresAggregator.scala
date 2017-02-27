@@ -151,13 +151,12 @@ import org.apache.spark.ml.linalg._
  * @param bcFeaturesMean The broadcast mean values of the features.
  */
 private[ml] class LeastSquaresAggregator(
-    bcCoefficients: Broadcast[Vector],
     numFeatures: Int,
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
     bcFeaturesStd: Broadcast[Array[Double]],
-    bcFeaturesMean: Broadcast[Array[Double]])
+    bcFeaturesMean: Broadcast[Array[Double]])(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, LeastSquaresAggregator] {
 
   protected val dim: Int = numFeatures
@@ -218,10 +217,5 @@ private[ml] class LeastSquaresAggregator(
       weightSum += weight
       this
     }
-  }
-
-  override def create(coeff: Broadcast[Vector]): LeastSquaresAggregator = {
-    new LeastSquaresAggregator(coeff, numFeatures, labelStd, labelMean, fitIntercept, bcFeaturesStd,
-      bcFeaturesMean)
   }
 }

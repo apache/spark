@@ -320,15 +320,17 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
-    val aggregator = new LeastSquaresAggregator(null, numFeatures, yStd, yMean, $(fitIntercept),
-      bcFeaturesStd, bcFeaturesMean)
+    val getAggregatorFunc = new LeastSquaresAggregator(numFeatures, yStd, yMean, $(fitIntercept),
+      bcFeaturesStd, bcFeaturesMean)(_)
     val regularization = if (effectiveL2RegParam != 0.0) {
       Some(new L2RegularizationLoss(effectiveL2RegParam,
+        (idx: Int) => idx >= 0 && idx < numFeatures,
         if ($(standardization)) None else Some(featuresStd)))
     } else {
       None
     }
-    val costFun = new RDDLossFunction[LeastSquaresAggregator](instances, aggregator, regularization)
+    val costFun = new RDDLossFunction[LeastSquaresAggregator](instances, getAggregatorFunc,
+      regularization, $(aggregationDepth))
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))

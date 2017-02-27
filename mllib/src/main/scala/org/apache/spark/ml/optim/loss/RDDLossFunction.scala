@@ -18,6 +18,7 @@ package org.apache.spark.ml.optim.loss
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.DiffFunction
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.DifferentiableLossAggregator
@@ -26,55 +27,29 @@ import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 
 private[ml] class RDDLossFunction[Agg <: DifferentiableLossAggregator[Instance, Agg]: ClassTag](
-    val instances: RDD[Instance],
-    val aggregator: Agg,
-    val regularization: Option[DiffFunction[Array[Double]]])
+    instances: RDD[Instance],
+    getAggregator: (Broadcast[Vector] => Agg),
+    regularization: Option[DifferentiableRegularization[Array[Double]]],
+    aggregationDepth: Int = 2)
   extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val bcCoefficients = instances.context.broadcast(Vectors.dense(coefficients.data))
-    val thisAgg = aggregator.create(bcCoefficients)
+//    val thisAgg = aggregator.create(bcCoefficients)
+    val thisAgg = getAggregator(bcCoefficients)
     val seqOp = (agg: Agg, x: Instance) => agg.add(x)
     val combOp = (agg1: Agg, agg2: Agg) => agg1.merge(agg2)
-    val newAgg = instances.treeAggregate(thisAgg)(seqOp, combOp)
+    val newAgg = instances.treeAggregate(thisAgg)(seqOp, combOp, aggregationDepth)
     val gradient = newAgg.gradient
     val regLoss = regularization.map { regFun =>
       val (regLoss, regGradient) = regFun.calculate(coefficients.data)
       BLAS.axpy(1.0, Vectors.dense(regGradient), gradient)
       regLoss
     }.getOrElse(0.0)
+    bcCoefficients.destroy(blocking = false)
     (newAgg.loss + regLoss, gradient.asBreeze.toDenseVector)
   }
 }
 
-trait RegularizationFunction[T] extends DiffFunction[T] {
 
-  def regParam: Double
-
-}
-
-class L2RegularizationLoss(val regParam: Double, featuresStd: Option[Array[Double]])
-  extends RegularizationFunction[Array[Double]] {
-
-  override def calculate(coefficients: Array[Double]): (Double, Array[Double]) = {
-    var sum = 0.0
-    val gradient = featuresStd.map { std =>
-      coefficients.indices.map { j =>
-        if (std(j) != 0.0) {
-          val temp = coefficients(j) / (std(j) * std(j))
-          sum += coefficients(j) * temp
-          regParam * temp
-        } else {
-          0.0
-        }
-      }.toArray
-    }.getOrElse {
-      coefficients.map { x =>
-        sum += x * x
-        x * regParam
-      }
-    }
-    (0.5 * sum * regParam, gradient)
-  }
-}
 

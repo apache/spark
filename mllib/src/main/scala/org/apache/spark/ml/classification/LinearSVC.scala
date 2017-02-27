@@ -18,11 +18,9 @@
 package org.apache.spark.ml.classification
 
 import scala.collection.mutable
-
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
@@ -30,6 +28,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.optim.aggregator.LinearSVCAggregator
+import org.apache.spark.ml.optim.loss.{L2RegularizationLoss, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -203,10 +203,20 @@ class LinearSVC @Since("2.2.0") (
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
-      val costFun = new LinearSVCCostFun(instances, $(fitIntercept),
-        $(standardization), bcFeaturesStd, regParamL2, $(aggregationDepth))
+      val getAggregatorFunc = new LinearSVCAggregator(bcFeaturesStd, $(fitIntercept))(_)
+      val regularization = if (regParamL2 != 0.0) {
+        Some(new L2RegularizationLoss(regParamL2,
+          (idx: Int) => idx >= 0 && idx < numFeatures,
+          if ($(standardization)) None else Some(featuresStd)))
+      } else {
+        None
+      }
+      val costFun = new RDDLossFunction[LinearSVCAggregator](instances, getAggregatorFunc,
+        regularization, $(aggregationDepth))
+//      val costFun = new LinearSVCCostFun(instances, $(fitIntercept),
+//        $(standardization), bcFeaturesStd, regParamL2, $(aggregationDepth))
 
-      def regParamL1Fun = (index: Int) => 0D
+      def regParamL1Fun = (_: Int) => 0D
       val optimizer = new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
       val initialCoefWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
 

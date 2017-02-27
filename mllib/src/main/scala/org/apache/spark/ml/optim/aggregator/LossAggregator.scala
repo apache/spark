@@ -17,7 +17,6 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.ml.linalg._
-import org.apache.spark.broadcast.Broadcast
 
 
 private[ml] trait LossAggregator[Datum, Agg <: LossAggregator[Datum, Agg]] extends Serializable {
@@ -43,7 +42,8 @@ private[ml] trait LossAggregator[Datum, Agg <: LossAggregator[Datum, Agg]] exten
   }
 }
 
-private[ml] trait DifferentiableLossAggregator[Datum, Agg <: DifferentiableLossAggregator[Datum, Agg]]
+private[ml] trait DifferentiableLossAggregator[Datum,
+  Agg <: DifferentiableLossAggregator[Datum, Agg]]
   extends LossAggregator[Datum, Agg] {
 
   protected val dim: Int
@@ -77,6 +77,5 @@ private[ml] trait DifferentiableLossAggregator[Datum, Agg <: DifferentiableLossA
     result
   }
 
-  def create(coeff: Broadcast[Vector]): Agg
 }
 
