@@ -18,42 +18,14 @@ package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.ml.linalg._
 
-
-private[ml] trait LossAggregator[Datum, Agg <: LossAggregator[Datum, Agg]] extends Serializable {
-
-  self: Agg =>
-
-  /** Weighted count of instances in this aggregator. */
-  protected var weightSum: Double = 0.0
-
-  protected var lossSum: Double = 0.0
-
-  /** Add a single instance to this aggregator. */
-  def add(instance: Datum): Agg
-
-  /** Merge two aggregators, updating the `this` aggregator in place. */
-  def merge(other: Agg): Agg = {
-    if (other.weightSum != 0) {
-      weightSum += other.weightSum
-      lossSum += other.lossSum
-    }
-    this
-  }
-
-  /** The current loss value of this aggregator. */
-  def loss: Double = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
-      s"greater than 0.0, but $weightSum.")
-    lossSum / weightSum
-  }
-}
-
 private[ml] trait DifferentiableLossAggregator[
     Datum,
-    Agg <: DifferentiableLossAggregator[Datum, Agg]]
-  extends LossAggregator[Datum, Agg] {
+    Agg <: DifferentiableLossAggregator[Datum, Agg]] {
 
   self: Agg =>
+
+  protected var weightSum: Double = 0.0
+  protected var lossSum: Double = 0.0
 
   /** The dimension of the gradient array. */
   protected val dim: Int
@@ -61,7 +33,10 @@ private[ml] trait DifferentiableLossAggregator[
   /** Array of gradient values that are mutated when new instances are added to the aggregator. */
   protected lazy val gradientSumArray: Array[Double] = Array.ofDim[Double](dim)
 
-  override def merge(other: Agg): Agg = {
+  /** Add a single data point to this aggregator. */
+  def add(instance: Datum): Agg
+
+  def merge(other: Agg): Agg = {
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
@@ -87,6 +62,16 @@ private[ml] trait DifferentiableLossAggregator[
     val result = Vectors.dense(gradientSumArray.clone())
     BLAS.scal(1.0 / weightSum, result)
     result
+  }
+
+  /** Weighted count of instances in this aggregator. */
+  def weight: Double = weightSum
+
+  /** The current loss value of this aggregator. */
+  def loss: Double = {
+    require(weightSum > 0.0, s"The effective number of instances should be " +
+      s"greater than 0.0, but $weightSum.")
+    lossSum / weightSum
   }
 
 }

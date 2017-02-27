@@ -26,6 +26,12 @@ import org.apache.spark.rdd.RDD
 
 import scala.reflect.ClassTag
 
+/*
+  Tests:
+    with/without regularization
+    empty rdd
+    check it versus just aggregating over Iterator[Instance] (no reg)
+ */
 private[ml] class RDDLossFunction[Agg <: DifferentiableLossAggregator[Instance, Agg]: ClassTag](
     instances: RDD[Instance],
     getAggregator: (Broadcast[Vector] => Agg),

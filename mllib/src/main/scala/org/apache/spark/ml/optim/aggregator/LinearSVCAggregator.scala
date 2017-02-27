@@ -41,8 +41,6 @@ private[ml] class LinearSVCAggregator(
   private val numFeatures = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   protected override val dim: Int = numFeaturesPlusIntercept
-//  require(numFeaturesPlusIntercept == coefficients.size, s"Dimension mismatch. Coefficients " +
-//  s"length ${coefficients.size}, FeaturesStd length ${numFeatures}, fitIntercept: $fitIntercept")
 
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
