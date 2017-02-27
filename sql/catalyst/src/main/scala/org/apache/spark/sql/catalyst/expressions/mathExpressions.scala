@@ -1023,7 +1023,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   def nullSafeEval(input1: Any): Any = {
     child.dataType match {
       case _: DecimalType =>
-        val decimal = input1.asInstanceOf[Decimal]
+        val decimal = input1.asInstanceOf[Decimal].clone()
         if (decimal.changePrecision(decimal.precision, _scale, mode)) decimal else null
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
