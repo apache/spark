@@ -76,7 +76,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         conf.setOutputFormat(classOf[OrcOutputFormat])
       case conf =>
         conf.setClass(
-          "mapreduce.job.outputformat.class",
+          "mapred.output.format.class",
           classOf[OrcOutputFormat],
           classOf[MapRedOutputFormat[_, _]])
     }
