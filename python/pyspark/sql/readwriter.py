@@ -572,7 +572,8 @@ class DataFrameWriter(OptionUtils):
 
         >>> (df.write.format('parquet')
         ...     .bucketBy(100, 'year', 'month')
-        ...     .saveAsTable(os.path.join(tempfile.mkdtemp(), 'bucketed_table')))
+        ...     .mode("overwrite")
+        ...     .saveAsTable('bucketed_table'))
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
@@ -598,7 +599,8 @@ class DataFrameWriter(OptionUtils):
         >>> (df.write.format('parquet')
         ...     .bucketBy(100, 'year', 'month')
         ...     .sortBy('day')
-        ...     .saveAsTable(os.path.join(tempfile.mkdtemp(), 'sorted_bucketed_table')))
+        ...     .mode("overwrite")
+        ...     .saveAsTable('sorted_bucketed_table'))
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
