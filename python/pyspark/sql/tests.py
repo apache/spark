@@ -1601,6 +1601,17 @@ class SQLTests(ReusedPySparkTestCase):
             [(u'Alice', 10, 80.1)], schema).replace({10: 11}).first()
         self.assertTupleEqual(row, (u'Alice', 11, 80.1))
 
+        # test backward compatibility with dummy value
+        dummy_value = 1
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace({'Alice': 'Bob'}, dummy_value).first()
+        self.assertTupleEqual(row, (u'Bob', 10, 80.1))
+
+        # test dict with mixed numerics
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.1)], schema).replace({10: -10, 80.1: 90.5}).first()
+        self.assertTupleEqual(row, (u'Alice', -10, 90.5))
+
         # replace with tuples
         row = self.spark.createDataFrame(
             [(u'Alice', 10, 80.1)], schema).replace((u'Alice', ), (u'Bob', )).first()
