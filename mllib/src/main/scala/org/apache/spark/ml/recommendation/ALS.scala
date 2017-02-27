@@ -87,16 +87,15 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
       case v: Int => v // Avoid unnecessary casting
       case v: Number =>
         val intV = v.intValue()
-        // True for Byte/Short, Long within the Int range and Double/Float with no fractional part.
-        if (v == intV) {
+        // Checks if number within Int range and has no fractional part.
+        if (v.doubleValue == intV) {
           intV
-        }
-        else {
+        } else {
           throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
             s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
         }
       case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
-        s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n is not numeric.")
+        s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was not numeric.")
     }
   }
 }
