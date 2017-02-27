@@ -106,8 +106,7 @@ AND    t1d NOT IN
               SELECT t2d
               FROM   t2
               RIGHT JOIN t1 on t2e = t1e
-              WHERE t1a = t2a)
-ORDER BY t1a, t1h;
+              WHERE t1a = t2a);
 
 -- TC 01.04
 SELECT Count(DISTINCT( t1a )),
