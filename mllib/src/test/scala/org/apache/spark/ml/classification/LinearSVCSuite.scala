@@ -18,7 +18,9 @@
 package org.apache.spark.ml.classification
 
 import scala.util.Random
+
 import breeze.linalg.{DenseVector => BDV}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
