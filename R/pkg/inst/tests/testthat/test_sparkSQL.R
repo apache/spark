@@ -1015,6 +1015,18 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
+  expect_warning(df[[1:2]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_is(suppressWarnings(df[[1:2]]), "Column")
+  expect_warning(df[[c("name", "age")]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_is(suppressWarnings(df[[c("name", "age")]]), "Column")
+
+  expect_warning(df[[1:2]] <- df[[1]],
+                 "Subset index has length > 1. Only the first index is used.")
+  expect_warning(df[[c("name", "age")]] <- df[[1]],
+                 "Subset index has length > 1. Only the first index is used.")
+
   expect_is(df[, 1, drop = F], "SparkDataFrame")
   expect_equal(columns(df[, 1, drop = F]), c("name"))
   expect_equal(columns(df[, "age", drop = F]), c("age"))
@@ -2222,11 +2234,19 @@ test_that("sampleBy() on a DataFrame", {
 })
 
 test_that("approxQuantile() on a DataFrame", {
-  l <- lapply(c(0:99), function(i) { i })
-  df <- createDataFrame(l, "key")
-  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
-  expect_equal(quantiles[[1]], 50)
-  expect_equal(quantiles[[2]], 80)
+  l <- lapply(c(0:99), function(i) { list(i, 99 - i) })
+  df <- createDataFrame(l, list("a", "b"))
+  quantiles <- approxQuantile(df, "a", c(0.5, 0.8), 0.0)
+  expect_equal(quantiles, list(50, 80))
+  quantiles2 <- approxQuantile(df, c("a", "b"), c(0.5, 0.8), 0.0)
+  expect_equal(quantiles2[[1]], list(50, 80))
+  expect_equal(quantiles2[[2]], list(50, 80))
+
+  dfWithNA <- createDataFrame(data.frame(a = c(NA, 30, 19, 11, 28, 15),
+                                         b = c(-30, -19, NA, -11, -28, -15)))
+  quantiles3 <- approxQuantile(dfWithNA, c("a", "b"), c(0.5), 0.0)
+  expect_equal(quantiles3[[1]], list(28))
+  expect_equal(quantiles3[[2]], list(-15))
 })
 
 test_that("SQL error message is returned from JVM", {

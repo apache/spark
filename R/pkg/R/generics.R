@@ -66,7 +66,7 @@ setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("fre
 # @rdname approxQuantile
 # @export
 setGeneric("approxQuantile",
-           function(x, col, probabilities, relativeError) {
+           function(x, cols, probabilities, relativeError) {
              standardGeneric("approxQuantile")
            })
 
@@ -1406,7 +1406,7 @@ setGeneric("spark.randomForest",
 
 #' @rdname spark.survreg
 #' @export
-setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
 #' @rdname spark.svmLinear
 #' @export

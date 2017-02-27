@@ -20,15 +20,17 @@ package test.org.apache.spark.streaming;
 import java.io.Serializable;
 import java.util.*;
 
+import org.apache.spark.api.java.function.Function3;
+import org.apache.spark.api.java.function.Function4;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.JavaTestUtils;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
+import org.apache.spark.streaming.State;
 import org.apache.spark.streaming.StateSpec;
 import org.apache.spark.streaming.Time;
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.junit.Assert;
 import org.junit.Test;
@@ -101,7 +103,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       while (in.hasNext()) {
         out = out + in.next().toUpperCase();
       }
-      return Lists.newArrayList(out).iterator();
+      return Arrays.asList(out).iterator();
     });
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 2, 2);
@@ -143,8 +145,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       Arrays.asList(24));
 
     JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream<Integer> reducedWindowed = stream.reduceByWindow((x, y) -> x + y,
-                                                                 (x, y) -> x - y, new Duration(2000), new Duration(1000));
+    JavaDStream<Integer> reducedWindowed = stream.reduceByWindow(
+      (x, y) -> x + y, (x, y) -> x - y, new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reducedWindowed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 4, 4);
 
@@ -240,7 +242,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaTestUtils.attachTestOutputStream(joined);
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
-    List<Set<Tuple2<String, Tuple2<String, String>>>> unorderedResult = Lists.newArrayList();
+    List<Set<Tuple2<String, Tuple2<String, String>>>> unorderedResult = new ArrayList<>();
     for (List<Tuple2<String, Tuple2<String, String>>> res : result) {
       unorderedResult.add(Sets.newHashSet(res));
     }
@@ -315,7 +317,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaPairDStream<Integer, String> pairStream1 = JavaPairDStream.fromJavaDStream(
       JavaTestUtils.attachTestInputStream(ssc, pairStream1input, 1));
 
-    List<JavaDStream<?>> listOfDStreams1 = Arrays.<JavaDStream<?>>asList(stream1, stream2);
+    List<JavaDStream<?>> listOfDStreams1 = Arrays.asList(stream1, stream2);
 
     // This is just to test whether this transform to JavaStream compiles
     JavaDStream<Long> transformed1 = ssc.transform(
@@ -325,7 +327,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     });
 
     List<JavaDStream<?>> listOfDStreams2 =
-      Arrays.<JavaDStream<?>>asList(stream1, stream2, pairStream1.toJavaDStream());
+      Arrays.asList(stream1, stream2, pairStream1.toJavaDStream());
 
     JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2, (List<JavaRDD<?>> listOfRDDs, Time time) -> {
@@ -358,7 +360,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaDStream<String> flatMapped = stream.flatMap(
-        s -> Lists.newArrayList(s.split("(?!^)")).iterator());
+        s -> Arrays.asList(s.split("(?!^)")).iterator());
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
@@ -401,7 +403,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<Integer, String> flatMapped = stream.flatMapToPair(s -> {
-      List<Tuple2<Integer, String>> out = Lists.newArrayList();
+      List<Tuple2<Integer, String>> out = new ArrayList<>();
       for (String letter : s.split("(?!^)")) {
         out.add(new Tuple2<>(s.length(), letter));
       }
@@ -420,7 +422,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
    */
   public static <T extends Comparable<T>> void assertOrderInvariantEquals(
     List<List<T>> expected, List<List<T>> actual) {
-    expected.forEach(list -> Collections.sort(list));
+    expected.forEach(Collections::sort);
     List<List<T>> sortedActual = new ArrayList<>();
     actual.forEach(list -> {
         List<T> sortedList = new ArrayList<>(list);
@@ -491,7 +493,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaDStream<Tuple2<String, Integer>> stream =
       JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
-    JavaPairDStream<Integer, String> reversed = pairStream.mapToPair(x -> x.swap());
+    JavaPairDStream<Integer, String> reversed = pairStream.mapToPair(Tuple2::swap);
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
@@ -543,7 +545,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaDStream<Tuple2<String, Integer>> stream =
       JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
-    JavaDStream<Integer> reversed = pairStream.map(in -> in._2());
+    JavaDStream<Integer> reversed = pairStream.map(Tuple2::_2);
     JavaTestUtils.attachTestOutputStream(reversed);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
@@ -629,7 +631,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, Integer> combined = pairStream.<Integer>combineByKey(i -> i,
+    JavaPairDStream<String, Integer> combined = pairStream.combineByKey(i -> i,
       (x, y) -> x + y, (x, y) -> x + y, new HashPartitioner(2));
 
     JavaTestUtils.attachTestOutputStream(combined);
@@ -851,36 +853,44 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaPairRDD<String, Boolean> initialRDD = null;
     JavaPairDStream<String, Integer> wordsDstream = null;
 
+    Function4<Time, String, Optional<Integer>, State<Boolean>, Optional<Double>> mapFn =
+      (time, key, value, state) -> {
+        // Use all State's methods here
+        state.exists();
+        state.get();
+        state.isTimingOut();
+        state.remove();
+        state.update(true);
+        return Optional.of(2.0);
+      };
+
     JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream =
-        wordsDstream.mapWithState(
-            StateSpec.<String, Integer, Boolean, Double>function((time, key, value, state) -> {
-              // Use all State's methods here
-              state.exists();
-              state.get();
-              state.isTimingOut();
-              state.remove();
-              state.update(true);
-              return Optional.of(2.0);
-            }).initialState(initialRDD)
-                .numPartitions(10)
-                .partitioner(new HashPartitioner(10))
-                .timeout(Durations.seconds(10)));
+      wordsDstream.mapWithState(
+        StateSpec.function(mapFn)
+          .initialState(initialRDD)
+          .numPartitions(10)
+          .partitioner(new HashPartitioner(10))
+          .timeout(Durations.seconds(10)));
 
     JavaPairDStream<String, Boolean> emittedRecords = stateDstream.stateSnapshots();
 
+    Function3<String, Optional<Integer>, State<Boolean>, Double> mapFn2 =
+      (key, value, state) -> {
+        state.exists();
+        state.get();
+        state.isTimingOut();
+        state.remove();
+        state.update(true);
+        return 2.0;
+      };
+
     JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream2 =
-        wordsDstream.mapWithState(
-            StateSpec.<String, Integer, Boolean, Double>function((key, value, state) -> {
-              state.exists();
-              state.get();
-              state.isTimingOut();
-              state.remove();
-              state.update(true);
-              return 2.0;
-            }).initialState(initialRDD)
-                .numPartitions(10)
-                .partitioner(new HashPartitioner(10))
-                .timeout(Durations.seconds(10)));
+      wordsDstream.mapWithState(
+        StateSpec.function(mapFn2)
+          .initialState(initialRDD)
+          .numPartitions(10)
+          .partitioner(new HashPartitioner(10))
+          .timeout(Durations.seconds(10)));
 
     JavaPairDStream<String, Boolean> mappedDStream = stateDstream2.stateSnapshots();
   }

@@ -145,7 +145,9 @@
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.9.3</jets3t.version>
-    <aws.kinesis.client.version>1.6.2</aws.kinesis.client.version>
+    <aws.kinesis.client.version>1.7.3</aws.kinesis.client.version>
+    <!-- Should be consistent with Kinesis client dependency -->
+    <aws.java.sdk.version>1.11.76</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->

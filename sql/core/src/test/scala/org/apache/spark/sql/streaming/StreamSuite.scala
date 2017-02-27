@@ -338,7 +338,7 @@ class StreamSuite extends StreamTest {
         .writeStream
         .format("memory")
         .queryName("testquery")
-        .outputMode("complete")
+        .outputMode("append")
         .start()
       try {
         query.processAllAvailable()

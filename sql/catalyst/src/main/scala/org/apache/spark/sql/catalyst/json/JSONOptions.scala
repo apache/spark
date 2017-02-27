@@ -31,11 +31,20 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient private val parameters: CaseInsensitiveMap[String], defaultTimeZoneId: String)
+    @transient private val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable  {
 
-  def this(parameters: Map[String, String], defaultTimeZoneId: String) =
-    this(CaseInsensitiveMap(parameters), defaultTimeZoneId)
+  def this(
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+      this(
+        CaseInsensitiveMap(parameters),
+        defaultTimeZoneId,
+        defaultColumnNameOfCorruptRecord)
+  }
 
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
@@ -57,7 +66,8 @@ private[sql] class JSONOptions(
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+  val columnNameOfCorruptRecord =
+    parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
   val timeZone: TimeZone = TimeZone.getTimeZone(parameters.getOrElse("timeZone", defaultTimeZoneId))
 
@@ -68,6 +78,8 @@ private[sql] class JSONOptions(
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {

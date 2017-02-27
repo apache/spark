@@ -497,8 +497,7 @@ case class JsonToStruct(
   lazy val parser =
     new JacksonParser(
       schema,
-      "invalid", // Not used since we force fail fast.  Invalid rows will be set to `null`.
-      new JSONOptions(options ++ Map("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
+      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
 
   override def dataType: DataType = schema
 
@@ -506,7 +505,12 @@ case class JsonToStruct(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    try parser.parse(json.toString).headOption.orNull catch {
+    try {
+      parser.parse(
+        json.asInstanceOf[UTF8String],
+        CreateJacksonParser.utf8String,
+        identity[UTF8String]).headOption.orNull
+    } catch {
       case _: SparkSQLJsonProcessingException => null
     }
   }
