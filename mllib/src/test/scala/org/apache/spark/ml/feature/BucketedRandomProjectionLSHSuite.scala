@@ -187,7 +187,7 @@ class BucketedRandomProjectionLSHSuite
     val dataset2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("keys")
 
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashTables(8)
+      .setNumHashFunctions(4)
       .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
@@ -206,14 +206,14 @@ class BucketedRandomProjectionLSHSuite
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("keys")
 
     val brp = new BucketedRandomProjectionLSH()
-      .setNumHashTables(8)
+      .setNumHashFunctions(4)
       .setNumHashTables(2)
       .setInputCol("keys")
       .setOutputCol("values")
       .setBucketLength(4.0)
       .setSeed(12345)
 
-    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, df, df, 3.0)
+    val (precision, recall) = LSHTest.calculateApproxSimilarityJoin(brp, df, df, 2.0)
     assert(precision == 1.0)
     assert(recall >= 0.7)
   }
