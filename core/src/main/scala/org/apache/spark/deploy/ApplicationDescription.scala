@@ -34,7 +34,7 @@ private[spark] case class ApplicationDescription(
     // only used if dynamic allocation is enabled
     initialExecutorLimit: Option[Int] = None,
     user: String = System.getProperty("user.name", "<unknown>"),
-    tokens: Option[ByteBuffer] = None) {
+    tokens: Option[Array[Byte]] = None) {
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

@@ -22,14 +22,15 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.yarn.api.records.ContainerLaunchContext
+import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.deploy.security.ConfigurableCredentialManager
 import org.apache.spark.deploy.{ApplicationDescription, Command, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CREDENTIALS_RENEWAL_TIME, CREDENTIALS_UPDATE_TIME, KEYTAB, PRINCIPAL}
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
@@ -64,12 +65,13 @@ private[spark] class StandaloneSchedulerBackend(
   private val totalExpectedCores = maxCores.getOrElse(0)
 
 
+  //////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////
   private var loginFromKeytab = false
   private var principal: String = null
   private var keytab: String = null
   private var credentials: Credentials = null
   private val credentialManager = new ConfigurableCredentialManager(sc.conf, sc.hadoopConfiguration)
-
 
   def setupCredentials(): Unit = {
     loginFromKeytab = sc.conf.contains(PRINCIPAL.key)
@@ -92,7 +94,8 @@ private[spark] class StandaloneSchedulerBackend(
     logInfo("Credentials loaded: " + UserGroupInformation.getCurrentUser)
   }
 
-
+  //////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////
 
 
 
@@ -181,12 +184,48 @@ private[spark] class StandaloneSchedulerBackend(
 
 
     def setupSecurityToken(appDesc: ApplicationDescription): ApplicationDescription = {
+      logInfo(s"Writing credentials to buffer: ${credentials}: ${credentials.getAllTokens}")
       val dob = new DataOutputBuffer
       credentials.writeTokenStorageToStream(dob)
-      appDesc.copy(tokens = Some(ByteBuffer.wrap(dob.getData)))
+      dob.close()
+
+      val tokens = Some(dob.getData)
+
+      appDesc.copy(tokens = tokens)
     }
 
-    val secureAppDesc = setupSecurityToken(appDesc)
+    def buildPath(components: String*): String = {
+      components.mkString(Path.SEPARATOR)
+    }
+
+    val SPARK_STAGING: String = ".sparkStaging"
+
+    def getAppStagingDir(appId: String): String = {
+      buildPath(SPARK_STAGING, appId)
+    }
+
+
+
+    var secureAppDesc = setupSecurityToken(appDesc)
+
+    val appStagingBaseDir = sc.conf.get(STAGING_DIR).map { new Path(_) }
+      .getOrElse(FileSystem.get(sc.hadoopConfiguration).getHomeDirectory())
+    val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
+
+
+
+    val su = UserGroupInformation.getCurrentUser().getShortUserName()
+    if (loginFromKeytab) {
+      val credentialsFile = "credentials-" + UUID.randomUUID().toString
+      sc.conf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
+      logInfo(s"Credentials file set to: $credentialsFile")
+    }
+
+
+
+
+    logInfo(s"Submitting ${secureAppDesc} with tokens ${secureAppDesc.tokens}")
+
 
     // If we passed in a keytab, make sure we copy the keytab to the staging directory on
     // HDFS, and setup the relevant environment vars, so the AM can login again.
@@ -213,7 +252,7 @@ private[spark] class StandaloneSchedulerBackend(
 
 
 
-    if (conf.contains("spark.yarn.credentials.file")) {
+    if (conf.contains(CREDENTIALS_FILE_PATH)) {
       val newConf = SparkHadoopUtil.get.newConfiguration(conf)
       val cu = new ConfigurableCredentialManager(conf, newConf).credentialUpdater()
       cu.start()

@@ -18,13 +18,13 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
-
 import com.google.common.io.Files
-
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.internal.Logging
@@ -153,6 +153,29 @@ private[deploy] class ExecutorRunner(
       // In case we are running this from within the Spark Shell, avoid creating a "scala"
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
+
+
+
+      /////////////////////////////
+
+      logInfo(s"APP DESC TOKENS: ${appDesc}  tokens ${appDesc.tokens}")
+      appDesc.tokens.foreach { bytes =>
+        val creds = new File(executorDir, "credentials-" + appId)
+        logInfo("Writing out delegation tokens to " + creds.toString)
+        Utils.writeByteBuffer(ByteBuffer.wrap(bytes), new FileOutputStream(creds))   // TODO - duh
+        logInfo(s"Delegation Tokens written out successfully to $creds")
+        builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", creds.toString)
+      }
+
+
+
+      /////////////////////////////
+
+
+
+
+
+
 
       // Add webUI log urls
       val baseUrl =
