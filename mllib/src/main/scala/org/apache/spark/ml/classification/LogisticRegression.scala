@@ -1431,7 +1431,7 @@ private class LogisticAggregator(
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+  @transient private lazy val coefficientsArray: Array[Double] = bcCoefficients.value match {
     case DenseVector(values) => values
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
       s"got type ${bcCoefficients.value.getClass}.)")
