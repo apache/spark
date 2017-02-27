@@ -213,12 +213,29 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val predicate = newPredicate(condition, child.output)
-      predicate.initialize(0)
-      iter.filter { row =>
-        val r = predicate.eval(row)
-        if (r) numOutputRows += 1
-        r
+      try {
+        val predicate = newPredicate(condition, child.output)
+        predicate.initialize(0)
+        iter.filter { row =>
+          val r = predicate.eval(row)
+          if (r) numOutputRows += 1
+          r
+        }
+      } catch {
+        case e: Exception =>
+          iter.filter { row =>
+            val str = condition.toString
+            val logMessage = if (str.length > 256) {
+              str.substring(0, 256 - 3) + "..."
+            } else {
+              str
+            }
+            logWarning(s"Codegen disabled for this expression:\n $logMessage")
+            val r = BindReferences.bindReference(condition, child.output)
+              .eval(row).isInstanceOf[Predicate]
+            if (r) numOutputRows += 1
+            r
+          }
       }
     }
   }
