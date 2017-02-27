@@ -221,8 +221,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       StructField("vec", new UDT.MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = sparkContext.parallelize(data)
-    val jsonRDD = spark.read.schema(schema).json(stringRDD)
+    val jsonRDD = spark.read.schema(schema).json(data.toDS())
     checkAnswer(
       jsonRDD,
       Row(1, new UDT.MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
@@ -242,8 +241,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       StructField("vec", new UDT.MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = sparkContext.parallelize(data)
-    val jsonDataset = spark.read.schema(schema).json(stringRDD)
+    val jsonDataset = spark.read.schema(schema).json(data.toDS())
       .as[(Int, UDT.MyDenseVector)]
     checkDataset(
       jsonDataset,

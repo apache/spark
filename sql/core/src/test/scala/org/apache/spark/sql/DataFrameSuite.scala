@@ -914,15 +914,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = spark.read.json(sparkContext.makeRDD(
-      """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
+    val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = spark.read.json(sparkContext.makeRDD(
-      """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
+    val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),
       Row(1)
@@ -1110,8 +1108,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {
-    val df = spark.read.json(sparkContext.makeRDD(
-      """{"a": {"b": 1}}""" :: Nil))
+    val df = spark.read.json(Seq("""{"a": {"b": 1}}""").toDS())
     checkAnswer(df.orderBy("a.b"), Row(Row(1)))
   }
 
@@ -1164,8 +1161,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
-    val input = spark.read.json(spark.sparkContext.makeRDD(
-      (1 to 10).map(i => s"""{"id": $i}""")))
+    val input = spark.read.json((1 to 10).map(i => s"""{"id": $i}""").toDS())
 
     val df = input.select($"id", rand(0).as('r))
     df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>

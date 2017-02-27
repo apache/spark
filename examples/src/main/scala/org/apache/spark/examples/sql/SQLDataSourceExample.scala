@@ -111,6 +111,10 @@ object SQLDataSourceExample {
 
   private def runJsonDatasetExample(spark: SparkSession): Unit = {
     // $example on:json_dataset$
+    // Primitive types (Int, String, etc) and Product types (case classes) encoders are
+    // supported by importing this when creating a Dataset.
+    import spark.implicits._
+
     // A JSON dataset is pointed to by path.
     // The path can be either a single text file or a directory storing text files
     val path = "examples/src/main/resources/people.json"
@@ -135,10 +139,10 @@ object SQLDataSourceExample {
     // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
-    // an RDD[String] storing one JSON object per string
-    val otherPeopleRDD = spark.sparkContext.makeRDD(
+    // an Dataset[String] storing one JSON object per string
+    val otherPeopleDataset = spark.createDataset(
       """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
-    val otherPeople = spark.read.json(otherPeopleRDD)
+    val otherPeople = spark.read.json(otherPeopleDataset)
     otherPeople.show()
     // +---------------+----+
     // |        address|name|
