@@ -93,6 +93,7 @@ class InMemoryCatalog(
     }
   }
 
+  // For InMemoryCatatlog, default database location is equal to warehouse path
   protected override def warehousePath: String =
     catalog(SessionCatalog.DEFAULT_DATABASE).db.locationUri
   // --------------------------------------------------------------------------
