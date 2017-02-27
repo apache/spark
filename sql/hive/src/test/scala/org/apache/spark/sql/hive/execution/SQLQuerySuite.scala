@@ -2043,4 +2043,18 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-17409: Do Not Optimize Query in CTAS (Hive Serde Table) More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        sql("select 0 as id").createOrReplaceTempView("foo")
+        // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+        // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+        sql("SELECT * FROM foo group by id").toDF().write.format("hive").saveAsTable("bar")
+        checkAnswer(spark.table("bar"), Row(0) :: Nil)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+        assert(tableMetadata.provider == Some("hive"), "the expected table is a Hive serde table")
+      }
+    }
+  }
 }

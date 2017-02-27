@@ -162,7 +162,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(relation: CatalogRelation, partSpec, query, overwrite, ifNotExists)
         if DDLUtils.isHiveTable(relation.tableMeta) =>
-      InsertIntoHiveTable(relation, partSpec, query, overwrite, ifNotExists)
+      InsertIntoHiveTable(relation.tableMeta, partSpec, query, overwrite, ifNotExists)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)

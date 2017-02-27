@@ -393,8 +393,7 @@ abstract class HiveComparisonTest
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
                   case (q, e) => e.analyzed.collect {
-                    case i: InsertIntoHiveTable
-                        if tablesRead contains i.table.tableMeta.identifier =>
+                    case i: InsertIntoHiveTable if tablesRead contains i.table.identifier =>
                       (q, e, i)
                   }
                 }

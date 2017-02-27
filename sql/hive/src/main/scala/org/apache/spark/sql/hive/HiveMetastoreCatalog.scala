@@ -90,6 +90,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             val useCached =
               relation.location.rootPaths.toSet == pathsInMetastore.toSet &&
                 logical.schema.sameType(schemaInMetastore) &&
+                // We don't support hive bucketed tables. This function `getCached` is only used for
+                // converting supported Hive tables to data source tables.
                 relation.bucketSpec.isEmpty &&
                 relation.partitionSchema == partitionSchema.getOrElse(StructType(Nil))
 
@@ -137,10 +139,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Partitioned tables without partitions use the location of the table's base path.
         // Partitioned tables with partitions use the locations of those partitions' data
         // locations,_omitting_ the table's base path.
-        val paths = sparkSession.sharedState.externalCatalog.listPartitions(
-          tableIdentifier.database, tableIdentifier.name).map { p =>
-          new Path(new URI(p.storage.locationUri.get))
-        }
+        val paths = sparkSession.sharedState.externalCatalog
+          .listPartitions(tableIdentifier.database, tableIdentifier.name)
+          .map(p => new Path(new URI(p.storage.locationUri.get)))
 
         if (paths.isEmpty) {
           Seq(tablePath)
@@ -167,18 +168,17 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               index.filterPartitions(Nil)  // materialize all the partitions in memory
             }
           }
-          val dataSchema = relation.tableMeta.dataSchema
 
-          val fs = HadoopFsRelation(
+          val fsRelation = HadoopFsRelation(
             location = fileIndex,
             partitionSchema = partitionSchema,
-            dataSchema = dataSchema,
+            dataSchema = relation.tableMeta.dataSchema,
             // We don't support hive bucketed tables, only ones we write out.
             bucketSpec = None,
             fileFormat = fileFormatClass.newInstance(),
             options = options)(sparkSession = sparkSession)
 
-          val created = LogicalRelation(fs, catalogTable = Some(relation.tableMeta))
+          val created = LogicalRelation(fsRelation, catalogTable = Some(relation.tableMeta))
           tableRelationCache.put(tableIdentifier, created)
           created
         }
@@ -201,6 +201,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Some(metastoreSchema),
+                // We don't support hive bucketed tables, only ones we write out.
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),

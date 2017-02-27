@@ -357,6 +357,8 @@ case class CatalogRelation(
     dataCols: Seq[Attribute],
     partitionCols: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
+  assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
 
   // The partition column should always appear after data columns.
   override def output: Seq[Attribute] = dataCols ++ partitionCols
@@ -373,12 +375,7 @@ case class CatalogRelation(
   }
 
   /** Only compare table identifier. */
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan.canonicalized match {
-      case other: CatalogRelation => tableMeta.identifier == other.tableMeta.identifier
-      case _ => false
-    }
-  }
+  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
 
   override def computeStats(conf: CatalystConf): Statistics = {
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for

@@ -43,13 +43,6 @@ class SessionCatalogSuite extends PlanTest {
 
   import utils._
 
-  private def tableRelation(tableMeta: CatalogTable): CatalogRelation = {
-    CatalogRelation(
-      tableMeta,
-      tableMeta.dataSchema.toAttributes,
-      tableMeta.partitionSchema.toAttributes)
-  }
-
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------

@@ -594,9 +594,9 @@ class SessionCatalog(
         } else {
           val tableRelation = CatalogRelation(
             metadata,
-            // we assume the data columns are always nullable.
+            // we assume all the columns are nullable.
             metadata.dataSchema.asNullable.toAttributes,
-            metadata.partitionSchema.toAttributes)
+            metadata.partitionSchema.asNullable.toAttributes)
           SubqueryAlias(table, tableRelation, None)
         }
       } else {
