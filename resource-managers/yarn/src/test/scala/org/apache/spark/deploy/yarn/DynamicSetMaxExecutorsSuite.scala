@@ -39,9 +39,9 @@ import org.apache.spark.tags.ExtendedYarnTest
 @ExtendedYarnTest
 class DynamicSetMaxExecutorsSuite extends BaseYarnClusterSuite {
 
+  // coresTotal = cpuCores * numNodeManagers = 80
   numNodeManagers = 10
   val cpuCores = 8
-  // coresTotal = cpuCores * numNodeManagers = 80
 
   val queueNameRA = "ra"
   val queueNameRB = "rb"
@@ -59,7 +59,10 @@ class DynamicSetMaxExecutorsSuite extends BaseYarnClusterSuite {
   val a1Capacity = 30F
   val a1MaximumCapacity = 70F
   val a2Capacity = 70F
-  val isDynamicAllocation = true
+  val dynamicAllocationEnabled = "spark.dynamicAllocation.enabled=true" +
+    ",spark.shuffle.service.enabled=true"
+  val dynamicAllocationDisabled = "spark.dynamicAllocation.enabled=false" +
+    ",spark.shuffle.service.enabled=false"
 
   override def newYarnConfig(): CapacitySchedulerConfiguration = {
 
@@ -84,56 +87,42 @@ class DynamicSetMaxExecutorsSuite extends BaseYarnClusterSuite {
 
   test(s"run Spark on YARN with dynamicAllocation enabled and ${ queueNameA1 } queue") {
     // a1's executors: 80 * 0.6 * 0.7 = 33
-    setMaxExecutors(33, queueNameA1,
-      s"spark.dynamicAllocation.enabled=${ isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ isDynamicAllocation }")
+    setMaxExecutors(33, queueNameA1, dynamicAllocationEnabled)
   }
 
   test(s"run Spark on YARN with dynamicAllocation enabled and ${ queueNameA2 } queue") {
     // a2's executors: 80 * 0.6 * 1 = 48
-    setMaxExecutors(48, queueNameA2,
-      s"spark.dynamicAllocation.enabled=${ isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ isDynamicAllocation }")
+    setMaxExecutors(48, queueNameA2, dynamicAllocationEnabled)
   }
 
   test(s"run Spark on YARN with dynamicAllocation enabled and ${ queueNameRB } queue") {
     // b's executors: 80 * 1 = 80
-    setMaxExecutors(80, queueNameRB,
-      s"spark.dynamicAllocation.enabled=${ isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ isDynamicAllocation }")
+    setMaxExecutors(80, queueNameRB, dynamicAllocationEnabled)
   }
 
   test(s"run Spark on YARN with dynamicAllocation enabled and ${ queueNameA1 } queue and " +
     s"user set maxExecutors") {
     val executors = 12
     setMaxExecutors(executors, queueNameA1,
-      s"spark.dynamicAllocation.enabled=${ isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ isDynamicAllocation }" +
-        s",${DYN_ALLOCATION_MAX_EXECUTORS.key}=${ executors }")
+      s"${ dynamicAllocationEnabled },${DYN_ALLOCATION_MAX_EXECUTORS.key}=${ executors }")
   }
 
   test(s"run Spark on YARN with dynamicAllocation disabled and ${ queueNameA1 } queue") {
-    setMaxExecutors(Int.MaxValue, queueNameA1,
-      s"spark.dynamicAllocation.enabled=${ !isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ !isDynamicAllocation }")
+    setMaxExecutors(DYN_ALLOCATION_MAX_EXECUTORS.defaultValue.get, queueNameA1,
+      dynamicAllocationDisabled)
   }
 
   test(s"run Spark on YARN with dynamicAllocation disabled and ${ queueNameA1 } queue and " +
     s"user set maxExecutors") {
     val executors = 12
     setMaxExecutors(executors, queueNameA1,
-      s"spark.dynamicAllocation.enabled=${ isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ isDynamicAllocation }" +
-        s",${DYN_ALLOCATION_MAX_EXECUTORS.key}=${ executors }")
+      s"${ dynamicAllocationEnabled },${DYN_ALLOCATION_MAX_EXECUTORS.key}=${ executors }")
   }
 
   test(s"run Spark on YARN with dynamicAllocation enabled and ${ queueNameRB } queue and " +
     s"user set spark.executor.cores") {
     // b's executors = 80 * 1 / 3 = 26
-    setMaxExecutors(26, queueNameRB,
-      s"spark.dynamicAllocation.enabled=${ isDynamicAllocation }" +
-        s",spark.shuffle.service.enabled=${ isDynamicAllocation }" +
-        s",${EXECUTOR_CORES.key}=3")
+    setMaxExecutors(26, queueNameRB, s"${ dynamicAllocationEnabled },${EXECUTOR_CORES.key}=3")
   }
 
   private def setMaxExecutors(expectedExecutors: Int,

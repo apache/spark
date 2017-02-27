@@ -349,7 +349,15 @@ private[spark] class ExecutorAllocationManager(
    * @return the number of additional executors actually requested.
    */
   private def addExecutors(maxNumExecutorsNeeded: Int): Int = {
-    maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+    // Update EnvironmentPage if spark.dynamicAllocation.maxExecutors changed.
+    if (maxNumExecutors != conf.get(DYN_ALLOCATION_MAX_EXECUTORS)) {
+      maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+      val sc = listenerBus.sparkContext
+      val envDetails = SparkEnv.environmentDetails(conf, sc.getSchedulingMode.toString,
+        sc.addedJars.keys.toSeq, sc.addedFiles.keys.toSeq)
+      val event = SparkListenerEnvironmentUpdate(envDetails)
+      listenerBus.postToAll(event)
+    }
     // Do not request more executors if it would put our target over the upper bound
     if (numExecutorsTarget >= maxNumExecutors) {
       logDebug(s"Not adding executors because our current target total " +
