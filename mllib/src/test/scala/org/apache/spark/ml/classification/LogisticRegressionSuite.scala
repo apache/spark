@@ -461,20 +461,22 @@ class LogisticRegressionSuite
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
     val binaryAgg = new LogisticAggregator(bcCoefficientsBinary, bcFeaturesStd, 2,
       fitIntercept = true, multinomial = false)
-    withClue("binary logistic aggregator cannot handle sparse coefficients") {
+    val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
       }
     }
+    assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
 
     val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
     val multinomialAgg = new LogisticAggregator(bcCoefficientsMulti, bcFeaturesStd, 3,
       fitIntercept = true, multinomial = true)
-    withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
+    val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
       }
     }
+    assert(thrown.getMessage.contains("coefficients only supports dense"))
     bcCoefficientsBinary.destroy(blocking = false)
     bcFeaturesStd.destroy(blocking = false)
     bcCoefficientsMulti.destroy(blocking = false)
