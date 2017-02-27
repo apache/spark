@@ -64,6 +64,22 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
   }
 
+  test("join with batch table which has an aggregation") {
+    // Make a table and ensure it will be broadcast.
+    val smallTable = Seq((1, "one"), (2, "two"), (4, "four"), (2, "two"))
+      .toDF("number", "word").groupBy("word").count()
+
+    // Join the input stream with a table.
+    val inputData = MemoryStream[Int]
+    val joined = inputData.toDS().toDF().join(smallTable, $"value" === $"count")
+
+    testStream(joined)(
+      AddData(inputData, 1),
+      CheckAnswer(Row(1, "one", 1), Row(1, "four", 1)),
+      AddData(inputData, 2),
+      CheckAnswer(Row(1, "one", 1), Row(1, "four", 1), Row(2, "two", 2)))
+  }
+
   test("union two streams") {
     val inputData1 = MemoryStream[Int]
     val inputData2 = MemoryStream[Int]

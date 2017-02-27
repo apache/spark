@@ -526,7 +526,10 @@ class StreamExecution(
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
-          LocalRelation(output)
+          val plan = new LocalRelation(output) {
+            override def isStreaming = true
+          }
+          plan
         }
     }
 

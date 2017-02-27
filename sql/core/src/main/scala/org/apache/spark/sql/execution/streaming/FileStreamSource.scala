@@ -155,8 +155,10 @@ class FileStreamSource(
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
         options = optionsWithPartitionBasePath)
-    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
-      checkFilesExist = false)))
+    markAsStreaming(
+      Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
+        checkFilesExist = false)))
+    )
   }
 
   /**

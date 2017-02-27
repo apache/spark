@@ -606,6 +606,33 @@ class KafkaSourceSuite extends KafkaSourceTest {
     assert(query.exception.isEmpty)
   }
 
+  test("getBatch should return a streaming DataFrame") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+    testUtils.sendMessages(topic, Array("-1"))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("subscribe", topic)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+
+    val mapped = kafka.map(kv => kv._2.toInt + 1)
+    testStream(mapped)(
+      StartStream(trigger = ProcessingTime(1)),
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 1, 2, 3),
+      CheckAnswer(2, 3, 4),
+      AssertOnQuery { query =>
+        query.lastExecution.logical.isStreaming
+      }
+    )
+  }
+
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   private def assignString(topic: String, partitions: Iterable[Int]): String = {

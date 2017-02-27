@@ -24,7 +24,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame, _}
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -120,12 +120,14 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
     logDebug(
       s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
-    newBlocks
-      .map(_.toDF())
-      .reduceOption(_ union _)
-      .getOrElse {
-        sys.error("No data selected!")
-      }
+    markAsStreaming(
+      newBlocks
+        .map(_.toDF())
+        .reduceOption(_ union _)
+        .getOrElse {
+          sys.error("No data selected!")
+        }
+    )
   }
 
   override def commit(end: Offset): Unit = synchronized {

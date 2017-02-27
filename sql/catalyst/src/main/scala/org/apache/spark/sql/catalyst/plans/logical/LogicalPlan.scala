@@ -31,6 +31,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   private var _analyzed: Boolean = false
 
+  private var _incremental: Boolean = false
+
   /**
    * Marks this plan as already analyzed.  This should only be called by CheckAnalysis.
    */
@@ -43,8 +45,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def analyzed: Boolean = _analyzed
 
+  def setIncremental(): Unit = { _incremental = true }
+
   /** Returns true if this subtree contains any streaming data sources. */
-  def isStreaming: Boolean = children.exists(_.isStreaming == true)
+  def isStreaming: Boolean = children.exists(_.isStreaming == true) || _incremental
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
