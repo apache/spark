@@ -114,7 +114,6 @@ case class InsertIntoHadoopFsRelationCommand(
     if (doInsertion) {
 
       // Callback for updating metastore partition metadata after the insertion job completes.
-      // and refresh the path in cache
       def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
         if (partitionsTrackedByCatalog) {
           val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
