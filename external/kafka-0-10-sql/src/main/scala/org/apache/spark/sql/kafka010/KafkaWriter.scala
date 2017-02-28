@@ -19,7 +19,6 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,18 +27,26 @@ import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.types.{BinaryType, StringType}
 import org.apache.spark.util.Utils
 
+/**
+ * The [[KafkaWriter]] class is used to write data from a batch query
+ * or structured streaming query, given by a [[QueryExecution]], to Kafka.
+ * The data is assumed to have a value column, and an optional topic and key
+ * columns. If the topic column is missing, then the topic must come from
+ * the 'topic' configuration option. If the key column is missing, then a
+ * null valued key field will be added to the
+ * [[org.apache.kafka.clients.producer.ProducerRecord]].
+ */
 private[kafka010] object KafkaWriter extends Logging {
   val TOPIC_ATTRIBUTE_NAME: String = "topic"
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
 
-  def write(
-      sparkSession: SparkSession,
+  def validateQuery(
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
       topic: Option[String] = None): Unit = {
     val schema = queryExecution.logical.output
-    schema.find(p => p.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
+    schema.find(_.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (topic == None) {
         throw new AnalysisException(s"topic option required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
@@ -52,7 +59,7 @@ private[kafka010] object KafkaWriter extends Logging {
       case _ =>
         throw new AnalysisException(s"Topic type must be a String")
     }
-    schema.find(p => p.name == KEY_ATTRIBUTE_NAME).getOrElse(
+    schema.find(_.name == KEY_ATTRIBUTE_NAME).getOrElse(
       Literal(null, StringType)
     ).dataType match {
       case StringType | BinaryType => // good
@@ -60,7 +67,7 @@ private[kafka010] object KafkaWriter extends Logging {
         throw new AnalysisException(s"$KEY_ATTRIBUTE_NAME attribute type " +
           s"must be a String or BinaryType")
     }
-    schema.find(p => p.name == VALUE_ATTRIBUTE_NAME).getOrElse(
+    schema.find(_.name == VALUE_ATTRIBUTE_NAME).getOrElse(
       throw new AnalysisException(s"Required attribute '$VALUE_ATTRIBUTE_NAME' not found")
     ).dataType match {
       case StringType | BinaryType => // good
@@ -68,39 +75,21 @@ private[kafka010] object KafkaWriter extends Logging {
         throw new AnalysisException(s"$VALUE_ATTRIBUTE_NAME attribute type " +
           s"must be a String or BinaryType")
     }
-    SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
-      sparkSession.sparkContext.runJob(queryExecution.toRdd,
-        (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
-          executeTask(
-            iterator = iter,
-            producerConfiguration = kafkaParameters,
-            sparkStageId = taskContext.stageId(),
-            sparkPartitionId = taskContext.partitionId(),
-            sparkAttemptNumber = taskContext.attemptNumber(),
-            inputSchema = schema,
-            defaultTopic = topic)
-        })
-    }
   }
 
-  /** Writes data out in a single Spark task. */
-  private def executeTask(
-      iterator: Iterator[InternalRow],
-      producerConfiguration: ju.Map[String, Object],
-      sparkStageId: Int,
-      sparkPartitionId: Int,
-      sparkAttemptNumber: Int,
-      inputSchema: Seq[Attribute],
-      defaultTopic: Option[String]): Unit = {
-    val writeTask = new KafkaWriteTask(
-      producerConfiguration, inputSchema, defaultTopic)
-    Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      // Execute the task to write rows out and commit the task.
-      writeTask.execute(iterator)
-    })(catchBlock = {
-      logError(s"Stage $sparkStageId, task $sparkPartitionId aborted.")
-    }, finallyBlock = {
-      writeTask.close()
-    })
+  def write(
+      sparkSession: SparkSession,
+      queryExecution: QueryExecution,
+      kafkaParameters: ju.Map[String, Object],
+      topic: Option[String] = None): Unit = {
+    val schema = queryExecution.logical.output
+    validateQuery(queryExecution, kafkaParameters, topic)
+    SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
+      queryExecution.toRdd.foreachPartition { iter =>
+        val writeTask = new KafkaWriteTask(kafkaParameters, schema, topic)
+        Utils.tryWithSafeFinally(block = writeTask.execute(iter))(
+          finallyBlock = writeTask.close())
+      }
+    }
   }
 }

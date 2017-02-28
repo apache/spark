@@ -364,5 +364,5 @@ private[kafka010] object KafkaSource {
   private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
     if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
   }
-}
 
+}

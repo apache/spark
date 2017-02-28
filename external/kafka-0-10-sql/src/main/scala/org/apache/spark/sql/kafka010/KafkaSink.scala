@@ -24,10 +24,12 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.streaming.Sink
 
 private[kafka010] class KafkaSink(
-  sqlContext: SQLContext,
-  executorKafkaParams: ju.Map[String, Object],
-  defaultTopic: Option[String]) extends Sink with Logging {
-  var latestBatchId = -1L
+    sqlContext: SQLContext,
+    executorKafkaParams: ju.Map[String, Object],
+    defaultTopic: Option[String]) extends Sink with Logging {
+  @volatile private var latestBatchId = -1L
+
+  override def toString(): String = "KafkaSink"
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= latestBatchId) {

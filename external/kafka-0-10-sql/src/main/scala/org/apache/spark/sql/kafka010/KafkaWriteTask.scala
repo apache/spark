@@ -19,13 +19,12 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.producer._
+import org.apache.kafka.clients.producer.{KafkaProducer, _}
 import org.apache.kafka.common.serialization.ByteArraySerializer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.types.{BinaryType, StringType}
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A simple trait for writing out data in a single Spark task, without any concerns about how
@@ -38,56 +37,24 @@ private[kafka010] class KafkaWriteTask(
     topic: Option[String]) {
   // used to synchronize with Kafka callbacks
   @volatile var failedWrite: Exception = null
-  val topicExpression =
-    if (topic.isDefined) {
-      // topic option overrides topic field
-      Literal(UTF8String.fromString(topic.get), StringType)
-    } else {
-    inputSchema.find(p =>
-      p.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME).getOrElse(
-        throw new IllegalStateException(s"topic option required when no " +
-          s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present"))
-    }
-  val keyExpression = inputSchema.find(p =>
-    p.name == KafkaWriter.KEY_ATTRIBUTE_NAME).getOrElse(
-      Literal(null, BinaryType)
-    )
-  keyExpression.dataType match {
-    case StringType | BinaryType => // good
-    case t =>
-      throw new IllegalStateException(s"${KafkaWriter.KEY_ATTRIBUTE_NAME} " +
-        s"attribute unsupported type $t")
-  }
-  val valueExpression = inputSchema.find(p =>
-    p.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
-      throw new IllegalStateException(s"Required attribute " +
-        s"'${KafkaWriter.VALUE_ATTRIBUTE_NAME}' not found")
-    )
-  valueExpression.dataType match {
-    case StringType | BinaryType => // good
-    case t =>
-      throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
-        s"attribute unsupported type $t")
-  }
-  val projection = UnsafeProjection.create(
-    Seq(topicExpression, Cast(keyExpression, BinaryType),
-      Cast(valueExpression, BinaryType)), inputSchema)
-
-  // Create a Kafka Producer
-  producerConfiguration.put("key.serializer", classOf[ByteArraySerializer].getName)
-  producerConfiguration.put("value.serializer", classOf[ByteArraySerializer].getName)
-  val producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
+  val projection = createProjection
+  var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
 
   /**
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
+    producer = {
+      producerConfiguration.put("key.serializer", classOf[ByteArraySerializer].getName)
+      producerConfiguration.put("value.serializer", classOf[ByteArraySerializer].getName)
+      new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
+    }
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       val projectedRow = projection(currentRow)
-      val topic = projectedRow.get(0, StringType)
-      val key = projectedRow.get(1, BinaryType).asInstanceOf[Array[Byte]]
-      val value = projectedRow.get(2, BinaryType).asInstanceOf[Array[Byte]]
+      val topic = projectedRow.getUTF8String(0)
+      val key = projectedRow.getBinary(1)
+      val value = projectedRow.getBinary(2)
       if (topic == null) {
         throw new NullPointerException(s"null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
@@ -105,12 +72,53 @@ private[kafka010] class KafkaWriteTask(
   }
 
   def close(): Unit = {
-    checkForErrors()
-    producer.close()
-    checkForErrors()
+    if (producer != null) {
+      checkForErrors
+      producer.close()
+      checkForErrors
+      producer = null
+    }
   }
 
-  private def checkForErrors() = {
+  private def createProjection: UnsafeProjection = {
+    val topicExpression = topic.map(Literal(_)).orElse {
+      inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
+    }.getOrElse {
+      throw new IllegalStateException(s"topic option required when no " +
+        s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present")
+    }
+    topicExpression.dataType match {
+      case StringType => // good
+      case t =>
+        throw new IllegalStateException(s"${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
+          s"attribute unsupported type $t. ${KafkaWriter.TOPIC_ATTRIBUTE_NAME} " +
+          s"must be a ${StringType}")
+    }
+    val keyExpression = inputSchema.find(_.name == KafkaWriter.KEY_ATTRIBUTE_NAME)
+      .getOrElse(Literal(null, BinaryType))
+    keyExpression.dataType match {
+      case StringType | BinaryType => // good
+      case t =>
+        throw new IllegalStateException(s"${KafkaWriter.KEY_ATTRIBUTE_NAME} " +
+          s"attribute unsupported type $t")
+    }
+    val valueExpression = inputSchema
+      .find(_.name == KafkaWriter.VALUE_ATTRIBUTE_NAME).getOrElse(
+      throw new IllegalStateException(s"Required attribute " +
+        s"'${KafkaWriter.VALUE_ATTRIBUTE_NAME}' not found")
+    )
+    valueExpression.dataType match {
+      case StringType | BinaryType => // good
+      case t =>
+        throw new IllegalStateException(s"${KafkaWriter.VALUE_ATTRIBUTE_NAME} " +
+          s"attribute unsupported type $t")
+    }
+    UnsafeProjection.create(
+      Seq(topicExpression, Cast(keyExpression, BinaryType),
+        Cast(valueExpression, BinaryType)), inputSchema)
+  }
+
+  private def checkForErrors: Unit = {
     if (failedWrite != null) {
       throw failedWrite
     }

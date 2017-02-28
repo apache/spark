@@ -162,18 +162,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters: Map[String, String],
       partitionColumns: Seq[String],
       outputMode: OutputMode): Sink = {
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val defaultTopic = caseInsensitiveParams.get(TOPIC_OPTION_KEY).map(_.trim.toLowerCase)
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase.startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap + ("value.serializer" -> classOf[BytesSerializer].getName,
-        "key.serializer" -> classOf[BytesSerializer].getName)
+    val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
+    val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     new KafkaSink(sqlContext,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
-      defaultTopic)
+      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), defaultTopic)
   }
 
   override def createRelation(
@@ -183,28 +175,48 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       data: DataFrame): BaseRelation = {
     mode match {
       case SaveMode.Overwrite | SaveMode.Ignore =>
-        throw new AnalysisException(s"save mode $mode not allowed for Kafka. " +
-          s"Allowable save modes are ${SaveMode.Append} and " +
+        throw new AnalysisException(s"Save mode $mode not allowed for Kafka. " +
+          s"Allowed save modes are ${SaveMode.Append} and " +
           s"${SaveMode.ErrorIfExists} (default).")
       case _ => // good
     }
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    val defaultTopic = caseInsensitiveParams.get(TOPIC_OPTION_KEY).map(_.trim.toLowerCase)
-    val specifiedKafkaParams =
-      parameters
-        .keySet
-        .filter(_.toLowerCase.startsWith("kafka."))
-        .map { k => k.drop(6).toString -> parameters(k) }
-        .toMap + ("value.serializer" -> classOf[BytesSerializer].getName,
-        "key.serializer" -> classOf[BytesSerializer].getName)
+    val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim.toLowerCase)
+    val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava),
-      defaultTopic)
+      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), defaultTopic)
 
+    /* This method is suppose to return a relation that reads the data that was written.
+     * We cannot support this for Kafka. Therefore, in order to make things consistent,
+     * we return an empty base relation.
+     */
     new BaseRelation {
       override def sqlContext: SQLContext = outerSQLContext
       override def schema: StructType = KafkaOffsetReader.kafkaSchema
     }
+  }
+
+  private def kafkaParamsForProducer(parameters: Map[String, String]): Map[String, String] = {
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}")) {
+      throw new IllegalArgumentException(
+        s"Kafka option '${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}' is not supported as keys "
+          + "are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame operations "
+          + "to explicitly deserialize the keys.")
+    }
+
+    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}"))
+    {
+      throw new IllegalArgumentException(
+        s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
+          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
+          + "operations to explicitly deserialize the values.")
+    }
+    parameters
+      .keySet
+      .filter(_.toLowerCase.startsWith("kafka."))
+      .map { k => k.drop(6).toString -> parameters(k) }
+      .toMap + (ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[BytesSerializer].getName,
+        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[BytesSerializer].getName)
   }
 
   private def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]) =
@@ -432,11 +444,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 }
 
 private[kafka010] object KafkaSourceProvider {
-  val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
-  val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
-  val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
-  val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
+  private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
+  private val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
+  private val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
+  private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   val TOPIC_OPTION_KEY = "topic"
 
-  val deserClassName = classOf[ByteArrayDeserializer].getName
+  private val deserClassName = classOf[ByteArrayDeserializer].getName
 }
