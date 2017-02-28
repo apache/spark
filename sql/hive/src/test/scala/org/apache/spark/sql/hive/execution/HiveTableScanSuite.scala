@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -95,8 +94,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
     val plan = sql(stmt).queryExecution.sparkPlan
     val numPartitions = plan.collectFirst {
-      case p: HiveTableScanExec =>
-        p.relation.getHiveQlPartitions(p.partitionPruningPred).length
+      case p: HiveTableScanExec => p.rawPartitions.length
     }.getOrElse(0)
     assert(numPartitions == expectedNumParts)
   }
@@ -170,11 +168,11 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
           s"""
              |SELECT * FROM $table
            """.stripMargin).queryExecution.sparkPlan
-        val relation = plan.collectFirst {
-          case p: HiveTableScanExec => p.relation
+        val scan = plan.collectFirst {
+          case p: HiveTableScanExec => p
         }.get
-        val tableCols = relation.hiveQlTable.getCols
-        relation.getHiveQlPartitions().foreach(p => assert(p.getCols.size == tableCols.size))
+        val numDataCols = scan.relation.dataCols.length
+        scan.rawPartitions.foreach(p => assert(p.getCols.size == numDataCols))
       }
     }
   }
