@@ -380,7 +380,6 @@ setMethod("colnames<-",
               stop("Column names cannot contain the '.' symbol.")
             }
 
-            
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
             dataFrame(sdf)
           })
