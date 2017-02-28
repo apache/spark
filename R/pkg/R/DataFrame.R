@@ -47,6 +47,19 @@ setClass("SparkDataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
 
+# Validate "SparkDataFrame"
+# SparkDataFrame should not allow duplicate column names
+validSparkDataFrame <- function(object) {
+  cols <- colnames
+  if (length(cols) != length(unique(cols))) {
+    stop("Duplicate column names.")
+  } else {
+    TRUE
+  }
+}
+
+setValidity("SparkDataFrame", validSparkDataFrame)
+
 setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
@@ -366,6 +379,7 @@ setMethod("colnames<-",
               stop("Column names cannot contain the '.' symbol.")
             }
 
+            
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
             dataFrame(sdf)
           })
