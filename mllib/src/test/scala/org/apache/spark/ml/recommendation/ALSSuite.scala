@@ -498,8 +498,8 @@ class ALSSuite
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
         } { (ex, act, _) =>
-          ex.transform(_: DataFrame).select("prediction").first.getFloat(0) ~==
-            act.transform(_: DataFrame).select("prediction").first.getFloat(0) absTol 1e-6
+          ex.transform(_: DataFrame).select("prediction").first.getDouble(0) ~==
+            act.transform(_: DataFrame).select("prediction").first.getDouble(0) absTol 1e-6
         }
     }
     // check user/item ids falling outside of Int range
@@ -545,6 +545,53 @@ class ALSSuite
     val ratings = sc.parallelize(Array.empty[Rating[Int]])
     intercept[IllegalArgumentException] {
       ALS.train(ratings)
+    }
+  }
+
+  test("ALS cold start user/item prediction strategy") {
+    val spark = this.spark
+    import spark.implicits._
+    import org.apache.spark.sql.functions._
+
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    val data = ratings.toDF
+    val knownUser = data.select(max("user")).as[Int].first()
+    val unknownUser = knownUser + 10
+    val knownItem = data.select(max("item")).as[Int].first()
+    val unknownItem = knownItem + 20
+    val test = Seq(
+      (unknownUser, unknownItem),
+      (knownUser, unknownItem),
+      (unknownUser, knownItem),
+      (knownUser, knownItem)
+    ).toDF("user", "item")
+
+    val als = new ALS().setMaxIter(1).setRank(1)
+    // default is 'nan'
+    val defaultModel = als.fit(data)
+    val defaultPredictions = defaultModel.transform(test).select("prediction").as[Float].collect()
+    assert(defaultPredictions.length == 4)
+    assert(defaultPredictions.slice(0, 3).forall(_.isNaN))
+    assert(!defaultPredictions.last.isNaN)
+
+    // check 'drop' strategy should filter out rows with unknown users/items
+    val dropPredictions = defaultModel
+      .setColdStartStrategy("drop")
+      .transform(test)
+      .select("prediction").as[Float].collect()
+    assert(dropPredictions.length == 1)
+    assert(!dropPredictions.head.isNaN)
+    assert(dropPredictions.head ~== defaultPredictions.last relTol 1e-14)
+  }
+
+  test("case insensitive cold start param value") {
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS().fit(data)
+    Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
+      model.setColdStartStrategy(s).transform(data)
     }
   }
 }
