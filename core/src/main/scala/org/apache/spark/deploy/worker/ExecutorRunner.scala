@@ -157,6 +157,9 @@ private[deploy] class ExecutorRunner(
 
 
       /////////////////////////////
+      /////////////////// just a one-time token... it can be renewed by driver
+      /////////////////// but will only last 7 days
+      /////////////////// for longer, the credetial updater will be used
 
       logInfo(s"APP DESC TOKENS: ${appDesc}  tokens ${appDesc.tokens}")
       appDesc.tokens.foreach { bytes =>
