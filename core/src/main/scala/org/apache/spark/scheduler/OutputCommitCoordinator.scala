@@ -48,11 +48,11 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private type StageId = Int
   private type PartitionId = Int
   private type TaskAttemptNumber = Int
-  private case class StageState(authorizedCommitters: Array[TaskAttemptNumber]) {
+  private val NO_AUTHORIZED_COMMITTER: TaskAttemptNumber = -1
+  private case class StageState(numPartitions: Int) {
+    val authorizedCommitters = Array.fill[TaskAttemptNumber](numPartitions)(NO_AUTHORIZED_COMMITTER)
     val failures = mutable.Map[PartitionId, mutable.Set[TaskAttemptNumber]]()
   }
-
-  private val NO_AUTHORIZED_COMMITTER: TaskAttemptNumber = -1
 
   /**
    * Map from active stages's id => authorized task attempts for each partition id, which hold an
@@ -109,14 +109,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
    * @param maxPartitionId the maximum partition id that could appear in this stage's tasks (i.e.
    *                       the maximum possible value of `context.partitionId`).
    */
-  private[scheduler] def stageStart(
-      stage: StageId,
-      maxPartitionId: Int): Unit = {
-    val arr = new Array[TaskAttemptNumber](maxPartitionId + 1)
-    java.util.Arrays.fill(arr, NO_AUTHORIZED_COMMITTER)
-    synchronized {
-      stageStates(stage) = new StageState(arr)
-    }
+  private[scheduler] def stageStart(stage: StageId, maxPartitionId: Int): Unit = synchronized {
+    stageStates(stage) = new StageState(maxPartitionId + 1)
   }
 
   // Called by DAGScheduler
