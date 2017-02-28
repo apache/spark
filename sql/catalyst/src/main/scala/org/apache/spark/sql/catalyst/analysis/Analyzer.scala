@@ -604,7 +604,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+        i.copy(table = lookupTableFromCatalog(u).canonicalized)
       case u: UnresolvedRelation => resolveRelation(u)
     }
 

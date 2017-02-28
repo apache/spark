@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -518,7 +518,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withSQLConf(
       HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
       HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
-      relation = EliminateSubqueryAliases(spark.table(tableName).queryExecution.analyzed)
+      relation = spark.table(tableName).queryExecution.analyzed.canonicalized
     }
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))

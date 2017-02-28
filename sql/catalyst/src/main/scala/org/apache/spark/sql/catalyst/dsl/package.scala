@@ -377,7 +377,7 @@ package object dsl {
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
 
       def analyze: LogicalPlan =
-        EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))
+        analysis.SimpleAnalyzer.execute(logicalPlan).canonicalized
     }
   }
 }
