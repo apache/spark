@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.net.URI
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -75,7 +77,7 @@ class FileStreamSource(
 
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
-  val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
+  val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs, sourceOptions.fileNameOnly)
 
   metadataLog.allFiles().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
@@ -262,7 +264,7 @@ object FileStreamSource {
    * To prevent the hash map from growing indefinitely, a purge function is available to
    * remove files "maxAgeMs" older than the latest file.
    */
-  class SeenFilesMap(maxAgeMs: Long) {
+  class SeenFilesMap(maxAgeMs: Long, fileNameOnly: Boolean) {
     require(maxAgeMs >= 0)
 
     /** Mapping from file to its timestamp. */
@@ -274,9 +276,13 @@ object FileStreamSource {
     /** Timestamp for the last purge operation. */
     private var lastPurgeTimestamp: Timestamp = 0L
 
+    @inline private def stripPathIfNecessary(path: String) = {
+      if (fileNameOnly) new Path(new URI(path)).getName else path
+    }
+
     /** Add a new file to the map. */
     def add(path: String, timestamp: Timestamp): Unit = {
-      map.put(path, timestamp)
+      map.put(stripPathIfNecessary(path), timestamp)
       if (timestamp > latestTimestamp) {
         latestTimestamp = timestamp
       }
@@ -289,7 +295,7 @@ object FileStreamSource {
     def isNewFile(path: String, timestamp: Timestamp): Boolean = {
       // Note that we are testing against lastPurgeTimestamp here so we'd never miss a file that
       // is older than (latestTimestamp - maxAgeMs) but has not been purged yet.
-      timestamp >= lastPurgeTimestamp && !map.containsKey(path)
+      timestamp >= lastPurgeTimestamp && !map.containsKey(stripPathIfNecessary(path))
     }
 
     /** Removes aged entries and returns the number of files removed. */
@@ -309,6 +315,10 @@ object FileStreamSource {
 
     def size: Int = map.size()
 
+    /**
+     * Note when `fileNameOnly` is true, each entry would be (file name, timestamp) rather than
+     * (full path, timestamp).
+     */
     def allEntries: Seq[(String, Timestamp)] = {
       map.asScala.toSeq
     }
