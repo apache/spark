@@ -11,7 +11,7 @@ struct<>
 
 
 -- !query 1
-use mydb1
+USE mydb1
 -- !query 1 schema
 struct<>
 -- !query 1 output
@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query 2
-CREATE TABLE t1 USING parquet as SELECT 1 as i1
+CREATE TABLE t1 USING parquet AS SELECT 1 AS i1
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -35,7 +35,7 @@ struct<>
 
 
 -- !query 4
-use mydb2
+USE mydb2
 -- !query 4 schema
 struct<>
 -- !query 4 output
@@ -43,7 +43,7 @@ struct<>
 
 
 -- !query 5
-CREATE TABLE t1 USING parquet as SELECT 20 as i1
+CREATE TABLE t1 USING parquet AS SELECT 20 AS i1
 -- !query 5 schema
 struct<>
 -- !query 5 output
@@ -158,7 +158,7 @@ cannot resolve '`mydb1.t1.i1`' given input columns: [i1]; line 1 pos 7
 
 
 -- !query 19
-use mydb1
+USE mydb1
 -- !query 19 schema
 struct<>
 -- !query 19 output
@@ -191,7 +191,7 @@ struct<i1:int>
 
 
 -- !query 23
-use mydb2
+USE mydb2
 -- !query 23 schema
 struct<>
 -- !query 23 output
@@ -274,7 +274,7 @@ cannot resolve '`mydb1.t4.c3`' given input columns: [c2, c3]; line 2 pos 42
 
 
 -- !query 33
-set spark.sql.crossJoin.enabled = true
+SET spark.sql.crossJoin.enabled = true
 -- !query 33 schema
 struct<key:string,value:string>
 -- !query 33 output
@@ -325,7 +325,7 @@ struct<>
 
 
 -- !query 39
-CREATE TABLE t5(i1 INT, t5 STRUCT<i1:INT, i2:INT>) USING PARQUET
+CREATE TABLE t5(i1 INT, t5 STRUCT<i1:INT, i2:INT>) USING parquet
 -- !query 39 schema
 struct<>
 -- !query 39 output
@@ -382,7 +382,7 @@ cannot resolve '`mydb1.t5.t5.i1`' given input columns: [i1, t5]; line 1 pos 7
 
 
 -- !query 46
-SELECT mydb1.t5.t5.i2 from mydb1.t5
+SELECT mydb1.t5.t5.i2 FROM mydb1.t5
 -- !query 46 schema
 struct<>
 -- !query 46 output
@@ -391,7 +391,7 @@ cannot resolve '`mydb1.t5.t5.i2`' given input columns: [i1, t5]; line 1 pos 7
 
 
 -- !query 47
-set spark.sql.crossJoin.enabled = true
+SET spark.sql.crossJoin.enabled = false
 -- !query 47 schema
 struct<key:string,value:string>
 -- !query 47 output

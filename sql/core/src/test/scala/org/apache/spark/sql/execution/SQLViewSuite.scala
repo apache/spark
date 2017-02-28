@@ -52,19 +52,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("column resolution scenarios with local temp view") {
-    val df = Seq(2).toDF("i1")
-    df.createOrReplaceTempView("table1")
-    withTempView("table1") {
-      checkAnswer(spark.sql("SELECT table1.* FROM table1"), Row(2))
-      checkAnswer(spark.sql("SELECT * FROM table1"), Row(2))
-      checkAnswer(spark.sql("SELECT i1 FROM table1"), Row(2))
-      checkAnswer(spark.sql("SELECT table1.i1 FROM table1"), Row(2))
-      checkAnswer(spark.sql("SELECT a.i1 FROM table1 AS a"), Row(2))
-      checkAnswer(spark.sql("SELECT i1 FROM table1 AS a"), Row(2))
-    }
-  }
-
   test("create a temp view on a permanent view") {
     withView("jtv1", "temp_jtv1") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
