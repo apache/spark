@@ -2591,8 +2591,6 @@ private[spark] object Utils extends Logging {
    * of the key value pairs. No care is taken to make sure the redaction property itself is not
    * redacted. So theoretically, the property itself could be configured to redact its own value
    * when printing.
-   * @param kvs
-   * @return
    */
   def redact(kvs: Map[String, String]): Seq[(String, String)] = {
     val redactionPattern = kvs.getOrElse(SECRET_REDACTION_PROPERTY, SECRET_REDACTION_DEFAULT).r
