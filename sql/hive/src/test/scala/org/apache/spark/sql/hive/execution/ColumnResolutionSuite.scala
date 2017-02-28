@@ -24,8 +24,6 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
-  import spark.implicits._
-
   def columnResolutionTests(db1: String, db2: String): Unit = {
     spark.catalog.setCurrentDatabase(db1)
 
