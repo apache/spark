@@ -210,13 +210,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(store1.commit() === 2)
     assert(rowsToSet(store1.iterator()) === Set("a" -> 1, "b" -> 1))
     assert(getDataFromFiles(provider) === Set("a" -> 1, "b" -> 1))
-
-    // Overwrite the version with other data
-    val store2 = provider.getStore(1)
-    put(store2, "c", 1)
-    assert(store2.commit() === 2)
-    assert(rowsToSet(store2.iterator()) === Set("a" -> 1, "c" -> 1))
-    assert(getDataFromFiles(provider) === Set("a" -> 1, "c" -> 1))
   }
 
   test("snapshotting") {
@@ -292,6 +285,15 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
+  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+    val conf = new Configuration()
+    conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
+    conf.set("fs.default.name", "fake:///")
+
+    val provider = newStoreProvider(hadoopConf = conf)
+    provider.getStore(0).commit()
+    provider.getStore(0).commit()
+  }
 
   test("corrupted file handling") {
     val provider = newStoreProvider(minDeltasForSnapshot = 5)
@@ -678,6 +680,21 @@ private[state] object StateStoreSuite {
       case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
       case ValueRemoved(key, _) => Removed(rowToString(key))
     }.toSet
+  }
+}
+
+/**
+ * Fake FileSystem that simulates HDFS rename semantic, i.e. renaming a file atop an existing
+ * one should return false.
+ * See hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html
+ */
+class RenameLikeHDFSFileSystem extends RawLocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    if (exists(dst)) {
+      return false
+    } else {
+      return super.rename(src, dst)
+    }
   }
 }
 
