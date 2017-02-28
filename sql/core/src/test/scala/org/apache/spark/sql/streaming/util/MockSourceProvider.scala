@@ -66,15 +66,14 @@ object MockSourceProvider {
 
   final val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
 
-  def withMockSources(sources: Source*)(f: => Unit): Unit = {
-    require(sources.nonEmpty)
+  def withMockSources(source: Source, otherSources: Source*)(f: => Unit): Unit = {
     var i = 0
-    val srcProvider = () => {
+    val sources = source +: otherSources
+    sourceProviderFunction = () => {
       val source = sources(i % sources.length)
       i += 1
       source
     }
-    sourceProviderFunction = srcProvider
     try {
       f
     } finally {
