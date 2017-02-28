@@ -278,7 +278,7 @@ SET spark.sql.crossJoin.enabled = true
 -- !query 33 schema
 struct<key:string,value:string>
 -- !query 33 output
-spark.sql.crossJoin.enabled
+spark.sql.crossJoin.enabled	true
 
 
 -- !query 34
@@ -395,7 +395,7 @@ SET spark.sql.crossJoin.enabled = false
 -- !query 47 schema
 struct<key:string,value:string>
 -- !query 47 output
-spark.sql.crossJoin.enabled
+spark.sql.crossJoin.enabled	false
 
 
 -- !query 48
