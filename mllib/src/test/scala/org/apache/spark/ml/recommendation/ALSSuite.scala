@@ -22,6 +22,7 @@ import java.util.Random
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.WrappedArray
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
@@ -367,7 +368,7 @@ class ALSSuite
       implicitPrefs: Boolean = false,
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
-      targetRMSE: Double = 0.05): Unit = {
+      targetRMSE: Double = 0.05): ALSModel = {
     val spark = this.spark
     import spark.implicits._
     val als = new ALS()
@@ -410,6 +411,8 @@ class ALSSuite
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
+
+    model
   }
 
   test("exact rank-1 matrix") {
@@ -659,6 +662,44 @@ class ALSSuite
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
       model.setColdStartStrategy(s).transform(data)
     }
+
+  test("recommendForAllUsers") {
+    val numUsers = 20
+    val numItems = 40
+    val numRecs = 5
+    val (training, test) = genExplicitTestData(numUsers, numItems, rank = 2, noiseStd = 0.01)
+    val topItems =
+      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03)
+        .recommendForAllUsers(numRecs)
+
+    assert(topItems.count() == numUsers)
+    assert(topItems.columns.contains("user"))
+    checkRecommendationOrdering(topItems, numRecs)
+  }
+
+  test("recommendForAllItems") {
+    val numUsers = 20
+    val numItems = 40
+    val numRecs = 5
+    val (training, test) = genExplicitTestData(numUsers, numItems, rank = 2, noiseStd = 0.01)
+    val topUsers =
+      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03)
+        .recommendForAllItems(numRecs)
+
+    assert(topUsers.count() == numItems)
+    assert(topUsers.columns.contains("item"))
+    checkRecommendationOrdering(topUsers, numRecs)
+  }
+
+  private def checkRecommendationOrdering(topK: DataFrame, k: Int): Unit = {
+    assert(topK.columns.contains("recommendations"))
+    topK.select("recommendations").collect().foreach(
+      row => {
+        val recs = row.getAs[WrappedArray[Row]]("recommendations")
+        assert(recs.length == k)
+        assert(recs.sorted(Ordering.by((x: Row) => x(1).asInstanceOf[Float]).reverse) == recs)
+      }
+    )
   }
 }
 

@@ -284,18 +284,18 @@ class ALSModel private[ml] (
   @Since("2.2.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
+  private val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
+    if (userFeatures != null && itemFeatures != null) {
+      blas.sdot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
+    } else {
+      Float.NaN
+    }
+  }
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
-    // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
-    val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
-      if (userFeatures != null && itemFeatures != null) {
-        blas.sdot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
-      } else {
-        Float.NaN
-      }
-    }
     val predictions = dataset
       .join(userFactors,
         checkedCast(dataset($(userCol))) === userFactors("id"), "left")
@@ -328,13 +328,41 @@ class ALSModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 
-  // TODO: output is DataFrame ?? DataSet ?? what exactly is the output schema?
-  def recommendForAllUsers(): DataFrame = {
-
+  @Since("2.2.0")
+  def recommendForAllUsers(num: Int): DataFrame = {
+    recommendForAll(userFactors, itemFactors, $(userCol), num)
   }
 
-  def recommendForAllItems(): DataFrame = {
+  @Since("2.2.0")
+  def recommendForAllItems(num: Int): DataFrame = {
+    recommendForAll(itemFactors, userFactors, $(itemCol), num)
+  }
 
+  /**
+   * Makes recommendations for all users (or items).
+   * @param srcFactors src factors for which to generate recommendations
+   * @param dstFactors dst factors used to make recommendations
+   * @param srcOutputColumn name of the column for the source in the output DataFrame
+   * @param num number of recommendations for each record
+   * @return a DataFrame of (srcOutputColumn: Int, recommendations), where recommendations are
+   *         stored as an array of (dstId: Int, ratingL: Double) tuples.
+   */
+  private def recommendForAll(
+      srcFactors: DataFrame,
+      dstFactors: DataFrame,
+      srcOutputColumn: String,
+      num: Int): DataFrame = {
+    import srcFactors.sparkSession.implicits._
+
+    val ratings = srcFactors.crossJoin(dstFactors)
+      .select(
+        srcFactors("id").as("srcId"),
+        dstFactors("id").as("dstId"),
+        predict(srcFactors("features"), dstFactors("features")).as($(predictionCol)))
+    // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
+    val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
+    ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
+      .toDF(srcOutputColumn, "recommendations")
   }
 }
 
