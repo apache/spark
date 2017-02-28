@@ -63,9 +63,9 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
       withTempDatabase { db2 =>
         try {
           spark.catalog.setCurrentDatabase(db1)
-          spark.sql("CREATE TABLE t1 as SELECT 1 as i1")
+          spark.sql("CREATE TABLE t1 AS SELECT 1 AS i1")
           spark.catalog.setCurrentDatabase(db2)
-          spark.sql("CREATE TABLE t1 as SELECT 20 as i1")
+          spark.sql("CREATE TABLE t1 AS SELECT 20 AS i1")
 
           columnResolutionTests(db1, db2)
         } finally {
@@ -145,7 +145,7 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
         withTempPath { f =>
           try {
             spark.catalog.setCurrentDatabase(db1)
-            spark.sql("CREATE TABLE t1 as SELECT 1 as i1")
+            spark.sql("CREATE TABLE t1 AS SELECT 1 AS i1")
             intercept[AnalysisException] {
               spark.sql(s"SELECT $db1.t1 FROM t1")
             }
@@ -157,7 +157,7 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
             }
 
             spark.catalog.setCurrentDatabase(db2)
-            spark.sql("CREATE TABLE t1 as SELECT 20 as i1")
+            spark.sql("CREATE TABLE t1 AS SELECT 20 AS i1")
             intercept[AnalysisException] {
               spark.sql(s"SELECT $db1.t1.i1 FROM t1")
             }
