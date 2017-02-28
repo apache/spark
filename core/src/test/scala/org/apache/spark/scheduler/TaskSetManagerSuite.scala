@@ -665,8 +665,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(thrown2.getMessage().contains("bigger than spark.driver.maxResultSize"))
   }
 
-  test("taskSetManager should not send Resubmitted tasks after being a zombie") {
-    // Regression test for SPARK-13931
+  test("[SPARK-13931] taskSetManager should not send Resubmitted tasks after being a zombie") {
     val conf = new SparkConf().set("spark.speculation", "true")
     sc = new SparkContext("local", "test", conf)
 
@@ -675,7 +674,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {}
     })
 
-    // count for Resubmitted tasks
+    // Keep track of the number of tasks that are resubmitted,
+    // so that the test can check that no tasks were resubmitted.
     var resubmittedTasks = 0
     val dagScheduler = new FakeDAGScheduler(sc, sched) {
       override def taskEnded(task: Task[_], reason: TaskEndReason, result: Any,
