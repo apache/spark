@@ -144,14 +144,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       "Input schema array<string> must be a struct or an array of structs."))
   }
 
-  test("to_json") {
-    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
-
-    checkAnswer(
-      df.select(to_json($"a")),
-      Row("""{"_1":1}""") :: Nil)
-  }
-
   test("from_json array support") {
     val df = Seq("""[{"a": 1, "b": "a"}, {"a": 2}, { }]""").toDS()
     val schema = ArrayType(
@@ -162,6 +154,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(from_json($"value", schema)),
       Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
+  }
+
+  test("to_json") {
+    val df = Seq(Tuple1(Tuple1(1))).toDF("a")
+
+    checkAnswer(
+      df.select(to_json($"a")),
+      Row("""{"_1":1}""") :: Nil)
   }
 
   test("to_json with option") {
