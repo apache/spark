@@ -133,7 +133,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): Option[StructType] = {
-    val csv: Dataset[String] = createBaseDataset(sparkSession, inputPaths, parsedOptions)
+    val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
     CSVUtils.filterCommentAndEmpty(csv, parsedOptions)
       .take(1)
       .headOption
@@ -145,7 +145,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       parsedOptions: CSVOptions,
       csv: Dataset[String],
-      firstLine: String) = {
+      firstLine: String): StructType = {
     val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
