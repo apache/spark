@@ -155,12 +155,11 @@ class CloudPickler(Pickler):
         except Exception as e:
             emsg = _exception_message(e)
             if "'i' format requires" in emsg:
-                msg = "Object too large to serialize: " + emsg
+                msg = "Object too large to serialize: %s" % emsg
             else:
-                msg = "Could not serialize object: " + e.__class__.__name__ + ": " + emsg
+                msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
-
 
     def save_memoryview(self, obj):
         """Fallback to save_string"""

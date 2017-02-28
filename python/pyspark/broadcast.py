@@ -83,8 +83,8 @@ class Broadcast(object):
         except pickle.PickleError:
             raise
         except Exception as e:
-            msg = ("Could not serialize broadcast: " + e.__class__.__name__ + ": "
-                   + _exception_message(e))
+            msg = "Could not serialize broadcast: %s: %s" \
+                  % (e.__class__.__name__, _exception_message(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
