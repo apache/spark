@@ -24,14 +24,16 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
+  import testImplicits._
+
   protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     path = Utils.createTempDir()
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    spark.read.json(rdd).createOrReplaceTempView("jt")
+    val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
+    spark.read.json(ds).createOrReplaceTempView("jt")
     sql(
       s"""
         |CREATE TEMPORARY VIEW jsonTable (a int, b string)
@@ -129,7 +131,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to less part files.
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 5)
-    spark.read.json(rdd1).createOrReplaceTempView("jt1")
+    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt1")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
@@ -141,7 +143,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    spark.read.json(rdd2).createOrReplaceTempView("jt2")
+    spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
