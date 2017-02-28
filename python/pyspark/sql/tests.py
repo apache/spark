@@ -31,6 +31,18 @@ import functools
 import time
 import datetime
 
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
+    if sys.version_info[0] >= 3:
+        xrange = range
+        basestring = str
+
 import py4j
 try:
     import xmlrunner
@@ -49,7 +61,7 @@ else:
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
-from pyspark.sql.types import UserDefinedType, _infer_type
+from pyspark.sql.types import UserDefinedType, _infer_type, _verify_type
 from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
@@ -2366,6 +2378,127 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             self.assertTrue(range_frame_match())
 
         importlib.reload(window)
+
+
+class TypesTest(unittest.TestCase):
+
+    def test_verify_type_ok_nullable(self):
+        for obj, data_type in [
+                (None, IntegerType()),
+                (None, FloatType()),
+                (None, StringType()),
+                (None, StructType([]))]:
+            _verify_type(obj, data_type, nullable=True)
+            msg = "_verify_type(%s, %s, nullable=True)" % (obj, data_type)
+            self.assertIsTrue(True, msg)
+
+    def test_verify_type_not_nullable(self):
+        import array
+        import datetime
+        import decimal
+
+        MyStructType = StructType([
+            StuctField('s', StringType(), nullable=False),
+            StructField('i', IntegerType(), nullable=True)])
+
+        class MyDictObj:
+            def __init__(self, s, i):
+                self.__dict__ = {'s': s, 'i': i}
+
+        # exp: None for success, Exception subclass for error
+        for obj, data_type, exp in [
+                # Strings (match anything but None)
+                ("", StringType(), None),
+                (1, StringType(), None),
+                (1.0, StringType(), None),
+                ([], StringType(), None),
+                ({}, StringType(), None),
+                (None, StringType(), ValueError),   # Only None test
+
+                # UDT
+                (ExamplePoint(1.0, 2.0), ExamplePointUDT(), None),
+                (ExamplePoint(1.0, 2.0), PythonOnlyUDT(), ValueError),
+
+                # Boolean
+                (True, BooleanType(), None),
+                (1, BooleanType(), TypeError),
+                ("True", BooleanType(), TypeError),
+                ([1], BooleanType(), TypeError),
+
+                # Bytes
+                (-(2**7) - 1, ByteType(), ValueError)
+                (-(2**7), ByteType(), None),
+                (2**7 - 1 , ByteType(), None),
+                (2**7, ByteType(), ValueError)
+                ("1", ByteType(), TypeError),
+                (1.0, ByteType(), TypeError),
+
+                # Shorts
+                (-(2**15) - 1, ShortType(), ValueError),
+                (-(2**15), ShortType(), None),
+                (2**17 - 1, ShortType(), None),
+                (2**17, ShortType(), ValueError),
+
+                # Integer
+                (-(2**31) - 1, IntegerType(), ValueError),
+                (-(2**31), IntegerType(), None),
+                (2**31 - 1, IntegerType(), None),
+                (2**31, IntegerType(), ValueError),
+
+                # Long
+                (2**64, LongType(), None),
+
+                # Float & Double
+                (1.0, FloatType(), None),
+                (1, FloatType(), TypeError),
+                (1.0, DoubleType(), None),
+                (1, DoubleType(), TypeError),
+
+                # Decimal
+                (decimal.Decimal("1.0"), DecimalType(), None),
+
+                # TODO: Finish tests
+
+                # String
+                ("string", StringType(), None),
+                (u"unicode", UnicodeType(), None),
+
+                # Binary
+                (bytearray([1, 2]), BinaryType(), None),
+
+                # Date/Time
+                (datetime.date(2000, 1, 2), DateType(), None),
+                (datetime.datetime(2000, 1, 2, 3, 4), DateType(), None),
+                (datetime.datetime(2000, 1, 2, 3, 4), TimestampType(), None),
+
+                # Array
+                ([], ArrayType(IntegerType()), None),
+                (["1", None], ArrayType(StringType(), containsNull=True), None),
+                ([1, 2], ArrayType(IntegerType()), None),
+                ((1, 2), ArrayType(IntegerType()), None),
+                (array.array('h', [1, 2]), ArrayType(IntegerType()), None),
+
+                # Map
+                ({}, MapType(StringType(), InetgerType()), None),
+                ({"a": 1}, MapType(StringType(), IntegerType()), None),
+                ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=True), None),
+
+                # Struct
+                ({'s': 'a', 'i': 1}, MyStructType, None),
+                ({'s': 'a'}, MyStructType, None),
+                (['a', 1], MyStructType, None),
+                (('a', 1), MyStructType, None),
+                (Row(s=a, i=1), MyStructType, None),
+                (MyDictObj(s=1, i=1), MyStructType, None),
+        ]:
+            msg = "_verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
+            if exp is None:
+                _verify_type(obj, data_type, nullable=False)
+                self.assertIsTrue(True, msg)
+            else:
+                with self.assertRaises(exp, msg):
+                    _verify_type(obj, data_type, nullable=False)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
