@@ -195,6 +195,9 @@ case class CatalogTable(
     StructType(partitionFields)
   }
 
+  /** Returns whether the table is partitioned. */
+  def isPartitioned: Boolean = partitionColumnNames.nonEmpty
+
   /**
    * schema of this table's data columns
    */

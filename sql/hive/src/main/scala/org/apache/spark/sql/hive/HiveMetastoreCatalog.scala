@@ -130,11 +130,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
 
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
-    val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
+    val result = if (metastoreRelation.catalogTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
 
       val rootPaths: Seq[Path] = if (lazyPruningEnabled) {
-        Seq(metastoreRelation.hiveQlTable.getDataLocation)
+        Seq(new Path(metastoreRelation.catalogTable.location))
       } else {
         // By convention (for example, see CatalogFileIndex), the definition of a
         // partitioned table's paths depends on whether that table has any actual partitions.
@@ -145,7 +145,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           new Path(p.getLocation)
         }
         if (paths.isEmpty) {
-          Seq(metastoreRelation.hiveQlTable.getDataLocation)
+          Seq(new Path(metastoreRelation.catalogTable.location))
         } else {
           paths
         }
@@ -195,7 +195,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logicalRelation
       })
     } else {
-      val rootPath = metastoreRelation.hiveQlTable.getDataLocation
+      val rootPath = new Path(metastoreRelation.catalogTable.location)
       withTableCreationLock(tableIdentifier, {
         val cached = getCached(tableIdentifier,
           Seq(rootPath),
@@ -231,7 +231,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
    * data source relations for better performance.
    */
   object ParquetConversions extends Rule[LogicalPlan] {
-    private def shouldConvertMetastoreParquet(relation: MetastoreRelation): Boolean = {
+    private def shouldConvertToParquet(relation: MetastoreRelation): Boolean = {
       relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") &&
         sessionState.convertMetastoreParquet
     }
@@ -251,11 +251,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Write path
         case InsertIntoTable(r: MetastoreRelation, partition, query, overwrite, ifNotExists)
             // Inserting into partitioned table is not supported in Parquet data source (yet).
-            if query.resolved && !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
+            if query.resolved && !r.catalogTable.isPartitioned && shouldConvertToParquet(r) =>
           InsertIntoTable(convertToParquetRelation(r), partition, query, overwrite, ifNotExists)
 
         // Read path
-        case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
+        case relation: MetastoreRelation if shouldConvertToParquet(relation) =>
           val parquetRelation = convertToParquetRelation(relation)
           SubqueryAlias(relation.tableName, parquetRelation, None)
       }
@@ -267,7 +267,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
    * for better performance.
    */
   object OrcConversions extends Rule[LogicalPlan] {
-    private def shouldConvertMetastoreOrc(relation: MetastoreRelation): Boolean = {
+    private def shouldConvertToOrc(relation: MetastoreRelation): Boolean = {
       relation.tableDesc.getSerdeClassName.toLowerCase.contains("orc") &&
         sessionState.convertMetastoreOrc
     }
@@ -285,11 +285,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Write path
         case InsertIntoTable(r: MetastoreRelation, partition, query, overwrite, ifNotExists)
             // Inserting into partitioned table is not supported in Orc data source (yet).
-            if query.resolved && !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
+            if query.resolved && !r.catalogTable.isPartitioned && shouldConvertToOrc(r) =>
           InsertIntoTable(convertToOrcRelation(r), partition, query, overwrite, ifNotExists)
 
         // Read path
-        case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
+        case relation: MetastoreRelation if shouldConvertToOrc(relation) =>
           val orcRelation = convertToOrcRelation(relation)
           SubqueryAlias(relation.tableName, orcRelation, None)
       }
