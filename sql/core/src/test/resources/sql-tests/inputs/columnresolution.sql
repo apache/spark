@@ -23,10 +23,8 @@ SELECT i1 FROM t1;
 SELECT i1 FROM mydb1.t1;
 SELECT t1.i1 FROM t1;
 SELECT t1.i1 FROM mydb1.t1;
-
 -- TODO: Support this scenario
 SELECT mydb1.t1.i1 FROM mydb1.t1;
-
 
 -- Scenario: resolve fully qualified table name in star expansion
 use mydb1;
@@ -35,10 +33,8 @@ SELECT mydb1.t1.* FROM mydb1.t1;
 SELECT t1.* FROM mydb1.t1;
 use mydb2;
 SELECT t1.* FROM t1;
-
 -- TODO: Support this scenario
 SELECT mydb1.t1.* FROM mydb1.t1;
-
 SELECT t1.* FROM mydb1.t1;
 SELECT a.* FROM mydb1.t1 AS a;
 
