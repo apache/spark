@@ -85,7 +85,7 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
   test("path option also exist for write path") {
     withTable("src") {
       withTempPath { p =>
-        val path = new Path(p.getAbsolutePath).toString
+        val path = new Path(p.getAbsolutePath)
         sql(
           s"""
             |CREATE TABLE src
@@ -93,7 +93,9 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
             |OPTIONS (PATH '$path')
             |AS SELECT 1
           """.stripMargin)
-        assert(spark.table("src").schema.head.metadata.getString("path") == s"file:$path")
+        val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(spark.table("src").schema.head.metadata.getString("path")) ==
+          fs.makeQualified(path))
       }
     }
 

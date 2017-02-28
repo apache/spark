@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.io.File
 import java.net.URI
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -459,7 +460,9 @@ class CatalogSuite
           options = Map("path" -> dir.getAbsolutePath))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
-        assert(table.storage.locationUri.get == s"file:${dir.getAbsolutePath}")
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.storage.locationUri.get) == fs.makeQualified(dirPath))
 
         Seq((1)).toDF("i").write.insertInto("t")
         assert(dir.exists() && dir.listFiles().nonEmpty)
