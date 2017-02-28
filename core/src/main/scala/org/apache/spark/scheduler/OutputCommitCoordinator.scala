@@ -159,7 +159,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       partition: PartitionId,
       attemptNumber: TaskAttemptNumber): Boolean = synchronized {
     stageStates.get(stage) match {
-      case Some(state) if attemptFailed(stage, partition, attemptNumber) =>
+      case Some(state) if attemptFailed(state, partition, attemptNumber) =>
         logInfo(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage," +
         s" partition=$partition as task attempt $attemptNumber has already failed.")
         false
@@ -192,12 +192,10 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   }
 
   private def attemptFailed(
-      stage: StageId,
+      stageState: StageState,
       partition: PartitionId,
       attempt: TaskAttemptNumber): Boolean = synchronized {
-    stageStates.get(stage).exists { state =>
-      state.failures.get(partition).exists(_.contains(attempt))
-    }
+    stageState.failures.get(partition).exists(_.contains(attempt))
   }
 }
 
