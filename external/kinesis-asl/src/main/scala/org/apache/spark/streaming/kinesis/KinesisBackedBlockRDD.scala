@@ -214,7 +214,7 @@ class KinesisSequenceRangeIterator(
     val getRecordsRequest = new GetRecordsRequest
     getRecordsRequest.setRequestCredentials(credentials)
     getRecordsRequest.setShardIterator(shardIterator)
-    getRecordsRequest.setLimit(Math.max(recordCount, this.maxGetRecordsLimit))
+    getRecordsRequest.setLimit(Math.min(recordCount, this.maxGetRecordsLimit))
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
       s"getting records using shard iterator") {
         client.getRecords(getRecordsRequest)
