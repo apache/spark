@@ -80,28 +80,6 @@ SELECT mydb1.t5.t5.i1 FROM mydb1.t5;
 -- TODO: Support this scenario
 SELECT mydb1.t5.t5.i2 from mydb1.t5;
 
--- Negative testcases for column resolution
-USE mydb1;
-SELECT mydb1.t1 FROM t1;
-SELECT t1.x.y.* FROM t1;
-SELECT t1 FROM mydb1.t1;
-USE mydb2;
-SELECT mydb1.t1.i1 FROM t1;
--- Negative tests: column resolution scenarios with ambiguous cases in join queries
-set spark.sql.crossJoin.enabled = true;
-USE mydb1;
-SELECT i1 FROM t1, mydb1.t1;
-SELECT t1.i1 FROM t1, mydb1.t1;
-SELECT mydb1.t1.i1 FROM t1, mydb1.t1;
-SELECT i1 FROM t1, mydb2.t1;
-SELECT t1.i1 FROM t1, mydb2.t1;
-USE mydb2;
-SELECT i1 FROM t1, mydb1.t1;
-SELECT t1.i1 FROM t1, mydb1.t1;
-SELECT i1 FROM t1, mydb2.t1;
-SELECT t1.i1 FROM t1, mydb2.t1;
-SELECT db1.t1.i1 FROM t1, mydb2.t1;
-
 set spark.sql.crossJoin.enabled = true;
 USE default;
 DROP DATABASE mydb1 CASCADE;
