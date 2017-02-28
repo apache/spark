@@ -40,6 +40,7 @@ private[sql] class SparkSQLJsonProcessingException(msg: String) extends RuntimeE
 class JacksonParser(
     schema: StructType,
     options: JSONOptions) extends Logging {
+
   import JacksonUtils._
   import ParseModes._
   import com.fasterxml.jackson.core.JsonToken._
