@@ -186,15 +186,14 @@ class FileIndexSuite extends SharedSQLContext {
       val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
       val catalog =
         new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
-        def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
-        def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
-      }
-
-      assert(catalog.leafDirPaths.isEmpty)
-      assert(catalog.leafFilePaths.isEmpty)
+          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+          def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+        }
 
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
+      assert(catalog.leafDirPaths.isEmpty)
+      assert(catalog.leafFilePaths.isEmpty)
 
       catalog.refresh()
 
