@@ -21,11 +21,9 @@ import java.math.BigDecimal
 
 import scala.util.control.Exception._
 
-import com.univocity.parsers.csv.CsvParser
-
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types._
 
 private[csv] object CSVInferSchema {
@@ -37,24 +35,13 @@ private[csv] object CSVInferSchema {
    *     3. Replace any null types with string type
    */
   def infer(
-      csv: Dataset[String],
-      caseSensitive: Boolean,
+      tokenRDD: RDD[Array[String]],
+      header: Array[String],
       options: CSVOptions): StructType = {
-    val firstLine: String = CSVUtils.filterCommentAndEmpty(csv, options).first()
-    val firstRow = new CsvParser(options.asParserSettings).parseLine(firstLine)
-    val header = makeSafeHeader(firstRow, caseSensitive, options)
-
     val fields = if (options.inferSchemaFlag) {
-      val tokenRdd = csv.rdd.mapPartitions { iter =>
-        val filteredLines = CSVUtils.filterCommentAndEmpty(iter, options)
-        val linesWithoutHeader = CSVUtils.filterHeaderLine(filteredLines, firstLine, options)
-        val parser = new CsvParser(options.asParserSettings)
-        linesWithoutHeader.map(parser.parseLine)
-      }
-
       val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
       val rootTypes: Array[DataType] =
-        tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
+        tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
       header.zip(rootTypes).map { case (thisHeader, rootType) =>
         val dType = rootType match {
@@ -69,44 +56,6 @@ private[csv] object CSVInferSchema {
     }
 
     StructType(fields)
-  }
-
-  /**
-   * Generates a header from the given row which is null-safe and duplicate-safe.
-   */
-  private def makeSafeHeader(
-      row: Array[String],
-      caseSensitive: Boolean,
-      options: CSVOptions): Array[String] = {
-    if (options.headerFlag) {
-      val duplicates = {
-        val headerNames = row.filter(_ != null)
-          .map(name => if (caseSensitive) name else name.toLowerCase)
-        headerNames.diff(headerNames.distinct).distinct
-      }
-
-      row.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == options.nullValue) {
-          // When there are empty strings or the values set in `nullValue`, put the
-          // index as the suffix.
-          s"_c$index"
-        } else if (!caseSensitive && duplicates.contains(value.toLowerCase)) {
-          // When there are case-insensitive duplicates, put the index as the suffix.
-          s"$value$index"
-        } else if (duplicates.contains(value)) {
-          // When there are duplicates, put the index as the suffix.
-          s"$value$index"
-        } else {
-          value
-        }
-      }
-    } else {
-      row.zipWithIndex.map { case (_, index) =>
-        // Uses default column names, "_c#" where # is its position of fields
-        // when header option is disabled.
-        s"_c$index"
-      }
-    }
   }
 
   private def inferRowType(options: CSVOptions)

@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.InputStream
-
 import scala.reflect.ClassTag
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, TextInputFormat}
@@ -186,16 +184,10 @@ object WholeFileJsonDataSource extends JsonDataSource[PortableDataStream] {
     }
   }
 
-  private def createInputStream(config: Configuration, path: String): InputStream = {
-    val inputStream = CodecStreams.createInputStream(config, new Path(path))
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => inputStream.close()))
-    inputStream
-  }
-
   override def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
     CreateJacksonParser.inputStream(
       jsonFactory,
-      createInputStream(record.getConfiguration, record.getPath()))
+      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, record.getPath()))
   }
 
   override def readFile(
@@ -203,13 +195,15 @@ object WholeFileJsonDataSource extends JsonDataSource[PortableDataStream] {
       file: PartitionedFile,
       parser: JacksonParser): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
-      Utils.tryWithResource(createInputStream(conf, file.filePath)) { inputStream =>
+      Utils.tryWithResource {
+        CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
+      } { inputStream =>
         UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }
     }
 
     parser.parse(
-      createInputStream(conf, file.filePath),
+      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath),
       CreateJacksonParser.inputStream,
       partitionedFileString).toIterator
   }

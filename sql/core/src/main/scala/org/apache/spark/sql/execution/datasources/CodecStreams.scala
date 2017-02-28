@@ -27,6 +27,8 @@ import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.util.ReflectionUtils
 
+import org.apache.spark.TaskContext
+
 object CodecStreams {
   private def getDecompressionCodec(config: Configuration, file: Path): Option[CompressionCodec] = {
     val compressionCodecs = new CompressionCodecFactory(config)
@@ -40,6 +42,16 @@ object CodecStreams {
     getDecompressionCodec(config, file)
       .map(codec => codec.createInputStream(inputStream))
       .getOrElse(inputStream)
+  }
+
+  /**
+   * Creates an input stream from the string path and add a closure for the input stream to be
+   * closed on task completion.
+   */
+  def createInputStreamWithCloseResource(config: Configuration, path: String): InputStream = {
+    val inputStream = createInputStream(config, new Path(path))
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => inputStream.close()))
+    inputStream
   }
 
   private def getCompressionCodec(
