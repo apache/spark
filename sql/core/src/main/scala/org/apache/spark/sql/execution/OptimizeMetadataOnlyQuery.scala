@@ -96,7 +96,7 @@ case class OptimizeMetadataOnlyQuery(
     child transform {
       case plan if plan eq relation =>
         relation match {
-          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
+          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(filters = Nil)
             LocalRelation(partAttrs, partitionData.map(_.values))
@@ -132,7 +132,7 @@ case class OptimizeMetadataOnlyQuery(
   object PartitionedRelation {
 
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
-      case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)
+      case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
         if fsRelation.partitionSchema.nonEmpty =>
         val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
         Some(AttributeSet(partAttrs), l)

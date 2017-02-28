@@ -1084,7 +1084,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
         // Force deleting the old logs
-        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+        SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false"
       ) {
         val fileStream = createFileStream("text", src.getCanonicalPath)
         val filtered = fileStream.filter($"value" contains "keep")
