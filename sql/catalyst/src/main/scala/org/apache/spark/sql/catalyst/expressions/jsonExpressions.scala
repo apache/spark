@@ -510,11 +510,8 @@ case class JsonToStruct(
   @transient
   lazy val converter = schema match {
     case _: StructType =>
-      // These are always produced from json objects by `objectSupport` in `JacksonParser`.
-      (rows: Seq[InternalRow]) => rows.head
-
+      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
     case ArrayType(_: StructType, _) =>
-      // These are always produced from json arrays by `arraySupport` in `JacksonParser`.
       (rows: Seq[InternalRow]) => new GenericArrayData(rows)
   }
 
@@ -522,9 +519,7 @@ case class JsonToStruct(
   lazy val parser =
     new JacksonParser(
       rowSchema,
-      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get),
-      objectSupport = schema.isInstanceOf[StructType],
-      arraySupport = schema.isInstanceOf[ArrayType])
+      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
 
   override def dataType: DataType = schema
 
@@ -532,17 +527,22 @@ case class JsonToStruct(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    // `null` related behavior of this expression is as below:
     // When input is,
-    //   - `null`: the output is `null`.
-    //   - invalid json: the output is `null`.
-    //   - empty string: the output is `null`.
-    //   - empty json object: the output is Row(`null`).
-    //   - empty json array: the output is `Nil`.
+    //   - `null`: `null`.
+    //   - invalid json: `null`.
+    //   - empty string: `null`.
     //
-    // Note that, it returns `null` if the schema is not matched. If the schema is
-    // `StructType`, then the json string should be json objects. If the schema is
-    // array of structs, then the string should be json arrays.
+    // When the schema is array,
+    //   - json array: `Array(Row(...), ...)`
+    //   - json object: `Array(Row(...))`
+    //   - empty json array: `Array()`.
+    //   - empty json object: `Array(Row(null))`.
+    //
+    // When the schema is a struct,
+    //   - json object/array with single element: `Row(...)`
+    //   - json array with multiple elements: `null`
+    //   - empty json array: `null`.
+    //   - empty json object: `Row(null)`.
 
     // We need `null` if the input string is an empty string. `JacksonParser` can
     // deal with this but produces `Nil`.

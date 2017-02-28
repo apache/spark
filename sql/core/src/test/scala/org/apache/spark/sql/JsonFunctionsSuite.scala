@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -139,7 +137,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq("""{"a" 1}""").toDS()
     val schema = ArrayType(StringType)
     val message = intercept[IllegalArgumentException] {
-      df.select(from_json($"value", schema.json, Map.empty[String, String].asJava))
+      df.select(from_json($"value", schema))
     }.getMessage
 
     assert(message.contains(
@@ -163,10 +161,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(from_json($"value", schema)),
-      Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
-
-    checkAnswer(
-      df.select(from_json($"value", schema.json, Map.empty[String, String].asJava)),
       Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
   }
 

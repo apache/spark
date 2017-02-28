@@ -373,39 +373,55 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("from_json - array") {
-    val jsonDataArr = """[{"a": 1}, {"a": 2}]"""
     val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+
+    // json array: `Array(Row(...), ...)`
+    val jsonData1 = """[{"a": 1}, {"a": 2}]"""
     val expected =
       InternalRow.fromSeq(1 :: Nil) ::
       InternalRow.fromSeq(2 :: Nil) :: Nil
     checkEvaluation(JsonToStruct(
-      schema, Map.empty, Literal(jsonDataArr), gmtId), expected)
+      schema, Map.empty, Literal(jsonData1), gmtId), expected)
 
-    // Empty array produces empty collection.
-    checkEvaluation(JsonToStruct(schema, Map.empty, Literal("[ ]"), gmtId), Nil)
+    // json object: `Array(Row(...))`
+    val jsonData2 = """{"a": 1}"""
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData2), gmtId),
+      InternalRow.fromSeq(1 :: Nil) :: Nil)
+
+    // empty json array: `Array()`.
+    val jsonData3 = "[ ]"
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(jsonData3), gmtId), Nil)
+
+    // empty json object: `Array(Row(null))`.
+    val jsonData4 = "{ }"
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData4), gmtId),
+      InternalRow(null) :: Nil)
   }
 
-  test("from_json empty object") {
-    val jsonData = """{  }"""
+  test("from_json - struct") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
+
+    // json object/array with single element: `Row(...)`
+    val jsonData1 = """[{"a": 1}]"""
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId), InternalRow(null))
-  }
+      JsonToStruct(schema, Map.empty, Literal(jsonData1), gmtId), InternalRow(1))
 
-  test("from_json schema mismatch - struct") {
-    val jsonData = """[{"a" 1}]"""
-    val schema = new StructType().add("a", IntegerType)
-
+    // json array with multiple elements: `null`
+    val jsonData2 = """[{"a": 1}, {"a": 2}]"""
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId), null)
-  }
+      JsonToStruct(schema, Map.empty, Literal(jsonData2), gmtId), null)
 
-  test("from_json schema mismatch - array") {
-    val jsonData = """{"a" 1}"""
-    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
-
+    // empty json array: `null`.
+    val jsonData3 = """[]"""
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId), null)
+      JsonToStruct(schema, Map.empty, Literal(jsonData3), gmtId), null)
+
+    // empty json object: `Row(null)`.
+    val jsonData4 = """{  }"""
+    checkEvaluation(
+      JsonToStruct(schema, Map.empty, Literal(jsonData4), gmtId), InternalRow(null))
   }
 
   test("from_json null input column") {

@@ -2953,43 +2953,47 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Parses a column containing a JSON object string into a `StructType` with the
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON object data.
-   * @param schema the schema to use when parsing the json object string
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
-  def from_json(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
-    JsonToStruct(schema, options, e.expr)
-  }
+  def from_json(e: Column, schema: StructType, options: Map[String, String]): Column =
+    from_json(e, schema.asInstanceOf[DataType], options)
 
   /**
-   * (Scala-specific) Parses a column containing a JSON array string into a `ArrayType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON array data.
-   * @param schema the schema to use when parsing the json array string
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
    *
    * @group collection_funcs
    * @since 2.2.0
    */
-  def from_json(e: Column, schema: ArrayType, options: Map[String, String]): Column = withExpr {
-    JsonToStruct(schema, options, e.expr)
+  def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
+    schema match {
+      case _: StructType | ArrayType(_: StructType, _) => JsonToStruct(schema, options, e.expr)
+      case dt =>
+        throw new IllegalArgumentException(
+          s"Input schema ${dt.simpleString} must be a struct or an array of structs.")
+    }
   }
 
   /**
-   * (Java-specific) Parses a column containing a JSON object string into a `StructType` with the
+   * (Java-specific) Parses a column containing a JSON string into a `StructType` with the
    * specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON object data.
-   * @param schema the schema to use when parsing the json object string
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
    *
@@ -3000,26 +3004,26 @@ object functions {
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * (Java-specific) Parses a column containing a JSON array string into a `ArrayType` with the
-   * specified schema. Returns `null`, in the case of an unparseable string.
+   * (Java-specific) Parses a column containing a JSON object or array string into a `StructType`
+   * or `ArrayType` with the specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON array data.
-   * @param schema the schema to use when parsing the json array string
+   * @param e a string column containing JSON object or array data.
+   * @param schema the schema to use when parsing the json object or array string
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source.
    *
    * @group collection_funcs
    * @since 2.2.0
    */
-  def from_json(e: Column, schema: ArrayType, options: java.util.Map[String, String]): Column =
+  def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column =
     from_json(e, schema, options.asScala.toMap)
 
   /**
-   * Parses a column containing a JSON object string into a `StructType` with the specified schema.
+   * Parses a column containing a JSON string into a `StructType` with the specified schema.
    * Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON object data.
-   * @param schema the schema to use when parsing the json object string
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -3028,37 +3032,30 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON array string into a `ArrayType` with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON array data.
-   * @param schema the schema to use when parsing the json array string
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
    *
    * @group collection_funcs
    * @since 2.2.0
    */
-  def from_json(e: Column, schema: ArrayType): Column =
+  def from_json(e: Column, schema: DataType): Column =
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON object or array string into a `StructType` or `ArrayType`
+   * Parses a column containing a JSON string into a `StructType` or `ArrayType`
    * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON object or array data.
+   * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string as a json string
    *
    * @group collection_funcs
    * @since 2.1.0
    */
-  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    DataType.fromJson(schema) match {
-      case st: StructType => from_json(e, st, options)
-      case at @ ArrayType(_: StructType, _) => from_json(e, at, options)
-      case dt =>
-        throw new IllegalArgumentException(
-          s"Input schema ${dt.simpleString} must be a struct or an array of structs.")
-    }
-  }
+  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
+    from_json(e, DataType.fromJson(schema), options)
 
   /**
    * (Scala-specific) Converts a column containing a `StructType` into a JSON string with the
