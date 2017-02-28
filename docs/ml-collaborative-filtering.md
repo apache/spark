@@ -81,8 +81,11 @@ This makes model selection impossible.
 
 Spark allows users to set the `coldStartStrategy` parameter
 to `drop` in order to drop any rows in the `DataFrame` of predictions that contain `NaN` values. 
-The resulting evaluation metric will then be computed over the non-`NaN` data and will be valid. 
-This is illustrated in the example below.
+The evaluation metric will then be computed over the non-`NaN` data and will be valid. 
+Usage of this parameter is illustrated in the example below.
+
+**Note:** currently the supported cold start strategies are `nan` (the default behavior mentioned 
+above) and `drop`. Further strategies may be supported in future versions.
 
 **Examples**
 
