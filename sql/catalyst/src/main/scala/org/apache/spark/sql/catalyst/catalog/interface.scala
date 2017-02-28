@@ -381,7 +381,9 @@ case class CatalogRelation(
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for
     // hive serde tables, we will always generate a statistics.
     // TODO: unify the table stats generation.
-    tableMeta.stats.map(_.toPlanStats(output)).get
+    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+      throw new IllegalStateException("table stats must be specified.")
+    }
   }
 
   override def newInstance(): LogicalPlan = copy(

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
@@ -45,8 +44,7 @@ case class AnalyzeColumnCommand(
     val sizeInBytes = AnalyzeTableCommand.calculateTotalSize(sessionState, tableMeta)
 
     // Compute stats for each column
-    val (rowCount, newColStats) =
-      AnalyzeColumnCommand.computeColumnStats(sparkSession, tableIdentWithDB, columnNames)
+    val (rowCount, newColStats) = computeColumnStats(sparkSession, tableIdentWithDB, columnNames)
 
     // We also update table-level stats in order to keep them consistent with column-level stats.
     val statistics = CatalogStatistics(
@@ -62,17 +60,12 @@ case class AnalyzeColumnCommand(
 
     Seq.empty[Row]
   }
-}
-
-object AnalyzeColumnCommand extends Logging {
 
   /**
    * Compute stats for the given columns.
    * @return (row count, map from column name to ColumnStats)
-   *
-   * This is visible for testing.
    */
-  def computeColumnStats(
+  private def computeColumnStats(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
       columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
@@ -100,7 +93,7 @@ object AnalyzeColumnCommand extends Logging {
     // The layout of each struct follows the layout of the ColumnStats.
     val ndvMaxErr = sparkSession.sessionState.conf.ndvMaxError
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-        attributesToAnalyze.map(ColumnStat.statExprs(_, ndvMaxErr))
+      attributesToAnalyze.map(ColumnStat.statExprs(_, ndvMaxErr))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
