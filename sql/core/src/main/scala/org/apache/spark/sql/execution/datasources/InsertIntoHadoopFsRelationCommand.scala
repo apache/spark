@@ -148,6 +148,9 @@ case class InsertIntoHadoopFsRelationCommand(
         options = options)
 
       fileIndex.foreach(_.refresh())
+      catalogTable.foreach { table =>
+        sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(table.identifier))
+      }
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }

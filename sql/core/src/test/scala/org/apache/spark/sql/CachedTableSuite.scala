@@ -634,4 +634,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       assert(getNumInMemoryRelations(cachedPlan2) == 4)
     }
   }
+
+  test("SPARK-19756: drop the table cache after inserting into a data source table") {
+    withTable("t") {
+      Seq(1 -> "a").toDF("i", "j").write.saveAsTable("t")
+      spark.catalog.cacheTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a"))
+
+      sql("INSERT INTO t SELECT 2, 'b'")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+    }
+  }
 }
