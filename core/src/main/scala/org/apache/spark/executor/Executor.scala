@@ -415,10 +415,11 @@ private[spark] class Executor(
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
             // and threw something else.  Regardless, we treat it as a fetch failure.
-            logWarning(s"TID ${taskId} encountered a ${classOf[FetchFailedException]} and " +
-              s"failed, but did not directly throw the ${classOf[FetchFailedException]}.  " +
-              s"Spark is still handling the fetch failure, but these exceptions should not be " +
-              s"intercepted by user code.")
+            val fetchFailedCls = classOf[FetchFailedException].getName
+            logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
+              s"failed, but the ${fetchFailedCls} was hidden by another " +
+              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
+              s"other exception: $t")
           }
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
