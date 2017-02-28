@@ -391,10 +391,13 @@ class DataFrame(object):
             port = self._jdf.collectToPython()
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
-    @ignore_unicode_prefix
     @since(2.2)
     def collectAsArrow(self):
-        """Returns all records as list of deserialized ArrowPayloads
+        """
+        Returns all records as list of deserialized ArrowPayloads, pyarrow must be installed
+        and available.
+
+        .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectAsArrowToPython()
@@ -1608,15 +1611,20 @@ class DataFrame(object):
 
     @since(1.3)
     def toPandas(self, useArrow=False):
-        """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
+        """
+        Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
 
         :param useArrow: Make use of Apache Arrow for conversion, pyarrow must be installed
-            on the calling Python process.
+            and available on the calling Python process (Experimental).
 
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
+
+        .. note:: Using pyarrow is experimental and currently supports the following data types:
+            StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType,
+            LongType, ShortType
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
