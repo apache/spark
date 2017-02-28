@@ -222,7 +222,7 @@ function(object, path, overwrite = FALSE) {
 #' # binary logistic regression
 #' t <- as.data.frame(Titanic)
 #' training <- createDataFrame(t)
-#' model <- spark.logit(training, Sex ~ ., regParam = 0.5)
+#' model <- spark.logit(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data

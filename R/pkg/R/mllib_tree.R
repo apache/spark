@@ -354,7 +354,7 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' # fit a Random Forest Classification Model
 #' t <- as.data.frame(Titanic)
 #' df <- createDataFrame(t)
-#' model <- spark.randomForest(df, Sex ~ Freq + Age, "classification")
+#' model <- spark.randomForest(df, Survived ~ Freq + Age, "classification")
 #' }
 #' @note spark.randomForest since 2.1.0
 setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "formula"),

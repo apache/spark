@@ -568,7 +568,7 @@ Binomial logistic regression
 ```{r}
 t <- as.data.frame(Titanic)
 training <- createDataFrame(t)
-model <- spark.logit(training, Sex ~ ., regParam = 0.05805813)
+model <- spark.logit(training, Survived ~ ., regParam = 0.04741301)
 summary(model)
 ```
 
