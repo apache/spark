@@ -1496,19 +1496,19 @@ class HiveDDLSuite
     }
   }
 
-  test("insert data to a hive serde table which has a not existed location should succeed") {
+  test("insert data to a hive serde table which has a non-existing location should succeed") {
     withTable("t") {
       withTempDir { dir =>
-        val dirPath = dir.getAbsolutePath.stripSuffix("/")
         spark.sql(
           s"""
              |CREATE TABLE t(a string, b int)
              |USING hive
-             |OPTIONS(path "file:$dirPath")
+             |LOCATION '$dir'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = s"file:$dirPath"
-        assert(table.location.stripSuffix("/") == expectedPath)
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.location) == fs.makeQualified(dirPath))
 
         val tableLocFile = new File(table.location.stripPrefix("file:"))
         tableLocFile.delete()
@@ -1539,20 +1539,20 @@ class HiveDDLSuite
     }
   }
 
-  test("insert into a hive serde table with no existed partition location should succeed") {
+  test("insert into a hive serde table with non-existing partition location should succeed") {
     withTable("t") {
       withTempDir { dir =>
-        val dirPath = dir.getAbsolutePath.stripSuffix("/")
         spark.sql(
           s"""
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING hive
              |PARTITIONED BY(a, b)
-             |LOCATION "file:$dirPath"
+             |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = s"file:$dirPath"
-        assert(table.location.stripSuffix("/") == expectedPath)
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.location) == fs.makeQualified(dirPath))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1578,19 +1578,19 @@ class HiveDDLSuite
     }
   }
 
-  test("read data from a hive serde table which has a not existed location should succeed") {
+  test("read data from a hive serde table which has a non-existing location should succeed") {
     withTable("t") {
       withTempDir { dir =>
-        val dirPath = dir.getAbsolutePath.stripSuffix("/")
         spark.sql(
           s"""
              |CREATE TABLE t(a string, b int)
              |USING hive
-             |OPTIONS(path "file:${dir.getAbsolutePath}")
+             |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = s"file:$dirPath"
-        assert(table.location.stripSuffix("/") == expectedPath)
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.location) == fs.makeQualified(dirPath))
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
@@ -1607,7 +1607,7 @@ class HiveDDLSuite
     }
   }
 
-  test("read data from a hive serde table with no existed partition location should succeed") {
+  test("read data from a hive serde table with non-existing partition location should succeed") {
     withTable("t") {
       withTempDir { dir =>
         spark.sql(
