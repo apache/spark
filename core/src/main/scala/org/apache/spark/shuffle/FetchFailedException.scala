@@ -52,8 +52,8 @@ private[spark] class FetchFailedException(
 
   // SPARK-19276. We set the fetch failure in the task context, so that even if there is user-code
   // which intercepts this exception (possibly wrapping it), the Executor can still tell there was
-  // a fetch failure, and send the correct error msg back to the driver.  The TaskContext won't be
-  // defined if this is run on the driver (just in test cases) -- we can safely ignore then.
+  // a fetch failure, and send the correct error msg back to the driver.  We wrap with an Option
+  // because the TaskContext is not defined in some test cases.
   Option(TaskContext.get()).map(_.setFetchFailed(this))
 
   def toTaskFailedReason: TaskFailedReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId,
