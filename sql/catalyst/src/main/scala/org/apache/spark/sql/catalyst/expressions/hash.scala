@@ -642,7 +642,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       input: String,
       result: String): String = {
     s"""
-      $result = org.apache.spark.sql.catalyst.expressions.HiveHashFunction.normalizeDecimal(
+      $result = ${HiveHashFunction.getClass.getName.stripSuffix("$")}.normalizeDecimal(
        $input.toJavaBigDecimal(), true).hashCode();"""
   }
 
