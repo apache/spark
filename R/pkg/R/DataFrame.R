@@ -50,7 +50,7 @@ setClass("SparkDataFrame",
 # Validate "SparkDataFrame"
 # SparkDataFrame should not allow duplicate column names
 validSparkDataFrame <- function(object) {
-  cols <- colnames
+  cols <- colnames(object)
   if (length(cols) != length(unique(cols))) {
     stop("Duplicate column names.")
   } else {
@@ -65,6 +65,7 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
   .Object@env$isCached <- isCached
 
   .Object@sdf <- sdf
+  validObject(.Object)
   .Object
 })
 
