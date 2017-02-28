@@ -66,14 +66,16 @@ class HadoopTableReader(
     hadoopConf: Configuration)
   extends TableReader with Logging {
 
-  // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
-  // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
+  // Hadoop honors "mapreduce.job.maps" as hint,
+  // but will ignore when mapreduce.jobtracker.address is "local".
+  // https://hadoop.apache.org/docs/r2.6.5/hadoop-mapreduce-client/hadoop-mapreduce-client-core/
+  // mapred-default.xml
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
   private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will splitted based on block by default.
   } else {
-    math.max(hadoopConf.getInt("mapred.map.tasks", 1),
+    math.max(hadoopConf.getInt("mapreduce.job.maps", 1),
       sparkSession.sparkContext.defaultMinPartitions)
   }
 
