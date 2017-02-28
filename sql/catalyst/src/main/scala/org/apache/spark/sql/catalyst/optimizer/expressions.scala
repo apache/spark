@@ -452,6 +452,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case u: UnaryNode if !stop && canPropagateFoldables(u) =>
           u.transformExpressions(replaceFoldable)
 
+        // Allow inner joins. We do not allow outer join, although its output attributes are
+        // derived from its children, they are actually different attributes: the output of outer
+        // join is not always picked from its children, but can also be null.
+        // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
+        // of outer join.
+        case j @ Join(_, _, Inner, _) if !stop =>
+          j.transformExpressions(replaceFoldable)
+
         // We can fold the projections an expand holds. However expand changes the output columns
         // and often reuses the underlying attributes; so we cannot assume that a column is still
         // foldable after the expand has been applied.
