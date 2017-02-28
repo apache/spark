@@ -80,6 +80,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val sparseModel = svm.fit(smallSparseBinaryDataset)
     assert(sparseModel.transform(smallSparseValidationDataset)
       .where("prediction=label").count() > nPoints * 0.8)
+    checkModels(model, sparseModel)
   }
 
   test("Linear SVC binary classification with regularization") {
@@ -90,6 +91,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val sparseModel = svm.fit(smallSparseBinaryDataset)
     assert(sparseModel.transform(smallSparseValidationDataset)
       .where("prediction=label").count() > nPoints * 0.8)
+    checkModels(model, sparseModel)
   }
 
   test("params") {
@@ -132,14 +134,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
     val model = lsvc.fit(smallBinaryDataset)
     assert(model.intercept === 0.0)
-    val sparseModel = lsvc.fit(smallSparseBinaryDataset)
-    assert(sparseModel.intercept === 0.0)
 
     val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(5)
     val model2 = lsvc2.fit(smallBinaryDataset)
     assert(model2.intercept !== 0.0)
-    val sparseModel2 = lsvc2.fit(smallSparseBinaryDataset)
-    assert(sparseModel2.intercept !== 0.0)
   }
 
   test("linearSVC with sample weights") {
@@ -159,7 +157,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
     val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
     mlTestingUtils(smallBinaryDataset, estimator)
-    mlTestingUtils(smallSparseBinaryDataset, estimator)
 
   }
 
@@ -227,8 +224,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val svm = new LinearSVC()
     testEstimatorAndModelReadWrite(svm, smallBinaryDataset, LinearSVCSuite.allParamSettings,
       checkModelData)
-    testEstimatorAndModelReadWrite(svm, smallSparseBinaryDataset, LinearSVCSuite.allParamSettings,
-      checkModelData)
   }
 }
 
@@ -261,12 +256,17 @@ object LinearSVCSuite {
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD > 0) 1.0 else 0.0
     }
-    val index = (0 to weights.length - 1).toArray
+
     if (isDense) {
       y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
     } else {
-      y.zip(x).map(p => LabeledPoint(p._1, Vectors.sparse(weights.length * 10, index, p._2)))
+      y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2).toSparse))
     }
+  }
+
+  def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {
+    assert(model1.intercept == model2.intercept)
+    assert(model1.coefficients.equals(model2.coefficients))
   }
 
 }
