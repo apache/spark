@@ -180,8 +180,13 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD is 0") {
+  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
+    "is not positive number") {
     withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+    }
+
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "-1") {
       new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
   }
