@@ -146,18 +146,14 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
 
-    def mlTestingUtils(dataset: Dataset[_], estimator: LinearSVC): Unit = {
-      MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
-        dataset.as[LabeledPoint], estimator, modelEquals)
-      MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
-        dataset.as[LabeledPoint], estimator, 2, modelEquals)
-      MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
-        dataset.as[LabeledPoint], estimator, modelEquals, 42L)
-    }
-
     val estimator = new LinearSVC().setRegParam(0.01).setTol(0.01)
-    mlTestingUtils(smallBinaryDataset, estimator)
-
+    val dataset = smallBinaryDataset
+    MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
+      dataset.as[LabeledPoint], estimator, modelEquals)
+    MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
+      dataset.as[LabeledPoint], estimator, 2, modelEquals)
+    MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
+      dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {
