@@ -22,8 +22,8 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import breeze.stats.distributions.StudentsT
-
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
@@ -323,8 +323,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
       bcFeaturesStd, bcFeaturesMean)(_)
     val regularization = if (effectiveL2RegParam != 0.0) {
-      Some(new L2RegularizationLoss(effectiveL2RegParam,
-        (idx: Int) => idx >= 0 && idx < numFeatures,
+      val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
+      Some(new L2RegularizationLoss(effectiveL2RegParam, shouldApply,
         if ($(standardization)) None else Some(featuresStd)))
     } else {
       None

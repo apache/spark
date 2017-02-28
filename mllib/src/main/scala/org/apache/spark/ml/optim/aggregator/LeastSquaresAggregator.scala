@@ -143,12 +143,15 @@ import org.apache.spark.ml.linalg._
  *    $$
  * </blockquote>
  *
- * @param bcCoefficients The broadcast coefficients corresponding to the features.
+ * @note The constructor is curried, since the cost function will repeatedly create new versions
+ *       of this class for different coefficient vectors.
+ *
  * @param labelStd The standard deviation value of the label.
  * @param labelMean The mean value of the label.
  * @param fitIntercept Whether to fit an intercept term.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param bcFeaturesMean The broadcast mean values of the features.
+ * @param bcCoefficients The broadcast coefficients corresponding to the features.
  */
 private[ml] class LeastSquaresAggregator(
     labelStd: Double,

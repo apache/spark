@@ -18,6 +18,15 @@ package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.ml.linalg._
 
+/**
+ * A parent trait for aggregators used in fitting MLlib models. This parent trait implements
+ * some of the common code shared between concrete instances of aggregators. Subclasses of this
+ * aggregator need only implement the `add` method.
+ *
+ * @tparam Datum The type of the instances added to the aggregator to update the loss and gradient.
+ * @tparam Agg Specialization of [[DifferentiableLossAggregator]]. Classes that subclass this
+ *             type need to use this parameter to specify the concrete type of the aggregator.
+ */
 private[ml] trait DifferentiableLossAggregator[
     Datum,
     Agg <: DifferentiableLossAggregator[Datum, Agg]] extends Serializable {
@@ -36,6 +45,7 @@ private[ml] trait DifferentiableLossAggregator[
   /** Add a single data point to this aggregator. */
   def add(instance: Datum): Agg
 
+  /** Merge two aggregators. The `this` object will be modified in place and returned. */
   def merge(other: Agg): Agg = {
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
       s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")

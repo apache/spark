@@ -18,18 +18,27 @@ package org.apache.spark.ml.optim.loss
 
 import breeze.optimize.DiffFunction
 
+/**
+ * A Breeze diff function which represents a cost function for differentiable regularization
+ * of parameters. e.g. L2 regularization: 1 / 2 regParam * <\beta, \beta>
+ *
+ * @tparam T The type of the coefficients being regularized.
+ */
 trait DifferentiableRegularization[T] extends DiffFunction[T] {
 
   def regParam: Double
 
 }
 
-/*
-Tests:
--check that standardization works alright
--check analytical results (easy)
--check div by zero for std
--check should apply works
+/**
+ * A Breeze diff function for computing the L2 regularized loss and gradient of an array of
+ * coefficients.
+ *
+ * @param regParam The magnitude of the regularization.
+ * @param shouldApply A function (Int => Boolean) indicating whether a given index should have
+ *                    regularization applied to it.
+ * @param featuresStd Option indicating whether the regularization should be scaled by the standard
+ *                    deviation of the features.
  */
 class L2RegularizationLoss(
     val regParam: Double,

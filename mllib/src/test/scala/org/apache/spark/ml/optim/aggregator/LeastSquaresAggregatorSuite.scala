@@ -49,6 +49,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     )
   }
 
+  /** Get feature and label summarizers for provided data. */
   def getSummarizers(
     instances: Array[Instance]): (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer) = {
     val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
@@ -82,7 +83,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
       bcFeaturesMean)(bcCoefficients)
   }
 
-  test("check initialization params") {
+  test("check sizes") {
     val coefficients = Vectors.dense(1.0, 2.0)
     val aggIntercept = getNewAggregator(instances, coefficients, fitIntercept = true)
     val aggNoIntercept = getNewAggregator(instances, coefficients, fitIntercept = false)
@@ -139,7 +140,7 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     assert(agg.gradient ~== expectedGradient relTol 1e-3)
   }
 
-  test("check with zero standardization") {
+  test("check with zero standard deviation") {
     val coefficients = Vectors.dense(1.0, 2.0)
     val aggConstantFeature = getNewAggregator(instancesConstantFeature, coefficients,
       fitIntercept = true)

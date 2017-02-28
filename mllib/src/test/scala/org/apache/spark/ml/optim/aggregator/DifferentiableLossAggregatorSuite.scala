@@ -108,8 +108,8 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
     val coefficients = Vectors.dense(0.5, -0.1)
     val agg = new TestAggregator(2)(coefficients)
     instances1.foreach(agg.add)
-    val errors = instances1.map { case Instance(l, _, f) =>
-      l - BLAS.dot(f, coefficients)
+    val errors = instances1.map { case Instance(label, _, features) =>
+      label - BLAS.dot(features, coefficients)
     }
     val expectedLoss = errors.zip(instances1).map { case (error: Double, instance: Instance) =>
       instance.weight * error * error / 2.0

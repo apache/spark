@@ -16,21 +16,34 @@
  */
 package org.apache.spark.ml.optim.loss
 
+import scala.reflect.ClassTag
+
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.DiffFunction
+
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator.DifferentiableLossAggregator
 import org.apache.spark.rdd.RDD
 
-import scala.reflect.ClassTag
-
-/*
-  Tests:
-    with/without regularization
-    empty rdd
-    check it versus just aggregating over Iterator[Instance] (no reg)
+/**
+ * This class computes the gradient and loss of a differentiable loss function by mapping a
+ * [[DifferentiableLossAggregator]] over an [[RDD]] of [[Instance]]s. The loss function is the
+ * sum of the loss computed on a single instance across all points in the RDD. Therefore, the actual
+ * analytical form of the loss function is specified by the aggregator, which computes each points
+ * contribution to the overall loss.
+ *
+ * A differentiable regularization component can also be added by providing a
+ * [[DifferentiableRegularization]] loss function.
+ *
+ * @param instances
+ * @param getAggregator A function which gets a new loss aggregator in every tree aggregate step.
+ * @param regularization An option representing the regularization loss function to apply to the
+ *                       coefficients.
+ * @param aggregationDepth The aggregation depth of the tree aggregation step.
+ * @tparam Agg Specialization of [[DifferentiableLossAggregator]], representing the concrete type
+ *             of the aggregator.
  */
 private[ml] class RDDLossFunction[Agg <: DifferentiableLossAggregator[Instance, Agg]: ClassTag](
     instances: RDD[Instance],
