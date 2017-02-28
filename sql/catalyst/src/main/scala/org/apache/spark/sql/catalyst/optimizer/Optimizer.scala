@@ -1119,11 +1119,16 @@ case class DecimalAggregates(conf: CatalystConf) extends Rule[LogicalPlan] {
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data))
+    case Project(projectList, lr @ LocalRelation(output, data))
         if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      if (lr.isStreaming) {
+        LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+          .setIncremental()
+      } else {
+        LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      }
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {

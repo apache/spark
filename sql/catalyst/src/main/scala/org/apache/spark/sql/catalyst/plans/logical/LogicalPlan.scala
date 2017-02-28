@@ -45,7 +45,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def analyzed: Boolean = _analyzed
 
-  def setIncremental(): Unit = { _incremental = true }
+  def setIncremental(): LogicalPlan = { _incremental = true ; this}
 
   /** Returns true if this subtree contains any streaming data sources. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true) || _incremental
