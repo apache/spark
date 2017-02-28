@@ -338,11 +338,28 @@ trait CheckAnalysis extends PredicateHelper {
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.mkString(",")
-            val input = o.inputSet.mkString(",")
+            val availableAttributes = o.inputSet.mkString(",")
+            val missingAttributesHelper = o.missingInput.map(a => (a.name, a.exprId.id))
+
+            val availableAttributesHelper = o.inputSet.map(a => (a.name, a.exprId.id))
+
+            val common = (missingAttributesHelper ++ availableAttributesHelper).groupBy(_._1)
+            val commonNames = common.map(x => (x._1, x._2.toSet))
+              .filter(_._2.size > 1)
+              .map(_._1)
+
+            val repeatedNameHint = if (commonNames.size > 0) {
+              s"""\nObserve that attribute(s) ${commonNames.mkString(",")} appear in your """ +
+                """query with at least two different hashes, but same name.\n"""
+            } else {
+              ""
+            }
 
             failAnalysis(
-              s"resolved attribute(s) $missingAttributes missing from $input " +
-                s"in operator ${operator.simpleString}")
+              s"""Some resolved attribute(s) are not present among available attributes for a query.
+                 | $missingAttributes is not in $availableAttributes. $repeatedNameHint
+                 The failed query was for operator
+                 | ${operator.simpleString}""")
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
