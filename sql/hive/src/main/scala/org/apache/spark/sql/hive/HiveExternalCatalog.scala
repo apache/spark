@@ -510,8 +510,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, tableDefinition.identifier.table)
     verifyTableProperties(tableDefinition)
 
+    // Add table metadata such as table schema, partition columns, etc. if they aren't already
+    // present.
+    val withMetaProps = tableDefinition.copy(
+      properties = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition))
+
     // convert table statistics to properties so that we can persist them through hive api
-    val withStatsProps = if (tableDefinition.stats.isDefined) {
+    val withStatsProps = if (withMetaProps.stats.isDefined) {
       val stats = tableDefinition.stats.get
       var statsProperties: Map[String, String] =
         Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
@@ -523,9 +528,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           statsProperties += (columnStatKeyPropName(colName, k) -> v)
         }
       }
-      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
+      withMetaProps.copy(properties = withMetaProps.properties ++ statsProperties)
     } else {
-      tableDefinition
+      withMetaProps
     }
 
     if (tableDefinition.tableType == VIEW) {
@@ -680,7 +685,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         hiveTable.copy(
           schema = schemaFromTableProps,
           partitionColumnNames = getPartitionColumnsFromTableProperties(table),
-          bucketSpec = getBucketSpecFromTableProperties(table))
+          bucketSpec = getBucketSpecFromTableProperties(table),
+          schemaFromTableProps = true)
       } else {
         // Hive metastore may change the table schema, e.g. schema inference. If the table
         // schema we read back is different(ignore case and nullability) from the one in table

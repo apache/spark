@@ -161,12 +161,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           bucketSpec,
           Some(partitionSchema))
 
+        val catalogTable = metastoreRelation.catalogTable
         val logicalRelation = cached.getOrElse {
           val sizeInBytes =
             metastoreRelation.stats(sparkSession.sessionState.conf).sizeInBytes.toLong
           val fileIndex = {
-            val index = new CatalogFileIndex(
-              sparkSession, metastoreRelation.catalogTable, sizeInBytes)
+            val index = new CatalogFileIndex(sparkSession, catalogTable, sizeInBytes)
             if (lazyPruningEnabled) {
               index
             } else {
@@ -174,9 +174,35 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             }
           }
           val partitionSchemaColumnNames = partitionSchema.map(_.name.toLowerCase).toSet
-          val dataSchema =
-            StructType(metastoreSchema
+          val filteredMetastoreSchema = StructType(metastoreSchema
               .filterNot(field => partitionSchemaColumnNames.contains(field.name.toLowerCase)))
+
+          val inferenceMode = sparkSession.sessionState.conf.schemaInferenceMode
+          val dataSchema = if (inferenceMode != "NEVER_INFER" &&
+              !catalogTable.schemaFromTableProps) {
+            val fileStatuses = fileIndex.listFiles(Nil).flatMap(_.files)
+            val inferred = defaultSource.inferSchema(sparkSession, options, fileStatuses)
+            val merged = if (fileType.equals("parquet")) {
+              inferred.map(ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, _))
+            } else {
+              inferred
+            }
+            if (inferenceMode == "INFER_AND_SAVE") {
+              // If a case-sensitive schema was successfully inferred, execute an alterTable
+              // operation to save the schema to the table properties.
+              merged.foreach { mergedSchema =>
+                  val updatedTable = catalogTable.copy(schema = mergedSchema)
+                  sparkSession.sharedState.externalCatalog.alterTable(updatedTable)
+              }
+            }
+            merged.getOrElse {
+              logWarning(s"Unable to infer schema for table $tableIdentifier from file format " +
+                s"$defaultSource; using metastore schema.")
+              filteredMetastoreSchema
+            }
+          } else {
+            filteredMetastoreSchema
+          }
 
           val relation = HadoopFsRelation(
             location = fileIndex,
@@ -186,8 +212,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             fileFormat = defaultSource,
             options = options)(sparkSession = sparkSession)
 
-          val created = LogicalRelation(relation,
-            catalogTable = Some(metastoreRelation.catalogTable))
+          val created = LogicalRelation(relation, catalogTable = Some(catalogTable))
           tableRelationCache.put(tableIdentifier, created)
           created
         }

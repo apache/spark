@@ -270,4 +270,8 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
+
+  test("Default value of HIVE_SCHEMA_INFERENCE_MODE") {
+    assert(spark.sessionState.conf.schemaInferenceMode === "INFER_AND_SAVE")
+  }
 }
