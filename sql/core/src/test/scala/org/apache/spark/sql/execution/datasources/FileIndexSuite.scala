@@ -183,8 +183,9 @@ class FileIndexSuite extends SharedSQLContext {
     withTempDir { dir =>
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
       val dirPath = new Path(dir.getAbsolutePath)
-      val catalog = new InMemoryFileIndex(spark, Seq(dirPath), Map.empty,
-        None, fileStatusCache) {
+      val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+      val catalog =
+        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
         def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
         def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
       }
@@ -198,12 +199,10 @@ class FileIndexSuite extends SharedSQLContext {
       catalog.refresh()
 
       assert(catalog.leafFilePaths.size == 1)
-      assert(catalog.leafFilePaths.head.toString.stripSuffix("/") ==
-        s"file:${file.getAbsolutePath.stripSuffix("/")}")
+      assert(catalog.leafFilePaths.head == fs.makeQualified(new Path(file.getAbsolutePath)))
 
       assert(catalog.leafDirPaths.size == 1)
-      assert(catalog.leafDirPaths.head.toString.stripSuffix("/") ==
-        s"file:${dir.getAbsolutePath.stripSuffix("/")}")
+      assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
     }
   }
 }
