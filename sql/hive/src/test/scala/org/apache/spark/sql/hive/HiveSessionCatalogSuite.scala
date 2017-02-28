@@ -19,15 +19,15 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.SimpleFunctionRegistry
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.internal.SQLConf
 
-class HiveSessionCatalogSuite extends SessionCatalogSuite {
+class HiveSessionCatalogSuite extends SparkFunSuite {
 
   test("clone HiveSessionCatalog") {
     val hiveSession = SparkSession.builder().master("local").enableHiveSupport().getOrCreate()

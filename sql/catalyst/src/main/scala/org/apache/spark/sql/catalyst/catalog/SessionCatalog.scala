@@ -1183,9 +1183,9 @@ class SessionCatalog(
 
   /**
    * Get an identical copy of the `SessionCatalog`.
-   * The temporary tables and function registry are retained.
+   * The temporary views and function registry are retained.
    * The table relation cache will not be populated.
-   * @note `externalCatalog` and `globalTempViewManager` are from shared state, don't need deep
+   * @note `externalCatalog` and `globalTempViewManager` are from shared state, do not need deep
    * copy. `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
    * All arguments passed in should be associated with a particular `SparkSession`.
    */
@@ -1194,7 +1194,6 @@ class SessionCatalog(
       hadoopConf: Configuration,
       functionRegistry: FunctionRegistry,
       parser: ParserInterface): SessionCatalog = {
-
     val catalog = new SessionCatalog(
       externalCatalog,
       globalTempViewManager,
@@ -1212,5 +1211,4 @@ class SessionCatalog(
 
     catalog
   }
-
 }

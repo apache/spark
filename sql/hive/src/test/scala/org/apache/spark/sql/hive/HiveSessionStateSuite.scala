@@ -22,6 +22,9 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
+/**
+ * Run all tests from `SessionStateSuite` with a `HiveSessionState`.
+ */
 class HiveSessionStateSuite extends SessionStateSuite
   with TestHiveSingleton with BeforeAndAfterEach {
 
@@ -31,8 +34,15 @@ class HiveSessionStateSuite extends SessionStateSuite
 
   override def afterEach(): Unit = {}
 
-  override def createSession(): Unit = {
-    activeSession = spark.newSession()
+  override def afterAll(): Unit = {
+    try {
+      hiveContext.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
+  override def createSession(): Unit = {
+    activeSession = spark.newSession() // TestHiveSparkSession from TestHiveSingleton
+  }
 }

@@ -18,14 +18,8 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
-import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
  * A special [[SparkSession]] prepared for testing.
@@ -41,7 +35,8 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
   }
 
   @transient
-  override lazy val sessionState: SessionState = SessionState(this, Some(
+  override lazy val sessionState: SessionState = SessionState(
+    this,
     new SQLConf {
       clear()
       override def clear(): Unit = {
@@ -49,7 +44,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
         // Make sure we start with the default test configs even after clear
         TestSQLContext.overrideConfs.foreach { case (key, value) => setConfString(key, value) }
       }
-    }))
+    })
 
   // Needed for Java tests
   def loadTestData(): Unit = {

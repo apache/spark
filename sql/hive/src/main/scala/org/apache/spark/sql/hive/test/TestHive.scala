@@ -145,7 +145,8 @@ private[hive] class TestHiveSparkSession(
     existingSharedState.getOrElse(new SharedState(sc))
   }
 
-  private def createHiveSessionState: HiveSessionState = {
+  @transient
+  override lazy val sessionState: HiveSessionState = {
     val testConf =
       new SQLConf {
         clear()
@@ -156,7 +157,7 @@ private[hive] class TestHiveSparkSession(
         }
       }
     val queryExecutionCreator = (plan: LogicalPlan) => new TestHiveQueryExecution(this, plan)
-    val initHelper = HiveSessionState(this, Some(testConf))
+    val initHelper = HiveSessionState(this, testConf)
     SessionState.mergeSparkConf(testConf, sparkContext.getConf)
 
     new HiveSessionState(
@@ -173,9 +174,6 @@ private[hive] class TestHiveSparkSession(
       queryExecutionCreator,
       initHelper.plannerCreator)
   }
-
-  @transient
-  override lazy val sessionState: HiveSessionState = createHiveSessionState
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)

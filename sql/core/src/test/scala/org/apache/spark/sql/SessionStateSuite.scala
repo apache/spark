@@ -35,10 +35,6 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
     createSession()
   }
 
-  override def afterEach(): Unit = {
-    activeSession.stop()
-  }
-
   test("fork new session and inherit RuntimeConfig options") {
     val key = "spark-config-clone"
     activeSession.conf.set(key, "active")
@@ -81,9 +77,7 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
       def apply(p: LogicalPlan): LogicalPlan = p
     }
     val optimizations = List(DummyRule1, DummyRule2)
-
     activeSession.experimental.extraOptimizations = optimizations
-
     val forkedSession = activeSession.cloneSession()
 
     // inheritance
@@ -110,8 +104,6 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
         Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
     }
 
-    SparkSession.setActiveSession(activeSession)
-
     implicit val enc = Encoders.tuple(Encoders.scalaInt, Encoders.STRING)
     activeSession
       .createDataset[(Int, String)](Seq(1, 2, 3).map(i => (i, i.toString)))
@@ -122,11 +114,8 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
     val forkedSession = activeSession.cloneSession()
     assert(forkedSession ne activeSession)
     assert(forkedSession.sessionState ne activeSession.sessionState)
-    SparkSession.setActiveSession(forkedSession)
     checkTableExists(forkedSession)
     checkTableExists(activeSession.cloneSession()) // ability to clone multiple times
     checkTableExists(forkedSession.cloneSession()) // clone of clone
-
-    SparkSession.clearActiveSession()
   }
 }

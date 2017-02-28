@@ -22,6 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -31,6 +32,10 @@ import org.apache.spark.sql.streaming.StreamingQueryManager
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
+ * @param catalog A Hive client used for interacting with the metastore.
+ * @param analyzer An analyzer that uses the Hive metastore.
+ * @param plannerCreator Lambda to create a [[SparkPlanner]] that converts optimized logical
+ *                       plans to physical plans.
  */
 private[hive] class HiveSessionState(
     sparkContext: SparkContext,
@@ -41,7 +46,7 @@ private[hive] class HiveSessionState(
     override val catalog: HiveSessionCatalog,
     sqlParser: ParserInterface,
     val metadataHive: HiveClient,
-    override val analyzer: Analyzer,
+    analyzer: Analyzer,
     streamingQueryManager: StreamingQueryManager,
     queryExecutionCreator: LogicalPlan => QueryExecution,
     val plannerCreator: () => SparkPlanner)
@@ -155,13 +160,10 @@ private[hive] class HiveSessionState(
 object HiveSessionState {
 
   def apply(sparkSession: SparkSession): HiveSessionState = {
-    apply(sparkSession, None)
+    apply(sparkSession, new SQLConf)
   }
 
-  def apply(
-      sparkSession: SparkSession,
-      conf: Option[SQLConf]): HiveSessionState = {
-
+  def apply(sparkSession: SparkSession, conf: SQLConf): HiveSessionState = {
     val initHelper = SessionState(sparkSession, conf)
 
     val sparkContext = sparkSession.sparkContext
@@ -174,12 +176,10 @@ object HiveSessionState {
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, initHelper.conf),
       initHelper.sqlParser)
 
-    // A Hive client used for interacting with the metastore.
     val metadataHive: HiveClient =
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
         .newSession()
 
-    // An analyzer that uses the Hive metastore.
     val analyzer: Analyzer = createAnalyzer(sparkSession, catalog, initHelper.conf)
 
     val plannerCreator = createPlannerCreator(
@@ -202,19 +202,21 @@ object HiveSessionState {
       plannerCreator)
   }
 
-  def createAnalyzer(
+  /**
+   * Create an logical query plan `Analyzer` with rules specific to a `HiveSessionState`.
+   */
+  private def createAnalyzer(
       sparkSession: SparkSession,
       catalog: HiveSessionCatalog,
       sqlConf: SQLConf): Analyzer = {
-
     new Analyzer(catalog, sqlConf) {
-      override val extendedResolutionRules =
+      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
         new ResolveHiveSerdeTable(sparkSession) ::
         new FindDataSourceTable(sparkSession) ::
         new FindHiveSerdeTable(sparkSession) ::
         new ResolveSQLOnFile(sparkSession) :: Nil
 
-      override val postHocResolutionRules =
+      override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
         PreprocessTableCreation(sparkSession) ::
@@ -226,11 +228,10 @@ object HiveSessionState {
     }
   }
 
-  def createPlannerCreator(
+  private def createPlannerCreator(
       associatedSparkSession: SparkSession,
       sqlConf: SQLConf,
       experimentalMethods: ExperimentalMethods): () => SparkPlanner = {
-
     () =>
       new SparkPlanner(
           associatedSparkSession.sparkContext,
@@ -255,5 +256,4 @@ object HiveSessionState {
         }
       }
   }
-
 }

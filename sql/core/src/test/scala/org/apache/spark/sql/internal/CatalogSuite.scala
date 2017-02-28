@@ -514,7 +514,4 @@ class CatalogSuite
       .createTempView("fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
   }
-
-  // TODO: add tests for the rest of them
-
 }

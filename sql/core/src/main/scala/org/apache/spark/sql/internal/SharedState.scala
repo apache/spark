@@ -140,14 +140,8 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     SparkSession.sqlListener.get()
   }
 
-  /*
-   * This belongs here more than in `SessionState`. However, does not seem that it can be
-   * removed from `SessionState` and `HiveSessionState` without using reflection in
-   * `AddJarCommand`.
-   */
   def addJar(path: String): Unit = {
     sparkContext.addJar(path)
-
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {
       // `path` is a local file path without a URL scheme

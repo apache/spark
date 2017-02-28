@@ -87,7 +87,6 @@ private[sql] class HiveSessionCatalog(
       hadoopConf: Configuration,
       functionRegistry: FunctionRegistry,
       parser: ParserInterface): HiveSessionCatalog = {
-
     val catalog = HiveSessionCatalog(
       newSparkSession,
       functionResourceLoader,
@@ -257,7 +256,6 @@ private[sql] object HiveSessionCatalog {
       conf: SQLConf,
       hadoopConf: Configuration,
       parser: ParserInterface): HiveSessionCatalog = {
-
     // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
     // essentially a cache for metastore tables. However, it relies on a lot of session-specific
     // things so it would be a lot of work to split its functionality between HiveSessionCatalog
@@ -268,10 +266,10 @@ private[sql] object HiveSessionCatalog {
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
       sparkSession.sharedState.globalTempViewManager,
       metastoreCatalog,
-      functionResourceLoader: FunctionResourceLoader,
-      functionRegistry: FunctionRegistry,
-      conf: SQLConf,
-      hadoopConf: Configuration,
-      parser: ParserInterface)
+      functionResourceLoader,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
   }
 }
