@@ -65,7 +65,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     maybeBlock.nonEmpty
   }
 
-  private def getNumInMemoryRelations(plan: LogicalPlan): Int = {
+  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
+    val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {
       case e: SubqueryExpression =>
@@ -187,7 +188,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
 
     assertResult(1, "InMemoryRelation not found, testData should have been cached") {
-      getNumInMemoryRelations(spark.table("testData").queryExecution.withCachedData)
+      getNumInMemoryRelations(spark.table("testData"))
     }
 
     spark.catalog.cacheTable("testData")
@@ -580,21 +581,21 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     localRelation.createOrReplaceTempView("localRelation")
 
     spark.catalog.cacheTable("localRelation")
-    assert(getNumInMemoryRelations(localRelation.queryExecution.withCachedData) == 1)
+    assert(getNumInMemoryRelations(localRelation) == 1)
   }
 
   test("SPARK-19093 Caching in side subquery") {
     withTempView("t1") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       spark.catalog.cacheTable("t1")
-      val cachedPlan =
+      val ds =
         sql(
           """
             |SELECT * FROM t1
             |WHERE
             |NOT EXISTS (SELECT * FROM t1)
-          """.stripMargin).queryExecution.optimizedPlan
-      assert(getNumInMemoryRelations(cachedPlan) == 2)
+          """.stripMargin)
+      assert(getNumInMemoryRelations(ds) == 2)
     }
   }
 
@@ -610,17 +611,17 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       spark.catalog.cacheTable("t4")
 
       // Nested predicate subquery
-      val cachedPlan =
+      val ds =
         sql(
         """
           |SELECT * FROM t1
           |WHERE
           |c1 IN (SELECT c1 FROM t2 WHERE c1 IN (SELECT c1 FROM t3 WHERE c1 = 1))
-        """.stripMargin).queryExecution.optimizedPlan
-      assert(getNumInMemoryRelations(cachedPlan) == 3)
+        """.stripMargin)
+      assert(getNumInMemoryRelations(ds) == 3)
 
       // Scalar subquery and predicate subquery
-      val cachedPlan2 =
+      val ds2 =
         sql(
           """
             |SELECT * FROM (SELECT max(c1) FROM t1 GROUP BY c1)
@@ -630,8 +631,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             |EXISTS (SELECT c1 FROM t3)
             |OR
             |c1 IN (SELECT c1 FROM t4)
-          """.stripMargin).queryExecution.optimizedPlan
-      assert(getNumInMemoryRelations(cachedPlan2) == 4)
+          """.stripMargin)
+      assert(getNumInMemoryRelations(ds2) == 4)
+    }
+  }
+
+  test("SPARK-19765: UNCACHE TABLE should re-cache all cached plans that refer to this table") {
+    withTable("t") {
+      Seq(1 -> "a").toDF("i", "j").write.saveAsTable("t")
+      spark.catalog.cacheTable("t")
+      spark.table("t").select($"i").cache()
+      checkAnswer(spark.table("t").select($"i"), Row(1))
+      assertCached(spark.table("t").select($"i"))
+
+      sql("INSERT OVERWRITE TABLE t SELECT 2, 'b'")
+      spark.catalog.uncacheTable("t")
+      checkAnswer(spark.table("t").select($"i"), Row(2))
+      assert(getNumInMemoryRelations(spark.table("t").select($"i")) == 1)
     }
   }
 
