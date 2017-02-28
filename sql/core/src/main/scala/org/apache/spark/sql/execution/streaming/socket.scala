@@ -46,8 +46,8 @@ object TextSocketSource {
  * support for fault recovery and keeping all of the text read in memory forever.
  */
 class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlContext: SQLContext)
-  extends Source with Logging
-{
+  extends Source with Logging {
+
   @GuardedBy("this")
   private var socket: Socket = null
 
@@ -168,6 +168,8 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       socket = null
     }
   }
+
+  override def toString: String = s"TextSocketSource[host: $host, port: $port]"
 }
 
 class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegister with Logging {
