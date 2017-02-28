@@ -1587,4 +1587,33 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("the qualified path of a datasource table is stored in the catalog") {
+    withTable("t", "t1") {
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
+        spark.sql(
+         s"""
+            |CREATE TABLE t(a string)
+            |USING parquet
+            |LOCATION '$dir'
+          """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location.startsWith("file:/"))
+      }
+
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a string, b string)
+             |USING parquet
+             |PARTITIONED BY(b)
+             |LOCATION '$dir'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location.startsWith("file:/"))
+      }
+    }
+  }
 }
