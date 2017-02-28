@@ -267,10 +267,11 @@ class UISuite extends SparkFunSuite {
           s"$scheme://localhost:$port/test1/root",
           s"$scheme://localhost:$port/test2/root")
         urls.foreach { url =>
-          val rc = TestUtils.httpResponseCodeAndURL(new URL(url))
-          assert(rc._1 === expected, s"Unexpected status $rc for $url")
-          if (rc._1 == HttpServletResponse.SC_FOUND) {
-            assert(TestUtils.httpResponseCode(new URL(rc._2.get)) === HttpServletResponse.SC_OK)
+          val (rc, redirectUrl) = TestUtils.httpResponseCodeAndURL(new URL(url))
+          assert(rc === expected, s"Unexpected status $rc for $url")
+          if (rc == HttpServletResponse.SC_FOUND) {
+            assert(
+              TestUtils.httpResponseCode(new URL(redirectUrl.get)) === HttpServletResponse.SC_OK)
           }
         }
       }

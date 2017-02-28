@@ -379,7 +379,8 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def createRedirectHttpsHandler(
-      httpsConnector: ServerConnector, scheme: String): ContextHandler = {
+      httpsConnector: ServerConnector,
+      scheme: String): ContextHandler = {
     val redirectHandler: ContextHandler = new ContextHandler
     redirectHandler.setContextPath("/")
     redirectHandler.setVirtualHosts(Array("@" + REDIRECT_CONNECTOR_NAME))
