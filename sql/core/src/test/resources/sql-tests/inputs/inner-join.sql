@@ -13,7 +13,7 @@ SELECT a, 'a' AS tag FROM t3
 UNION ALL
 SELECT a, 'b' AS tag FROM t4;
 
---
+-- SPARK-19766 Constant alias columns in INNER JOIN should not be folded by FoldablePropagation rule
 SELECT tb.* FROM ta INNER JOIN tb ON ta.a = tb.a AND ta.tag = tb.tag;
 
 -- Clean up
