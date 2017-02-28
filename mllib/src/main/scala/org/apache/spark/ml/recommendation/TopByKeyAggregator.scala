@@ -26,8 +26,8 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
- * TODO: Some comments go here about the class
- * TODO: should probably move it to somewhere else
+ * Works on rows of the form (K1, K2, V) where K1 & K2 are IDs and V is the score value. Finds
+ * the top `num` K2 items based on the given Ordering.
  */
 
 private[recommendation] class TopByKeyAggregator[K1: TypeTag, K2: TypeTag, V: TypeTag]
