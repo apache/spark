@@ -55,10 +55,6 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
     checkAnswer(spark.sql("SELECT t1.i1 FROM t1"), Row(20))
     checkAnswer(spark.sql(s"SELECT t1.i1 FROM $db1.t1"), Row(1))
 
-    intercept[AnalysisException] {
-      spark.sql(s"SELECT $db1.t1.i1 FROM t1")
-    }
-
     // TODO: Support this scenario
     intercept[AnalysisException] {
       spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1")
@@ -71,11 +67,9 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
       withTempDatabase { db2 =>
         try {
           spark.catalog.setCurrentDatabase(db1)
-          spark.sql("CREATE TABLE t1(i1 INT)")
-          spark.sql("INSERT INTO t1 VALUES(1)")
+          spark.sql("CREATE TABLE t1 as SELECT 1 as i1")
           spark.catalog.setCurrentDatabase(db2)
-          spark.sql("CREATE TABLE t1(i1 INT)")
-          spark.sql("INSERT INTO t1 VALUES(20)")
+          spark.sql("CREATE TABLE t1 as SELECT 20 as i1")
 
           columnResolutionTests(db1, db2)
         } finally {
@@ -122,7 +116,7 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
     }
   }
 
-  test("column resolution scenarios with ambiguous cases") {
+  test("column resolution scenarios with ambiguous cases in join queries - negative cases") {
     val currentDb = spark.catalog.currentDatabase
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       withTempDatabase { db1 =>
@@ -155,15 +149,6 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
                 spark.sql(s"SELECT t1.i1 FROM t1, $db2.t1")
               }
 
-              // TODO: Support this scenario
-              intercept[AnalysisException] {
-                spark.sql(s"SELECT $db1.t1.i1 FROM t1, $db2.t1")
-              }
-              // TODO: Support this scenario
-              intercept[AnalysisException] {
-                spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1, $db2.t1")
-              }
-
               spark.catalog.setCurrentDatabase(db2)
 
               intercept[AnalysisException] {
@@ -172,11 +157,6 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
 
               intercept[AnalysisException] {
                 spark.sql(s"SELECT t1.i1 FROM t1, $db1.t1")
-              }
-
-              // TODO: Support this scenario
-              intercept[AnalysisException] {
-                spark.sql(s"SELECT $db1.t1.i1 FROM t1, $db1.t1")
               }
 
               intercept[AnalysisException] {
@@ -190,6 +170,43 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
               intercept[AnalysisException] {
                 spark.sql(s"SELECT $db1.t1.i1 FROM t1, $db2.t1")
               }
+            } finally {
+              spark.catalog.setCurrentDatabase(currentDb)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("column resolution scenarios in join queries") {
+    val currentDb = spark.catalog.currentDatabase
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withTempDatabase { db1 =>
+        withTempDatabase { db2 =>
+          withTempPath { f =>
+            try {
+              spark.catalog.setCurrentDatabase(db1)
+              spark.sql("CREATE TABLE t1 AS SELECT 1 AS i1")
+              spark.catalog.setCurrentDatabase(db2)
+              spark.sql("CREATE TABLE t1 AS SELECT 20 AS i1")
+              spark.catalog.setCurrentDatabase(db1)
+
+              // TODO: Support this scenario
+              intercept[AnalysisException] {
+                spark.sql(s"SELECT $db1.t1.i1 FROM t1, $db2.t1")
+              }
+              // TODO: Support this scenario
+              intercept[AnalysisException] {
+                spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1, $db2.t1")
+              }
+
+              spark.catalog.setCurrentDatabase(db2)
+              // TODO: Support this scenario
+              intercept[AnalysisException] {
+                spark.sql(s"SELECT $db1.t1.i1 FROM t1, $db1.t1")
+              }
+
             } finally {
               spark.catalog.setCurrentDatabase(currentDb)
             }
@@ -295,23 +312,30 @@ class ColumnResolutionSuite extends QueryTest with SQLTestUtils with TestHiveSin
 
   test("col resolution - error case") {
     val currentDb = spark.catalog.currentDatabase
-    withTempDatabase { db1 =>
-      withTempPath { f =>
-        try {
-          spark.catalog.setCurrentDatabase(db1)
-          spark.sql("CREATE TABLE t1(i1 INT)")
-          spark.sql("INSERT INTO t1 VALUES(1)")
-          intercept[AnalysisException] {
-            spark.sql(s"SELECT $db1.t1 FROM t1")
+    withTempDatabase { db2 =>
+      withTempDatabase { db1 =>
+        withTempPath { f =>
+          try {
+            spark.catalog.setCurrentDatabase(db1)
+            spark.sql("CREATE TABLE t1 as SELECT 1 as i1")
+            intercept[AnalysisException] {
+              spark.sql(s"SELECT $db1.t1 FROM t1")
+            }
+            intercept[AnalysisException] {
+              spark.sql(s"SELECT t1.x.y.* FROM t1")
+            }
+            intercept[AnalysisException] {
+              spark.sql(s"SELECT t1 FROM $db1.t1")
+            }
+
+            spark.catalog.setCurrentDatabase(db2)
+            spark.sql("CREATE TABLE t1 as SELECT 20 as i1")
+            intercept[AnalysisException] {
+              spark.sql(s"SELECT $db1.t1.i1 FROM t1")
+            }
+          } finally {
+            spark.catalog.setCurrentDatabase(currentDb)
           }
-          intercept[AnalysisException] {
-            spark.sql(s"SELECT t1.x.y.* FROM t1")
-          }
-          intercept[AnalysisException] {
-            spark.sql(s"SELECT t1 FROM $db1.t1")
-          }
-        } finally {
-          spark.catalog.setCurrentDatabase(currentDb)
         }
       }
     }

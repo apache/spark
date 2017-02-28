@@ -52,10 +52,6 @@ class ColumnResolutionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(spark.sql("SELECT t1.i1 FROM t1"), Row(20))
     checkAnswer(spark.sql(s"SELECT t1.i1 FROM $db1.t1"), Row(1))
 
-    intercept[AnalysisException] {
-      spark.sql(s"SELECT $db1.t1.i1 FROM t1")
-    }
-
     // TODO: Support this scenario
     intercept[AnalysisException] {
       spark.sql(s"SELECT $db1.t1.i1 FROM $db1.t1")
