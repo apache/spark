@@ -30,6 +30,19 @@ import pickle
 import functools
 import time
 import datetime
+import traceback
+
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
+    if sys.version_info[0] >= 3:
+        xrange = range
+        basestring = str
 
 import py4j
 try:
@@ -57,7 +70,7 @@ except:
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
-from pyspark.sql.types import UserDefinedType, _infer_type
+from pyspark.sql.types import UserDefinedType, _infer_type, _verify_type
 from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
@@ -2619,6 +2632,162 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             self.assertTrue(range_frame_match())
 
         importlib.reload(window)
+
+
+class TypesTest(unittest.TestCase):
+
+    def test_verify_type_exception_msg(self):
+        name = "test_name"
+        try:
+            _verify_type(None, StringType(), nullable=False, name=name)
+            self.fail('Expected _verify_type() to throw so test can check exception message')
+        except Exception as e:
+            self.assertTrue(str(e).startswith(name))
+
+    def test_verify_type_ok_nullable(self):
+        obj = None
+        for data_type in [IntegerType(), FloatType(), StringType(), StructType([])]:
+            msg = "_verify_type(%s, %s, nullable=True)" % (obj, data_type)
+            try:
+                _verify_type(obj, data_type, nullable=True)
+            except Exception as e:
+                traceback.print_exc()
+                self.fail(msg)
+
+    def test_verify_type_not_nullable(self):
+        import array
+        import datetime
+        import decimal
+
+        MyStructType = StructType([
+            StructField('s', StringType(), nullable=False),
+            StructField('i', IntegerType(), nullable=True)])
+
+        class MyObj:
+            def __init__(self, **ka):
+                for k, v in ka.items():
+                    setattr(self, k, v)
+
+        # obj, data_type, exception (None for success or Exception subclass for error)
+        spec = [
+            # Strings (match anything but None)
+            ("", StringType(), None),
+            (u"", StringType(), None),
+            (1, StringType(), None),
+            (1.0, StringType(), None),
+            ([], StringType(), None),
+            ({}, StringType(), None),
+            (None, StringType(), ValueError),   # Only None test
+
+            # UDT
+            (ExamplePoint(1.0, 2.0), ExamplePointUDT(), None),
+            (ExamplePoint(1.0, 2.0), PythonOnlyUDT(), ValueError),
+
+            # Boolean
+            (True, BooleanType(), None),
+            (1, BooleanType(), TypeError),
+            ("True", BooleanType(), TypeError),
+            ([1], BooleanType(), TypeError),
+
+            # Bytes
+            (-(2**7) - 1, ByteType(), ValueError),
+            (-(2**7), ByteType(), None),
+            (2**7 - 1, ByteType(), None),
+            (2**7, ByteType(), ValueError),
+            ("1", ByteType(), TypeError),
+            (1.0, ByteType(), TypeError),
+
+            # Shorts
+            (-(2**15) - 1, ShortType(), ValueError),
+            (-(2**15), ShortType(), None),
+            (2**15 - 1, ShortType(), None),
+            (2**15, ShortType(), ValueError),
+
+            # Integer
+            (-(2**31) - 1, IntegerType(), ValueError),
+            (-(2**31), IntegerType(), None),
+            (2**31 - 1, IntegerType(), None),
+            (2**31, IntegerType(), ValueError),
+
+            # Long
+            (2**64, LongType(), None),
+
+            # Float & Double
+            (1.0, FloatType(), None),
+            (1, FloatType(), TypeError),
+            (1.0, DoubleType(), None),
+            (1, DoubleType(), TypeError),
+
+            # Decimal
+            (decimal.Decimal("1.0"), DecimalType(), None),
+            (1.0, DecimalType(), TypeError),
+            (1, DecimalType(), TypeError),
+            ("1.0", DecimalType(), TypeError),
+
+            # Binary
+            (bytearray([1, 2]), BinaryType(), None),
+            (1, BinaryType(), TypeError),
+
+            # Date/Time
+            (datetime.date(2000, 1, 2), DateType(), None),
+            (datetime.datetime(2000, 1, 2, 3, 4), DateType(), None),
+            ("2000-01-02", DateType(), TypeError),
+            (datetime.datetime(2000, 1, 2, 3, 4), TimestampType(), None),
+            (946811040, TimestampType(), TypeError),
+
+            # Array
+            ([], ArrayType(IntegerType()), None),
+            (["1", None], ArrayType(StringType(), containsNull=True), None),
+            (["1", None], ArrayType(StringType(), containsNull=False), ValueError),
+            ([1, 2], ArrayType(IntegerType()), None),
+            ([1, "2"], ArrayType(IntegerType()), TypeError),
+            ((1, 2), ArrayType(IntegerType()), None),
+            (array.array('h', [1, 2]), ArrayType(IntegerType()), None),
+
+            # Map
+            ({}, MapType(StringType(), IntegerType()), None),
+            ({"a": 1}, MapType(StringType(), IntegerType()), None),
+            ({"a": 1}, MapType(IntegerType(), IntegerType()), TypeError),
+            ({"a": "1"}, MapType(StringType(), IntegerType()), TypeError),
+            ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=True), None),
+            ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=False),
+             ValueError),
+
+            # Struct
+            ({"s": "a", "i": 1}, MyStructType, None),
+            ({"s": "a", "i": None}, MyStructType, None),
+            ({"s": "a"}, MyStructType, None),
+            ({"s": "a", "f": 1.0}, MyStructType, None),     # Extra fields OK
+            ({"s": "a", "i": "1"}, MyStructType, TypeError),
+            (Row(s="a", i=1), MyStructType, None),
+            (Row(s="a", i=None), MyStructType, None),
+            (Row(s="a", i=1, f=1.0), MyStructType, None),   # Extra fields OK
+            (Row(s="a"), MyStructType, ValueError),     # Row can't have missing field
+            (Row(s="a", i="1"), MyStructType, TypeError),
+            (["a", 1], MyStructType, None),
+            (["a", None], MyStructType, None),
+            (["a"], MyStructType, ValueError),
+            (["a", "1"], MyStructType, TypeError),
+            (("a", 1), MyStructType, None),
+            (MyObj(s="a", i=1), MyStructType, None),
+            (MyObj(s="a", i=None), MyStructType, None),
+            (MyObj(s="a"), MyStructType, None),
+            (MyObj(s="a", i="1"), MyStructType, TypeError),
+            (MyObj(s=None, i="1"), MyStructType, ValueError),
+        ]
+
+        for obj, data_type, exp in spec:
+            msg = "_verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
+            if exp is None:
+                try:
+                    _verify_type(obj, data_type, nullable=False)
+                except Exception:
+                    traceback.print_exc()
+                    self.fail(msg)
+            else:
+                with self.assertRaises(exp, msg=msg):
+                    _verify_type(obj, data_type, nullable=False)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
