@@ -68,9 +68,9 @@ private[spark] object JsonProtocol {
     omitUpdatedBlockStatuses: Boolean = false): JValue = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        stageSubmittedToJson(stageSubmitted)
+        stageSubmittedToJson(stageSubmitted, omitInternalAccums)
       case stageCompleted: SparkListenerStageCompleted =>
-        stageCompletedToJson(stageCompleted)
+        stageCompletedToJson(stageCompleted, omitInternalAccums)
       case taskStart: SparkListenerTaskStart =>
         taskStartToJson(taskStart, omitInternalAccums)
       case taskGettingResult: SparkListenerTaskGettingResult =>
@@ -78,7 +78,7 @@ private[spark] object JsonProtocol {
       case taskEnd: SparkListenerTaskEnd =>
         taskEndToJson(taskEnd, omitInternalAccums, omitUpdatedBlockStatuses)
       case jobStart: SparkListenerJobStart =>
-        jobStartToJson(jobStart)
+        jobStartToJson(jobStart, omitInternalAccums)
       case jobEnd: SparkListenerJobEnd =>
         jobEndToJson(jobEnd)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
@@ -120,7 +120,7 @@ private[spark] object JsonProtocol {
   def stageCompletedToJson(
     stageCompleted: SparkListenerStageCompleted,
     omitInternalAccums: Boolean = false): JValue = {
-    val stageInfo = stageInfoToJson(stageCompleted.stageInfo)
+    val stageInfo = stageInfoToJson(stageCompleted.stageInfo, omitInternalAccums)
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted) ~
     ("Stage Info" -> stageInfo)
   }
