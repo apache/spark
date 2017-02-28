@@ -24,6 +24,13 @@ trait DifferentiableRegularization[T] extends DiffFunction[T] {
 
 }
 
+/*
+Tests:
+-check that standardization works alright
+-check analytical results (easy)
+-check div by zero for std
+-check should apply works
+ */
 class L2RegularizationLoss(
     val regParam: Double,
     shouldApply: Int => Boolean,
