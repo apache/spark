@@ -21,14 +21,14 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.TestingUtils._
 
-class LossAggregatorSuite extends SparkFunSuite {
+class DifferentiableLossAggregatorSuite extends SparkFunSuite {
 
-  val instances1 = Array(
+  private val instances1 = Array(
     Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
     Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
     Instance(2.0, 0.3, Vectors.dense(4.0, 0.5))
   )
-  val instances2 = Seq(
+  private val instances2 = Seq(
     Instance(0.2, 0.4, Vectors.dense(0.8, 2.5)),
     Instance(0.8, 0.9, Vectors.dense(2.0, 1.3)),
     Instance(1.5, 0.2, Vectors.dense(3.0, 0.2))
@@ -67,7 +67,7 @@ class LossAggregatorSuite extends SparkFunSuite {
     assert(agg.weight === 0.3)
   }
 
-  test("merge") {
+  test("merge aggregators") {
     val coefficients = Vectors.dense(0.5, -0.1)
     val agg1 = new TestAggregator(2)(coefficients)
     val agg2 = new TestAggregator(2)(coefficients)
@@ -108,7 +108,7 @@ class LossAggregatorSuite extends SparkFunSuite {
     val coefficients = Vectors.dense(0.5, -0.1)
     val agg = new TestAggregator(2)(coefficients)
     instances1.foreach(agg.add)
-    val errors = instances1.map { case Instance(l, w, f) =>
+    val errors = instances1.map { case Instance(l, _, f) =>
       l - BLAS.dot(f, coefficients)
     }
     val expectedLoss = errors.zip(instances1).map { case (error: Double, instance: Instance) =>
@@ -116,7 +116,7 @@ class LossAggregatorSuite extends SparkFunSuite {
     }
     val expectedGradient = Vectors.dense(0.0, 0.0)
     errors.zip(instances1).foreach { case (error, instance) =>
-      BLAS.axpy(error, instance.features, expectedGradient)
+      BLAS.axpy(instance.weight * error, instance.features, expectedGradient)
     }
     BLAS.scal(1.0 / agg.weight, expectedGradient)
 
@@ -126,6 +126,9 @@ class LossAggregatorSuite extends SparkFunSuite {
   }
 }
 
+/**
+ * Dummy aggregator that represents least squares cost with no intercept.
+ */
 class TestAggregator(numFeatures: Int)(coefficients: Vector)
   extends DifferentiableLossAggregator[Instance, TestAggregator] {
 
@@ -136,7 +139,7 @@ class TestAggregator(numFeatures: Int)(coefficients: Vector)
     weightSum += instance.weight
     lossSum += instance.weight * error * error / 2.0
     (0 until dim).foreach { j =>
-      gradientSumArray(j) += error * instance.features(j)
+      gradientSumArray(j) += instance.weight * error * instance.features(j)
     }
     this
   }

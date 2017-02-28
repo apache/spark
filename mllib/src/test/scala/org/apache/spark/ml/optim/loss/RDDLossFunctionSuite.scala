@@ -61,7 +61,7 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val lossFun = new RDDLossFunction[TestAggregator](rdd, getAgg, None)
     withClue("cannot calculate cost for empty dataset") {
       intercept[IllegalArgumentException]{
-        val (loss, grad) = lossFun.calculate(coefficients.asBreeze.toDenseVector)
+        lossFun.calculate(coefficients.asBreeze.toDenseVector)
       }
     }
   }
@@ -71,8 +71,11 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val getAgg = (bvec: Broadcast[Vector]) => new TestAggregator(2)(bvec.value)
     val lossFun = new RDDLossFunction[TestAggregator](instances, getAgg, None)
     val (loss, grad) = lossFun.calculate(coefficients.asBreeze.toDenseVector)
+
+    // just map the aggregator over the instances array
     val agg = new TestAggregator(2)(coefficients)
     instances.collect().foreach(agg.add)
+
     assert(loss === agg.loss)
     assert(Vectors.fromBreeze(grad) === agg.gradient)
   }

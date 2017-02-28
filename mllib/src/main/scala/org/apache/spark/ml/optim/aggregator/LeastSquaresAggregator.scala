@@ -157,7 +157,7 @@ private[ml] class LeastSquaresAggregator(
     bcFeaturesStd: Broadcast[Array[Double]],
     bcFeaturesMean: Broadcast[Array[Double]])(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, LeastSquaresAggregator] {
-  require(labelStd > 0.0, s"${this.getClass().getName()} requires the label standard" +
+  require(labelStd > 0.0, s"${this.getClass.getName} requires the label standard" +
     s"deviation to be positive.")
 
   private val numFeatures = bcFeaturesStd.value.length

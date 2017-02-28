@@ -19,6 +19,7 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -93,8 +94,49 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     assert(aggNoIntercept.gradient.size === 2)
   }
 
-  test("check correctness with/without standardization") {
+  test("check correctness") {
+    /*
+    Check that the aggregator computes loss/gradient for:
+      0.5 * sum_i=1^N ([sum_j=1^D beta_j * ((x_j - x_j,bar) / sigma_j)] - ((y - ybar) / sigma_y))^2
+     */
+    val coefficients = Vectors.dense(1.0, 2.0)
+    val numFeatures = coefficients.size
+    val (featuresSummarizer, ySummarizer) = getSummarizers(instances)
+    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val featuresMean = featuresSummarizer.mean.toArray
+    val yStd = math.sqrt(ySummarizer.variance(0))
+    val yMean = ySummarizer.mean(0)
 
+    val agg = getNewAggregator(instances, coefficients, fitIntercept = true)
+    instances.foreach(agg.add)
+
+    // compute (y - pred) analytically
+    val errors = instances.map { case Instance(l, w, f) =>
+      val scaledFeatures = (0 until numFeatures).map { j =>
+        (f.toArray(j) - featuresMean(j)) / featuresStd(j)
+      }.toArray
+      val scaledLabel = (l - yMean) / yStd
+      BLAS.dot(coefficients, Vectors.dense(scaledFeatures)) - scaledLabel
+    }
+
+    // compute expected loss sum analytically
+    val expectedLoss = errors.zip(instances).map { case (error, instance) =>
+      instance.weight * error * error / 2.0
+    }
+
+    // compute gradient analytically from instances
+    val expectedGradient = Vectors.dense(0.0, 0.0)
+    errors.zip(instances).foreach { case (error, instance) =>
+      val scaledFeatures = (0 until numFeatures).map { j =>
+        instance.weight * instance.features.toArray(j) / featuresStd(j)
+      }.toArray
+      BLAS.axpy(error, Vectors.dense(scaledFeatures), expectedGradient)
+    }
+
+    val weightSum = instances.map(_.weight).sum
+    BLAS.scal(1.0 / weightSum, expectedGradient)
+    assert(agg.loss ~== (expectedLoss.sum / weightSum) relTol 1e-3)
+    assert(agg.gradient ~== expectedGradient relTol 1e-3)
   }
 
   test("check with zero standardization") {
