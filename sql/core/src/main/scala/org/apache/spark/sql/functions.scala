@@ -2980,12 +2980,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    schema match {
-      case _: StructType | ArrayType(_: StructType, _) => JsonToStruct(schema, options, e.expr)
-      case dt =>
-        throw new IllegalArgumentException(
-          s"Input schema ${dt.simpleString} must be a struct or an array of structs.")
-    }
+    JsonToStruct(schema, options, e.expr)
   }
 
   /**

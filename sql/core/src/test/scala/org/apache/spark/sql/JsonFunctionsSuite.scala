@@ -136,7 +136,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   test("from_json invalid schema") {
     val df = Seq("""{"a" 1}""").toDS()
     val schema = ArrayType(StringType)
-    val message = intercept[IllegalArgumentException] {
+    val message = intercept[AnalysisException] {
       df.select(from_json($"value", schema))
     }.getMessage
 
