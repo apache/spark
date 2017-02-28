@@ -376,17 +376,20 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         precision: Int,
         scale: Int,
         expected: Long): Unit = {
-      val decimal = Decimal.apply(new java.math.BigDecimal(input))
-      decimal.changePrecision(precision, scale)
       val decimalType = DataTypes.createDecimalType(precision, scale)
+      val decimal = {
+        val value = Decimal.apply(new java.math.BigDecimal(input))
+        if (value.changePrecision(precision, scale)) value else null
+      }
+
       checkHiveHash(decimal, decimalType, expected)
     }
 
     checkHiveHashForDecimal("18", 38, 0, 558)
     checkHiveHashForDecimal("-18", 38, 0, -558)
     checkHiveHashForDecimal("-18", 38, 12, -558)
-    checkHiveHashForDecimal("18446744073709001000", 38, 19, -17070057)
-    checkHiveHashForDecimal("-18446744073709001000", 38, 22, 17070057)
+    checkHiveHashForDecimal("18446744073709001000", 38, 19, 0)
+    checkHiveHashForDecimal("-18446744073709001000", 38, 22, 0)
     checkHiveHashForDecimal("-18446744073709001000", 38, 3, 17070057)
     checkHiveHashForDecimal("18446744073709001000", 38, 4, -17070057)
     checkHiveHashForDecimal("9223372036854775807", 38, 4, 2147482656)
