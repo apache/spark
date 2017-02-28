@@ -365,11 +365,11 @@ private[spark] object HadoopRDD extends Logging {
     val jobID = new JobID(jobTrackerId, jobId)
     val taId = new TaskAttemptID(new TaskID(jobID, TaskType.MAP, splitId), attemptId)
 
-    conf.set("mapred.tip.id", taId.getTaskID.toString)
-    conf.set("mapred.task.id", taId.toString)
-    conf.setBoolean("mapred.task.is.map", true)
-    conf.setInt("mapred.task.partition", splitId)
-    conf.set("mapred.job.id", jobID.toString)
+    conf.set("mapreduce.task.id", taId.getTaskID.toString)
+    conf.set("mapreduce.task.attempt.id", taId.toString)
+    conf.setBoolean("mapreduce.task.ismap", true)
+    conf.setInt("mapreduce.task.partition", splitId)
+    conf.set("mapreduce.job.id", jobID.toString)
   }
 
   /**

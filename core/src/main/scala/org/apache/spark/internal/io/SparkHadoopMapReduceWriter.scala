@@ -79,7 +79,7 @@ object SparkHadoopMapReduceWriter extends Logging {
     val committer = FileCommitProtocol.instantiate(
       className = classOf[HadoopMapReduceCommitProtocol].getName,
       jobId = stageId.toString,
-      outputPath = conf.value.get("mapred.output.dir"),
+      outputPath = conf.value.get("mapreduce.output.fileoutputformat.outputdir"),
       isAppend = false).asInstanceOf[HadoopMapReduceCommitProtocol]
     committer.setupJob(jobContext)
 

@@ -1347,7 +1347,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
-        oldconf = {"mapred.input.dir": hellopath}
+        oldconf = {"mapreduce.input.fileinputformat.inputdir": hellopath}
         hello = self.sc.hadoopRDD("org.apache.hadoop.mapred.TextInputFormat",
                                   "org.apache.hadoop.io.LongWritable",
                                   "org.apache.hadoop.io.Text",
@@ -1366,7 +1366,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
-        newconf = {"mapred.input.dir": hellopath}
+        newconf = {"mapreduce.input.fileinputformat.inputdir": hellopath}
         hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
                                         "org.apache.hadoop.io.LongWritable",
                                         "org.apache.hadoop.io.Text",
@@ -1515,12 +1515,12 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
         conf = {
             "mapred.output.format.class": "org.apache.hadoop.mapred.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.hadoop.io.MapWritable",
-            "mapred.output.dir": basepath + "/olddataset/"
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.hadoop.io.MapWritable",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/olddataset/"
         }
         self.sc.parallelize(dict_data).saveAsHadoopDataset(conf)
-        input_conf = {"mapred.input.dir": basepath + "/olddataset/"}
+        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/olddataset/"}
         result = self.sc.hadoopRDD(
             "org.apache.hadoop.mapred.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
@@ -1547,14 +1547,14 @@ class OutputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(result, data)
 
         conf = {
-            "mapreduce.outputformat.class":
+            "mapreduce.job.outputformat.class":
                 "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.hadoop.io.Text",
-            "mapred.output.dir": basepath + "/newdataset/"
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.hadoop.io.Text",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/newdataset/"
         }
         self.sc.parallelize(data).saveAsNewAPIHadoopDataset(conf)
-        input_conf = {"mapred.input.dir": basepath + "/newdataset/"}
+        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/newdataset/"}
         new_dataset = sorted(self.sc.newAPIHadoopRDD(
             "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
@@ -1584,16 +1584,16 @@ class OutputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(result, array_data)
 
         conf = {
-            "mapreduce.outputformat.class":
+            "mapreduce.job.outputformat.class":
                 "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
-            "mapred.output.dir": basepath + "/newdataset/"
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/newdataset/"
         }
         self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(
             conf,
             valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
-        input_conf = {"mapred.input.dir": basepath + "/newdataset/"}
+        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/newdataset/"}
         new_dataset = sorted(self.sc.newAPIHadoopRDD(
             "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
@@ -1663,18 +1663,19 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
         conf4 = {
             "mapred.output.format.class": "org.apache.hadoop.mapred.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.dir": basepath + "/reserialize/dataset"}
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/dataset"}
         rdd.saveAsHadoopDataset(conf4)
         result4 = sorted(self.sc.sequenceFile(basepath + "/reserialize/dataset").collect())
         self.assertEqual(result4, data)
 
-        conf5 = {"mapreduce.outputformat.class":
+        conf5 = {"mapreduce.job.outputformat.class":
                  "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-                 "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-                 "mapred.output.value.class": "org.apache.hadoop.io.IntWritable",
-                 "mapred.output.dir": basepath + "/reserialize/newdataset"}
+                 "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+                 "mapreduce.job.output.value.class": "org.apache.hadoop.io.IntWritable",
+                 "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/newdataset"
+                 }
         rdd.saveAsNewAPIHadoopDataset(conf5)
         result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)

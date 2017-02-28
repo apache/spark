@@ -46,7 +46,7 @@ build_script:
   - cmd: mvn -DskipTests -Psparkr -Phive -Phive-thriftserver package
 
 test_script:
-  - cmd: .\bin\spark-submit2.cmd --conf spark.hadoop.fs.default.name="file:///" R\pkg\tests\run-all.R
+  - cmd: .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
 
 notifications:
   - provider: Email
