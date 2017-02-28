@@ -18,6 +18,7 @@
 package org.apache.spark.executor
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
@@ -27,7 +28,7 @@ import scala.concurrent.duration._
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
-import org.mockito.Mockito.{inOrder, when}
+import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
@@ -136,7 +137,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     // the fetch failure.  The executor should still tell the driver that the task failed due to a
     // fetch failure, not a generic exception from user code.
     val inputRDD = new FetchFailureThrowingRDD(sc)
-    val secondRDD = new FetchFailureHidingRDD(sc, inputRDD)
+    val secondRDD = new FetchFailureHidingRDD(sc, inputRDD, throwOOM = false)
     val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
     val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
     val task = new ResultTask(
@@ -155,6 +156,44 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
     val failReason = runTaskAndGetFailReason(taskDescription)
     assert(failReason.isInstanceOf[FetchFailed])
+  }
+
+  test("SPARK-19276: OOMs correctly handled with a FetchFailure") {
+    // when there is a fatal error like an OOM, we don't do normal fetch failure handling, since it
+    // may be a false positive.  And we should call the uncaught exception handler.
+    val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
+    sc = new SparkContext(conf)
+    val serializer = SparkEnv.get.closureSerializer.newInstance()
+    val resultFunc = (context: TaskContext, itr: Iterator[Int]) => itr.size
+
+    // Submit a job where a fetch failure is thrown, but user code has a try/catch which hides
+    // the fetch failure.  The executor should still tell the driver that the task failed due to a
+    // fetch failure, not a generic exception from user code.
+    val inputRDD = new FetchFailureThrowingRDD(sc)
+    val secondRDD = new FetchFailureHidingRDD(sc, inputRDD, throwOOM = true)
+    val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
+    val serializedTaskMetrics = serializer.serialize(TaskMetrics.registered).array()
+    val task = new ResultTask(
+      stageId = 1,
+      stageAttemptId = 0,
+      taskBinary = taskBinary,
+      partition = secondRDD.partitions(0),
+      locs = Seq(),
+      outputId = 0,
+      localProperties = new Properties(),
+      serializedTaskMetrics = serializedTaskMetrics
+    )
+
+    val serTask = serializer.serialize(task)
+    val taskDescription = createFakeTaskDescription(serTask)
+
+    val (failReason, uncaughtExceptionHandler) =
+      runTaskGetFailReasonAndExceptionHandler(taskDescription)
+    assert(failReason.isInstanceOf[ExceptionFailure])
+    val exceptionCaptor = ArgumentCaptor.forClass(classOf[Throwable])
+    verify(uncaughtExceptionHandler).uncaughtException(any(), exceptionCaptor.capture())
+    assert(exceptionCaptor.getAllValues.size === 1)
+    assert(exceptionCaptor.getAllValues.get(0).isInstanceOf[OutOfMemoryError])
   }
 
   test("Gracefully handle error in task deserialization") {
@@ -203,13 +242,20 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   }
 
   private def runTaskAndGetFailReason(taskDescription: TaskDescription): TaskFailedReason = {
+    runTaskGetFailReasonAndExceptionHandler(taskDescription)._1
+  }
+
+  private def runTaskGetFailReasonAndExceptionHandler(
+      taskDescription: TaskDescription): (TaskFailedReason, UncaughtExceptionHandler) = {
     val mockBackend = mock[ExecutorBackend]
+    val mockUncaughtExceptionHandler = mock[UncaughtExceptionHandler]
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
+        uncaughtExceptionHandler = mockUncaughtExceptionHandler)
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
-      eventually(timeout(5 seconds), interval(10 milliseconds)) {
+      eventually(timeout(5.seconds), interval(10.milliseconds)) {
         assert(executor.numRunningTasks === 0)
       }
     } finally {
@@ -227,7 +273,9 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     assert(statusCaptor.getAllValues().get(0).remaining() === 0)
     // second update is more interesting
     val failureData = statusCaptor.getAllValues.get(1)
-    SparkEnv.get.closureSerializer.newInstance().deserialize[TaskFailedReason](failureData)
+    val failReason =
+      SparkEnv.get.closureSerializer.newInstance().deserialize[TaskFailedReason](failureData)
+    (failReason, mockUncaughtExceptionHandler)
   }
 }
 
@@ -257,14 +305,19 @@ class SimplePartition extends Partition {
 
 class FetchFailureHidingRDD(
     sc: SparkContext,
-    val input: FetchFailureThrowingRDD) extends RDD[Int](input) {
+    val input: FetchFailureThrowingRDD,
+    throwOOM: Boolean) extends RDD[Int](input) {
   override def compute(split: Partition, context: TaskContext): Iterator[Int] = {
     val inItr = input.compute(split, context)
     try {
       Iterator(inItr.size)
     } catch {
       case t: Throwable =>
-        throw new RuntimeException("User Exception that hides the original exception", t)
+        if (throwOOM) {
+          throw new OutOfMemoryError("OOM while handling another exception")
+        } else {
+          throw new RuntimeException("User Exception that hides the original exception", t)
+        }
     }
   }
 
