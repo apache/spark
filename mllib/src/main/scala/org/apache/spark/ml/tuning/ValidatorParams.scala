@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.tuning
 
+import java.util.concurrent.ExecutorService
+
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
@@ -29,6 +32,7 @@ import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -79,6 +83,26 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
 
   /** @group getParam */
   def getNumParallelEval: Int = $(numParallelEval)
+
+  /**
+   * Creates a execution service to be used for validation, defaults to a thread-pool with
+   * size of `numParallelEval`
+   */
+  protected var executorServiceFactory: (Int) => ExecutorService = {
+    (requestedMaxThreads: Int) => ThreadUtils.newDaemonCachedThreadPool(
+      s"${this.getClass.getSimpleName}-thread-pool", requestedMaxThreads)
+  }
+
+  /**
+   * Sets a function to get an execution service to be used for validation
+   *
+   * @param getExecutorService function to get an ExecutorService given a requestedMaxThread size
+   */
+  @Experimental
+  @InterfaceStability.Unstable
+  def setExecutorService(getExecutorService: (Int) => ExecutorService): Unit = {
+    executorServiceFactory = getExecutorService
+  }
 
   protected def transformSchemaImpl(schema: StructType): StructType = {
     require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")

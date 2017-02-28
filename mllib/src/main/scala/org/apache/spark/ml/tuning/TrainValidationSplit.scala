@@ -18,9 +18,10 @@
 package org.apache.spark.ml.tuning
 
 import java.util.{List => JList}
-import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
@@ -34,6 +35,7 @@ import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Params for [[TrainValidationSplit]] and [[TrainValidationSplitModel]].
@@ -99,40 +101,53 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
-    // Barrier to limit parallelism during model fit/evaluation
-    // NOTE: will be capped by size of thread pool used in Scala parallel collections, which is
-    // number of cores in the system by default
-    val numParBarrier = new Semaphore($(numParallelEval))
-    logDebug(s"Running validation with level of parallelism: ${numParBarrier.availablePermits()}.")
+
+    // Create execution context, run in serial if numParallelEval is 1
+    val executionContext = $(numParallelEval) match {
+      case 1 =>
+        ThreadUtils.sameThread
+      case n =>
+        ExecutionContext.fromExecutorService(executorServiceFactory(n))
+    }
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(trainRatio, seed)
     logTuningParams(instr)
 
+    logDebug(s"Running validation with level of parallelism: $numParallelEval.")
     val Array(trainingDataset, validationDataset) =
       dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
     trainingDataset.cache()
     validationDataset.cache()
 
-    // Fit models concurrently, limited by a barrier with '$numParallelEval' permits
+    // Fit models in a Future with thread-pool size determined by '$numParallelEval'
     logDebug(s"Train split with multiple sets of parameters.")
-    val models = epm.par.map { paramMap =>
-      numParBarrier.acquire()
-      val model = est.fit(trainingDataset, paramMap)
-      numParBarrier.release()
-      model.asInstanceOf[Model[_]]
-    }.seq
-    trainingDataset.unpersist()
+    val models = epm.map { paramMap =>
+      Future[Model[_]] {
+        val model = est.fit(trainingDataset, paramMap)
+        model.asInstanceOf[Model[_]]
+      } (executionContext)
+    }
+
+    Future.sequence[Model[_], Iterable](models)(implicitly, executionContext).onComplete { _ =>
+      trainingDataset.unpersist()
+    } (executionContext)
 
     // Evaluate models concurrently, limited by a barrier with '$numParallelEval' permits
-    val metrics = models.zip(epm).par.map { case (model, paramMap) =>
-      numParBarrier.acquire()
-      // TODO: duplicate evaluator to take extra params from input
-      val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-      numParBarrier.release()
-      logDebug(s"Got metric $metric for model trained with $paramMap.")
-      metric
-    }.seq.toArray
+    val metricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
+      modelFuture.flatMap { model =>
+        Future {
+          // TODO: duplicate evaluator to take extra params from input
+          val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+          logDebug(s"Got metric $metric for model trained with $paramMap.")
+          metric
+        } (executionContext)
+      } (executionContext)
+    }
+
+    // Wait for all metrics to be calculated
+    val metrics = metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+
     validationDataset.unpersist()
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")

@@ -18,9 +18,10 @@
 package org.apache.spark.ml.tuning
 
 import java.util.{List => JList}
-import java.util.concurrent.Semaphore
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
@@ -28,13 +29,15 @@ import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml._
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ThreadUtils
+
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
@@ -105,48 +108,58 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
-    // Barrier to limit parallelism during model fit/evaluation
-    // NOTE: will be capped by size of thread pool used in Scala parallel collections, which is
-    // number of cores in the system by default
-    val numParBarrier = new Semaphore($(numParallelEval))
+
+    // Create execution context, run in serial if numParallelEval is 1
+    val executionContext = $(numParallelEval) match {
+      case 1 =>
+        ThreadUtils.sameThread
+      case n =>
+        ExecutionContext.fromExecutorService(executorServiceFactory(n))
+    }
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(numFolds, seed)
     logTuningParams(instr)
 
-    // Compute metrics for each model over each fold
-    logDebug("Running cross-validation with level of parallelism: " +
-      s"${numParBarrier.availablePermits()}.")
+    // Compute metrics for each model over each split
+    logDebug(s"Running cross-validation with level of parallelism: $numParallelEval.")
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      // Fit models concurrently, limited by a barrier with '$numParallelEval' permits
-      val models = epm.par.map { paramMap =>
-        numParBarrier.acquire()
-        val model = est.fit(trainingDataset, paramMap)
-        numParBarrier.release()
-        model.asInstanceOf[Model[_]]
-      }.seq
-      trainingDataset.unpersist()
+      // Fit models in a Future with thread-pool size determined by '$numParallelEval'
+      val models = epm.map { paramMap =>
+        Future[Model[_]] {
+          val model = est.fit(trainingDataset, paramMap)
+          model.asInstanceOf[Model[_]]
+        } (executionContext)
+      }
 
-      // Evaluate models concurrently, limited by a barrier with '$numParallelEval' permits
-      val foldMetrics = models.zip(epm).par.map { case (model, paramMap) =>
-        numParBarrier.acquire()
-        // TODO: duplicate evaluator to take extra params from input
-        val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-        numParBarrier.release()
-        logDebug(s"Got metric $metric for model trained with $paramMap.")
-        metric
-      }.seq
+      Future.sequence[Model[_], Iterable](models)(implicitly, executionContext).onComplete { _ =>
+        trainingDataset.unpersist()
+      } (executionContext)
 
+      // Evaluate models in a Future with thread-pool size determined by '$numParallelEval'
+      val foldMetricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
+        modelFuture.flatMap { model =>
+          Future {
+            // TODO: duplicate evaluator to take extra params from input
+            val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+            logDebug(s"Got metric $metric for model trained with $paramMap.")
+            metric
+          } (executionContext)
+        } (executionContext)
+      }
+
+      // Wait for metrics to be calculated before upersisting validation dataset
+      val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
       validationDataset.unpersist()
       foldMetrics
-    }.reduce((mA, mB) => mA.zip(mB).map(m => m._1 + m._2)).toArray
+    }.transpose.map(_.sum)
 
-    // Calculate average metric for all folds
+    // Calculate average metric over all splits
     f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
 
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
