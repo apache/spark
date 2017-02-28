@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.execution.streaming.{JdbcSink, Sink}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
+
 
 class JdbcRelationProvider extends CreatableRelationProvider
   with RelationProvider with DataSourceRegister with StreamSinkProvider{
@@ -98,27 +99,6 @@ class JdbcRelationProvider extends CreatableRelationProvider
 
     createRelation(sqlContext, parameters)
   }
-
-//  class JdbcSink(sqlContext: SQLContext,
-//                 parameters: Map[String, String],
-//                 partitionColumns: Seq[String],
-//                 outputMode: OutputMode) extends Sink {
-//    def addBatch(batchId: Long, data: DataFrame): Unit = {
-//      // TODO add code to log if batch is written and ignore committed batches
-//
-//      createRelation(sqlContext, saveMode(outputMode), parameters, data)
-//    }
-//
-//    def saveMode(outputMode: OutputMode): SaveMode = {
-//      if (outputMode==OutputMode.Append()) {
-//        SaveMode.Append
-//      } else if (outputMode==OutputMode.Complete()) {
-//        SaveMode.Overwrite
-//      } else {
-//        throw new IllegalArgumentException(s"Output mode $outputMode is not supported by JdbcSink")
-//      }
-//    }
-//  }
 
   def createSink(sqlContext: SQLContext,
                   parameters: Map[String, String],

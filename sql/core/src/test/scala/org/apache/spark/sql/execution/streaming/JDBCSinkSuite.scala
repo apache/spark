@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql.execution.streaming
 
-
 import java.sql.DriverManager
 import java.util.Properties
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.ScalaReflection
-
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-import collection.JavaConversions._
+
 import org.scalatest.BeforeAndAfter
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+
+import org.apache.spark.SparkException
+import org.apache.spark.sql._
+import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-import org.h2.jdbc.JdbcBatchUpdateException
+
 
 class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
 
@@ -54,13 +53,7 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
     withConnection { conn =>
       conn.prepareStatement("create schema test").executeUpdate()
       conn.prepareStatement("drop table if exists data").executeUpdate()
-//      conn.prepareStatement(
-//        "CREATE TABLE data (\"id\" INTEGER NOT NULL, \"name\" TEXT not null, \"gender\" TEXT not null) ")
-//        .executeUpdate()
       conn.prepareStatement("drop table if exists aggdata").executeUpdate()
-//      conn.prepareStatement(
-//        "create table aggdata (gender varchar(50), count integer, batch_id BIGINT null )")
-//        .executeUpdate()
       conn.commit()
     }
 
@@ -79,7 +72,7 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
                                           , StructField("gender", StringType, false)))
 
     var parameters = Map("url" -> url, "dbtable" -> "data", "queryname" -> "jdbcstream") ++
-      properties.map(elem => (elem._1.toString, elem._2.toString)).toMap
+      properties.asScala.map(elem => (elem._1.toString, elem._2.toString)).toMap
 
     val sink = new JdbcSink(sqlContext
       , parameters
@@ -95,7 +88,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , Superhero(3, "Batman", "male"))
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, List(Superhero(4, "Captain America", "male"), Superhero(5, "Supergirl", "female")))
+    sink.addBatch(1, List(Superhero(4, "Captain America", "male")
+                        , Superhero(5, "Supergirl", "female")))
     checkSuperheroesInDatabase(Superhero(1, "Iron Man", "male")
       , Superhero(2, "Black Widow", "female")
       , Superhero(3, "Batman", "male")
@@ -103,7 +97,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , Superhero(5, "Supergirl", "female"))
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, List(Superhero(4, "Captain America", "male"), Superhero(5, "Supergirl", "female")))
+    sink.addBatch(1, List(Superhero(4, "Captain America", "male")
+                        , Superhero(5, "Supergirl", "female")))
     checkSuperheroesInDatabase(Superhero(1, "Iron Man", "male")
       , Superhero(2, "Black Widow", "female")
       , Superhero(3, "Batman", "male")
@@ -135,7 +130,7 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , StructField("gender", StringType, false)))
 
     var parameters = Map("url" -> url, "dbtable" -> "data", "queryname" -> "jdbcstream") ++
-      properties.map(elem => (elem._1.toString, elem._2.toString)).toMap
+      properties.asScala.map(elem => (elem._1.toString, elem._2.toString)).toMap
 
     val sink = new JdbcSink(sqlContext
       , parameters
@@ -151,12 +146,14 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , Superhero(3, "Batman", "male"))
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, List(Superhero(4, "Captain America", "male"), Superhero(5, "Supergirl", "female")))
+    sink.addBatch(1, List(Superhero(4, "Captain America", "male")
+                          , Superhero(5, "Supergirl", "female")))
     checkSuperheroesInDatabase(Superhero(4, "Captain America", "male")
       , Superhero(5, "Supergirl", "female"))
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, List(Superhero(4, "Captain America", "male"), Superhero(5, "Supergirl", "female")))
+    sink.addBatch(1, List(Superhero(4, "Captain America", "male")
+                        , Superhero(5, "Supergirl", "female")))
     checkSuperheroesInDatabase(Superhero(4, "Captain America", "male")
       , Superhero(5, "Supergirl", "female"))
 
@@ -177,7 +174,7 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , StructField("gender", StringType, false)))
 
     var parameters = Map("url" -> url, "dbtable" -> "data", "queryname" -> "jdbcstream") ++
-      properties.map(elem => (elem._1.toString, elem._2.toString)).toMap
+      properties.asScala.map(elem => (elem._1.toString, elem._2.toString)).toMap
 
     val sink = new JdbcSink(sqlContext
       , parameters
@@ -197,7 +194,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
        val badSchema = StructType(List(StructField("id", IntegerType, false)
         , StructField("name", StringType, false)
         , StructField("gender", StringType, true)))
-      sink.addBatch(1, rowsToDF(List(Row(4, "Captain America", "male"), Row(5, "Supergirl", null)), badSchema))
+      sink.addBatch(1, rowsToDF(List(Row(4, "Captain America", "male"), Row(5, "Supergirl", null))
+                                , badSchema))
     } catch {
       case e: SparkException =>
       // do nothing.. it should throw this exception
@@ -210,7 +208,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , Superhero(4, "Captain America", "male"))
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, List(Superhero(4, "Captain America", "male"), Superhero(5, "Supergirl", "female")))
+    sink.addBatch(1, List(Superhero(4, "Captain America", "male")
+                        , Superhero(5, "Supergirl", "female")))
     checkSuperheroesInDatabase(Superhero(1, "Iron Man", "male")
       , Superhero(2, "Black Widow", "female")
       , Superhero(3, "Batman", "male")
@@ -224,9 +223,9 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       , StructField("name", StringType, false)
       , StructField("gender", StringType, false)))
 
-    var parameters = Map("url" -> url, "dbtable" -> "data", "queryname" -> "jdbcstream"
+    val parameters = Map("url" -> url, "dbtable" -> "data", "queryname" -> "jdbcstream"
                         , "batchIdCol" -> "batch_id") ++
-      properties.map(elem => (elem._1.toString, elem._2.toString)).toMap
+      properties.asScala.map(elem => (elem._1.toString, elem._2.toString)).toMap
 
     val sink = new JdbcSink(sqlContext
       , parameters
@@ -245,7 +244,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       val badSchema = StructType(List(StructField("id", IntegerType, false)
         , StructField("name", StringType, false)
         , StructField("gender", StringType, true)))
-      sink.addBatch(1, rowsToDF(List(Row(4, "Captain America", "male"), Row(5, "Supergirl", null)), badSchema))
+      sink.addBatch(1, rowsToDF(List(Row(4, "Captain America", "male"), Row(5, "Supergirl", null))
+                                    , badSchema))
     } catch {
       case e: SparkException =>
         // do nothing.. it should throw this exception
@@ -254,7 +254,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
     }
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, List(Superhero(4, "Captain America", "male"), Superhero(5, "Supergirl", "female")))
+    sink.addBatch(1, List(Superhero(4, "Captain America", "male")
+                        , Superhero(5, "Supergirl", "female")))
     checkSuperheroesInDatabase(Superhero(1, "Iron Man", "male")
       , Superhero(2, "Black Widow", "female")
       , Superhero(3, "Batman", "male")
@@ -409,7 +410,7 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
 
   def checkGenderCountsInDatabase(expected: Superhero*) : Unit = {
     val genderCounts = expected.map(_.gender)
-                      .foldLeft(Map.empty[String, Int]){
+                      .foldLeft(Map.empty[String, Int]) {
                         (count, gender) =>
                           count + (gender -> (count.getOrElse(gender, 0) + 1))
                       }
@@ -445,7 +446,8 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
       }
     }
   }
-  def foreachResult(sqlText: String)(handleRow: (List[(String, Any)] => Unit), handleCount: (Integer => Unit)) : Unit = {
+  def foreachResult(sqlText: String)(handleRow: (List[(String, Any)] => Unit)
+                                     , handleCount: (Integer => Unit)) : Unit = {
     sql(sqlText, {rs =>
       val cols = colNames(rs.getMetaData)
       var i = 0
@@ -468,15 +470,16 @@ class JDBCSinkSuite extends StreamTest with BeforeAndAfter {
 
 
 
-  private implicit def superheroesintsToDF(seq: List[Superhero])(implicit schema: StructType): DataFrame = {
+  private implicit def superheroesintsToDF(seq: List[Superhero])
+                                          (implicit schema: StructType): DataFrame = {
 
-    val rows : List[Row] = seq.map(s=>Row(s.id, s.name, s.gender))
-    sqlContext.createDataFrame(rows, schema)
+    val rows : List[Row] = seq.map(s => Row(s.id, s.name, s.gender))
+    sqlContext.createDataFrame(rows.asJava, schema)
   }
 
   private  def rowsToDF(rows: List[Row], schema: StructType): DataFrame = {
 
-    sqlContext.createDataFrame(rows, schema)
+    sqlContext.createDataFrame(rows.asJava, schema)
   }
 
 }

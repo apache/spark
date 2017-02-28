@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.sql.{Connection, SQLException}
+import java.sql.Connection
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils.{logWarning, _}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
-import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
+import org.apache.spark.sql.execution.datasources.jdbc._
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types._
 
-import scala.util.control.NonFatal
+
 
 
 
@@ -40,14 +39,15 @@ class JdbcSink(sqlContext: SQLContext,
                outputMode: OutputMode) extends Sink  with Logging {
   val options = new JDBCOptions(parameters)
   val sinkLog = new JDBCSinkLog(parameters)
-  // If user specifies a batchIdCol in the parameters, then it means that the user wants exactly once
-  // semantics. This column will store the batch Id for the row
-  // when an uncommitted batch is replayed, JDBC SInk will delete the rows that were added to the previous
-  //play of the batch
+  // If user specifies a batchIdCol in the parameters, then it means that the user wants exactly
+  // once semantics. This column will store the batch Id for the row when an uncommitted batch
+  // is replayed, JDBC SInk will delete the rows that were added to the previous play of the
+  // batch
   val batchIdCol = parameters.get("batchIdCol")
   def addBatch(batchId: Long, df: DataFrame): Unit = {
 
-    val schema: StructType = batchIdCol.map(colName => df.schema.add(colName, LongType, false)).getOrElse(df.schema)
+    val schema: StructType = batchIdCol.map(colName => df.schema.add(colName, LongType, false))
+                                        .getOrElse(df.schema)
     val conn = JdbcUtils.createConnectionFactory(options)()
     try {
       if (sinkLog.isBatchCommitted(batchId, conn)) {
@@ -122,11 +122,13 @@ class JdbcSink(sqlContext: SQLContext,
       // batchId col is defined.. construct a schema by adding the batchId col to the DF schema
       // also put the value of the batch id to the end of every row in the DF
       val dfSchema = df.schema
-      val rddSchema: StructType =  df.schema.add(batchIdCol.get, LongType, false)
+      val rddSchema: StructType = df.schema.add(batchIdCol.get, LongType, false)
       val insertStmt = getInsertStatement(table, rddSchema, None, isCaseSensitive, dialect)
       repartitionedDF.queryExecution.toRdd.foreachPartition(iterator => {
         saveInternalPartition(
-          getConnection, table, iterator.map(ir => InternalRow.fromSeq(ir.toSeq(dfSchema) :+ batchId )), rddSchema, insertStmt, batchSize, dialect, isolationLevel)
+          getConnection, table
+          , iterator.map(ir => InternalRow.fromSeq(ir.toSeq(dfSchema) :+ batchId ))
+          , rddSchema, insertStmt, batchSize, dialect, isolationLevel)
       })
     }
   }
