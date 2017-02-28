@@ -48,9 +48,9 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private type StageId = Int
   private type PartitionId = Int
   private type TaskAttemptNumber = Int
-  private case class StageState(
-      authorizedCommitters: Array[TaskAttemptNumber],
-      failures: mutable.Map[PartitionId, mutable.Set[TaskAttemptNumber]])
+  private case class StageState(authorizedCommitters: Array[TaskAttemptNumber]) {
+    val failures = mutable.Map[PartitionId, mutable.Set[TaskAttemptNumber]]()
+  }
 
   private val NO_AUTHORIZED_COMMITTER: TaskAttemptNumber = -1
 
@@ -114,9 +114,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       maxPartitionId: Int): Unit = {
     val arr = new Array[TaskAttemptNumber](maxPartitionId + 1)
     java.util.Arrays.fill(arr, NO_AUTHORIZED_COMMITTER)
-    val failures = mutable.Map[PartitionId, mutable.Set[TaskAttemptNumber]]()
     synchronized {
-      stageStates(stage) = new StageState(arr, failures)
+      stageStates(stage) = new StageState(arr)
     }
   }
 
