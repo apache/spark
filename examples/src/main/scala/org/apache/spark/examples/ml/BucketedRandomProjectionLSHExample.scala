@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 /**
  * An example demonstrating BucketedRandomProjectionLSH.
  * Run with:
- *   bin/run-example org.apache.spark.examples.ml.BucketedRandomProjectionLSHExample
+ *   bin/run-example ml.BucketedRandomProjectionLSHExample
  */
 object BucketedRandomProjectionLSHExample {
   def main(args: Array[String]): Unit = {
