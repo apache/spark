@@ -82,17 +82,19 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
    * out of integer range.
    */
-  protected val checkedCast = udf { (n: Any) =>
+  protected[recommendation] val checkedCast = udf { (n: Any) =>
     n match {
       case v: Int => v // Avoid unnecessary casting
       case v: Number =>
-        val intV = v.intValue()
+        val intV = v.intValue
         // Checks if number within Int range and has no fractional part.
         if (v.doubleValue == intV) {
           intV
         } else {
           throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
-            s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
+            s"and without fractional part for columns ${$(userCol)} and ${$(itemCol)}. " +
+            s"Value $n was either out of Integer range or contained a fractional part that " +
+            s"could not be converted.")
         }
       case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
         s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was not numeric.")
