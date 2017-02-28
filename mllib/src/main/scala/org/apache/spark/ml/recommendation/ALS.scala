@@ -286,6 +286,7 @@ class ALSModel private[ml] (
 
   private val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
     if (userFeatures != null && itemFeatures != null) {
+      // TODO: try dot-producting on Seqs or another non-converted type for potential optimization
       blas.sdot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
     } else {
       Float.NaN
@@ -328,11 +329,23 @@ class ALSModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 
+  /**
+   * Returns top `num` items recommended for each user, for all users.
+   * @param num number of recommendations for each user
+   * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
+   *         stored as an array of (itemId: Int, rating: Double) tuples.
+   */
   @Since("2.2.0")
   def recommendForAllUsers(num: Int): DataFrame = {
     recommendForAll(userFactors, itemFactors, $(userCol), num)
   }
 
+  /**
+   * Returns top `num` users recommended for each item, for all items.
+   * @param num number of recommendations for each item
+   * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
+   *         stored as an array of (userId: Int, rating: Double) tuples.
+   */
   @Since("2.2.0")
   def recommendForAllItems(num: Int): DataFrame = {
     recommendForAll(itemFactors, userFactors, $(itemCol), num)
@@ -345,7 +358,7 @@ class ALSModel private[ml] (
    * @param srcOutputColumn name of the column for the source in the output DataFrame
    * @param num number of recommendations for each record
    * @return a DataFrame of (srcOutputColumn: Int, recommendations), where recommendations are
-   *         stored as an array of (dstId: Int, ratingL: Double) tuples.
+   *         stored as an array of (dstId: Int, rating: Double) tuples.
    */
   private def recommendForAll(
       srcFactors: DataFrame,
