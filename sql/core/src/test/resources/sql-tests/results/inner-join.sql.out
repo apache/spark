@@ -63,10 +63,6 @@ struct<a:int,tag:string>
 -- !query 6 output
 1	a
 1	a
-1	a
-1	a
-1	b
-1	b
 1	b
 1	b
 
