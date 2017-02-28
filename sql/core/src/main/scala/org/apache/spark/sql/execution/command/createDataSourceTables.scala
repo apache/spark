@@ -140,8 +140,8 @@ case class CreateDataSourceTableAsSelectCommand(
         return Seq.empty
       }
 
-      saveDataIntoTable(sparkSession, table, table.storage.locationUri, query, mode,
-        overwrite = false, tableExists = true)
+      saveDataIntoTable(
+        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
 
@@ -151,7 +151,7 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, query, mode, overwrite = true, tableExists = false)
+        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -178,7 +178,6 @@ case class CreateDataSourceTableAsSelectCommand(
       tableLocation: Option[String],
       data: LogicalPlan,
       mode: SaveMode,
-      overwrite: Boolean,
       tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
     val pathOption = tableLocation.map("path" -> _)
@@ -191,7 +190,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, Dataset.ofRows(session, query), Some(overwrite))
+      dataSource.writeAndRead(mode, Dataset.ofRows(session, query))
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

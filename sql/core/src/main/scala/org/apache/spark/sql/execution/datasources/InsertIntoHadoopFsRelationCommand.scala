@@ -47,7 +47,6 @@ case class InsertIntoHadoopFsRelationCommand(
     options: Map[String, String],
     query: LogicalPlan,
     mode: SaveMode,
-    overwrite: Boolean,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
   extends RunnableCommand {
@@ -98,7 +97,7 @@ case class InsertIntoHadoopFsRelationCommand(
       outputPath = outputPath.toString,
       isAppend = isAppend)
 
-    if (overwrite) {
+    if (mode == SaveMode.Overwrite) {
       deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
     }
 

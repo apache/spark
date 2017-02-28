@@ -406,11 +406,7 @@ case class DataSource(
   /**
    * Writes the given [[DataFrame]] out in this [[FileFormat]].
    */
-  private def writeInFileFormat(
-      format: FileFormat,
-      mode: SaveMode,
-      data: DataFrame,
-      overwrite: Option[Boolean]): Unit = {
+  private def writeInFileFormat(format: FileFormat, mode: SaveMode, data: DataFrame): Unit = {
     // Don't glob path for the write path.  The contracts here are:
     //  1. Only one output path can be specified on the write path;
     //  2. Output path must be a legal HDFS style file system path;
@@ -426,26 +422,18 @@ case class DataSource(
         s"got: ${allPaths.mkString(", ")}")
     }
 
-    val isOverWrite = overwrite match {
-      case Some(ow) => ow
-      case _ =>
-        if (pathExists) {
-          if (mode == SaveMode.ErrorIfExists) {
-            throw new AnalysisException(s"path $outputPath already exists.")
-          }
-          if (mode == SaveMode.Ignore) {
-            // Since the path already exists and the save mode is Ignore, we will just return.
-            return
-          }
-
-          if (mode == SaveMode.Append) false
-          else if (mode == SaveMode.Overwrite) true
-          else {
-            throw new IllegalStateException(s"unsupported save mode $mode")
-          }
-        } else true
+    if (pathExists) {
+      if (mode == SaveMode.ErrorIfExists) {
+        throw new AnalysisException(s"path $outputPath already exists.")
+      }
+      if (mode == SaveMode.Ignore) {
+        // Since the path already exists and the save mode is Ignore, we will just return.
+        return
+      }
     }
 
+    // if path does not exist, the ErrorIfExists and Ignore can be transformed to Append
+    val transformedMode = if (mode != SaveMode.Overwrite) SaveMode.Append else mode
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
@@ -476,8 +464,7 @@ case class DataSource(
         fileFormat = format,
         options = options,
         query = data.logicalPlan,
-        mode = mode,
-        isOverWrite,
+        mode = transformedMode,
         catalogTable = catalogTable,
         fileIndex = fileIndex)
       sparkSession.sessionState.executePlan(plan).toRdd
@@ -487,7 +474,7 @@ case class DataSource(
    * Writes the given [[DataFrame]] out to this [[DataSource]] and returns a [[BaseRelation]] for
    * the following reading.
    */
-  def writeAndRead(mode: SaveMode, data: DataFrame, overwrite: Option[Boolean]): BaseRelation = {
+  def writeAndRead(mode: SaveMode, data: DataFrame): BaseRelation = {
     if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
@@ -496,7 +483,7 @@ case class DataSource(
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
       case format: FileFormat =>
-        writeInFileFormat(format, mode, data, overwrite)
+        writeInFileFormat(format, mode, data)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
       case _ =>
@@ -516,7 +503,7 @@ case class DataSource(
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sparkSession.sqlContext, mode, caseInsensitiveOptions, data)
       case format: FileFormat =>
-        writeInFileFormat(format, mode, data, None)
+        writeInFileFormat(format, mode, data)
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
