@@ -19,7 +19,7 @@ package org.apache.spark.ml.optim.loss
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim.aggregator.TestAggregator
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -50,14 +50,14 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val (loss2, grad2) = lossWithReg.calculate(coefficients.asBreeze.toDenseVector)
 
     BLAS.axpy(1.0, Vectors.fromBreeze(grad1), Vectors.dense(regGrad))
-    assert(Vectors.dense(regGrad) ~== Vectors.fromBreeze(grad2) relTol 1e-4)
+    assert(Vectors.dense(regGrad) ~== Vectors.fromBreeze(grad2) relTol 1e-5)
     assert(loss1 + regLoss === loss2)
   }
 
   test("empty RDD") {
     val rdd = sc.parallelize(Seq.empty[Instance])
     val coefficients = Vectors.dense(0.5, -0.1)
-    val getAgg = (bvec: Broadcast[Vector]) => new TestAggregator(2)(bvec.value)
+    val getAgg = (bv: Broadcast[Vector]) => new TestAggregator(2)(bv.value)
     val lossFun = new RDDLossFunction[TestAggregator](rdd, getAgg, None)
     withClue("cannot calculate cost for empty dataset") {
       intercept[IllegalArgumentException]{
@@ -68,7 +68,7 @@ class RDDLossFunctionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("versus aggregating on an iterable") {
     val coefficients = Vectors.dense(0.5, -0.1)
-    val getAgg = (bvec: Broadcast[Vector]) => new TestAggregator(2)(bvec.value)
+    val getAgg = (bv: Broadcast[Vector]) => new TestAggregator(2)(bv.value)
     val lossFun = new RDDLossFunction[TestAggregator](instances, getAgg, None)
     val (loss, grad) = lossFun.calculate(coefficients.asBreeze.toDenseVector)
 

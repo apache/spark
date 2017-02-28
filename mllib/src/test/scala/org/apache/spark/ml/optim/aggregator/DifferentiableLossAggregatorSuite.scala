@@ -18,7 +18,7 @@ package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 
 class DifferentiableLossAggregatorSuite extends SparkFunSuite {
@@ -119,10 +119,11 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
       BLAS.axpy(instance.weight * error, instance.features, expectedGradient)
     }
     BLAS.scal(1.0 / agg.weight, expectedGradient)
+    val weightSum = instances1.map(_.weight).sum
 
-    assert(agg.weight ~== 0.9 absTol 1e-5)
-    assert(agg.loss ~== expectedLoss.sum / agg.weight absTol 1e-5)
-    assert(agg.gradient ~== expectedGradient absTol 1e-5)
+    assert(agg.weight ~== weightSum relTol 1e-5)
+    assert(agg.loss ~== expectedLoss.sum / weightSum relTol 1e-5)
+    assert(agg.gradient ~== expectedGradient relTol 1e-5)
   }
 }
 

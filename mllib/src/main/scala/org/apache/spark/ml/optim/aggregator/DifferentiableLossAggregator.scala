@@ -16,7 +16,7 @@
  */
 package org.apache.spark.ml.optim.aggregator
 
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 
 /**
  * A parent trait for aggregators used in fitting MLlib models. This parent trait implements
@@ -80,7 +80,7 @@ private[ml] trait DifferentiableLossAggregator[
   /** The current loss value of this aggregator. */
   def loss: Double = {
     require(weightSum > 0.0, s"The effective number of instances should be " +
-      s"greater than 0.0, but $weightSum.")
+      s"greater than 0.0, but was $weightSum.")
     lossSum / weightSum
   }
 

@@ -18,7 +18,7 @@ package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 
 /**
  * LeastSquaresAggregator computes the gradient and loss for a Least-squared loss function,

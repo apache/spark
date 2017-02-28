@@ -18,7 +18,7 @@ package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
@@ -136,8 +136,8 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
 
     val weightSum = instances.map(_.weight).sum
     BLAS.scal(1.0 / weightSum, expectedGradient)
-    assert(agg.loss ~== (expectedLoss.sum / weightSum) relTol 1e-3)
-    assert(agg.gradient ~== expectedGradient relTol 1e-3)
+    assert(agg.loss ~== (expectedLoss.sum / weightSum) relTol 1e-5)
+    assert(agg.gradient ~== expectedGradient relTol 1e-5)
   }
 
   test("check with zero standard deviation") {
