@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileIndexSuite extends SharedSQLContext {
@@ -176,6 +177,12 @@ class FileIndexSuite extends SharedSQLContext {
       val catalog2 = new MockCatalog(Seq(pathWithoutSlash))
       assert(catalog1.allFiles().nonEmpty)
       assert(catalog2.allFiles().nonEmpty)
+    }
+  }
+
+  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD is 0") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
   }
 }
