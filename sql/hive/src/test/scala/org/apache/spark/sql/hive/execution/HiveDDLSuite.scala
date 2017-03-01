@@ -1589,7 +1589,7 @@ class HiveDDLSuite
   }
 
   test("refresh table after alter the location") {
-    withTable("t", "t1") {
+    withTable("t", "t1", "t2", "t3") {
       withTempDir { dir =>
         spark.sql(
           """
@@ -1615,6 +1615,34 @@ class HiveDDLSuite
         checkAnswer(spark.table("t1"), Row("2", "1") :: Nil)
         spark.sql(s"ALTER TABLE t1 PARTITION(b=1)SET LOCATION '$dir'")
         checkAnswer(spark.table("t1"), Nil)
+      }
+
+
+      withTempDir { dir =>
+        spark.sql(
+          """
+            |CREATE TABLE t2(a string)
+            |USING hive
+          """.stripMargin)
+
+        spark.sql("INSERT INTO TABLE t2 SELECT 1")
+        checkAnswer(spark.table("t2"), Row("1") :: Nil)
+        spark.sql(s"ALTER TABLE t2 SET LOCATION '$dir'")
+        checkAnswer(spark.table("t2"), Nil)
+      }
+
+      withTempDir { dir =>
+        spark.sql(
+          """
+            |CREATE TABLE t3(a string, b string)
+            |USING hive
+            |PARTITIONED BY(b)
+          """.stripMargin)
+
+        spark.sql("INSERT INTO TABLE t3  PARTITION(b=1) SELECT 2")
+        checkAnswer(spark.table("t3"), Row("2", "1") :: Nil)
+        spark.sql(s"ALTER TABLE t3 PARTITION(b=1)SET LOCATION '$dir'")
+        checkAnswer(spark.table("t3"), Nil)
       }
     }
   }
