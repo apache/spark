@@ -400,6 +400,7 @@ object KMeans extends MLReadable[KMeans] {
 
   /** [[MLWriter]] instance for [[KMeans]] */
   private[KMeans] class KMeansWriter(instance: KMeans) extends MLWriter {
+
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveInitialModel(instance, path)
       DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -408,11 +409,8 @@ object KMeans extends MLReadable[KMeans] {
 
   private class KMeansReader extends MLReader[KMeans] {
 
-    /** Checked against metadata when loading estimator */
-    private val className = classOf[KMeans].getName
-
     override def load(path: String): KMeans = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, classOf[KMeans].getName)
       val instance = new KMeans(metadata.uid)
 
       DefaultParamsReader.getAndSetParams(instance, metadata)

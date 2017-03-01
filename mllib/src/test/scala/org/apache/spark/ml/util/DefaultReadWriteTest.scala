@@ -114,6 +114,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     testParams.foreach { case (p, v) =>
       val param = estimator.getParam(p)
       if (param.name == "initialModel") {
+        // Estimator's `initialModel` has same type as the model produced by this estimator.
+        // So we can use `checkModelData` to check equality of `initialModel` as well.
         checkModelData(estimator.get(param).get.asInstanceOf[M],
           estimator2.get(param).get.asInstanceOf[M])
       } else {
@@ -123,6 +125,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
     // Test Model save/load
     val model2 = testDefaultReadWrite(model)
+    // Model does not extend HasInitialModel, so we don't check it.
     testParams.filter(_._1 != "initialModel").foreach { case (p, v) =>
       val param = model.getParam(p)
       assert(model.get(param).get === model2.get(param).get)

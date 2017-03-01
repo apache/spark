@@ -280,7 +280,7 @@ private[ml] object DefaultParamsWriter {
    * Helper for [[saveMetadata()]] which extracts the JSON to save.
    * This is useful for ensemble models which need to save metadata for many sub-models.
    *
-   * Note: This function does not handle param `initialModel`.
+   * Note: This function does not handle param `initialModel`, see [[saveInitialModel()]].
    *
    * @see [[saveMetadata()]] for details on what this includes.
    */
@@ -311,6 +311,9 @@ private[ml] object DefaultParamsWriter {
     metadataJson
   }
 
+  /**
+   * Save estimator's `initialModel` to corresponding path.
+   */
   def saveInitialModel[T <: HasInitialModel[_ <: MLWritable with Params]](
       instance: T, path: String): Unit = {
     if (instance.isDefined(instance.initialModel)) {
@@ -453,6 +456,12 @@ private[ml] object DefaultParamsReader {
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
   }
 
+  /**
+   * Load estimator's `initialModel` instance from the given path, and return it.
+   * If the `initialModel` path does not exist, it means the estimator does not have or
+   * set param `initialModel`, then return None.
+   * This assumes the model implements [[MLReadable]].
+   */
   def loadInitialModel[M <: Model[M]](path: String, sc: SparkContext): Option[M] = {
     val hadoopConf = sc.hadoopConfiguration
     val initialModelPath = new Path(path, "initialModel")
