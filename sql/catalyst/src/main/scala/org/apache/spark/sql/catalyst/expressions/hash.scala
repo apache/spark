@@ -748,17 +748,14 @@ object HiveHashFunction extends InterpretedHashFunction {
 
   // Mimics normalization done for decimals in Hive at HiveDecimalV1.normalize()
   def normalizeDecimal(input: BigDecimal, allowRounding: Boolean): BigDecimal = {
-    if (input == null) {
-      return null
-    }
+    if (input == null) return null
 
     def trimDecimal(input: BigDecimal) = {
       var result = input
       if (result.compareTo(BigDecimal.ZERO) == 0) {
         // Special case for 0, because java doesn't strip zeros correctly on that number.
         result = BigDecimal.ZERO
-      }
-      else {
+      } else {
         result = result.stripTrailingZeros
         if (result.scale < 0) {
           // no negative scale decimals
