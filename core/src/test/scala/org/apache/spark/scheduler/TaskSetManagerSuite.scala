@@ -177,7 +177,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
   }
 
-
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -872,6 +871,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(sched.endedTasks(3) === Success)
   }
 
+
   test("Killing speculative tasks does not count towards aborting the taskset") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -1037,6 +1037,32 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // the fault of the executor where the task was running.
     verify(blacklist, never())
       .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+  }
+
+  test("Measurement for SPARK-16929.") {
+    val tasksNum = 100000
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(tasksNum)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock,
+      newAlgorithm = true)
+
+    for(i <- 0 until tasksNum) {
+      manager.resourceOffer("exec", "host", NO_PREF)
+    }
+
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+    val random = new Random()
+    for (id <- 0 until tasksNum - 1) {
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)),
+        random.nextInt(3600000))
+      assert(sched.endedTasks(id) === Success)
+    }
+    println("handleSuccessfulTasks cost: " + manager.handleSuccessfulTasksCost.get())
+    manager.checkSpeculatableTasks(600000)
   }
 
   private def createTaskResult(

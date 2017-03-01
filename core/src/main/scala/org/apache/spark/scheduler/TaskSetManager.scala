@@ -21,6 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.Arrays
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.{max, min}
@@ -52,7 +53,8 @@ private[spark] class TaskSetManager(
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     blacklistTracker: Option[BlacklistTracker] = None,
-    clock: Clock = new SystemClock()) extends Schedulable with Logging {
+    clock: Clock = new SystemClock(),
+    newAlgorithm: Boolean = false) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
 
@@ -140,6 +142,19 @@ private[spark] class TaskSetManager(
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
   val taskInfos = new HashMap[Long, TaskInfo]
+
+  val successfulTaskIdsSet = new scala.collection.mutable.TreeSet[Long] {
+    override val ordering: Ordering[Long] = new Ordering[Long] {
+      override def compare(tid0: Long, tid1: Long): Int = {
+        ((taskInfos(tid0).duration - taskInfos(tid1).duration).toInt, tid0 - tid1) match {
+          case (0, 0) => 0
+          case (diffDuration, diffTid)
+            if diffDuration > 0 || (diffDuration == 0 && diffTid > 0) => 1
+          case _ => -1
+        }
+      }
+    }
+  }.empty
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
@@ -692,10 +707,21 @@ private[spark] class TaskSetManager(
   /**
    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
-  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
+  val handleSuccessfulTasksCost = new AtomicLong(0L)
+
+  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_], finishTime: Long = 0L): Unit = {
     val info = taskInfos(tid)
     val index = info.index
-    info.markFinished(TaskState.FINISHED)
+    if (finishTime != 0L) {
+      info.markFinished(TaskState.FINISHED, finishTime)
+    } else {
+      info.markFinished(TaskState.FINISHED)
+    }
+    val start = System.currentTimeMillis()
+    successfulTaskIdsSet += tid
+    val end = System.currentTimeMillis()
+    handleSuccessfulTasksCost.addAndGet(end - start)
+
     removeRunningTask(tid)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -740,6 +766,7 @@ private[spark] class TaskSetManager(
     }
     removeRunningTask(tid)
     info.markFinished(state)
+    successfulTaskIdsSet -= tid
     val index = info.index
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
@@ -918,11 +945,24 @@ private[spark] class TaskSetManager(
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
-    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
+    val successfulTaskIdsSize = successfulTaskIdsSet.size
+    if (successfulTaskIdsSize >= minFinishedForSpeculation && successfulTaskIdsSize > 0) {
       val time = clock.getTimeMillis()
-      val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
-      Arrays.sort(durations)
-      val medianDuration = durations(min((0.5 * tasksSuccessful).round.toInt, durations.length - 1))
+      var medianDuration: Long = 0L
+
+      val startTime = System.currentTimeMillis()
+      if (newAlgorithm) {
+        medianDuration = taskInfos(successfulTaskIdsSet.slice(
+        successfulTaskIdsSize / 2, successfulTaskIdsSize / 2 + 1).head).duration
+      } else {
+        val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
+        Arrays.sort(durations)
+        val medianDuration =
+          durations(min((0.5 * tasksSuccessful).round.toInt, durations.length - 1))
+      }
+      val endTime = System.currentTimeMillis()
+      println(s"Time cost: ${endTime - startTime}")
+
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
