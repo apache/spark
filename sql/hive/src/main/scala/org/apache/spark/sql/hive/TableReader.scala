@@ -111,13 +111,14 @@ class HadoopTableReader(
 
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
+    val localTableDesc = tableDesc
     val broadcastedHadoopConf = _broadcastedHadoopConf
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
     val locationPath = new Path(inputPathStr)
-    val fs = locationPath.getFileSystem(_broadcastedHadoopConf.value.value)
+    val fs = locationPath.getFileSystem(broadcastedHadoopConf.value.value)
 
     // if the location of the table which is not created by 'stored by' does not exist,
     // return an empty RDD
@@ -130,7 +131,7 @@ class HadoopTableReader(
       // logDebug("Table input: %s".format(tablePath))
       val ifc = hiveTable.getInputFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-      val hadoopRDD = createHadoopRdd(tableDesc, inputPathStr, ifc)
+      val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
 
       val attrsWithIndex = attributes.zipWithIndex
       val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
@@ -138,7 +139,7 @@ class HadoopTableReader(
       val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
         val hconf = broadcastedHadoopConf.value.value
         val deserializer = deserializerClass.newInstance()
-        deserializer.initialize(hconf, tableDesc.getProperties)
+        deserializer.initialize(hconf, localTableDesc.getProperties)
         HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
       }
 
