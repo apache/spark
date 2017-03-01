@@ -402,12 +402,12 @@ object SQLConf {
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
-      .doc("The maximum number of files allowed for listing files at driver side. If the number " +
+      .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
         "of detected files exceeds this value during partition discovery, it tries to list the " +
         "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
         "LibSVM data sources.")
       .intConf
-      .checkValue(parallel => parallel >= 0, "The maximum number of files allowed for listing " +
+      .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
         "files at driver side must not be negative")
       .createWithDefault(32)
 
