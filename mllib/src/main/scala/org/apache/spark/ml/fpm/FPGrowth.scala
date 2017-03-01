@@ -56,8 +56,8 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   def getMinSupport: Double = $(minSupport)
 
   /**
-   * Number of partitions (>=1) used by parallel FP-growth. By default the param is not set, and
-   * partition number of the input dataset is used.
+   * Number of partitions (positive) used by parallel FP-growth. By default the param is not set,
+   * and partition number of the input dataset is used.
    * @group expertParam
    */
   @Since("2.2.0")
@@ -240,12 +240,13 @@ class FPGrowthModel private[ml] (
     val predictUDF = udf((items: Seq[_]) => {
       if (items != null) {
         val itemset = items.toSet
-        brRules.value.flatMap(rule =>
-          if (items != null && rule._1.forall(item => itemset.contains(item))) {
+        brRules.value.flatMap { rule =>
+          if (rule._1.forall(item => itemset.contains(item))) {
             rule._2.filter(item => !itemset.contains(item))
           } else {
             Seq.empty
-          })
+          }
+        }
       } else {
         Seq.empty
       }.distinct }, dt)

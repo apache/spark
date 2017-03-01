@@ -8,6 +8,8 @@
   url: ml-clustering.html
 - text: Collaborative filtering
   url: ml-collaborative-filtering.html
+- text: Frequent Pattern Mining
+  url: ml-frequent-pattern-mining.html
 - text: Model selection and tuning
   url: ml-tuning.html
 - text: Advanced topics
