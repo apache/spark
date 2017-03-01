@@ -1334,7 +1334,7 @@ class DAGScheduler(
             }
             else {
               handleExecutorLost(bmAddress.executorId, fileLost = true, hostLost = false,
-                Some(bmAddress.host),Some(task.epoch))
+                Some(bmAddress.host), Some(task.epoch))
             }
           }
         }
