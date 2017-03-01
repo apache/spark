@@ -1,6 +1,6 @@
 SET hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
-SET mapred.min.split.size=1000;
-SET mapred.max.split.size=5000;
+SET mapreduce.input.fileinputformat.split.minsize=1000;
+SET mapreduce.input.fileinputformat.split.maxsize=5000;
 
 create table newtypesorc(c char(10), v varchar(10), d decimal(5,3), da date) stored as orc tblproperties("orc.stripe.size"="16777216"); 
 

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{AggregateEstimation, EstimationUtils, ProjectEstimation}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -128,6 +128,14 @@ case class Filter(condition: Expression, child: LogicalPlan)
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
+  }
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    if (conf.cboEnabled) {
+      FilterEstimation(this, conf).estimate.getOrElse(super.computeStats(conf))
+    } else {
+      super.computeStats(conf)
+    }
   }
 }
 
@@ -340,14 +348,22 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = joinType match {
-    case LeftAnti | LeftSemi =>
-      // LeftSemi and LeftAnti won't ever be bigger than left
-      left.stats(conf).copy()
-    case _ =>
-      // make sure we don't propagate isBroadcastable in other joins, because
-      // they could explode the size.
-      super.computeStats(conf).copy(isBroadcastable = false)
+  override def computeStats(conf: CatalystConf): Statistics = {
+    def simpleEstimation: Statistics = joinType match {
+      case LeftAnti | LeftSemi =>
+        // LeftSemi and LeftAnti won't ever be bigger than left
+        left.stats(conf)
+      case _ =>
+        // Make sure we don't propagate isBroadcastable in other joins, because
+        // they could explode the size.
+        super.computeStats(conf).copy(isBroadcastable = false)
+    }
+
+    if (conf.cboEnabled) {
+      JoinEstimation.estimate(conf, this).getOrElse(simpleEstimation)
+    } else {
+      simpleEstimation
+    }
   }
 }
 
@@ -363,7 +379,17 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
- * Insert some data into a table.
+ * A general hint for the child. This node will be eliminated post analysis.
+ * A pair of (name, parameters).
+ */
+case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
+ * concrete implementations during analysis.
  *
  * @param table the logical plan representing the table. In the future this should be a
  *              [[org.apache.spark.sql.catalyst.catalog.CatalogTable]] once we converge Hive tables
@@ -374,25 +400,24 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
  *                  Map('a' -> Some('1'), 'b' -> Some('2')),
  *                  and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
  *                  would have Map('a' -> Some('1'), 'b' -> None).
- * @param child the logical plan representing data to write to.
+ * @param query the logical plan representing data to write to.
  * @param overwrite overwrite existing table or partitions.
  * @param ifNotExists If true, only write if the table or partition does not exist.
  */
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],
-    child: LogicalPlan,
+    query: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean)
   extends LogicalPlan {
-
-  override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
-
   assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
 
-  override lazy val resolved: Boolean = childrenResolved && table.resolved
+  // We don't want `table` in children as sometimes we don't want to transform it.
+  override def children: Seq[LogicalPlan] = query :: Nil
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved: Boolean = false
 }
 
 /**
@@ -827,18 +852,13 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
  * information about the number of partitions during execution. Used when a specific ordering or
  * distribution is expected by the consumer of the query result. Use [[Repartition]] for RDD-like
  * `coalesce` and `repartition`.
- * If `numPartitions` is not specified, the number of partitions will be the number set by
- * `spark.sql.shuffle.partitions`.
  */
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Option[Int] = None) extends UnaryNode {
+    numPartitions: Int) extends UnaryNode {
 
-  numPartitions match {
-    case Some(n) => require(n > 0, s"Number of partitions ($n) must be positive.")
-    case None => // Ok
-  }
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
@@ -851,4 +871,13 @@ case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
   override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
+}
+
+/** A logical plan for `dropDuplicates`. */
+case class Deduplicate(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    streaming: Boolean) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
 }

@@ -325,7 +325,6 @@ class InMemoryCatalog(
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
     throw new UnsupportedOperationException("loadTable is not implemented")
   }
@@ -336,7 +335,6 @@ class InMemoryCatalog(
       loadPath: String,
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
@@ -348,8 +346,7 @@ class InMemoryCatalog(
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit = {
+      numDP: Int): Unit = {
     throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
   }
 

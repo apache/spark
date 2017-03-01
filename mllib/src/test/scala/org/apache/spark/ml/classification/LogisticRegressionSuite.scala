@@ -456,6 +456,32 @@ class LogisticRegressionSuite
     assert(blrModel.intercept !== 0.0)
   }
 
+  test("sparse coefficients in LogisticAggregator") {
+    val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
+    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
+    val binaryAgg = new LogisticAggregator(bcCoefficientsBinary, bcFeaturesStd, 2,
+      fitIntercept = true, multinomial = false)
+    val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
+      intercept[IllegalArgumentException] {
+        binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
+      }
+    }
+    assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
+
+    val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
+    val multinomialAgg = new LogisticAggregator(bcCoefficientsMulti, bcFeaturesStd, 3,
+      fitIntercept = true, multinomial = true)
+    val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
+      intercept[IllegalArgumentException] {
+        multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
+      }
+    }
+    assert(thrown.getMessage.contains("coefficients only supports dense"))
+    bcCoefficientsBinary.destroy(blocking = false)
+    bcFeaturesStd.destroy(blocking = false)
+    bcCoefficientsMulti.destroy(blocking = false)
+  }
+
   test("overflow prediction for multiclass") {
     val model = new LogisticRegressionModel("mLogReg",
       Matrices.dense(3, 2, Array(0.0, 0.0, 0.0, 1.0, 2.0, 3.0)),

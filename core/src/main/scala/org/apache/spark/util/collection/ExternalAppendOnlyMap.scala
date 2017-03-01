@@ -192,12 +192,19 @@ class ExternalAppendOnlyMap[K, V, C](
    * It will be called by TaskMemoryManager when there is not enough memory for the task.
    */
   override protected[this] def forceSpill(): Boolean = {
-    assert(readingIterator != null)
-    val isSpilled = readingIterator.spill()
-    if (isSpilled) {
-      currentMap = null
+    if (readingIterator != null) {
+      val isSpilled = readingIterator.spill()
+      if (isSpilled) {
+        currentMap = null
+      }
+      isSpilled
+    } else if (currentMap.size > 0) {
+      spill(currentMap)
+      currentMap = new SizeTrackingAppendOnlyMap[K, C]
+      true
+    } else {
+      false
     }
-    isSpilled
   }
 
   /**
