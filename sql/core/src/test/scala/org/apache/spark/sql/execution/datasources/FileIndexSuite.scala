@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileIndexSuite extends SharedSQLContext {
@@ -177,6 +178,21 @@ class FileIndexSuite extends SharedSQLContext {
       assert(catalog1.allFiles().nonEmpty)
       assert(catalog2.allFiles().nonEmpty)
     }
+  }
+
+  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
+    "is a nonpositive number") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+    }
+
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "-1") {
+        new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+      }
+    }.getMessage
+    assert(e.contains("The maximum number of paths allowed for listing files at " +
+      "driver side must not be negative"))
   }
 
   test("refresh for InMemoryFileIndex with FileStatusCache") {
