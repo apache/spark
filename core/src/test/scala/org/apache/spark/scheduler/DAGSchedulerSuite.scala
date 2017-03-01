@@ -414,6 +414,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
+    scheduler.handleExecutorLost("exec-hostA1", fileLost = false, hostLost = true, Some("hostA"))
     runEvent(ExecutorLost("exec-hostA1", SlaveLost("", true)))
     val mapStatus = mapOutputTracker.mapStatuses.get(0).get.filter(_!= null)
     assert(mapStatus.size === 1)

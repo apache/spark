@@ -149,7 +149,6 @@ class DAGScheduler(
    */
   private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
-  private[scheduler] val execIdToHost = new HashMap[String, String]
 
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
@@ -549,10 +548,8 @@ class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
-   *
    * @return a JobWaiter object that can be used to block until the job finishes executing
    *         or can be used to cancel the job.
-   *
    * @throws IllegalArgumentException when partitions ids are illegal
    */
   def submitJob[T, U](
@@ -1337,7 +1334,8 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, slaveLost = true, Some(task.epoch))
+            handleExecutorLost(bmAddress.executorId, fileLost = false, hostLost = true,
+              Some(bmAddress.host), Some(task.epoch))
           }
         }
 
@@ -1371,7 +1369,9 @@ class DAGScheduler(
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
-      slaveLost: Boolean,
+      fileLost: Boolean,
+      hostLost: Boolean = false,
+      maybeHost: Option[String] = None,
       maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
@@ -1396,7 +1396,6 @@ class DAGScheduler(
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
-    execIdToHost.put(execId, host)
   }
 
   private[scheduler] def handleStageCancellation(stageId: Int, reason: Option[String]) {
