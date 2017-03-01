@@ -223,12 +223,24 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Create new `Decimal` with given precision and scale.
+   *
+   * @return `Some(decimal)` if successful or `None` if overflow would occur
+   */
+  private[sql] def toPrecision(precision: Int, scale: Int,
+                               roundMode: BigDecimal.RoundingMode.Value =
+                               ROUND_HALF_UP): Option[Decimal] = {
+    val copy = clone()
+    if (copy.changePrecision(precision, scale, roundMode)) Some(copy) else None
+  }
+
+  /**
    * Update precision and scale while keeping our value the same, and return true if successful.
    *
    * @return true if successful, false if overflow would occur
    */
   private[sql] def changePrecision(precision: Int, scale: Int,
-                      roundMode: BigDecimal.RoundingMode.Value): Boolean = {
+                                   roundMode: BigDecimal.RoundingMode.Value): Boolean = {
     // fast path for UnsafeProjection
     if (precision == this.precision && scale == this.scale) {
       return true
@@ -362,17 +374,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
 
   def floor: Decimal = if (scale == 0) this else {
-    val value = this.clone()
-    value.changePrecision(
-      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
-    value
+    toPrecision(DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
+      .getOrElse(clone())
   }
 
   def ceil: Decimal = if (scale == 0) this else {
-    val value = this.clone()
-    value.changePrecision(
-      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
-    value
+    toPrecision(DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
+      .getOrElse(clone())
   }
 }
 
