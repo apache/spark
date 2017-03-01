@@ -51,8 +51,7 @@ private[sql] object SQLUtils extends Logging {
         && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
       SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
     } else {
-      if (enableHiveSupport
-        && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
+      if (enableHiveSupport) {
         logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
           s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to 'hive', " +
           "falling back to without Hive support.")
