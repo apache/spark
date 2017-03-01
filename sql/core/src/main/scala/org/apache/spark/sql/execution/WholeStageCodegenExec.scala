@@ -215,9 +215,7 @@ trait CodegenSupport extends SparkPlan {
   var shouldStopRequired: Boolean = false
 
   def isShouldStopRequired: Boolean = {
-    if (shouldStopRequired) return true
-    if (this.parent != null) return this.parent.isShouldStopRequired
-    false
+    shouldStopRequired || (this.parent != null && this.parent.isShouldStopRequired)
   }
 }
 
