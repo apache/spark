@@ -755,9 +755,7 @@ case class AlterTableSetLocationCommand(
         catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
     }
 
-    if (DDLUtils.isDatasourceTable(table)) {
-      sparkSession.catalog.refreshTable(table.identifier.table)
-    }
+    sparkSession.sessionState.catalog.refreshTable(table.identifier)
     Seq.empty[Row]
   }
 }
