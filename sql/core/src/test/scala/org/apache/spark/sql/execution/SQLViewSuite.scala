@@ -172,7 +172,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       var e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $viewName SELECT 1")
       }.getMessage
-      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+      assert(e.contains("inserting into a view is not allowed"))
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
@@ -481,6 +481,15 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
         checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
       }
+    }
+  }
+
+  test("create view as insert into table") {
+    withView("testView") {
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
+      }.getMessage
+      assert(e.contains("Create a view as insert into a table is not allowed"))
     }
   }
 
