@@ -693,7 +693,7 @@ class ALSSuite
       1 -> Array(Row(3, 39f), Row(5, 33f)),
       2 -> Array(Row(3, 51f), Row(5, 45f))
     )
-    checkRecommendations(topItems, expected)
+    checkRecommendations(topItems, expected, "item")
   }
 
   test("recommendForAllUsers with k = num_items") {
@@ -706,7 +706,7 @@ class ALSSuite
       1 -> Array(Row(3, 39f), Row(5, 33f), Row(4, 26f), Row(6, 16f)),
       2 -> Array(Row(3, 51f), Row(5, 45f), Row(4, 30f), Row(6, 18f))
     )
-    checkRecommendations(topItems, expected)
+    checkRecommendations(topItems, expected, "item")
   }
 
   test("recommendForAllItems with k < num_users") {
@@ -720,7 +720,7 @@ class ALSSuite
       5 -> Array(Row(2, 45f), Row(0, 42f)),
       6 -> Array(Row(0, 28f), Row(2, 18f))
     )
-    checkRecommendations(topUsers, expected)
+    checkRecommendations(topUsers, expected, "user")
   }
 
   test("recommendForAllItems with k = num_users") {
@@ -734,15 +734,20 @@ class ALSSuite
       5 -> Array(Row(2, 45f), Row(0, 42f), Row(1, 33f)),
       6 -> Array(Row(0, 28f), Row(2, 18f), Row(1, 16f))
     )
-    checkRecommendations(topUsers, expected)
+    checkRecommendations(topUsers, expected, "user")
   }
 
-  private def checkRecommendations(topK: DataFrame, expected: Map[Int, Array[Row]]): Unit = {
+  private def checkRecommendations(
+      topK: DataFrame,
+      expected: Map[Int, Array[Row]],
+      dstColName: String): Unit = {
     assert(topK.columns.contains("recommendations"))
     topK.collect().foreach { row =>
       val id = row.getInt(0)
       val recs = row.getAs[WrappedArray[Row]]("recommendations")
       assert(recs === expected(id))
+      assert(recs(0).fieldIndex(dstColName) == 0)
+      assert(recs(0).fieldIndex("rating") == 1)
     }
   }
 }

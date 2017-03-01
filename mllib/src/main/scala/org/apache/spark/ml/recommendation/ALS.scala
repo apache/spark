@@ -335,37 +335,39 @@ class ALSModel private[ml] (
    * Returns top `numItems` items recommended for each user, for all users.
    * @param numItems max number of recommendations for each user
    * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
-   *         stored as an array of (itemId: Int, rating: Float) tuples.
+   *         stored as an array of (itemCol: Int, rating: Float) Rows.
    */
   @Since("2.2.0")
   def recommendForAllUsers(numItems: Int): DataFrame = {
-    recommendForAll(userFactors, itemFactors, $(userCol), numItems)
+    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems)
   }
 
   /**
    * Returns top `numUsers` users recommended for each item, for all items.
    * @param numUsers max number of recommendations for each item
    * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
-   *         stored as an array of (userId: Int, rating: Float) tuples.
+   *         stored as an array of (userCol: Int, rating: Float) Rows.
    */
   @Since("2.2.0")
   def recommendForAllItems(numUsers: Int): DataFrame = {
-    recommendForAll(itemFactors, userFactors, $(itemCol), numUsers)
+    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
   }
 
   /**
    * Makes recommendations for all users (or items).
    * @param srcFactors src factors for which to generate recommendations
    * @param dstFactors dst factors used to make recommendations
-   * @param srcOutputColumn name of the column for the source in the output DataFrame
+   * @param srcOutputColumn name of the column for the source ID in the output DataFrame
+   * @param dstOutputColumn name of the column for the destination ID in the output DataFrame
    * @param num max number of recommendations for each record
    * @return a DataFrame of (srcOutputColumn: Int, recommendations), where recommendations are
-   *         stored as an array of (dstId: Int, rating: Float) tuples.
+   *         stored as an array of (dstOutputColumn: Int, rating: Float) Rows.
    */
   private def recommendForAll(
       srcFactors: DataFrame,
       dstFactors: DataFrame,
       srcOutputColumn: String,
+      dstOutputColumn: String,
       num: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
 
@@ -376,8 +378,21 @@ class ALSModel private[ml] (
         predict(srcFactors("features"), dstFactors("features")))
     // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
     val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
-    ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
+    val recs = ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
       .toDF(srcOutputColumn, "recommendations")
+
+    // There is some performance hit from converting the (Int, Float) tuples to
+    // (dstOutputColumn: Int, rating: Float) structs using .rdd. Need SPARK-16483 for a fix.
+    val schema = new StructType()
+      .add(srcOutputColumn, IntegerType)
+      .add("recommendations",
+        ArrayType(
+          StructType(
+            StructField(dstOutputColumn, IntegerType, nullable = false) ::
+            StructField("rating", FloatType, nullable = false) ::
+            Nil
+      )))
+    recs.sparkSession.createDataFrame(recs.rdd, schema)
   }
 }
 
