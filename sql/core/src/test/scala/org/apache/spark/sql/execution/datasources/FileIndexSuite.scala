@@ -191,7 +191,7 @@ class FileIndexSuite extends SharedSQLContext {
         new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
       }
     }.getMessage
-    assert(e.contains("The maximum number of files allowed for listing files at " +
+    assert(e.contains("The maximum number of paths allowed for listing files at " +
     "driver side must not be negative"))
   }
 
