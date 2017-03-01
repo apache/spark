@@ -200,11 +200,14 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
           val bd = BigDecimal(sign + n)
           val unscaled = (bd * 10).toLongExact
           val d = Decimal(unscaled, 8, 1)
-          val copy = d.toPrecision(10, 0, mode)
           assert(d.changePrecision(10, 0, mode))
-          assert(copy.isDefined)
-          assert(d.ne(copy.get))
           assert(d.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
+
+          val copy = d.toPrecision(10, 0, mode).orNull
+          assert(copy !== null)
+          assert(d.ne(copy))
+          assert(d === copy)
+          assert(copy.toString === bd.setScale(0, mode).toString(), s"num: $sign$n, mode: $mode")
         }
       }
     }
