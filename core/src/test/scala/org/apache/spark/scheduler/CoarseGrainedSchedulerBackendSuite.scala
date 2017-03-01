@@ -28,7 +28,7 @@ import org.mockito.Mockito._
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, ReviveOffers}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RetrieveSparkAppConfig}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
@@ -135,7 +135,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val backend = new CoarseGrainedSchedulerBackend(taskScheduler, rpcEnv)
     backend.start()
     backend.driverEndpoint.askSync[Boolean](message)
-    backend.driverEndpoint.askSync[Boolean](ReviveOffers)
+    backend.reviveOffers()
+    // Make sure that the ReviveOffers message has been processed.
+    // backend.driverEndpoint is thread safe. However, If you modify it,
+    // please modify the code here
+    backend.driverEndpoint.askSync[Any](RetrieveSparkAppConfig)
     assert(taskIdToTaskSetManager(1L).isZombie === true)
     assert(taskIdToTaskSetManager(2L).isZombie === false)
     backend.stop()
