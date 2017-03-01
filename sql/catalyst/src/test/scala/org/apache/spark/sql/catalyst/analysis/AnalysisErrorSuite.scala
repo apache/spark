@@ -398,16 +398,22 @@ class AnalysisErrorSuite extends AnalysisTest {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
     // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
-    val plan =
-      Aggregate(
+    val attrA = AttributeReference("a", LongType)(exprId = ExprId(1))
+    val aId = Array[String](attrA.name, attrA.exprId.id.toString)
+    val otherA = AttributeReference("a", LongType)(exprId = ExprId(2))
+    val otherAId = Array[String](otherA.name, otherA.exprId.id.toString)
+    val plan = Aggregate(
         Nil,
-        Alias(sum(AttributeReference("a", LongType)(exprId = ExprId(1))), "b")() :: Nil,
-        LocalRelation(
-          AttributeReference("a", LongType)(exprId = ExprId(2))))
+        Alias(sum(attrA), "b")() :: Nil,
+        LocalRelation(otherA))
 
     assert(plan.resolved)
 
-    assertAnalysisError(plan, "resolved attribute(s) a#1L missing from a#2L" :: Nil)
+    assertAnalysisError(plan,
+                        "Some resolved attribute(s) are not present among available " +
+                          "attributes for a query.\n" +
+                          s"""| ${aId.mkString("#")}L is not """ +
+                          s"""in ${otherAId.mkString("#")}L.""" :: Nil)
   }
 
   test("error test for self-join") {

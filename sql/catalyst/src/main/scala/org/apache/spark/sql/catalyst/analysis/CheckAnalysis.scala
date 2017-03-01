@@ -349,17 +349,18 @@ trait CheckAnalysis extends PredicateHelper {
               .map(_._1)
 
             val repeatedNameHint = if (commonNames.size > 0) {
-              s"""\nObserve that attribute(s) ${commonNames.mkString(",")} appear in your """ +
-                """query with at least two different hashes, but same name.\n"""
+              s"\n|Observe that attribute(s) ${commonNames.mkString(",")} appear in your " +
+                "query with at least two different hashes, but same name."
             } else {
               ""
             }
 
             failAnalysis(
-              s"""Some resolved attribute(s) are not present among available attributes for a query.
-                 | $missingAttributes is not in $availableAttributes. $repeatedNameHint
-                 The failed query was for operator
-                 | ${operator.simpleString}""")
+              s"|Some resolved attribute(s) are not present among available attributes " +
+                s"for a query.\n" +
+                s"| $missingAttributes is not in $availableAttributes. $repeatedNameHint\n" +
+                s"|The failed query was for operator\n" +
+                s"| ${operator.simpleString}")
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
