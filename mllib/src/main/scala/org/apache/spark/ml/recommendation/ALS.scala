@@ -80,7 +80,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /**
    * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
-   * out of integer range.
+   * out of integer range or contains a fractional part.
    */
   protected[recommendation] val checkedCast = udf { (n: Any) =>
     n match {
@@ -461,8 +461,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(checkedCast(col($(userCol))),
-        checkedCast(col($(itemCol))), r)
+      .select(checkedCast(col($(userCol))), checkedCast(col($(itemCol))), r)
       .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
