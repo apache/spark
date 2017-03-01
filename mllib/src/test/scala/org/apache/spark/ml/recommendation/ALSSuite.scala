@@ -662,44 +662,90 @@ class ALSSuite
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
       model.setColdStartStrategy(s).transform(data)
     }
+  }
 
-  test("recommendForAllUsers") {
-    val numUsers = 20
-    val numItems = 40
-    val numRecs = 5
-    val (training, test) = genExplicitTestData(numUsers, numItems, rank = 2, noiseStd = 0.01)
-    val topItems =
-      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03)
-        .recommendForAllUsers(numRecs)
+  private def getALSModel = {
+    val spark = this.spark
+    import spark.implicits._
 
-    assert(topItems.count() == numUsers)
+    val userFactors = Seq(
+      (0, Array(6.0f, 4.0f)),
+      (1, Array(3.0f, 4.0f)),
+      (2, Array(3.0f, 6.0f))
+    ).toDF("id", "features")
+    val itemFactors = Seq(
+      (3, Array(5.0f, 6.0f)),
+      (4, Array(6.0f, 2.0f)),
+      (5, Array(3.0f, 6.0f)),
+      (6, Array(4.0f, 1.0f))
+    ).toDF("id", "features")
+    val als = new ALS().setRank(2)
+    new ALSModel(als.uid, als.getRank, userFactors, itemFactors)
+      .setUserCol("user")
+      .setItemCol("item")
+  }
+
+  test("recommendForAllUsers with k < num_items") {
+    val topItems = getALSModel.recommendForAllUsers(2)
+    assert(topItems.count() == 3)
     assert(topItems.columns.contains("user"))
-    checkRecommendationOrdering(topItems, numRecs)
-  }
 
-  test("recommendForAllItems") {
-    val numUsers = 20
-    val numItems = 40
-    val numRecs = 5
-    val (training, test) = genExplicitTestData(numUsers, numItems, rank = 2, noiseStd = 0.01)
-    val topUsers =
-      testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03)
-        .recommendForAllItems(numRecs)
-
-    assert(topUsers.count() == numItems)
-    assert(topUsers.columns.contains("item"))
-    checkRecommendationOrdering(topUsers, numRecs)
-  }
-
-  private def checkRecommendationOrdering(topK: DataFrame, k: Int): Unit = {
-    assert(topK.columns.contains("recommendations"))
-    topK.select("recommendations").collect().foreach(
-      row => {
-        val recs = row.getAs[WrappedArray[Row]]("recommendations")
-        assert(recs.length == k)
-        assert(recs.sorted(Ordering.by((x: Row) => x(1).asInstanceOf[Float]).reverse) == recs)
-      }
+    val expected = Map(
+      0 -> Array(Row(3, 54f), Row(4, 44f)),
+      1 -> Array(Row(3, 39f), Row(5, 33f)),
+      2 -> Array(Row(3, 51f), Row(5, 45f))
     )
+    checkRecommendations(topItems, expected)
+  }
+
+  test("recommendForAllUsers with k = num_items") {
+    val topItems = getALSModel.recommendForAllUsers(4)
+    assert(topItems.count() == 3)
+    assert(topItems.columns.contains("user"))
+
+    val expected = Map(
+      0 -> Array(Row(3, 54f), Row(4, 44f), Row(5, 42f), Row(6, 28f)),
+      1 -> Array(Row(3, 39f), Row(5, 33f), Row(4, 26f), Row(6, 16f)),
+      2 -> Array(Row(3, 51f), Row(5, 45f), Row(4, 30f), Row(6, 18f))
+    )
+    checkRecommendations(topItems, expected)
+  }
+
+  test("recommendForAllItems with k < num_users") {
+    val topUsers = getALSModel.recommendForAllItems(2)
+    assert(topUsers.count() == 4)
+    assert(topUsers.columns.contains("item"))
+
+    val expected = Map(
+      3 -> Array(Row(0, 54f), Row(2, 51f)),
+      4 -> Array(Row(0, 44f), Row(2, 30f)),
+      5 -> Array(Row(2, 45f), Row(0, 42f)),
+      6 -> Array(Row(0, 28f), Row(2, 18f))
+    )
+    checkRecommendations(topUsers, expected)
+  }
+
+  test("recommendForAllItems with k = num_users") {
+    val topUsers = getALSModel.recommendForAllItems(3)
+    assert(topUsers.count() == 4)
+    assert(topUsers.columns.contains("item"))
+
+    val expected = Map(
+      3 -> Array(Row(0, 54f), Row(2, 51f), Row(1, 39f)),
+      4 -> Array(Row(0, 44f), Row(2, 30f), Row(1, 26f)),
+      5 -> Array(Row(2, 45f), Row(0, 42f), Row(1, 33f)),
+      6 -> Array(Row(0, 28f), Row(2, 18f), Row(1, 16f))
+    )
+    checkRecommendations(topUsers, expected)
+  }
+
+  private def checkRecommendations(topK: DataFrame, expected: Map[Int, Array[Row]]): Unit = {
+    assert(topK.columns.contains("recommendations"))
+    topK.collect().foreach { row =>
+      val id = row.getInt(0)
+      val recs = row.getAs[WrappedArray[Row]]("recommendations")
+      assert(recs === expected(id))
+    }
   }
 }
 
