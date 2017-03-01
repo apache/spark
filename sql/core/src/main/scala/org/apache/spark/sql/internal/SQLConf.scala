@@ -133,7 +133,7 @@ object SQLConf {
     .intConf
     .createWithDefault(4)
 
-  val ENABLE_PARALLEL_GLOBAL_LIMIT = SQLConfigBuilder("spark.sql.limit.globalparallel")
+  val ENABLE_PARALLEL_GLOBAL_LIMIT = buildConf("spark.sql.limit.globalparallel")
     .internal()
     .doc("Not to shuffle the results of local limit to one single partition in global limit " +
       "so that the limit operation doesn't downgrade parallelism. The config is mainly used " +
