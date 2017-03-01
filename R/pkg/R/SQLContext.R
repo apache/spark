@@ -348,6 +348,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
+#' df <- read.json(path, wholeFile = TRUE)
 #' df <- jsonFile(path)
 #' }
 #' @name read.json
@@ -780,6 +781,7 @@ dropTempView <- function(viewName) {
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
+#' @seealso \link{read.json}
 #' @export
 #' @examples
 #'\dontrun{
@@ -787,7 +789,7 @@ dropTempView <- function(viewName) {
 #' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
-#' df2 <- read.df(mapTypeJsonPath, "json", schema, wholeFile = "true")
+#' df2 <- read.df(mapTypeJsonPath, "json", schema, wholeFile = TRUE)
 #' df3 <- loadDF("data/test_table", "parquet", mergeSchema = "true")
 #' }
 #' @name read.df
