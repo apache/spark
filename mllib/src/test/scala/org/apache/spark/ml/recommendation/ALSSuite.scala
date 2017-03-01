@@ -368,7 +368,7 @@ class ALSSuite
       implicitPrefs: Boolean = false,
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
-      targetRMSE: Double = 0.05): ALSModel = {
+      targetRMSE: Double = 0.05): Unit = {
     val spark = this.spark
     import spark.implicits._
     val als = new ALS()
@@ -411,8 +411,6 @@ class ALSSuite
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
-
-    model
   }
 
   test("exact rank-1 matrix") {
