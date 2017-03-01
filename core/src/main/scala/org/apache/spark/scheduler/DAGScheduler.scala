@@ -1334,8 +1334,14 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            handleExecutorLost(bmAddress.executorId, fileLost = false, hostLost = true,
-              Some(bmAddress.host), Some(task.epoch))
+            if (!env.blockManager.externalShuffleServiceEnabled) {
+              handleExecutorLost(bmAddress.executorId, fileLost = false, hostLost = true,
+                Some(bmAddress.host), Some(task.epoch))
+            }
+            else {
+              handleExecutorLost(bmAddress.executorId, fileLost = true, hostLost = false,
+                Some(bmAddress.host),Some(task.epoch))
+            }
           }
         }
 
