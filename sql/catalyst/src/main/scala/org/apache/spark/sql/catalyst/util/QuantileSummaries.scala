@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
 
 /**
