@@ -113,7 +113,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     }
 
     val bucketizer: UserDefinedFunction = udf { (row: Row) =>
-      row.is
       Bucketizer.binarySearchForBuckets($(splits), row.getAs[java.lang.Double]($(inputCol)), keepInvalid)
     }
 
