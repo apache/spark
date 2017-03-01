@@ -20,11 +20,12 @@ package org.apache.spark.ml.stat
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
-import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * API for statistical functions in MLlib, compatible with Dataframes and Datasets.
@@ -66,10 +67,13 @@ object Statistics {
   // TODO: how do we handle missing values?
   @Since("2.2.0")
   def corr(dataset: Dataset[_], column: String, method: String): DataFrame = {
-    val rdd = dataset.select(column).map { case Row(v: Vector) => OldVectors.fromML(v)} .rdd
+    val rdd = dataset.select(column).rdd.map {
+      case Row(v: Vector) => OldVectors.fromML(v)
+//      case r: GenericRowWithSchema => OldVectors.fromML(r.getAs[Vector](0))
+    }
     val oldM = OldStatistics.corr(rdd, method)
     val name = s"$method($column)"
-    val schema = StructType(Array(StructField(name, new VectorUDT, nullable = true)))
+    val schema = StructType(Array(StructField(name, SQLDataTypes.MatrixType, nullable = true)))
     dataset.sparkSession.createDataFrame(Seq(Row(oldM.asML)).asJava, schema)
   }
 
