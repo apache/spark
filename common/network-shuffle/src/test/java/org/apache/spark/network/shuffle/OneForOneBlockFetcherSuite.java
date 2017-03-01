@@ -25,8 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -85,8 +83,8 @@ public class OneForOneBlockFetcherSuite {
 
     // Each failure will cause a failure to be invoked in all remaining block fetches.
     verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), (Throwable) any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("b2"), (Throwable) any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
+    verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
   }
 
   @Test
@@ -100,15 +98,15 @@ public class OneForOneBlockFetcherSuite {
 
     // We may call both success and failure for the same block.
     verify(listener, times(1)).onBlockFetchSuccess("b0", blocks.get("b0"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), (Throwable) any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
     verify(listener, times(1)).onBlockFetchSuccess("b2", blocks.get("b2"));
-    verify(listener, times(1)).onBlockFetchFailure(eq("b2"), (Throwable) any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("b2"), any());
   }
 
   @Test
   public void testEmptyBlockFetch() {
     try {
-      fetchBlocks(Maps.<String, ManagedBuffer>newLinkedHashMap());
+      fetchBlocks(Maps.newLinkedHashMap());
       fail();
     } catch (IllegalArgumentException e) {
       assertEquals("Zero-sized blockIds array", e.getMessage());
@@ -123,52 +121,46 @@ public class OneForOneBlockFetcherSuite {
    *
    * If a block's buffer is "null", an exception will be thrown instead.
    */
-  private BlockFetchingListener fetchBlocks(final LinkedHashMap<String, ManagedBuffer> blocks) {
+  private static BlockFetchingListener fetchBlocks(LinkedHashMap<String, ManagedBuffer> blocks) {
     TransportClient client = mock(TransportClient.class);
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
-    final String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
     OneForOneBlockFetcher fetcher =
       new OneForOneBlockFetcher(client, "app-id", "exec-id", blockIds, listener);
 
-    // Respond to the "OpenBlocks" message with an appropirate ShuffleStreamHandle with streamId 123
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
-        BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
-          (ByteBuffer) invocationOnMock.getArguments()[0]);
-        RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
-        callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
-        assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
-        return null;
-      }
+    // Respond to the "OpenBlocks" message with an appropriate ShuffleStreamHandle with streamId 123
+    doAnswer(invocationOnMock -> {
+      BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(
+        (ByteBuffer) invocationOnMock.getArguments()[0]);
+      RpcResponseCallback callback = (RpcResponseCallback) invocationOnMock.getArguments()[1];
+      callback.onSuccess(new StreamHandle(123, blocks.size()).toByteBuffer());
+      assertEquals(new OpenBlocks("app-id", "exec-id", blockIds), message);
+      return null;
     }).when(client).sendRpc(any(ByteBuffer.class), any(RpcResponseCallback.class));
 
     // Respond to each chunk request with a single buffer from our blocks array.
-    final AtomicInteger expectedChunkIndex = new AtomicInteger(0);
-    final Iterator<ManagedBuffer> blockIterator = blocks.values().iterator();
-    doAnswer(new Answer<Void>() {
-      @Override
-      public Void answer(InvocationOnMock invocation) throws Throwable {
-        try {
-          long streamId = (Long) invocation.getArguments()[0];
-          int myChunkIndex = (Integer) invocation.getArguments()[1];
-          assertEquals(123, streamId);
-          assertEquals(expectedChunkIndex.getAndIncrement(), myChunkIndex);
+    AtomicInteger expectedChunkIndex = new AtomicInteger(0);
+    Iterator<ManagedBuffer> blockIterator = blocks.values().iterator();
+    doAnswer(invocation -> {
+      try {
+        long streamId = (Long) invocation.getArguments()[0];
+        int myChunkIndex = (Integer) invocation.getArguments()[1];
+        assertEquals(123, streamId);
+        assertEquals(expectedChunkIndex.getAndIncrement(), myChunkIndex);
 
-          ChunkReceivedCallback callback = (ChunkReceivedCallback) invocation.getArguments()[2];
-          ManagedBuffer result = blockIterator.next();
-          if (result != null) {
-            callback.onSuccess(myChunkIndex, result);
-          } else {
-            callback.onFailure(myChunkIndex, new RuntimeException("Failed " + myChunkIndex));
-          }
-        } catch (Exception e) {
-          e.printStackTrace();
-          fail("Unexpected failure");
+        ChunkReceivedCallback callback = (ChunkReceivedCallback) invocation.getArguments()[2];
+        ManagedBuffer result = blockIterator.next();
+        if (result != null) {
+          callback.onSuccess(myChunkIndex, result);
+        } else {
+          callback.onFailure(myChunkIndex, new RuntimeException("Failed " + myChunkIndex));
         }
-        return null;
+      } catch (Exception e) {
+        e.printStackTrace();
+        fail("Unexpected failure");
       }
-    }).when(client).fetchChunk(anyLong(), anyInt(), (ChunkReceivedCallback) any());
+      return null;
+    }).when(client).fetchChunk(anyLong(), anyInt(), any());
 
     fetcher.start();
     return listener;
