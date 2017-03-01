@@ -190,32 +190,31 @@ class FileStreamSource(
     val startTime = System.nanoTime
 
     var allFiles: Seq[FileStatus] = null
-    if (sourceHasMetadata.isEmpty) {
-      if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
-        sourceHasMetadata = Some(true)
-        allFiles = allFilesUsingMetadataLogFileIndex()
-      } else {
-        allFiles = allFilesUsingInMemoryFileIndex()
-        if (allFiles.isEmpty) {
-          // we still cannot decide
+    sourceHasMetadata match {
+      case None =>
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+          sourceHasMetadata = Some(true)
+          allFiles = allFilesUsingMetadataLogFileIndex()
         } else {
-          // decide what to use for future rounds
-          // double check whether source has metadata, preventing the extreme corner case that
-          // metadata log and data files are only generated after the previous
-          // `FileStreamSink.hasMetadata` check
-          if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
-            sourceHasMetadata = Some(true)
-            allFiles = allFilesUsingMetadataLogFileIndex()
+          allFiles = allFilesUsingInMemoryFileIndex()
+          if (allFiles.isEmpty) {
+            // we still cannot decide
           } else {
-            sourceHasMetadata = Some(false)
-            // `allFiles` have already been fetched using InMemoryFileIndex in this round
+            // decide what to use for future rounds
+            // double check whether source has metadata, preventing the extreme corner case that
+            // metadata log and data files are only generated after the previous
+            // `FileStreamSink.hasMetadata` check
+            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+              sourceHasMetadata = Some(true)
+              allFiles = allFilesUsingMetadataLogFileIndex()
+            } else {
+              sourceHasMetadata = Some(false)
+              // `allFiles` have already been fetched using InMemoryFileIndex in this round
+            }
           }
         }
-      }
-    } else if (sourceHasMetadata == Some(true)) {
-      allFiles = allFilesUsingMetadataLogFileIndex()
-    } else {
-      allFiles = allFilesUsingInMemoryFileIndex()
+      case Some(true) => allFiles = allFilesUsingMetadataLogFileIndex()
+      case Some(false) => allFiles = allFilesUsingInMemoryFileIndex()
     }
 
     val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>

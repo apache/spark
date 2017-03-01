@@ -667,25 +667,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   test("read data from outputs of another streaming query") {
     withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
-      withTempDirs { case (dir, tmp) =>
+      withTempDirs { case (outputDir, checkpointDir) =>
         // q1 is a streaming query that reads from memory and writes to text files
-        val q1_source = MemoryStream[String]
-        val q1_checkpointDir = new File(dir, "q1_checkpointDir").getCanonicalPath
-        val q1_outputDir = new File(dir, "q1_outputDir").getCanonicalPath
+        val q1Source = MemoryStream[String]
         val q1 =
-          q1_source
+          q1Source
             .toDF()
             .writeStream
-            .option("checkpointLocation", q1_checkpointDir)
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
             .format("text")
-            .start(q1_outputDir)
+            .start(outputDir.getCanonicalPath)
 
         // q2 is a streaming query that reads q1's text outputs
-        val q2 = createFileStream("text", q1_outputDir).filter($"value" contains "keep")
+        val q2 =
+          createFileStream("text", outputDir.getCanonicalPath).filter($"value" contains "keep")
 
         def q1AddData(data: String*): StreamAction =
           Execute { _ =>
-            q1_source.addData(data)
+            q1Source.addData(data)
             q1.processAllAvailable()
           }
         def q2ProcessAllAvailable(): StreamAction = Execute { q2 => q2.processAllAvailable() }
@@ -699,8 +698,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           // batch 1
           Assert {
             // create a text file that won't be on q1's sink log
-            // thus even if its contents contains "keep", it should NOT appear in q2's answer
-            val shouldNotKeep = new File(q1_outputDir, "should_not_keep.txt")
+            // thus even if its content contains "keep", it should NOT appear in q2's answer
+            val shouldNotKeep = new File(outputDir, "should_not_keep.txt")
             stringToFile(shouldNotKeep, "should_not_keep!!!")
             shouldNotKeep.exists()
           },
@@ -712,103 +711,51 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           q1AddData("keep4"),
           Assert {
             // compact interval is 3, so file "2.compact" should exist
-            new File(q1_outputDir, s"${FileStreamSink.metadataDir}/2.compact").exists()
+            new File(outputDir, s"${FileStreamSink.metadataDir}/2.compact").exists()
           },
           q2ProcessAllAvailable(),
           CheckAnswer("keep2", "keep3", "keep4"),
 
-          // stop q1 manually
           Execute { _ => q1.stop() }
         )
       }
     }
   }
 
-  test("read partitioned data from outputs of another streaming query") {
-    withTempDirs { case (dir, tmp) =>
-      // q1 is a streaming query that reads from memory and writes to partitioned json files
-      val q1_source = MemoryStream[(String, String)]
-      val q1_checkpointDir = new File(dir, "q1_checkpointDir").getCanonicalPath
-      val q1_outputDir = new File(dir, "q1_outputDir").getCanonicalPath
-      val q1 =
-        q1_source
-          .toDF()
-          .select($"_1" as "partition", $"_2" as "value")
-          .writeStream
-          .option("checkpointLocation", q1_checkpointDir)
-          .partitionBy("partition")
-          .format("json")
-          .start(q1_outputDir)
-
-      // q2 is a streaming query that reads q1's partitioned json outputs
-      val schema = new StructType().add("value", StringType).add("partition", StringType)
-      val q2 = createFileStream("json", q1_outputDir, Some(schema)).filter($"value" contains "keep")
-
-      def q1AddData(data: (String, String)*): StreamAction =
-        Execute { _ =>
-          q1_source.addData(data)
-          q1.processAllAvailable()
-        }
-      def q2ProcessAllAvailable(): StreamAction = Execute { q2 => q2.processAllAvailable() }
-
-      testStream(q2)(
-        // batch 0: append to a new partition=foo, should read value and partition
-        q1AddData(("foo", "drop1"), ("foo", "keep2")),
-        q2ProcessAllAvailable(),
-        CheckAnswer(("keep2", "foo")),
-
-        // batch 1: append to same partition=foo, should read value and partition
-        q1AddData(("foo", "keep3")),
-        q2ProcessAllAvailable(),
-        CheckAnswer(("keep2", "foo"), ("keep3", "foo")),
-
-        // batch 2: append to a different partition=bar, should read value and partition
-        q1AddData(("bar", "keep4")),
-        q2ProcessAllAvailable(),
-        CheckAnswer(("keep2", "foo"), ("keep3", "foo"), ("keep4", "bar")),
-
-        // stop q1 manually
-        Execute { _ => q1.stop() }
-      )
-    }
-  }
-
   test("start before another streaming query, and read its output") {
-    withTempDirs { case (dir, tmp) =>
+    withTempDirs { case (outputDir, checkpointDir) =>
       // q1 is a streaming query that reads from memory and writes to text files
-      val q1_source = MemoryStream[String]
-      val q1_checkpointDir = new File(dir, "q1_checkpointDir").getCanonicalPath
-      val q1_outputDir = new File(dir, "q1_outputDir")
-      assert(q1_outputDir.mkdir())                    // prepare the output dir for q2 to read
-      val q1_write = q1_source
-        .toDF()
-        .writeStream
-        .option("checkpointLocation", q1_checkpointDir)
-        .format("text")                               // define q1, but don't start it for now
+      val q1Source = MemoryStream[String]
+      // define q1, but don't start it for now
+      val q1Write =
+        q1Source
+          .toDF()
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .format("text")
       var q1: StreamingQuery = null
 
-      val q2 =
-        createFileStream("text", q1_outputDir.getCanonicalPath).filter($"value" contains "keep")
+      val q2 = createFileStream("text", outputDir.getCanonicalPath).filter($"value" contains "keep")
 
       testStream(q2)(
         AssertOnQuery { q2 =>
           val fileSource = getSourcesFromStreamingQuery(q2).head
-          fileSource.sourceHasMetadata === None       // q1 has not started yet, verify that q2
-                                                      // doesn't know whether q1 has metadata
+          // q1 has not started yet, verify that q2 doesn't know whether q1 has metadata
+          fileSource.sourceHasMetadata === None
         },
         Execute { _ =>
-          q1 = q1_write.start(q1_outputDir.getCanonicalPath)  // start q1 !!!
-          q1_source.addData("drop1", "keep2")
+          q1 = q1Write.start(outputDir.getCanonicalPath)
+          q1Source.addData("drop1", "keep2")
           q1.processAllAvailable()
         },
         AssertOnQuery { q2 =>
           q2.processAllAvailable()
           val fileSource = getSourcesFromStreamingQuery(q2).head
-          fileSource.sourceHasMetadata === Some(true) // q1 has started, verify that q2 knows q1 has
-                                                      // metadata by now
+          // q1 has started, verify that q2 knows q1 has metadata by now
+          fileSource.sourceHasMetadata === Some(true)
         },
-        CheckAnswer("keep2"),                         // answer should be correct
-        Execute { _ => q1.stop() }                    // stop q1 manually
+        CheckAnswer("keep2"),
+        Execute { _ => q1.stop() }
       )
     }
   }
