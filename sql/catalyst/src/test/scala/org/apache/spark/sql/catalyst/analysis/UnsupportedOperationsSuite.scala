@@ -22,13 +22,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{MapGroupsWithState, _}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends Command
@@ -36,6 +37,11 @@ case class DummyCommand() extends Command
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
   val attribute = AttributeReference("a", IntegerType, nullable = true)()
+  val watermarkMetadata = new MetadataBuilder()
+    .withMetadata(attribute.metadata)
+    .putLong(EventTimeWatermark.delayKey, 1000L)
+    .build()
+  val attributeWithWatermark = attribute.withMetadata(watermarkMetadata)
   val batchRelation = LocalRelation(attribute)
   val streamRelation = new TestStreamingRelation(attribute)
 
@@ -98,6 +104,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Update,
     expectedMsgs = Seq("multiple streaming aggregations"))
 
+  assertSupportedInStreamingPlan(
+    "aggregate - streaming aggregations in update mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Update)
+
+  assertSupportedInStreamingPlan(
+    "aggregate - streaming aggregations in complete mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Complete)
+
+  assertSupportedInStreamingPlan(
+    "aggregate - streaming aggregations with watermark in append mode",
+    Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - streaming aggregations without watermark in append mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation),
+    outputMode = Append,
+    expectedMsgs = Seq("streaming aggregations", "without watermark"))
+
   // Aggregation: Distinct aggregates not supported on streaming relation
   val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
   assertSupportedInStreamingPlan(
@@ -110,6 +137,51 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Aggregate(Nil, distinctAggExprs, streamRelation),
     outputMode = Complete,
     expectedMsgs = Seq("distinct aggregation"))
+
+  // MapGroupsWithState: Not supported after a streaming aggregation
+  val att = new AttributeReference(name = "a", dataType = LongType)()
+  assertSupportedInBatchPlan(
+    "mapGroupsWithState - mapGroupsWithState on batch relation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), batchRelation))
+
+  assertSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState on streaming relation before aggregation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), streamRelation),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState on streaming relation after aggregation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att),
+      Aggregate(Nil, aggExprs("c"), streamRelation)),
+    outputMode = Complete,
+    expectedMsgs = Seq("(map/flatMap)GroupsWithState"))
+
+  assertSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState on batch relation inside streaming relation",
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), batchRelation),
+    outputMode = Append
+  )
+
+  // Deduplicate
+  assertSupportedInStreamingPlan(
+    "Deduplicate - Deduplicate on streaming relation before aggregation",
+    Aggregate(
+      Seq(attributeWithWatermark),
+      aggExprs("c"),
+      Deduplicate(Seq(att), streamRelation, streaming = true)),
+    outputMode = Append)
+
+  assertNotSupportedInStreamingPlan(
+    "Deduplicate - Deduplicate on streaming relation after aggregation",
+    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation), streaming = true),
+    outputMode = Complete,
+    expectedMsgs = Seq("dropDuplicates"))
+
+  assertSupportedInStreamingPlan(
+    "Deduplicate - Deduplicate on batch relation inside a streaming query",
+    Deduplicate(Seq(att), batchRelation, streaming = false),
+    outputMode = Append
+  )
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(

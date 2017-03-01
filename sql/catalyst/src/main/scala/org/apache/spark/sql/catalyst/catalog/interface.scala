@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
-
 
 
 /**
@@ -114,7 +114,9 @@ case class CatalogTablePartition(
    */
   def toRow(partitionSchema: StructType): InternalRow = {
     InternalRow.fromSeq(partitionSchema.map { field =>
-      Cast(Literal(spec(field.name)), field.dataType).eval()
+      // TODO: use correct timezone for partition values.
+      Cast(Literal(spec(field.name)), field.dataType,
+        Option(DateTimeUtils.defaultTimeZone().getID)).eval()
     })
   }
 }
@@ -133,8 +135,9 @@ case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String]) {
-  if (numBuckets <= 0) {
-    throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
+  if (numBuckets <= 0 || numBuckets >= 100000) {
+    throw new AnalysisException(
+      s"Number of buckets should be greater than 0 but less than 100000. Got `$numBuckets`")
   }
 
   override def toString: String = {
@@ -190,6 +193,14 @@ case class CatalogTable(
     assert(partitionFields.map(_.name) == partitionColumnNames)
 
     StructType(partitionFields)
+  }
+
+  /**
+   * schema of this table's data columns
+   */
+  def dataSchema: StructType = {
+    val dataFields = schema.dropRight(partitionColumnNames.length)
+    StructType(dataFields)
   }
 
   /** Return the database this table was specified to belong to, assuming it exists. */

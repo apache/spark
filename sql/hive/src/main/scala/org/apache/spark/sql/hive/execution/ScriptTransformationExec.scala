@@ -137,21 +137,13 @@ case class ScriptTransformationExec(
             throw writerThread.exception.get
           }
 
-          // Checks if the proc is still alive (incase the command ran was bad)
-          // The ideal way to do this is to use Java 8's Process#isAlive()
-          // but it cannot be used because Spark still supports Java 7.
-          // Following is a workaround used to check if a process is alive in Java 7
-          // TODO: Once builds are switched to Java 8, this can be changed
-          try {
+          if (!proc.isAlive) {
             val exitCode = proc.exitValue()
             if (exitCode != 0) {
               logError(stderrBuffer.toString) // log the stderr circular buffer
               throw new SparkException(s"Subprocess exited with status $exitCode. " +
                 s"Error: ${stderrBuffer.toString}", cause)
             }
-          } catch {
-            case _: IllegalThreadStateException =>
-            // This means that the process is still alive. Move ahead
           }
         }
 

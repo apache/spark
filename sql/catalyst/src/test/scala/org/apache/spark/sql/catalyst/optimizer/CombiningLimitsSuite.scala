@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -32,7 +33,7 @@ class CombiningLimitsSuite extends PlanTest {
       Batch("Combine Limit", FixedPoint(10),
         CombineLimits) ::
       Batch("Constant Folding", FixedPoint(10),
-        NullPropagation,
+        NullPropagation(SimpleCatalystConf(caseSensitiveAnalysis = true)),
         ConstantFolding,
         BooleanSimplification,
         SimplifyConditionals) :: Nil

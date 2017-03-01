@@ -50,10 +50,10 @@ import org.apache.spark.SparkException
  * blame Reynold for this! He was just moving code around!
  *
  * In the future we should converge the write path for Hive with the normal data source write path,
- * as defined in [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
+ * as defined in `org.apache.spark.sql.execution.datasources.FileFormatWriter`.
  *
  * @param table the logical plan representing the table. In the future this should be a
- *              [[org.apache.spark.sql.catalyst.catalog.CatalogTable]] once we converge Hive tables
+ *              `org.apache.spark.sql.catalyst.catalog.CatalogTable` once we converge Hive tables
  *              and data source tables.
  * @param partition a map from the partition key to the partition value (optional). If the partition
  *                  value is optional, dynamic partition insert will be performed.
@@ -301,10 +301,6 @@ case class InsertIntoHiveTable(
       refreshFunction = _ => (),
       options = Map.empty)
 
-    // TODO: Correctly set holdDDLTime.
-    // In most of the time, we should have holdDDLTime = false.
-    // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
-    val holdDDLTime = false
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
         externalCatalog.loadDynamicPartitions(
@@ -313,8 +309,7 @@ case class InsertIntoHiveTable(
           tmpLocation.toString,
           partitionSpec,
           overwrite,
-          numDynamicPartitions,
-          holdDDLTime = holdDDLTime)
+          numDynamicPartitions)
       } else {
         // scalastyle:off
         // ifNotExists is only valid with static partition, refer to
@@ -357,7 +352,6 @@ case class InsertIntoHiveTable(
             tmpLocation.toString,
             partitionSpec,
             isOverwrite = doHiveOverwrite,
-            holdDDLTime = holdDDLTime,
             inheritTableSpecs = inheritTableSpecs,
             isSrcLocal = false)
         }
@@ -368,7 +362,6 @@ case class InsertIntoHiveTable(
         table.catalogTable.identifier.table,
         tmpLocation.toString, // TODO: URI
         overwrite,
-        holdDDLTime,
         isSrcLocal = false)
     }
 
