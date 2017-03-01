@@ -192,7 +192,7 @@ class FileIndexSuite extends SharedSQLContext {
       }
     }.getMessage
     assert(e.contains("The maximum number of paths allowed for listing files at " +
-    "driver side must not be negative"))
+      "driver side must not be negative"))
   }
 
   test("refresh for InMemoryFileIndex with FileStatusCache") {
