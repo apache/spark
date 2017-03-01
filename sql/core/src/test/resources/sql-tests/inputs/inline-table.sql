@@ -29,6 +29,9 @@ select * from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b);
 -- decimal and double coercion
 select * from values ("one", 2.0), ("two", 3.0D) as data(a, b);
 
+-- string to timestamp
+select * from values timestamp('1991-12-06 00:00:00.0') as data(a);
+
 -- error reporting: nondeterministic function rand
 select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b);
 

@@ -2586,15 +2586,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(!jobStarted.get(), "Command should not trigger a Spark job.")
   }
-
-  test("string to timestamp in inline table definition") {
-    sql(
-      """
-        |CREATE TEMPORARY VIEW table_4(timestamp_col_3)
-        |AS VALUES TIMESTAMP('1991-12-06 00:00:00.0')
-      """.stripMargin)
-    checkAnswer(
-      sql("SELECT timestamp_col_3 FROM table_4"),
-      Row(java.sql.Timestamp.valueOf("1991-12-06 00:00:00")) :: Nil)
-  }
 }
