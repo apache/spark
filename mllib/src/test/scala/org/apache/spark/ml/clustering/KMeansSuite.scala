@@ -22,8 +22,10 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.linalg.{Vectors => MLlibVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
@@ -31,13 +33,17 @@ private[clustering] case class TestRow(features: Vector)
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   final val k = 5
   @transient var dataset: Dataset[_] = _
+  @transient var rData: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    rData = GaussianMixtureSuite.rData.map(GaussianMixtureSuite.FeatureData).toDF()
   }
 
   test("default parameters") {
@@ -152,6 +158,35 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val kmeans = new KMeans()
     testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
   }
+
+  test("training with initial model") {
+    val kmeans = new KMeans().setK(2).setSeed(1)
+    val model1 = kmeans.fit(rData)
+    val model2 = kmeans.setInitMode("initialModel").setInitialModel(model1).fit(rData)
+    model2.clusterCenters.zip(model1.clusterCenters)
+      .foreach { case (center2, center1) => assert(center2 ~== center1 absTol 1E-8) }
+  }
+
+  test("training with initial model, error cases") {
+    val kmeans = new KMeans().setK(k).setSeed(1).setMaxIter(1)
+
+    // Sets initMode with 'initialModel', but does not specify initial model.
+    intercept[IllegalArgumentException] {
+      kmeans.setInitMode("initialModel").fit(dataset)
+    }
+
+    // Training dataset dimension mismatched.
+    val modelWithDiffDim = KMeansSuite.generateRandomKMeansModel(4, k)
+    intercept[IllegalArgumentException] {
+      kmeans.setInitMode("initialModel").setInitialModel(modelWithDiffDim).fit(dataset)
+    }
+
+    // Mismatched cluster count between initial model and param k.
+    val initialModel = KMeansSuite.generateRandomKMeansModel(3, k + 1)
+    intercept[IllegalArgumentException] {
+      kmeans.setInitMode("initialModel").setInitialModel(initialModel).fit(dataset)
+    }
+  }
 }
 
 object KMeansSuite {
@@ -173,6 +208,13 @@ object KMeansSuite {
     spark.createDataFrame(rdd)
   }
 
+  def generateRandomKMeansModel(dim: Int, k: Int, seed: Int = 42): KMeansModel = {
+    val rng = new Random(seed)
+    val clusterCenters = (1 to k)
+      .map(i => MLlibVectors.dense(Array.fill(dim)(rng.nextDouble)))
+    new KMeansModel(Identifiable.randomUID("kmeans"), new MLlibKMeansModel(clusterCenters.toArray))
+  }
+
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.
@@ -182,6 +224,7 @@ object KMeansSuite {
     "predictionCol" -> "myPrediction",
     "k" -> 3,
     "maxIter" -> 2,
-    "tol" -> 0.01
+    "tol" -> 0.01,
+    "initialModel" -> generateRandomKMeansModel(3, 3)
   )
 }
