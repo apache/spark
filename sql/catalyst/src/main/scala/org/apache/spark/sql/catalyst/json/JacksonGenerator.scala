@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 private[sql] class JacksonGenerator(
     schema: StructType,
     writer: Writer,
-    options: JSONOptions = new JSONOptions(Map.empty[String, String])) {
+    options: JSONOptions) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.

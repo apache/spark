@@ -109,6 +109,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the index in the power link function. Only applicable for the Tweedie family.
    * Note that link power 0, 1, -1 or 0.5 corresponds to the Log, Identity, Inverse or Sqrt
    * link, respectively.
+   * When not set, this value defaults to 1 - [[variancePower]], which matches the R "statmod"
+   * package.
    *
    * @group param
    */
@@ -334,6 +336,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         s" <= ${WeightedLeastSquares.MAX_NUM_FEATURES}. Found $numFeatures in the input dataset."
       throw new SparkException(msg)
     }
+
+    require(numFeatures > 0 || $(fitIntercept),
+      "GeneralizedLinearRegression was given data with 0 features, and with Param fitIntercept " +
+        "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
