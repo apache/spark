@@ -1606,7 +1606,7 @@ class HiveDDLSuite
                """.stripMargin)
 
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+            assert(table.location == dir.getAbsolutePath)
 
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
@@ -1626,7 +1626,7 @@ class HiveDDLSuite
                """.stripMargin)
 
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+            assert(table.location == dir.getAbsolutePath)
 
             val partDir = new File(dir, "a=3")
             assert(partDir.exists())
@@ -1651,10 +1651,10 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-
+              val dirPath = new Path(dir.getAbsolutePath)
+              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
-              assert(table.location.stripSuffix("/") == expectedPath)
+              assert(new Path(table.location) == fs.makeQualified(dirPath))
 
               checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
           }
@@ -1672,10 +1672,10 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-
+              val dirPath = new Path(dir.getAbsolutePath)
+              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-              val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
-              assert(table.location.stripSuffix("/") == expectedPath)
+              assert(new Path(table.location) == fs.makeQualified(dirPath))
 
               val partDir = new File(dir, "a=3")
               assert(partDir.exists())
