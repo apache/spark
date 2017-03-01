@@ -208,6 +208,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
     }
   }
 
+  /** Execute arbitrary code */
+  object Execute {
+    def apply(func: StreamExecution => Any): AssertOnQuery =
+      AssertOnQuery(query => { func(query); true })
+  }
+
   class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
     private var waitStartTime: Option[Long] = None
 
@@ -472,7 +478,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
           case a: AssertOnQuery =>
             verify(currentStream != null || lastStream != null,
-              "cannot assert when not stream has been started")
+              "cannot assert when no stream has been started")
             val streamToAssert = Option(currentStream).getOrElse(lastStream)
             verify(a.condition(streamToAssert), s"Assert on query failed: ${a.message}")
 

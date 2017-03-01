@@ -280,28 +280,6 @@ case class DataSource(
   }
 
   /**
-   * Returns true if there is a single path that has a metadata log indicating which files should
-   * be read.
-   */
-  def hasMetadata(path: Seq[String]): Boolean = {
-    path match {
-      case Seq(singlePath) =>
-        try {
-          val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-          val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
-          val res = fs.exists(metadataPath)
-          res
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Error while looking for metadata directory.")
-            false
-        }
-      case _ => false
-    }
-  }
-
-  /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
    *
@@ -331,7 +309,9 @@ case class DataSource(
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
       case (format: FileFormat, _)
-          if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
+          if FileStreamSink.hasMetadata(
+            caseInsensitiveOptions.get("path").toSeq ++ paths,
+            sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
