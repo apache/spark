@@ -732,51 +732,38 @@ class Analyzer(
      * For example (SQL):
      * {{{
      *   SELECT * FROM t1
-     *   WHERE EXISTS (SELECT 1
-     *                 FROM t2
-     *                 WHERE t1.c1 = t2.c1)
      *   INTERSECT
      *   SELECT * FROM t1
      *   WHERE EXISTS (SELECT 1
      *                 FROM t2
      *                 WHERE t1.c1 = t2.c1)
      * }}}
-      * Plan before resolveReference rule.
+     * Plan before resolveReference rule.
      *    'Intersect
-     *    :- 'Project [*]
-     *    :  +- Filter exists#271 [c1#250]
-     *    :     :  +- Project [1 AS 1#295]
-     *    :     :     +- Filter (outer(c1#250) = c1#263)
-     *    :     :        +- SubqueryAlias t2
-     *    :     :           +- Relation[c1#263,c2#264] parquet
-     *    :     +- SubqueryAlias t1
-     *    :        +- Relation[c1#250,c2#251] parquet
+     *    :- Project [c1#245, c2#246]
+     *    :  +- SubqueryAlias t1
+     *    :     +- Relation[c1#245,c2#246] parquet
      *    +- 'Project [*]
-     *       +- Filter exists#272 [c1#250]
-     *          :  +- Project [1 AS 1#298]
-     *          :     +- Filter (outer(c1#250) = c1#263)
-     *          :        +- SubqueryAlias t2
-     *          :           +- Relation[c1#263,c2#264] parquet
-     *          +- SubqueryAlias t1
-     *             +- Relation[c1#250,c2#251] parquet
+     *       +- Filter exists#257 [c1#245]
+     *       :  +- Project [1 AS 1#258]
+     *       :     +- Filter (outer(c1#245) = c1#251)
+     *       :        +- SubqueryAlias t2
+     *       :           +- Relation[c1#251,c2#252] parquet
+     *       +- SubqueryAlias t1
+     *          +- Relation[c1#245,c2#246] parquet
      * Plan after the resolveReference rule.
      *    Intersect
-     *    :- Project [c1#250, c2#251]
-     *    :  +- Filter exists#271 [c1#250]
-     *    :     :  +- Project [1 AS 1#295]
-     *    :     :     +- Filter (outer(c1#250) = c1#263)
-     *    :     :        +- SubqueryAlias t2
-     *    :     :           +- Relation[c1#263,c2#264] parquet
-     *    :     +- SubqueryAlias t1
-     *    :        +- Relation[c1#250,c2#251] parquet
-     *    +- Project [c1#299, c2#300]
-     *    +- Filter exists#272 [c1#299]
-     *       :  +- Project [1 AS 1#298]
-     *       :     +- Filter (outer(c1#299) = c1#263)  ==> Updated
+     *    :- Project [c1#245, c2#246]
+     *    :  +- SubqueryAlias t1
+     *    :     +- Relation[c1#245,c2#246] parquet
+     *    +- Project [c1#259, c2#260]
+     *       +- Filter exists#257 [c1#259]
+     *       :  +- Project [1 AS 1#258]
+     *       :     +- Filter (outer(c1#259) = c1#251) => Updated
      *       :        +- SubqueryAlias t2
-     *       :           +- Relation[c1#263,c2#264] parquet
+     *       :           +- Relation[c1#251,c2#252] parquet
      *       +- SubqueryAlias t1
-     *          +- Relation[c1#299,c2#300] parquet  => Outer plan's attributes are de-duplicated.
+     *          +- Relation[c1#259,c2#260] parquet  => Outer plan's attributes are de-duplicated.
      */
     private def dedupOuterReferencesInSubquery(
         plan: LogicalPlan,
@@ -1212,7 +1199,7 @@ class Analyzer(
      * of subquery expressions by the caller of this function.
      */
     private def checkAndGetOuterReferences(sub: LogicalPlan): Seq[Expression] = {
-      val outerReferences = scala.collection.mutable.ArrayBuffer.empty[Seq[Expression]]
+      val outerReferences = ArrayBuffer.empty[Expression]
 
       // Make sure a plan's subtree does not contain outer references
       def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
@@ -1265,7 +1252,7 @@ class Analyzer(
 
       // Simplify the predicates before validating any unsupported correlation patterns
       // in the plan.
-      val transformed = BooleanSimplification(sub) transformUp {
+      BooleanSimplification(sub).foreachUp {
 
         // Whitelist operators allowed in a correlated subquery
         // There are 4 categories:
@@ -1288,25 +1275,18 @@ class Analyzer(
         // Category 1:
         // BroadcastHint, Distinct, LeafNode, Repartition, and SubqueryAlias
         case p: BroadcastHint =>
-          p
         case p: Distinct =>
-          p
         case p: LeafNode =>
-          p
         case p: Repartition =>
-          p
         case p: SubqueryAlias =>
-          p
 
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.
         case p: Sort =>
           failOnOuterReference(p)
-          p
         case p: RepartitionByExpression =>
           failOnOuterReference(p)
-          p
 
         // Category 3:
         // Filter is one of the two operators allowed to host correlated expressions.
@@ -1321,14 +1301,12 @@ class Analyzer(
             case _: EqualTo | _: EqualNullSafe => false
             case _ => true
           }
-          outerReferences += SubExprUtils.getOuterReferences(correlated)
-          f
+          outerReferences ++= SubExprUtils.getOuterReferences(correlated)
 
         // Project cannot host any correlated expressions
         // but can be anywhere in a correlated subquery.
         case p @ Project(expressions, child) =>
           failOnOuterReference(p)
-          p
 
         // Aggregate cannot host any correlated expressions
         // It can be on a correlation path if the correlation contains
@@ -1338,7 +1316,6 @@ class Analyzer(
         case a @ Aggregate(grouping, expressions, child) =>
           failOnOuterReference(a)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
-          a
 
         // Join can host correlated expressions.
         case j @ Join(left, right, joinType, _) =>
@@ -1369,7 +1346,6 @@ class Analyzer(
             case _ =>
               failOnOuterReferenceInSubTree(j)
           }
-          j
 
         // Generator with join=true, i.e., expressed with
         // LATERAL VIEW [OUTER], similar to inner join,
@@ -1379,7 +1355,6 @@ class Analyzer(
         // Generator with join=false is treated as Category 4.
         case p @ Generate(generator, true, _, _, _, _) =>
           failOnOuterReference(p)
-          p
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
@@ -1387,9 +1362,8 @@ class Analyzer(
         // are not allowed to have any correlated expressions.
         case p =>
           failOnOuterReferenceInSubTree(p)
-          p
       }
-      outerReferences.flatten
+      outerReferences
     }
 
     /**
@@ -1431,8 +1405,7 @@ class Analyzer(
         }
         // Validate the outer reference and record the outer references as children of
         // subquery expression.
-        f.tupled(current, checkAndGetOuterReferences(current))
-
+        f(current, checkAndGetOuterReferences(current))
       } else {
         e.withNewPlan(current)
       }
@@ -2362,7 +2335,7 @@ class Analyzer(
       // the types between the value expression and list query expression of IN expression.
       // We need to subject the subquery plan through ResolveTimeZone again to setup timezone
       // information for time zone aware expressions.
-      case e: ListQuery => e.withNewPlan(ResolveTimeZone.apply(e.plan))
+      case e: ListQuery => e.withNewPlan(apply(e.plan))
     }
   }
 }

@@ -208,16 +208,9 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case Filter(condition, _) =>
-            splitConjunctivePredicates(condition).foreach {
-              case _: Exists | Not(_: Exists) =>
-              case In(_, Seq(_: ListQuery)) =>
-              case Not(In(_, Seq(_: ListQuery))) =>
-              case e if SubExprUtils.hasNullAwarePredicateWithinNot(e) =>
-                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
-                  s" conditions: $e")
-              case e =>
-            }
+          case Filter(condition, _) if SubExprUtils.hasNullAwarePredicateWithinNot(condition) =>
+            failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
+              s" conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
@@ -306,7 +299,10 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case p if p.expressions.exists(SubqueryExpression.hasInOrExistsSubquery) =>
-            failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+            p match {
+              case _: Filter => // Ok
+              case other => failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+            }
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)

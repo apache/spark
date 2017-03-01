@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -97,13 +99,18 @@ object SubExprUtils extends PredicateHelper {
    * Returns whether there are any null-aware predicate subqueries inside Not. If not, we could
    * turn the null-aware predicate into not-null-aware predicate.
    */
-  def hasNullAwarePredicateWithinNot(e: Expression): Boolean = {
-    e.find{ x =>
-      x.isInstanceOf[Not] && e.find {
-        case In(_, Seq(_: ListQuery)) => true
-        case _ => false
+  def hasNullAwarePredicateWithinNot(condition: Expression): Boolean = {
+    splitConjunctivePredicates(condition).exists {
+      case _: Exists | Not(_: Exists) | In(_, Seq(_: ListQuery)) | Not(In(_, Seq(_: ListQuery))) =>
+        false
+      case e => e.find { x =>
+        x.isInstanceOf[Not] && e.find {
+          case In(_, Seq(_: ListQuery)) => true
+          case _ => false
+        }.isDefined
       }.isDefined
-    }.isDefined
+    }
+
   }
 
   /**
@@ -169,7 +176,7 @@ object SubExprUtils extends PredicateHelper {
    * The code below needs to change when we support the above cases.
    */
   def getOuterReferences(conditions: Seq[Expression]): Seq[Expression] = {
-    val outerExpressions = scala.collection.mutable.ArrayBuffer.empty[Expression]
+    val outerExpressions = ArrayBuffer.empty[Expression]
     conditions foreach { expr =>
       expr transformDown {
         case a: AggregateExpression if containsOuter(a) =>
@@ -198,7 +205,7 @@ object SubExprUtils extends PredicateHelper {
    * is removed before returning the predicate to the caller.
    */
   def getCorrelatedPredicates(plan: LogicalPlan): Seq[Expression] = {
-    val correlatedPredicates = scala.collection.mutable.ArrayBuffer.empty[Seq[Expression]]
+    val correlatedPredicates = ArrayBuffer.empty[Seq[Expression]]
     val conditions = BooleanSimplification(plan) collect { case Filter(cond, _) => cond }
 
     // Collect all the expressions that have outer references.
