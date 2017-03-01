@@ -332,8 +332,10 @@ setMethod("toDF", signature(x = "RDD"),
 
 #' Create a SparkDataFrame from a JSON file.
 #'
-#' Loads a JSON file (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
-#' ), returning the result as a SparkDataFrame
+#' Loads a JSON file, returning the result as a SparkDataFrame
+#' By default, (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' ) is supported. For JSON (one record per file), set a named paramter \code{wholeFile} to
+#' \code{true}.
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -785,7 +787,7 @@ dropTempView <- function(viewName) {
 #' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
-#' df2 <- read.df(mapTypeJsonPath, "json", schema)
+#' df2 <- read.df(mapTypeJsonPath, "json", schema, wholeFile = "true")
 #' df3 <- loadDF("data/test_table", "parquet", mergeSchema = "true")
 #' }
 #' @name read.df
