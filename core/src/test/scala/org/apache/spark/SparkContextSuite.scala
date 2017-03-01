@@ -292,6 +292,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("add jar with invalid path") {
+    val tmpDir = Utils.createTempDir()
+    val tmpJar = File.createTempFile("test", ".jar", tmpDir)
+
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar(tmpJar.getAbsolutePath)
+
+    // Invaid jar path will only print the error log, will not add to file server.
+    sc.addJar("dummy.jar")
+    sc.addJar("")
+    sc.addJar(tmpDir.getAbsolutePath)
+
+    sc.listJars().size should be (1)
+    sc.listJars().head should include (tmpJar.getName)
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))

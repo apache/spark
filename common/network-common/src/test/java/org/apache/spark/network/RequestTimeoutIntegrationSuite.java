@@ -17,7 +17,6 @@
 
 package org.apache.spark.network;
 
-import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -60,7 +59,7 @@ public class RequestTimeoutIntegrationSuite {
 
   @Before
   public void setUp() throws Exception {
-    Map<String, String> configMap = Maps.newHashMap();
+    Map<String, String> configMap = new HashMap<>();
     configMap.put("spark.shuffle.io.connectionTimeout", "10s");
     conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
 

@@ -515,7 +515,15 @@ class DataFrame(object):
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
-        claim 10 of the current partitions.
+        claim 10 of the current partitions. If a larger number of partitions is requested,
+        it will stay at the current number of partitions.
+
+        However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+        this may result in your computation taking place on fewer nodes than
+        you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+        you can call repartition(). This will add a shuffle step, but means the
+        current upstream partitions will be executed in parallel (per whatever
+        the current partitioning is).
 
         >>> df.coalesce(1).rdd.getNumPartitions()
         1
@@ -1150,6 +1158,12 @@ class DataFrame(object):
         """Return a new :class:`DataFrame` with duplicate rows removed,
         optionally only considering certain columns.
 
+        For a static batch :class:`DataFrame`, it just drops duplicate rows. For a streaming
+        :class:`DataFrame`, it will keep all data across triggers as intermediate state to drop
+        duplicates rows. You can use :func:`withWatermark` to limit how late the duplicate data can
+        be and system will accordingly limit the state. In addition, too late data older than
+        watermark will be dropped to avoid any possibility of duplicates.
+
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         >>> from pyspark.sql import Row
@@ -1271,16 +1285,22 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
+        Values to_replace and value should contain either all numerics, all booleans,
+        or all strings. When replacing, the new value will be cast
+        to the type of the existing column.
+        For numeric replacements all values to be replaced should have unique
+        floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
+        and arbitrary replacement will be used.
 
-        :param to_replace: int, long, float, string, or list.
+        :param to_replace: bool, int, long, float, string, list or dict.
             Value to be replaced.
             If the value is a dict, then `value` is ignored and `to_replace` must be a
-            mapping from column name (string) to replacement value. The value to be
-            replaced must be an int, long, float, or string.
+            mapping between a value and a replacement.
         :param value: int, long, float, string, or list.
-            Value to use to replace holes.
             The replacement value must be an int, long, float, or string. If `value` is a
-            list or tuple, `value` should be of the same length with `to_replace`.
+            list, `value` should be of the same length and type as `to_replace`.
+            If `value` is a scalar and `to_replace` is a sequence, then `value` is
+            used as a replacement for each item in `to_replace`.
         :param subset: optional list of column names to consider.
             Columns specified in subset that do not have matching data type are ignored.
             For example, if `value` is a string, and subset contains a non-string column,
