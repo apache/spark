@@ -66,7 +66,7 @@ test dataset that were not present during training the model. This typically occ
 scenarios:
 
 1. In production, for new users or items that have no rating history and on which the model has not 
-been trained (this is the "cold start problem")
+been trained (this is the "cold start problem").
 2. During cross-validation, the data is split between training and evaluation sets. When using 
 simple random splits as in Spark's `CrossValidator` or `TrainValidationSplit`, it is actually 
 very common to encounter users and/or items in the evaluation set that are not in the training set
@@ -80,12 +80,12 @@ in `NaN` results for the evaluation metric (for example when using `RegressionEv
 This makes model selection impossible.
 
 Spark allows users to set the `coldStartStrategy` parameter
-to `drop` in order to drop any rows in the `DataFrame` of predictions that contain `NaN` values. 
+to "drop" in order to drop any rows in the `DataFrame` of predictions that contain `NaN` values. 
 The evaluation metric will then be computed over the non-`NaN` data and will be valid. 
 Usage of this parameter is illustrated in the example below.
 
-**Note:** currently the supported cold start strategies are `nan` (the default behavior mentioned 
-above) and `drop`. Further strategies may be supported in future versions.
+**Note:** currently the supported cold start strategies are "nan" (the default behavior mentioned 
+above) and "drop". Further strategies may be supported in future.
 
 **Examples**
 
