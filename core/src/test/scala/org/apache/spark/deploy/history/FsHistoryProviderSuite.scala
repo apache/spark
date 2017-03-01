@@ -70,7 +70,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   /**
-   * Create a configure a new history provider
+   * Create and configure a new history provider
    * @return a filesystem history provider ready for use
    */
   private def createHistoryProvider(): FsHistoryProvider = {
@@ -79,10 +79,19 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     provider
   }
 
+  /**
+   * Create and configure a new history provider
+   * @return a filesystem history provider ready for use
+   */
+  private def createHistoryProvider(clock: Clock): FsHistoryProvider = {
+    val provider = new FsHistoryProvider(createTestConf(), clock)
+    provider.start()
+    provider
+  }
+
   test("Parse application logs") {
     val clock = new ManualClock(12345678)
-    val provider = new FsHistoryProvider(createTestConf(), clock)
-    val provider = createHistoryProvider()
+    val provider = createHistoryProvider(clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)

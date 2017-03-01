@@ -81,9 +81,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
+    server.initialize()
     server.bind()
     port = server.boundPort
-    provider.checkForLogs()
   }
 
   def stop(): Unit = {
@@ -417,6 +417,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // stop the server with the old config, and start the new one
     server.stop()
     server = new HistoryServer(myConf, provider, securityManager, 18080)
+    server.initialize()
     server.bind()
     val port = server.boundPort
     val cacheMetrics = server.cacheMetrics
@@ -537,7 +538,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getNumJobs("") should be (1)
     getNumJobs("/jobs") should be (1)
     getNumJobsRestful() should be (1)
-    assertCounterEvaluates(cacheMetrics, "lookup count", cacheMetrics.lookupCount, _ > 1)
+    assertCounterEvaluates(cacheMetrics, "lookup count",
+      cacheMetrics.lookupCount, _ > 1)
 
     // dump state before the next bit of test, which is where update
     // checking really gets stressed
@@ -592,14 +594,16 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     logInfo(s"Metrics:\n$metricsDump")
     // make some assertions about internal state of providers via the metrics
     val loadcount = "appui.load.count"
-    assert(metricsDump.contains(loadcount), s"No $loadcount in metrics dump <$metricsDump>")
+    assert(metricsDump.contains(loadcount),
+      s"No $loadcount in metrics dump <$metricsDump>")
     assertCounterEvaluates(providerMetrics, loadcount,
       providerMetrics.getCounter(loadcount).get, _ > 0)
     assertGaugeEvaluates(providerMetrics, replayTime,
       providerMetrics.getLongGauge(replayTime).get, _ > 0)
 
     val evictionCount = cacheMetrics.fullname("eviction.count")
-    assert(metricsDump.contains(evictionCount), s"No $evictionCount in metrics dump <$metricsDump>")
+    assert(metricsDump.contains(evictionCount),
+      s"No $evictionCount in metrics dump <$metricsDump>")
 
     // no need to retain the test dir now the tests complete
     logDir.deleteOnExit();

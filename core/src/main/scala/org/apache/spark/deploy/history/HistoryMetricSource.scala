@@ -29,6 +29,7 @@ import org.apache.spark.util.Clock
  * retrieving entries; the `toString()` operation dumps all counters and gauges.
  */
 private[history] abstract class HistoryMetricSource(val prefix: String) extends Source {
+
   override val metricRegistry = new MetricRegistry()
 
   /**
@@ -133,8 +134,6 @@ private[history] abstract class HistoryMetricSource(val prefix: String) extends 
     def matches(metricName: String, metric: Metric): Boolean = metricName == fullname
   }
 }
-
-
 
 /**
  * A Long gauge from a lambda expression; the expression is evaluated

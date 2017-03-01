@@ -28,7 +28,7 @@ import scala.xml.Node
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
@@ -278,8 +278,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             if (appListener.appId.isDefined) {
               ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
               // make sure to set admin acls before view acls so they are properly picked up
-              val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
-                appListener.adminAclsGroups.getOrElse("")
+              val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
+              ui.getSecurityManager.setAdminAcls(adminAcls)
+              ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
+              val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," + appListener.adminAclsGroups.getOrElse("")
               ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
               ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
               Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
@@ -345,7 +347,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         val logInfos: Seq[FileStatus] = statusList
           .filter { entry =>
             try {
-              val prevFileSize = fileToAppInfo.get(entry.getPath()) .map {_.fileSize}.getOrElse(0L)
+              val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
               !entry.isDirectory() &&
                 // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
                 // reading a garbage file is safe, but we would log an error which can be scary to
@@ -411,11 +413,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         metrics.updateLastSucceeded.setValue(newLastScanTime)
       } catch {
         case e: Exception => logError(
-          "Exception in checking for event log updates",
-          e)
+          "Exception in checking for event log updates", e)
           metrics.updateFailureCount.inc()
-      } finally {
-        updateContext.stop()
       }
     }
   }
@@ -477,7 +476,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case None => throw new SparkException(s"Logs for $appId not found.")
     }
   }
-
 
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
@@ -608,7 +606,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appsToRetain += (app.id -> app)
         } else if (toRetain.nonEmpty) {
           appsToRetain += (app.id ->
-            new FsApplicationHistoryInfo(app.id, app.name, toRetain))
+            new FsApplicationHistoryInfo(app.id, app.name, toRetain.toList))
         }
       }
 
