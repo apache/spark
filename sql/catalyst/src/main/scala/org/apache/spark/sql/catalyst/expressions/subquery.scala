@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.types._
@@ -139,6 +138,16 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
+   * Given a logical plan, returns TRUE if it has an outer reference and false otherwise.
+   */
+  def hasOuterReferences(plan: LogicalPlan): Boolean = {
+    plan.find {
+      case f: Filter => containsOuter(f.condition)
+      case other => false
+    }.isDefined
+  }
+
+  /**
    * Given a list of expressions, returns the expressions which have outer references. Aggregate
    * expressions are treated in a special way. If the children of aggregate expression contains an
    * outer reference, then the entire aggregate expression is marked as an outer reference.
@@ -196,7 +205,7 @@ object SubExprUtils extends PredicateHelper {
    * Filter operator can host outer references.
    */
   def getOuterReferences(plan: LogicalPlan): Seq[Expression] = {
-    val conditions = BooleanSimplification(plan) collect { case Filter(cond, _) => cond }
+    val conditions = plan.collect { case Filter(cond, _) => cond }
     getOuterReferences(conditions)
   }
 
@@ -206,7 +215,7 @@ object SubExprUtils extends PredicateHelper {
    */
   def getCorrelatedPredicates(plan: LogicalPlan): Seq[Expression] = {
     val correlatedPredicates = ArrayBuffer.empty[Seq[Expression]]
-    val conditions = BooleanSimplification(plan) collect { case Filter(cond, _) => cond }
+    val conditions = plan.collect { case Filter(cond, _) => cond }
 
     // Collect all the expressions that have outer references.
     conditions foreach { e =>

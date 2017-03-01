@@ -1203,7 +1203,7 @@ class Analyzer(
 
       // Make sure a plan's subtree does not contain outer references
       def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
-        if (p.find(SubExprUtils.getOuterReferences(_).nonEmpty).nonEmpty) {
+        if (SubExprUtils.hasOuterReferences(p)) {
           failAnalysis(s"Accessing outer query column is not allowed in:\n$p")
         }
       }
