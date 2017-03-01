@@ -36,7 +36,10 @@ import org.apache.spark.util.NextIterator
 /** Class representing a range of Kinesis sequence numbers. Both sequence numbers are inclusive. */
 private[kinesis]
 case class SequenceNumberRange(
-    streamName: String, shardId: String, fromSeqNumber: String, toSeqNumber: String,
+    streamName: String,
+    shardId: String,
+    fromSeqNumber: String,
+    toSeqNumber: String,
     recordCount: Int)
 
 /** Class representing an array of Kinesis sequence number ranges */
@@ -210,7 +213,8 @@ class KinesisSequenceRangeIterator(
    * to get records from Kinesis), and get the next shard iterator for next consumption.
    */
   private def getRecordsAndNextKinesisIterator(
-      shardIterator: String, recordCount: Int): (Iterator[Record], String) = {
+      shardIterator: String,
+      recordCount: Int): (Iterator[Record], String) = {
     val getRecordsRequest = new GetRecordsRequest
     getRecordsRequest.setRequestCredentials(credentials)
     getRecordsRequest.setShardIterator(shardIterator)
