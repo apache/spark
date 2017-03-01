@@ -109,6 +109,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the index in the power link function. Only applicable for the Tweedie family.
    * Note that link power 0, 1, -1 or 0.5 corresponds to the Log, Identity, Inverse or Sqrt
    * link, respectively.
+   * When not set, this value defaults to 1 - [[variancePower]], which matches the R "statmod"
+   * package.
    *
    * @group param
    */
