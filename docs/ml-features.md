@@ -502,7 +502,8 @@ for more details on the API.
 ## StringIndexer
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
-The indices are in `[0, numLabels]`, ordered by label frequencies, so the most frequent label gets index `0`.
+The indices are in `[0, numLabels)`, ordered by label frequencies, so the most frequent label gets index `0`.
+The unseen labels will be put at index numLabels if user chooses to keep them.
 If the input column is numeric, we cast it to string and index the string
 values. When downstream pipeline components such as `Estimator` or
 `Transformer` make use of this string-indexed label, you must set the input
@@ -580,7 +581,7 @@ will be generated:
 
 Notice that the rows containing "d" or "e" do not appear.
 
-If you had called `setHandleInvalid("keep")`, the following dataset
+If you call `setHandleInvalid("keep")`, the following dataset
 will be generated:
 
 ~~~~

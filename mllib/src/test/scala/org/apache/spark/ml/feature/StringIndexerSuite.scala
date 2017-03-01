@@ -78,11 +78,11 @@ class StringIndexerSuite
 
     indexer.setHandleInvalid("skip")
     // Verify that we skip the c record
-    var transformed = indexer.transform(df2)
-    var attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+    val transformedSkip = indexer.transform(df2)
+    val attrSkip = Attribute.fromStructField(transformedSkip.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("b", "a"))
-    val outputSkip = transformed.select("id", "labelIndex").rdd.map { r =>
+    assert(attrSkip.values.get === Array("b", "a"))
+    val outputSkip = transformedSkip.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 1, b -> 0
@@ -91,11 +91,11 @@ class StringIndexerSuite
 
     indexer.setHandleInvalid("keep")
     // Verify that we keep the unseen records
-    transformed = indexer.transform(df2)
-    attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+    val transformedKeep = indexer.transform(df2)
+    val attrKeep = Attribute.fromStructField(transformedKeep.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("b", "a"))
-    val outputKeep = transformed.select("id", "labelIndex").rdd.map { r =>
+    assert(attrKeep.values.get === Array("b", "a"))
+    val outputKeep = transformedKeep.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 1, b -> 0, c -> 2, d -> 3
