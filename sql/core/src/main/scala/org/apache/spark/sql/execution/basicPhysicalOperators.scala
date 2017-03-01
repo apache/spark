@@ -387,8 +387,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // How many values should be generated in the next batch.
     val nextBatchTodo = ctx.freshName("nextBatchTodo")
 
-    // The default size of a batch.
-    val batchSize = 1000L
+    // The default size of a batch, which must be positive integer
+    val batchSize = 1000
 
     ctx.addNewFunction("initRange",
       s"""
@@ -434,6 +434,17 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val input = ctx.freshName("input")
     // Right now, Range is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+
+    val localIdx = ctx.freshName("localIdx")
+    val localEnd = ctx.freshName("localEnd")
+    val range = ctx.freshName("range")
+    // we need to place consume() before calling isShouldStopRequired
+    val body = consume(ctx, Seq(ev))
+    val shouldStop = if (isShouldStopRequired) {
+      s"if (shouldStop()) { $number = $value + ${step}L; return; }"
+    } else {
+      "// shouldStop check is eliminated"
+    }
     s"""
       | // initialize Range
       | if (!$initTerm) {
@@ -442,11 +453,15 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | }
       |
       | while (true) {
-      |   while ($number != $batchEnd) {
-      |     long $value = $number;
-      |     $number += ${step}L;
-      |     ${consume(ctx, Seq(ev))}
-      |     if (shouldStop()) return;
+      |   long $range = $batchEnd - $number;
+      |   if ($range != 0L) {
+      |     int $localEnd = (int)($range / ${step}L);
+      |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
+      |       long $value = ((long)$localIdx * ${step}L) + $number;
+      |       $body
+      |       $shouldStop
+      |     }
+      |     $number = $batchEnd;
       |   }
       |
       |   if ($taskContext.isInterrupted()) {

@@ -77,6 +77,10 @@ trait CodegenSupport extends SparkPlan {
    */
   final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
+
+    // to track the existence of apply() call in the current produce-consume cycle
+    // if apply is not called (e.g. in aggregation), we can skip shoudStop in the inner-most loop
+    parent.shouldStopRequired = false
     ctx.freshNamePrefix = variablePrefix
     s"""
        |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
@@ -205,6 +209,15 @@ trait CodegenSupport extends SparkPlan {
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
+  }
+
+  /* for optimization */
+  var shouldStopRequired: Boolean = false
+
+  def isShouldStopRequired: Boolean = {
+    if (shouldStopRequired) return true
+    if (this.parent != null) return this.parent.isShouldStopRequired
+    false
   }
 }
 
@@ -418,6 +431,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     } else {
       ""
     }
+    shouldStopRequired = true
     s"""
       |${row.code}
       |append(${row.value}$doCopy);
