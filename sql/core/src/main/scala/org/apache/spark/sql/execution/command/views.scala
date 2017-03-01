@@ -132,9 +132,9 @@ case class CreateViewCommand(
     // CREATE VIEW AS INSERT INTO ... is not allowed, we should throw an AnalysisException.
     analyzedPlan match {
       case i: InsertIntoHadoopFsRelationCommand =>
-        throw new AnalysisException("Create a view as insert into a table is not allowed")
+        throw new AnalysisException("Creating a view as insert into a table is not allowed")
       case i: InsertIntoDataSourceCommand =>
-        throw new AnalysisException("Create a view as insert into a table is not allowed")
+        throw new AnalysisException("Creating a view as insert into a table is not allowed")
       case _ => // OK
     }
 

@@ -489,7 +489,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql(s"CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
       }.getMessage
-      assert(e.contains("Create a view as insert into a table is not allowed"))
+      assert(e.contains("Creating a view as insert into a table is not allowed"))
     }
   }
 
