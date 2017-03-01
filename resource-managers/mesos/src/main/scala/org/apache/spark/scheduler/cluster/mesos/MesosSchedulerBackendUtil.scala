@@ -104,12 +104,8 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
    * takes the form key=value
    */
   def parseParamsSpec(params: String): List[Parameter] = {
-    logWarning(s"DEBUG: parseParamsSpec() params=$params")
     params.split(",").map(_.split("=")).flatMap { kv: Array[String] =>
       val param: Parameter.Builder = Parameter.newBuilder()
-      val k = kv(0)
-      val v = kv(1)
-      logWarning(s"DEBUG: k=$k, v=$v")
       kv match {
         case Array(key, value) =>
           Some(param.setKey(key).setValue(value))
@@ -148,9 +144,6 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .getOption("spark.mesos.executor.docker.params")
         .map(parseParamsSpec)
         .getOrElse(List.empty)
-
-      val size = params.length
-      logWarning(s"DEBUG: param size is $size")
 
       if (containerType == ContainerInfo.Type.DOCKER) {
         containerInfo
