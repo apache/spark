@@ -192,6 +192,7 @@ private[hive] class HiveClientImpl(
         SessionState.start(state)
         state.out = new PrintStream(outputBuffer, true, "UTF-8")
         state.err = new PrintStream(outputBuffer, true, "UTF-8")
+        state.getHdfsEncryptionShim()
         state
       }
     } finally {
