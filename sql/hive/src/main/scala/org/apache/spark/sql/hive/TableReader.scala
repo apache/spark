@@ -111,14 +111,13 @@ class HadoopTableReader(
 
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
-    val localTableDesc = tableDesc
     val broadcastedHadoopConf = _broadcastedHadoopConf
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
     val locationPath = new Path(inputPathStr)
-    val fs = locationPath.getFileSystem(broadcastedHadoopConf.value.value)
+    val fs = locationPath.getFileSystem(_broadcastedHadoopConf.value.value)
 
     // if the location of the table which is not created by 'stored by' does not exist,
     // return an empty RDD
