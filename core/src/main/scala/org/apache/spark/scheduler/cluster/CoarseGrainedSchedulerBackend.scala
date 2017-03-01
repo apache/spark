@@ -640,17 +640,18 @@ private[spark] object CoarseGrainedSchedulerBackend extends Logging {
       abortedTaskSets: HashSet[TaskSetManager],
       maxRpcMessageSize: Long): ByteBuffer = {
     var serializedTask: ByteBuffer = null
-    getTaskSetManager(scheduler, task.taskId).foreach { taskSetManager =>
-      try {
-        if (!taskSetManager.isZombie && !abortedTaskSets.contains(taskSetManager)) {
-          serializedTask = TaskDescription.encode(task)
-        }
-      } catch {
-        case NonFatal(e) =>
-          abortTaskSetManager(scheduler, task.taskId,
-            s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
-          abortedTaskSets.add(taskSetManager)
+
+    try {
+      if (abortedTaskSets.isEmpty ||
+        !getTaskSetManager(scheduler, task.taskId).
+          exists(t => t.isZombie || abortedTaskSets.contains(t))) {
+        serializedTask = TaskDescription.encode(task)
       }
+    } catch {
+      case NonFatal(e) =>
+        abortTaskSetManager(scheduler, task.taskId,
+          s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
+        getTaskSetManager(scheduler, task.taskId).foreach(abortedTaskSets.add)
     }
 
     if (serializedTask != null && serializedTask.limit >= maxRpcMessageSize) {
