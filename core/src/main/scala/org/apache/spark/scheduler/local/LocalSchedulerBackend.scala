@@ -30,7 +30,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.prepareSerializedTask
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.RpcUtils
 
@@ -63,8 +62,6 @@ private[spark] class LocalEndpoint(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
 
-  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(SparkEnv.get.conf)
-
   override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>
       reviveOffers()
@@ -88,17 +85,10 @@ private[spark] class LocalEndpoint(
 
   def reviveOffers() {
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    val abortTaskSet = new HashSet[TaskSetManager]()
-    for (task <- scheduler.resourceOffers(offers).flatten) {
-      // make sure the task is serializable,
-      // so that it can be launched in a distributed environment.
-      val buffer = prepareSerializedTask(scheduler, task,
-        abortTaskSet, maxRpcMessageSize)
-      if (buffer != null) {
-        freeCores -= scheduler.CPUS_PER_TASK
-        val (taskDesc, serializedTask) = TaskDescription.decode(buffer)
-        executor.launchTask(executorBackend, taskDesc, serializedTask)
-      }
+    for ((_, buffer) <- scheduler.makeOffersAndSerializeTasks(offers).flatten) {
+      freeCores -= scheduler.CPUS_PER_TASK
+      val (taskDesc, serializedTask) = TaskDescription.decode(buffer)
+      executor.launchTask(executorBackend, taskDesc, serializedTask)
     }
   }
 }

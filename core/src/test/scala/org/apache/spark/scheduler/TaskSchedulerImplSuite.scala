@@ -881,4 +881,32 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskDescs.size === 1)
     assert(taskDescs.head.executorId === "exec2")
   }
+
+  test("serialization task errors do not affect each other") {
+    import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    sc = new SparkContext(conf)
+
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(mock[CoarseGrainedSchedulerBackend])
+    taskScheduler.setDAGScheduler(mock[DAGScheduler])
+    val taskSet1 = FakeTask.createTaskSet(1)
+    val taskSet2 = FakeTask.createTaskSet(1)
+    taskSet1.tasks(0) = new NotSerializableFakeTask(1, 0)
+    val taskIdToTaskSetManager = taskScheduler.taskIdToTaskSetManager
+    taskScheduler.submitTasks(taskSet1)
+    taskScheduler.submitTasks(taskSet2)
+    val offers = Array(WorkerOffer("1", "localhost", 2), WorkerOffer("2", "localhost", 2))
+    taskScheduler.makeOffersAndSerializeTasks(offers)
+
+    assert(taskIdToTaskSetManager.values.exists(_.taskSet == taskSet1))
+    assert(taskIdToTaskSetManager.values.exists(_.taskSet == taskSet2))
+
+    taskIdToTaskSetManager.values.filter(_.taskSet == taskSet1).foreach { taskSet =>
+      assert(taskSet.isZombie === true)
+    }
+    taskIdToTaskSetManager.values.filter(_.taskSet == taskSet2).foreach { taskSet =>
+      assert(taskSet.isZombie === false)
+    }
+  }
 }

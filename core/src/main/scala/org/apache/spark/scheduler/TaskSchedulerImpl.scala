@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.util.control.NonFatal
 import scala.util.Random
 
 import org.apache.spark._
@@ -34,7 +35,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, RpcUtils, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -92,6 +93,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   // CPUs to request per task
   val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
+
+  val MAX_RRC_MESSAGE_SIZE = RpcUtils.maxMessageSizeBytes(conf)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
@@ -364,6 +367,78 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       hasLaunchedTask = true
     }
     return tasks
+  }
+
+  private[scheduler] def makeOffersAndSerializeTasks(
+      offers: IndexedSeq[WorkerOffer]): Seq[Seq[(TaskDescription, ByteBuffer)]] = {
+    val abortedTaskSets = new HashSet[TaskSetManager]()
+    resourceOffers(offers).map(_.map { task =>
+      (task, prepareSerializedTask(task, abortedTaskSets, MAX_RRC_MESSAGE_SIZE))
+    }.filter(_._2 != null)).filter(_.nonEmpty)
+  }
+
+  private def prepareSerializedTask(
+      task: TaskDescription,
+      abortedTaskSets: HashSet[TaskSetManager],
+      maxRpcMessageSize: Long): ByteBuffer = {
+    var serializedTask: ByteBuffer = null
+    try {
+      if (abortedTaskSets.isEmpty ||
+        !getTaskSetManager(task.taskId).exists(t => t.isZombie || abortedTaskSets.contains(t))) {
+        serializedTask = TaskDescription.encode(task)
+      }
+    } catch {
+      case NonFatal(e) =>
+        abortTaskSetManager(task.taskId,
+          s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
+        getTaskSetManager(task.taskId).foreach(abortedTaskSets.add)
+    }
+
+    if (serializedTask != null && serializedTask.limit >= maxRpcMessageSize) {
+      val msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
+        "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
+        "spark.rpc.message.maxSize or using broadcast variables for large values."
+      abortTaskSetManager(task.taskId,
+        msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize))
+      getTaskSetManager(task.taskId).foreach(abortedTaskSets.add)
+      serializedTask = null
+    } else if (serializedTask != null) {
+      maybeEmitTaskSizeWarning(serializedTask, task.taskId)
+    }
+    serializedTask
+  }
+
+  private def maybeEmitTaskSizeWarning(
+      serializedTask: ByteBuffer,
+      taskId: Long): Unit = {
+    if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
+      getTaskSetManager(taskId).filterNot(_.emittedTaskSizeWarning).
+        foreach { taskSetMgr =>
+          taskSetMgr.emittedTaskSizeWarning = true
+          val stageId = taskSetMgr.taskSet.stageId
+          logWarning(s"Stage $stageId contains a task of very large size " +
+            s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+            s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+        }
+    }
+  }
+
+  // abort TaskSetManager without exception
+  private def abortTaskSetManager(
+      taskId: Long,
+      msg: => String,
+      exception: Option[Throwable] = None): Unit = {
+    getTaskSetManager(taskId).foreach { taskSetMgr =>
+      try {
+        taskSetMgr.abort(msg, exception)
+      } catch {
+        case e: Exception => logError("Exception while aborting taskset", e)
+      }
+    }
+  }
+
+  private def getTaskSetManager(taskId: Long): Option[TaskSetManager] = synchronized {
+    taskIdToTaskSetManager.get(taskId)
   }
 
   /**

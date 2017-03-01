@@ -30,7 +30,6 @@ import org.apache.mesos.protobuf.ByteString
 import org.apache.spark.{SparkContext, SparkException, TaskState}
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.prepareSerializedTask
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{RpcUtils, Utils}
 
@@ -68,8 +67,6 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   // reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
     getRejectOfferDurationForUnmetConstraints(sc)
-
-  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(sc.conf)
 
   @volatile var appId: String = _
 
@@ -295,25 +292,20 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       val mesosTasks = new HashMap[String, JArrayList[MesosTaskInfo]]
 
       val slavesIdsOfAcceptedOffers = HashSet[String]()
-      val abortTaskSet = new HashSet[TaskSetManager]()
       // Call into the TaskSchedulerImpl
-      val acceptedOffers = scheduler.resourceOffers(workerOffers).flatten
-      for (task <- acceptedOffers) {
-        val serializedTask = prepareSerializedTask(scheduler, task,
-          abortTaskSet, maxRpcMessageSize)
-        if (serializedTask != null) {
-          val slaveId = task.executorId
-          slavesIdsOfAcceptedOffers += slaveId
-          taskIdToSlaveId(task.taskId) = slaveId
-          val (mesosTask, remainingResources) = createMesosTask(
-            task,
-            serializedTask,
-            slaveIdToResources(slaveId),
-            slaveId)
-          mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
-            .add(mesosTask)
-          slaveIdToResources(slaveId) = remainingResources
-        }
+      val acceptedOffers = scheduler.makeOffersAndSerializeTasks(workerOffers).flatten
+      for ((task, serializedTask) <- acceptedOffers) {
+        val slaveId = task.executorId
+        slavesIdsOfAcceptedOffers += slaveId
+        taskIdToSlaveId(task.taskId) = slaveId
+        val (mesosTask, remainingResources) = createMesosTask(
+          task,
+          serializedTask,
+          slaveIdToResources(slaveId),
+          slaveId)
+        mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
+          .add(mesosTask)
+        slaveIdToResources(slaveId) = remainingResources
       }
 
       // Reply to the offers

@@ -256,7 +256,9 @@ class MesosFineGrainedSchedulerBackendSuite
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
       properties = new Properties())
-    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
+    val serializedTask = TaskDescription.encode(taskDesc)
+    when(taskScheduler.makeOffersAndSerializeTasks(expectedWorkerOffers)).
+      thenReturn(Seq(Seq((taskDesc, serializedTask))))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
 
     val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
@@ -292,7 +294,8 @@ class MesosFineGrainedSchedulerBackendSuite
     mesosOffers2.add(createOffer(1, minMem, minCpu))
     reset(taskScheduler)
     reset(driver)
-    when(taskScheduler.resourceOffers(any(classOf[IndexedSeq[WorkerOffer]]))).thenReturn(Seq(Seq()))
+    when(taskScheduler.makeOffersAndSerializeTasks(any(classOf[IndexedSeq[WorkerOffer]]))).
+      thenReturn(Seq(Seq()))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
     when(driver.declineOffer(mesosOffers2.get(0).getId)).thenReturn(Status.valueOf(1))
 
@@ -363,7 +366,9 @@ class MesosFineGrainedSchedulerBackendSuite
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
       properties = new Properties())
-    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
+    val serializedTask = TaskDescription.encode(taskDesc)
+    when(taskScheduler.makeOffersAndSerializeTasks(expectedWorkerOffers)).
+      thenReturn(Seq(Seq((taskDesc, serializedTask))))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(1)
 
     val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
