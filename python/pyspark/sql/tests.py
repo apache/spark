@@ -437,11 +437,18 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
     def test_wholefile_json(self):
-        from pyspark.sql.types import StringType
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
                                             wholeFile=True)
         self.assertEqual(people1.collect(), people_array.collect())
+
+    def test_wholefile_csv(self):
+        ages_newlines = self.spark.read.csv(
+            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+        expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
+                    Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
+                    Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
+        self.assertEqual(ages_newlines.collect(), expected)
 
     def test_udf_with_input_file_name(self):
         from pyspark.sql.functions import udf, input_file_name

@@ -102,8 +102,8 @@ case class OptimizeMetadataOnlyQuery(
             LocalRelation(partAttrs, partitionData.map(_.values))
 
           case relation: CatalogRelation =>
-            val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
-            val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
+            val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
+            val partitionData = catalog.listPartitions(relation.tableMeta.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
                 // TODO: use correct timezone for partition values.
                 Cast(Literal(p.spec(attr.name)), attr.dataType,
@@ -135,8 +135,8 @@ case class OptimizeMetadataOnlyQuery(
         val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
         Some(AttributeSet(partAttrs), l)
 
-      case relation: CatalogRelation if relation.catalogTable.partitionColumnNames.nonEmpty =>
-        val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
+      case relation: CatalogRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
+        val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
         Some(AttributeSet(partAttrs), relation)
 
       case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
