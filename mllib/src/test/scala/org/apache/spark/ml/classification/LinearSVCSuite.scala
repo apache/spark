@@ -24,12 +24,13 @@ import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions.udf
 
 
 class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -56,9 +57,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     binaryDataset = generateSVMInput(1.0, Array[Double](1.0, 2.0, 3.0, 4.0), 10000, 42).toDF()
 
     // Dataset for testing SparseVector
-    smallSparseBinaryDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42, false).toDF()
-    smallSparseValidationDataset =
-      generateSVMInput(A, Array[Double](B, C), nPoints, 17, false).toDF()
+    val toSparse: Vector => SparseVector = _.asInstanceOf[DenseVector].toSparse
+    val sparse = udf(toSparse)
+    smallSparseBinaryDataset = smallBinaryDataset.withColumn("features", sparse('features))
+    smallSparseValidationDataset = smallValidationDataset.withColumn("features", sparse('features))
 
   }
 
@@ -78,8 +80,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model.transform(smallValidationDataset)
       .where("prediction=label").count() > nPoints * 0.8)
     val sparseModel = svm.fit(smallSparseBinaryDataset)
-    assert(sparseModel.transform(smallSparseValidationDataset)
-      .where("prediction=label").count() > nPoints * 0.8)
     checkModels(model, sparseModel)
   }
 
@@ -89,8 +89,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model.transform(smallValidationDataset)
       .where("prediction=label").count() > nPoints * 0.8)
     val sparseModel = svm.fit(smallSparseBinaryDataset)
-    assert(sparseModel.transform(smallSparseValidationDataset)
-      .where("prediction=label").count() > nPoints * 0.8)
     checkModels(model, sparseModel)
   }
 
@@ -242,8 +240,7 @@ object LinearSVCSuite {
       intercept: Double,
       weights: Array[Double],
       nPoints: Int,
-      seed: Int,
-      isDense: Boolean = true): Seq[LabeledPoint] = {
+      seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
     val weightsMat = new BDV(weights)
     val x = Array.fill[Array[Double]](nPoints)(
@@ -253,11 +250,8 @@ object LinearSVCSuite {
       if (yD > 0) 1.0 else 0.0
     }
 
-    if (isDense) {
-      y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
-    } else {
-      y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2).toSparse))
-    }
+    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+
   }
 
   def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {
