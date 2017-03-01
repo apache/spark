@@ -266,9 +266,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("wholeFile", wholeFile)
         .options(Map("header" -> "true", "mode" -> "dropmalformed"))
-        .load(testFile(carsFile))
+        .option("comment", "~")
+        .load(testFile(carsMalformedFile))
 
-      assert(cars.select("year").collect().size === 2)
+      assert(cars.select("year").collect().size === 1)
     }
   }
 
@@ -290,22 +291,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .format("csv")
           .option("wholeFile", wholeFile)
           .options(Map("header" -> "true", "mode" -> "failfast"))
-          .load(testFile(carsFile)).collect()
+          .option("comment", "~")
+          .load(testFile(carsMalformedFile)).collect()
       }
 
-      assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
+      assert(exception.getMessage.contains(
+        "Malformed line in FAILFAST mode: 2012,Tesla,S,No comment,,null,null"))
     }
-  }
-
-  test("test for tokens more than the fields in the schema") {
-    val cars = spark
-      .read
-      .format("csv")
-      .option("header", "false")
-      .option("comment", "~")
-      .load(testFile(carsMalformedFile))
-
-    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 
   test("test with null quote character") {
@@ -974,21 +966,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("load null when the schema is larger than parsed tokens ") {
-    withTempPath { path =>
-      Seq("1").toDF().write.text(path.getAbsolutePath)
-      val schema = StructType(
-        StructField("a", IntegerType, true) ::
-        StructField("b", IntegerType, true) :: Nil)
-      val df = spark.read
-        .schema(schema)
-        .option("header", "false")
-        .csv(path.getAbsolutePath)
-
-      checkAnswer(df, Row(1, null))
-    }
-  }
-
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { wholeFile =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
@@ -1116,4 +1093,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(df2.schema === schema)
   }
 
+  test("SPARK-XXXXX regard as malformed records if the length is not equal to expected one") {
+    val columnNameOfCorruptRecord = "_unparsed"
+    withTempPath { path =>
+      Seq("1,2", "1,2,3,4").toDF().write.text(path.getAbsolutePath)
+      val schema = StructType(
+        StructField("a", IntegerType, true) ::
+        StructField("b", IntegerType, true) ::
+        StructField("c", IntegerType, true) ::
+        StructField(columnNameOfCorruptRecord, StringType, true) :: Nil)
+      val df = spark.read
+        .schema(schema)
+        .option("header", "false")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Row(null, null, null, "1,2") :: Row(null, null, null, "1,2,3,4") :: Nil)
+    }
+  }
 }
