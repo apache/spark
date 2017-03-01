@@ -407,6 +407,8 @@ object SQLConf {
         "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
         "LibSVM data sources.")
       .intConf
+      .checkValue(parallel => parallel >= 0, "The maximum number of files allowed for listing " +
+        "files at driver side must not be negative")
       .createWithDefault(32)
 
   val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =

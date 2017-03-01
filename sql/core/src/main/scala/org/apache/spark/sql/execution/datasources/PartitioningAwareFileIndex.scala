@@ -300,8 +300,7 @@ object PartitioningAwareFileIndex extends Logging {
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
-    if (paths.isEmpty ||
-      paths.size < sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       return paths.map { path =>
         (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
       }

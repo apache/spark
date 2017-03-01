@@ -186,9 +186,13 @@ class FileIndexSuite extends SharedSQLContext {
       new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
     }
 
-    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "-1") {
-      new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
-    }
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "-1") {
+        new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+      }
+    }.getMessage
+    assert(e.contains("The maximum number of files allowed for listing files at " +
+    "driver side must not be negative"))
   }
 
   test("refresh for InMemoryFileIndex with FileStatusCache") {
