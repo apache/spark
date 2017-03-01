@@ -168,15 +168,16 @@ class CacheManager extends Logging {
       (fs, path.makeQualified(fs.getUri, fs.getWorkingDirectory))
     }
 
-    cachedData.foreach {
-      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
-        val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
-        if (dataIndex >= 0) {
-          data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
-          cachedData.remove(dataIndex)
-        }
-        sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
-      case _ => // Do Nothing
+    cachedData.filter {
+      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined => true
+      case _ => false
+    }.foreach { data =>
+      val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
+      if (dataIndex >= 0) {
+        data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
+        cachedData.remove(dataIndex)
+      }
+      sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
     }
   }
 
