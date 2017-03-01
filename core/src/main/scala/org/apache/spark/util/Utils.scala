@@ -2581,7 +2581,7 @@ private[spark] object Utils extends Logging {
   private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
     kvs.map { kv =>
       redactionPattern.findFirstIn(kv._1)
-        .map { ignore => (kv._1, REDACTION_REPLACEMENT_TEXT) }
+        .map {ignore => (kv._1, REDACTION_REPLACEMENT_TEXT) }
         .getOrElse(kv)
     }
   }
@@ -2593,7 +2593,10 @@ private[spark] object Utils extends Logging {
    * when printing.
    */
   def redact(kvs: Map[String, String]): Seq[(String, String)] = {
-    val redactionPattern = kvs.getOrElse(SECRET_REDACTION_PROPERTY, SECRET_REDACTION_DEFAULT).r
+    val redactionPattern = kvs.getOrElse(
+      SECRET_REDACTION_PATTERN.key,
+      SECRET_REDACTION_PATTERN.defaultValueString
+    ).r
     redact(redactionPattern, kvs.toArray)
   }
 
