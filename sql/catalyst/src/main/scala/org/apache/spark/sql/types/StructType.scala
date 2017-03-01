@@ -402,13 +402,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 @InterfaceStability.Stable
 object StructType extends AbstractDataType {
 
-  /**
-   * A key used in field metadata to indicate that the field comes from the result of merging
-   * two different StructTypes that do not always contain the field. That is to say, the field
-   * might be missing (optional) from one of the StructTypes.
-   */
-  private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
-
   override private[sql] def defaultConcreteType: DataType = new StructType
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
@@ -463,8 +456,6 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
-        // This metadata will record the fields that only exist in one of two StructTypes
-        val optionalMeta = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
@@ -476,8 +467,7 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               }
               .orElse {
-                optionalMeta.putBoolean(metadataKeyForOptionalField, value = true)
-                Some(leftField.copy(metadata = optionalMeta.build()))
+                Some(leftField)
               }
               .foreach(newFields += _)
         }
@@ -486,8 +476,7 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            optionalMeta.putBoolean(metadataKeyForOptionalField, value = true)
-            newFields += f.copy(metadata = optionalMeta.build())
+            newFields += f
           }
 
         StructType(newFields)
