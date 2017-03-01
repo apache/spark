@@ -245,7 +245,7 @@ object ApproximatePercentile {
         val result = new Array[Double](percentages.length)
         var i = 0
         while (i < percentages.length) {
-          result(i) = summaries.query(percentages(i))
+          result(i) = summaries.query(percentages(i)).get
           i += 1
         }
         result

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.stat
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Cast, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -101,10 +101,11 @@ object StatFunctions extends Logging {
     val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
 
     summaries.map { summary =>
-      try {
-        probabilities.map(summary.query)
-      } catch {
-        case e: SparkException => Seq.empty[Double]
+      val res = probabilities.map(summary.query)
+      if (res.exists(_.isEmpty)) {
+        Seq.empty[Double]
+      } else {
+        res.map(_.get)
       }
     }
   }
