@@ -280,7 +280,7 @@ setMethod("dtypes",
 
 #' Column Names of SparkDataFrame
 #'
-#' Return all column names.
+#' Return a vector of column names.
 #'
 #' @param x a SparkDataFrame.
 #'
