@@ -77,7 +77,7 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
    */
   def alterDatabase(dbDefinition: CatalogDatabase): Unit
 
-  def getDatabase(db: String): CatalogDatabase = {
+  final def getDatabase(db: String): CatalogDatabase = {
     val database = getDatabaseInternal(db)
     // The default database's location always uses the warehouse path.
     // Since the location of database stored in metastore is qualified,
