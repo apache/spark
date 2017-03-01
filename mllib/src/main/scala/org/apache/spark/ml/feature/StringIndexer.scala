@@ -53,7 +53,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   setDefault(handleInvalid, StringIndexer.ERROR_UNSEEN_LABEL)
 
   /** @group getParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def getHandleInvalid: String = $(handleInvalid)
 
   /** Validates and transforms the input schema. */
@@ -172,7 +172,7 @@ class StringIndexerModel (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("2.1.0")
+  @Since("2.2.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
   setDefault(handleInvalid, StringIndexer.ERROR_UNSEEN_LABEL)
 
