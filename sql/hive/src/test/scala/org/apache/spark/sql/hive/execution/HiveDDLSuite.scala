@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -1603,7 +1604,7 @@ class HiveDDLSuite
         val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
         assert(new Path(table.location) == fs.makeQualified(dirPath))
 
-        val tableLocFile = new File(table.location.stripPrefix("file:"))
+        val tableLocFile = new File(new URI(table.location))
         tableLocFile.delete()
         assert(!tableLocFile.exists())
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1617,12 +1618,12 @@ class HiveDDLSuite
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDirPath = newDirFile.getAbsolutePath.stripSuffix("/")
+        val newDirPath = newDirFile.getAbsolutePath
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDirPath'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location.stripSuffix("/") == newDirPath)
+        assert(table1.location == newDirPath)
         assert(!newDirFile.exists())
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1659,7 +1660,7 @@ class HiveDDLSuite
         checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDirPath = newDirFile.getAbsolutePath.stripSuffix("/")
+        val newDirPath = newDirFile.getAbsolutePath
         spark.sql(s"ALTER TABLE t PARTITION(a=1, b=2) SET LOCATION '$newDirPath'")
         assert(!newDirFile.exists())
 
@@ -1689,11 +1690,11 @@ class HiveDDLSuite
         checkAnswer(spark.table("t"), Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDirPath = newDirFile.getAbsolutePath.stripSuffix("/")
+        val newDirPath = newDirFile.getAbsolutePath
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDirPath'")
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location.stripSuffix("/") == newDirPath)
+        assert(table1.location == newDirPath)
         assert(!newDirFile.exists())
         checkAnswer(spark.table("t"), Nil)
       }
