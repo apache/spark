@@ -48,7 +48,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * Values at -inf, inf must be explicitly provided to cover all Double values;
    * otherwise, values outside the splits specified will be treated as errors.
    *
-   * See also [[handleInvalid]], which can optionally create an additional bucket for NaN values.
+   * See also [[handleInvalid]], which can optionally create an additional bucket for NaN/NULL values.
    *
    * @group param
    */
@@ -105,20 +105,21 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     transformSchema(dataset.schema)
     val (filteredDataset, keepInvalid) = {
       if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
-        // "skip" NaN option is set, will filter out NaN values in the dataset
+        // "skip" NaN/NULL option is set, will filter out NaN/NULL values in the dataset
         (dataset.na.drop().toDF(), false)
       } else {
         (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
       }
     }
 
-    val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
-      Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
+    val bucketizer: UserDefinedFunction = udf { (row: Row) =>
+      row.is
+      Bucketizer.binarySearchForBuckets($(splits), row.getAs[java.lang.Double]($(inputCol)), keepInvalid)
     }
 
-    val newCol = bucketizer(filteredDataset($(inputCol)))
+    val newCol = bucketizer(struct(Array(filteredDataset($(inputCol))): _*))
     val newField = prepOutputField(filteredDataset.schema)
-    filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
+    filteredDataset.select(col("*"), newCol.as($(outputCol), newField.metadata))
   }
 
   private def prepOutputField(schema: StructType): StructField = {
@@ -171,22 +172,22 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
    * Binary searching in several buckets to place each data point.
    * @param splits array of split points
    * @param feature data point
-   * @param keepInvalid NaN flag.
-   *                    Set "true" to make an extra bucket for NaN values;
-   *                    Set "false" to report an error for NaN values
+   * @param keepInvalid NaN/NULL flag.
+   *                    Set "true" to make an extra bucket for NaN/NULL values;
+   *                    Set "false" to report an error for NaN/NULL values
    * @return bucket for each data point
    * @throws SparkException if a feature is < splits.head or > splits.last
    */
 
   private[feature] def binarySearchForBuckets(
       splits: Array[Double],
-      feature: Double,
+      feature: java.lang.Double,
       keepInvalid: Boolean): Double = {
-    if (feature.isNaN) {
+    if (feature == null || feature.isNaN) {
       if (keepInvalid) {
         splits.length - 1
       } else {
-        throw new SparkException("Bucketizer encountered NaN value. To handle or skip NaNs," +
+        throw new SparkException("Bucketizer encountered NaN/NULL value. To handle or skip NaNs/NULLs," +
           " try setting Bucketizer.handleInvalid.")
       }
     } else if (feature == splits.last) {
