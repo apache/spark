@@ -249,9 +249,7 @@ object LinearSVCSuite {
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD > 0) 1.0 else 0.0
     }
-
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
-
   }
 
   def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {
