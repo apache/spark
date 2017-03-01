@@ -90,6 +90,8 @@ private[spark] class LocalEndpoint(
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
     val abortTaskSet = new HashSet[TaskSetManager]()
     for (task <- scheduler.resourceOffers(offers).flatten) {
+      // make sure the task is serializable,
+      // so that it can be launched in a distributed environment.
       val buffer = prepareSerializedTask(scheduler, task,
         abortTaskSet, maxRpcMessageSize)
       if (buffer != null) {

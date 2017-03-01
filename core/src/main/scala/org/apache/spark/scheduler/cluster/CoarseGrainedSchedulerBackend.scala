@@ -197,11 +197,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           makeOffers()
         }
 
-      // Only be used for testing.
-      case ReviveOffers =>
-        makeOffers()
-        context.reply(true)
-
       case StopDriver =>
         context.reply(true)
         stop()
@@ -263,15 +258,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
-      val abortTaskSet = new HashSet[TaskSetManager]()
+      val abortedTaskSets = new HashSet[TaskSetManager]()
       for (task <- tasks.flatten) {
         val serializedTask = prepareSerializedTask(scheduler, task,
-          abortTaskSet, maxRpcMessageSize)
+          abortedTaskSets, maxRpcMessageSize)
         if (serializedTask != null) {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
-          logDebug(s"Launching task ${task.taskId} on executor id: ${task.executorId} " +
-            s" hostname: ${executorData.executorHost}.")
+          logInfo(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
+            s"${executorData.executorHost}, serializedTask: ${serializedTask.limit} bytes.")
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
@@ -628,37 +623,33 @@ private[spark] object CoarseGrainedSchedulerBackend extends Logging {
       try {
         taskSetMgr.abort(msg, exception)
       } catch {
-        case e: Exception => logError("Exception in error callback", e)
+        case e: Exception => logError("Exception while aborting taskset", e)
       }
     }
   }
 
-  private def isZombieTaskSetManager(
-    scheduler: TaskSchedulerImpl,
-    taskId: Long): Unit = scheduler.synchronized {
-    !scheduler.taskIdToTaskSetManager.get(taskId).exists(_.isZombie)
-  }
-
   private def getTaskSetManager(
-    scheduler: TaskSchedulerImpl,
-    taskId: Long): Option[TaskSetManager] = scheduler.synchronized {
+      scheduler: TaskSchedulerImpl,
+      taskId: Long): Option[TaskSetManager] = scheduler.synchronized {
     scheduler.taskIdToTaskSetManager.get(taskId)
   }
 
   private[scheduler] def prepareSerializedTask(
-    scheduler: TaskSchedulerImpl,
-    task: TaskDescription,
-    abortSet: HashSet[TaskSetManager],
-    maxRpcMessageSize: Long): ByteBuffer = {
+      scheduler: TaskSchedulerImpl,
+      task: TaskDescription,
+      abortedTaskSets: HashSet[TaskSetManager],
+      maxRpcMessageSize: Long): ByteBuffer = {
     var serializedTask: ByteBuffer = null
-    if (abortSet.isEmpty || !getTaskSetManager(scheduler, task.taskId).exists(_.isZombie)) {
+    getTaskSetManager(scheduler, task.taskId).foreach { taskSetManager =>
       try {
-        serializedTask = TaskDescription.encode(task)
+        if (!taskSetManager.isZombie && !abortedTaskSets.contains(taskSetManager)) {
+          serializedTask = TaskDescription.encode(task)
+        }
       } catch {
         case NonFatal(e) =>
           abortTaskSetManager(scheduler, task.taskId,
             s"Failed to serialize task ${task.taskId}, not attempting to retry it.", Some(e))
-          scheduler.taskIdToTaskSetManager.get(task.taskId).foreach(t => abortSet.add(t))
+          abortedTaskSets.add(taskSetManager)
       }
     }
 
@@ -668,18 +659,18 @@ private[spark] object CoarseGrainedSchedulerBackend extends Logging {
         "spark.rpc.message.maxSize or using broadcast variables for large values."
       abortTaskSetManager(scheduler, task.taskId,
         msg.format(task.taskId, task.index, serializedTask.limit, maxRpcMessageSize))
-      getTaskSetManager(scheduler, task.taskId).foreach(t => abortSet.add(t))
+      getTaskSetManager(scheduler, task.taskId).foreach(t => abortedTaskSets.add(t))
       serializedTask = null
     } else if (serializedTask != null) {
-      emittedTaskSizeWarning(scheduler, serializedTask, task.taskId)
+      maybeEmitTaskSizeWarning(scheduler, serializedTask, task.taskId)
     }
     serializedTask
   }
 
-  private def emittedTaskSizeWarning(
-    scheduler: TaskSchedulerImpl,
-    serializedTask: ByteBuffer,
-    taskId: Long): Unit = {
+  private def maybeEmitTaskSizeWarning(
+      scheduler: TaskSchedulerImpl,
+      serializedTask: ByteBuffer,
+      taskId: Long): Unit = {
     if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024) {
       getTaskSetManager(scheduler, taskId).filterNot(_.emittedTaskSizeWarning).
         foreach { taskSetMgr =>

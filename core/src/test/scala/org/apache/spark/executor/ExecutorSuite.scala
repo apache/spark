@@ -168,8 +168,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
   }
 
   private def runTaskAndGetFailReason(
-    taskDescription: TaskDescription,
-    serializedTask: ByteBuffer): TaskFailedReason = {
+      taskDescription: TaskDescription,
+      serializedTask: ByteBuffer): TaskFailedReason = {
     val mockBackend = mock[ExecutorBackend]
     var executor: Executor = null
     try {

@@ -55,22 +55,22 @@ private[spark] class TaskDescription(
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
     val properties: Properties,
-    // Task object corresponding to the TaskDescription. This is only defined on the master; on
-    // the worker, the Task object is handled separately from the TaskDescription so that it can
-    // deserialized after the TaskDescription is deserialized.
+    // Task object corresponding to the TaskDescription. This is only defined on the driver; on
+    // the executor, the Task object is handled separately from the TaskDescription so that it can
+    // be deserialized after the TaskDescription is deserialized.
     @transient private val task: Task[_] = null) extends Logging {
 
   /**
    * Serializes the task for this TaskDescription and returns the serialized task.
    *
-   * This method should only be used on the master (to serialize a task to send to a worker).
+   * This method should only be used on the driver (to serialize a task to send to a executor).
    */
   def serializeTask(): ByteBuffer = {
     try {
       ByteBuffer.wrap(Utils.serialize(task))
     } catch {
       case NonFatal(e) =>
-        val msg = s"Failed to serialize task ${taskId}."
+        val msg = s"Failed to serialize task $taskId."
         logError(msg, e)
         throw new TaskNotSerializableException(e)
     }
@@ -153,6 +153,7 @@ private[spark] object TaskDescription {
     val serializedTask = byteBuffer.slice()
 
     (new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
-      properties), serializedTask)
+      properties),
+      serializedTask)
   }
 }
