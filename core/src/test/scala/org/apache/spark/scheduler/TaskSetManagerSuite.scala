@@ -678,8 +678,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // so that the test can check that no tasks were resubmitted.
     var resubmittedTasks = 0
     val dagScheduler = new FakeDAGScheduler(sc, sched) {
-      override def taskEnded(task: Task[_], reason: TaskEndReason, result: Any,
-                             accumUpdates: Seq[AccumulatorV2[_, _]], taskInfo: TaskInfo): Unit = {
+      override def taskEnded(
+          task: Task[_],
+          reason: TaskEndReason,
+          result: Any,
+          accumUpdates: Seq[AccumulatorV2[_, _]],
+          taskInfo: TaskInfo): Unit = {
         super.taskEnded(task, reason, result, accumUpdates, taskInfo)
         reason match {
           case Resubmitted => resubmittedTasks += 1
