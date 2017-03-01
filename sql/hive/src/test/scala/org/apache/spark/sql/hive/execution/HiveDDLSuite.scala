@@ -1587,4 +1587,35 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("refresh table after alter the location") {
+    withTable("t", "t1") {
+      withTempDir { dir =>
+        spark.sql(
+          """
+            |CREATE TABLE t(a string)
+            |USING parquet
+          """.stripMargin)
+
+        spark.sql("INSERT INTO TABLE t SELECT 1")
+        checkAnswer(spark.table("t"), Row("1") :: Nil)
+        spark.sql(s"ALTER TABLE t SET LOCATION '$dir'")
+        checkAnswer(spark.table("t"), Nil)
+      }
+
+      withTempDir { dir =>
+        spark.sql(
+          """
+            |CREATE TABLE t1(a string, b string)
+            |USING parquet
+            |PARTITIONED BY(b)
+          """.stripMargin)
+
+        spark.sql("INSERT INTO TABLE t1  PARTITION(b=1) SELECT 2")
+        checkAnswer(spark.table("t1"), Row("2", "1") :: Nil)
+        spark.sql(s"ALTER TABLE t1 PARTITION(b=1)SET LOCATION '$dir'")
+        checkAnswer(spark.table("t1"), Nil)
+      }
+    }
+  }
 }
