@@ -590,7 +590,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
     val jsonDF = spark.read.json(path)
 
     val expectedSchema = StructType(
@@ -622,7 +622,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
     val jsonDF = spark.read.option("primitivesAsString", "true").json(path)
 
     val expectedSchema = StructType(
@@ -777,9 +777,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
-    val mixedIntegerAndDoubleRecords = sparkContext.parallelize(
-      """{"a": 3, "b": 1.1}""" ::
-      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""" :: Nil)
+    val mixedIntegerAndDoubleRecords = Seq(
+      """{"a": 3, "b": 1.1}""",
+      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""").toDS()
     val jsonDF = spark.read
       .option("prefersDecimal", "true")
       .json(mixedIntegerAndDoubleRecords)
@@ -828,7 +828,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val mergedJsonDF = spark.read
       .option("prefersDecimal", "true")
-      .json(floatingValueRecords ++ bigIntegerRecords)
+      .json(floatingValueRecords.union(bigIntegerRecords))
 
     val expectedMergedSchema = StructType(
       StructField("a", DoubleType, true) ::
@@ -846,7 +846,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.toURI.toString
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
     sql(
       s"""
@@ -873,7 +873,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val dir = Utils.createTempDir()
     dir.delete()
     val path = dir.getCanonicalPath
-    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+    primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
     val schema = StructType(
       StructField("bigInteger", DecimalType.SYSTEM_DEFAULT, true) ::
@@ -1263,7 +1263,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(result2(3) === "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
 
     val jsonDF = spark.read.json(primitiveFieldAndType)
-    val primTable = spark.read.json(jsonDF.toJSON.rdd)
+    val primTable = spark.read.json(jsonDF.toJSON)
     primTable.createOrReplaceTempView("primitiveTable")
     checkAnswer(
         sql("select * from primitiveTable"),
@@ -1276,7 +1276,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
 
     val complexJsonDF = spark.read.json(complexFieldAndType1)
-    val compTable = spark.read.json(complexJsonDF.toJSON.rdd)
+    val compTable = spark.read.json(complexJsonDF.toJSON)
     compTable.createOrReplaceTempView("complexTable")
     // Access elements of a primitive array.
     checkAnswer(
@@ -1364,10 +1364,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     })
   }
 
-  test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
+  test("SPARK-6245 JsonInferSchema.infer on empty RDD") {
     // This is really a test that it doesn't throw an exception
     val emptySchema = JsonInferSchema.infer(
-      empty,
+      empty.rdd,
       new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
@@ -1394,7 +1394,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-8093 Erase empty structs") {
     val emptySchema = JsonInferSchema.infer(
-      emptyRecords,
+      emptyRecords.rdd,
       new JSONOptions(Map.empty[String, String], "GMT"),
       CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
@@ -1592,7 +1592,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val dir = Utils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
-      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      arrayAndStructRecords.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val schema =
         StructType(
@@ -1609,7 +1609,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val dir = Utils.createTempDir()
       dir.delete()
       val path = dir.getCanonicalPath
-      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
@@ -1645,7 +1645,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       dir.delete()
 
       val path = dir.getCanonicalPath
-      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).write.text(path)
 
       val jsonDF = spark.read.json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
@@ -1693,8 +1693,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val json = s"""
        |{"a": [{$nested}], "b": [{$nested}]}
      """.stripMargin
-    val rdd = spark.sparkContext.makeRDD(Seq(json))
-    val df = spark.read.json(rdd)
+    val df = spark.read.json(Seq(json).toDS())
     assert(df.schema.size === 2)
     df.collect()
   }
@@ -1794,8 +1793,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    val records = sparkContext
-      .parallelize("""{"a": 3, "b": 1.1}""" :: """{"a": 3.1, "b": 0.000001}""" :: Nil)
+    val records = Seq("""{"a": 3, "b": 1.1}""", """{"a": 3.1, "b": 0.000001}""").toDS()
 
     val schema = StructType(
       StructField("a", DecimalType(21, 1), true) ::
