@@ -412,28 +412,15 @@ case class DataSource(
     //  2. Output path must be a legal HDFS style file system path;
     //  3. It's OK that the output path doesn't exist yet;
     val allPaths = paths ++ caseInsensitiveOptions.get("path")
-    val (outputPath, pathExists) = if (allPaths.length == 1) {
+    val outputPath = if (allPaths.length == 1) {
       val path = new Path(allPaths.head)
       val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      val qualifiedOutputPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      (qualifiedOutputPath, fs.exists(qualifiedOutputPath))
+      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
     } else {
       throw new IllegalArgumentException("Expected exactly one path to be specified, but " +
         s"got: ${allPaths.mkString(", ")}")
     }
 
-    if (pathExists) {
-      if (mode == SaveMode.ErrorIfExists) {
-        throw new AnalysisException(s"path $outputPath already exists.")
-      }
-      if (mode == SaveMode.Ignore) {
-        // Since the path already exists and the save mode is Ignore, we will just return.
-        return
-      }
-    }
-
-    // if path does not exist, the ErrorIfExists and Ignore can be transformed to Append
-    val transformedMode = if (mode != SaveMode.Overwrite) SaveMode.Append else mode
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
@@ -464,7 +451,7 @@ case class DataSource(
         fileFormat = format,
         options = options,
         query = data.logicalPlan,
-        mode = transformedMode,
+        mode = mode,
         catalogTable = catalogTable,
         fileIndex = fileIndex)
       sparkSession.sessionState.executePlan(plan).toRdd
