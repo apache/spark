@@ -284,7 +284,7 @@ class DataFrameReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths):
+    def text(self, path):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -292,15 +292,15 @@ class DataFrameReader(OptionUtils):
 
         Each line in the text file is a new row in the resulting DataFrame.
 
-        :param paths: string, or list of strings, for input path(s).
+        :param path: string, or list of strings, for input path(s).
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        if isinstance(paths, basestring):
-            paths = [paths]
-        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
+        if isinstance(path, basestring):
+            path = [path]
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
