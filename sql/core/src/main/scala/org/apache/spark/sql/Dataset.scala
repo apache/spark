@@ -2017,6 +2017,32 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
+   * (Scala-specific) Reservoir sampling implementation.
+   *
+   * @todo move this into sample operator.
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def reservoir(k: Int): Dataset[T] = withTypedPlan {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    val groupCols = this.columns.toSet.toSeq.flatMap { (colName: String) =>
+      // It is possibly there are more than one columns with the same name,
+      // so we call filter instead of find.
+      val cols = allColumns.filter(col => resolver(col.name, colName))
+      if (cols.isEmpty) {
+        throw new AnalysisException(
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+      }
+      cols
+    }
+    ReservoirSample(groupCols, logicalPlan, k, isStreaming)
+  }
+
+  /**
    * Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
    *

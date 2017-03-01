@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
+import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
-import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
+import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler, SamplingUtils}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
@@ -643,4 +643,19 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 object SubqueryExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+}
+
+case class ReservoirSampleExec(k: Int, child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    child.execute()
+      .mapPartitions(it => {
+        SamplingUtils.reservoirSampleAndCount(it, k)._1.iterator})
+      .repartition(1)
+      .mapPartitions(it => {
+        SamplingUtils.reservoirSampleAndCount(it, k)._1.iterator})
+  }
 }
