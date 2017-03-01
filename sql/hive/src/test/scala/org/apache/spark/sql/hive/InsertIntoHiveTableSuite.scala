@@ -284,19 +284,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     sql("DROP TABLE hiveTableWithStructValue")
   }
 
-  test("Reject partitioning that does not match table") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
-      val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
-          .toDF("id", "data", "part")
-
-      intercept[AnalysisException] {
-        // cannot partition by 2 fields when there is only one in the table definition
-        data.write.partitionBy("part", "data").insertInto("partitioned")
-      }
-    }
-  }
-
   test("Test partition mode = strict") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "strict")) {
       sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
