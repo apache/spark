@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
   import CatalogTypes.TablePartitionSpec
 
-  val defaultDB: CatalogDatabase = {
+  lazy val defaultDB: CatalogDatabase = {
     val qualifiedWarehousePath = SessionCatalog
       .makeQualifiedPath(warehousePath, hadoopConf).toString
     CatalogDatabase(
