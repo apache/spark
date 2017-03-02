@@ -565,11 +565,10 @@ We use a simple example to demonstrate `spark.logit` usage. In general, there ar
 and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
 
 Binomial logistic regression
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
-# Create a DataFrame containing two classes
-training <- df[df$Species %in% c("versicolor", "virginica"), ]
-model <- spark.logit(training, Species ~ ., regParam = 0.00042)
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+model <- spark.logit(training, Survived ~ ., regParam = 0.04741301)
 summary(model)
 ```
 
@@ -579,10 +578,11 @@ fitted <- predict(model, training)
 ```
 
 Multinomial logistic regression against three classes
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
 # Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
-model <- spark.logit(df, Species ~ ., regParam = 0.056)
+model <- spark.logit(training, Class ~ ., regParam = 0.07815179)
 summary(model)
 ```
 
@@ -609,11 +609,12 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 `spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
 
-We use iris data set to show how to use `spark.mlp` in classification.
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
+We use Titanic data set to show how to use `spark.mlp` in classification.
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
 # fit a Multilayer Perceptron Classification Model
-model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+model <- spark.mlp(training, Survived ~ Age + Sex, blockSize = 128, layers = c(2, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c( 0, 0, 0, 5, 5, 5, 9, 9, 9))
 ```
 
 To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
@@ -630,7 +631,7 @@ options(ops)
 ```
 ```{r}
 # make predictions use the fitted model
-predictions <- predict(model, df)
+predictions <- predict(model, training)
 head(select(predictions, predictions$prediction))
 ```
 
@@ -769,12 +770,13 @@ predictions <- predict(rfModel, df)
 
 `spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
 
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
-model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+model <- spark.bisectingKmeans(training, Class ~ Survived, k = 4)
 summary(model)
-fitted <- predict(model, df)
-head(select(fitted, "Sepal_Length", "prediction"))
+fitted <- predict(model, training)
+head(select(fitted, "Class", "prediction"))
 ```
 
 #### Gaussian Mixture Model
@@ -912,9 +914,10 @@ testSummary
 
 ### Model Persistence
 The following example shows how to save/load an ML model by SparkR.
-```{r, warning=FALSE}
-irisDF <- createDataFrame(iris)
-gaussianGLM <- spark.glm(irisDF, Sepal_Length ~ Sepal_Width + Species, family = "gaussian")
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+gaussianGLM <- spark.glm(training, Freq ~ Sex + Age, family = "gaussian")
 
 # Save and then load a fitted MLlib model
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
@@ -925,7 +928,7 @@ gaussianGLM2 <- read.ml(modelPath)
 summary(gaussianGLM2)
 
 # Check model prediction
-gaussianPredictions <- predict(gaussianGLM2, irisDF)
+gaussianPredictions <- predict(gaussianGLM2, training)
 head(gaussianPredictions)
 
 unlink(modelPath)

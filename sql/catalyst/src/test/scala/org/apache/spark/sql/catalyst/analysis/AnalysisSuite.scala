@@ -21,11 +21,12 @@ import java.util.TimeZone
 
 import org.scalatest.ShouldMatchers
 
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -192,12 +193,13 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("pull out nondeterministic expressions from RepartitionByExpression") {
-    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
+    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation, numPartitions = 10)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected, testRelation),
+          numPartitions = 10))
     checkAnalysis(plan, expected)
   }
 
