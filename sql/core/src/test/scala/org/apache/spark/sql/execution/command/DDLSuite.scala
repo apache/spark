@@ -1952,4 +1952,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       }
     }
   }
+
+  Seq(true, false).foreach { shouldCache =>
+    val testName = if (shouldCache) "cached" else "non-cached"
+    test(s"refresh $testNames table after alter the location") {
+      withTable("t", "t1", "t2", "t3") {
+        withTempDir { dir =>
+          spark.sql(
+            """
+              |CREATE TABLE t(a string)
+              |USING parquet
+            """.stripMargin)
+          spark.sql("INSERT INTO TABLE t SELECT 1")
+          if (shouldCache) {
+            spark.catalog.cacheTable("t")
+          }
+          checkAnswer(spark.table("t"), Row("1") :: Nil)
+          spark.sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          checkAnswer(spark.table("t"), Nil)
+        }
+
+        // TODO: partition table tests
+      }
+    }
+  }
 }
