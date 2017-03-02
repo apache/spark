@@ -141,7 +141,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, query, mode, tableExists = true)
+        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
 
@@ -151,7 +151,7 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, query, mode, tableExists = false)
+        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
