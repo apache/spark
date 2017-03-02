@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.test.SharedSQLContext
 
-class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
+class ResolvedDataSourceSuite extends SparkFunSuite {
   private def getProvidingClass(name: String): Class[_] =
     DataSource(
-      sparkSession = spark,
+      sparkSession = null,
       className = name,
       options = Map("timeZone" -> DateTimeUtils.defaultTimeZone().getID)).providingClass
 
