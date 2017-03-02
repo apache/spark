@@ -208,8 +208,8 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
-            failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
-              " conditions: $condition")
+            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
+              s"conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(

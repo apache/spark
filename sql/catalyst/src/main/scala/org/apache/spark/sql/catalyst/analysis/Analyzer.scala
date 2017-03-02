@@ -1280,18 +1280,17 @@ class Analyzer(
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
         // so long as they do not host outer references in the operators.
-        case p: Sort =>
-          failOnOuterReference(p)
-        case p: RepartitionByExpression =>
-          failOnOuterReference(p)
+        case s: Sort =>
+          failOnOuterReference(s)
+        case r: RepartitionByExpression =>
+          failOnOuterReference(r)
 
         // Category 3:
         // Filter is one of the two operators allowed to host correlated expressions.
         // The other operator is Join. Filter can be anywhere in a correlated subquery.
-        case f @ Filter(cond, child) =>
+        case f: Filter =>
           // Find all predicates with an outer reference.
-          val (correlated, local) =
-            splitConjunctivePredicates(cond).partition(containsOuter)
+          val (correlated, _) = splitConjunctivePredicates(f.condition).partition(containsOuter)
 
           // Find any non-equality correlated predicates
           foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
@@ -1302,7 +1301,7 @@ class Analyzer(
 
         // Project cannot host any correlated expressions
         // but can be anywhere in a correlated subquery.
-        case p @ Project(expressions, child) =>
+        case p: Project =>
           failOnOuterReference(p)
 
         // Aggregate cannot host any correlated expressions
@@ -1310,7 +1309,7 @@ class Analyzer(
         // only equality correlated predicates.
         // It cannot be on a correlation path if the correlation has
         // non-equality correlated predicates.
-        case a @ Aggregate(grouping, expressions, child) =>
+        case a: Aggregate =>
           failOnOuterReference(a)
           failOnNonEqualCorrelatedPredicate(foundNonEqualCorrelatedPred, a)
 
@@ -1350,8 +1349,8 @@ class Analyzer(
         // but must not host any outer references.
         // Note:
         // Generator with join=false is treated as Category 4.
-        case p @ Generate(generator, true, _, _, _, _) =>
-          failOnOuterReference(p)
+        case g: Generate if g.join =>
+          failOnOuterReference(g)
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
@@ -1392,7 +1391,8 @@ class Analyzer(
         }
       } while (!current.resolved && !current.fastEquals(previous))
 
-      // Step 2: pull the outer references and record them as children of SubqueryExpression
+      // Step 2: If the subquery plan is fully resolved, pull the outer references and record
+      // them as children of SubqueryExpression.
       if (current.resolved) {
         // Make sure the resolved query has the required number of output columns. This is only
         // needed for Scalar and IN subqueries.

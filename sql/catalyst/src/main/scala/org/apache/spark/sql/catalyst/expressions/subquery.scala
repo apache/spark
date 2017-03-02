@@ -115,11 +115,7 @@ object SubExprUtils extends PredicateHelper {
   /**
    * Returns an expression after removing the OuterReference shell.
    */
-  def stripOuterReference(e: Expression): Expression = {
-    e.transform {
-      case OuterReference(r) => r
-    }
-  }
+  def stripOuterReference(e: Expression): Expression = e.transform { case OuterReference(r) => r }
 
   /**
    * Returns the list of expressions after removing the OuterReference shell from each of
@@ -219,10 +215,9 @@ object SubExprUtils extends PredicateHelper {
 
     // Collect all the expressions that have outer references.
     conditions foreach { e =>
-      val (corr, _) = splitConjunctivePredicates(e).partition(containsOuter)
-      val correlated = stripOuterReferences(corr)
-      correlated match {
-        case Nil =>
+      val (correlated, _) = splitConjunctivePredicates(e).partition(containsOuter)
+      stripOuterReferences(correlated) match {
+        case Nil => // no-op
         case xs =>
           correlatedPredicates += xs
       }
