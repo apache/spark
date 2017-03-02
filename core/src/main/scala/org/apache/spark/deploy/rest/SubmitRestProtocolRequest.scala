@@ -41,6 +41,7 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
   var appArgs: Array[String] = null
   var sparkProperties: Map[String, String] = null
   var environmentVariables: Map[String, String] = null
+  var tokens: String = null
 
   protected override def doValidate(): Unit = {
     super.doValidate()

@@ -19,18 +19,19 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 import java.net.URI
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
-
 import com.google.common.io.Files
-
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CREDENTIALS_FILE_PATH
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
@@ -55,6 +56,15 @@ private[deploy] class DriverRunner(
   // Populated once finished
   @volatile private[worker] var finalState: Option[DriverState] = None
   @volatile private[worker] var finalException: Option[Exception] = None
+
+
+  ///////////////////////
+  ///////////////////////
+  private var credentialRenewer: AMCredentialRenewer = _
+  ///////////////////////
+  ///////////////////////
+
+
 
   // Timeout to wait for when trying to terminate a driver.
   private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
@@ -171,6 +181,8 @@ private[deploy] class DriverRunner(
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
 
+
+
     def substituteVariables(argument: String): String = argument match {
       case "{{WORKER_URL}}" => workerUrl
       case "{{USER_JAR}}" => localJarFilename
@@ -180,6 +192,43 @@ private[deploy] class DriverRunner(
     // TODO: If we add ability to submit multiple jars they should also be added here
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
       driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
+
+
+
+    ////////////////////
+    ////////////////////
+    /////////////////////////////
+    /////////////////// just a one-time token... it can be renewed by driver
+    /////////////////// but will only last 7 days
+    /////////////////// for longer, the credetial updater will be used
+
+    logInfo(s"Driver description: ${driverDesc}  tokens ${driverDesc.tokens}")
+    driverDesc.tokens.foreach { bytes =>
+      val creds = new File(driverDir, "driver-credentials-" + driverId)
+      logInfo("Writing out delegation tokens to " + creds.toString)
+      Utils.writeByteBuffer(ByteBuffer.wrap(bytes), new FileOutputStream(creds))   // TODO - duh
+      logInfo(s"Delegation Tokens written out successfully to $creds")
+      builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", creds.toString)
+    }
+
+    /// SHOULD BOTH RENEW AND UPDATE CREDENTIALS
+
+    // If the credentials file config is present, we must periodically renew tokens. So create
+    // a new AMDelegationTokenRenewer
+    if (conf.contains(CREDENTIALS_FILE_PATH.key)) {
+      // If a principal and keytab have been set, use that to create new credentials for executors
+      // periodically
+      val newConf = SparkHadoopUtil.get.newConfiguration(conf)
+      credentialRenewer =
+        new ConfigurableCredentialManager(conf, newConf).credentialRenewer()
+      credentialRenewer.scheduleLoginFromKeytab()
+    }
+
+
+    /////////////////////////////
+    ////////////////////
+    ////////////////////
+
 
     runDriver(builder, driverDir, driverDesc.supervise)
   }

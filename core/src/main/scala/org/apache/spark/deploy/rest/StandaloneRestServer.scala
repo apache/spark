@@ -20,7 +20,8 @@ package org.apache.spark.deploy.rest
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.commons.codec.binary.Base64
+import org.apache.spark.{SparkConf, SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -130,6 +131,18 @@ private[rest] class StandaloneSubmitRequestServlet(
       throw new SubmitRestMissingFieldException("Main class is missing.")
     }
 
+    /////////////////
+    /////////////////
+
+    val tokens = Option(Base64.decodeBase64(request.tokens))
+
+
+    /////////////////
+    /////////////////
+
+
+
+
     // Optional fields
     val sparkProperties = request.sparkProperties
     val driverMemory = sparkProperties.get("spark.driver.memory")
@@ -157,8 +170,15 @@ private[rest] class StandaloneSubmitRequestServlet(
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
+
+    //////////
+    //////////
+
     new DriverDescription(
-      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command, tokens)
+
+    ///////
+    ///////
   }
 
   /**

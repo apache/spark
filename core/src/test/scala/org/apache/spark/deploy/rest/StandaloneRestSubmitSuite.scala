@@ -56,7 +56,8 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val sparkProperties = Map("spark.app.name" -> "pi")
     val environmentVariables = Map("SPARK_ONE" -> "UN", "SPARK_TWO" -> "DEUX")
     val request = new RestSubmissionClient("spark://host:port").constructSubmitRequest(
-      "my-app-resource", "my-main-class", appArgs, sparkProperties, environmentVariables)
+      "my-app-resource", "my-main-class", appArgs,
+      sparkProperties, environmentVariables, new SparkConf(loadDefaults = false))
     assert(request.action === Utils.getFormattedClassName(request))
     assert(request.clientSparkVersion === SPARK_VERSION)
     assert(request.appResource === "my-app-resource")
@@ -447,7 +448,8 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val args = new SparkSubmitArguments(commandLineArgs)
     val (_, _, sparkProperties, _) = SparkSubmit.prepareSubmitEnvironment(args)
     new RestSubmissionClient("spark://host:port").constructSubmitRequest(
-      mainJar, mainClass, appArgs, sparkProperties.toMap, Map.empty)
+      mainJar, mainClass, appArgs, sparkProperties.toMap, Map.empty,
+      new SparkConf(loadDefaults = false))
   }
 
   /** Return the response as a submit response, or fail with error otherwise. */
