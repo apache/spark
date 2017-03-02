@@ -106,7 +106,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       fitting: Boolean): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     if (fitting) {
-      SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
+      SchemaUtils.checkNumericType(schema, $(censorCol))
       SchemaUtils.checkNumericType(schema, $(labelCol))
     }
     if (hasQuantilesCol) {
@@ -200,8 +200,8 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    * and put it in an RDD with strong types.
    */
   protected[ml] def extractAFTPoints(dataset: Dataset[_]): RDD[AFTPoint] = {
-    dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType), col($(censorCol)))
-      .rdd.map {
+    dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType),
+      col($(censorCol)).cast(DoubleType)).rdd.map {
         case Row(features: Vector, label: Double, censor: Double) =>
           AFTPoint(features, label, censor)
       }

@@ -49,7 +49,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
    */
   final val isotonic: BooleanParam =
     new BooleanParam(this, "isotonic",
-      "whether the output sequence should be isotonic/increasing (true) or" +
+      "whether the output sequence should be isotonic/increasing (true) or " +
         "antitonic/decreasing (false)")
 
   /** @group getParam */
