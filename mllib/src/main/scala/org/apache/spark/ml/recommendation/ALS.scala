@@ -80,14 +80,24 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /**
    * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
-   * out of integer range.
+   * out of integer range or contains a fractional part.
    */
-  protected val checkedCast = udf { (n: Double) =>
-    if (n > Int.MaxValue || n < Int.MinValue) {
-      throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
-        s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
-    } else {
-      n.toInt
+  protected[recommendation] val checkedCast = udf { (n: Any) =>
+    n match {
+      case v: Int => v // Avoid unnecessary casting
+      case v: Number =>
+        val intV = v.intValue
+        // Checks if number within Int range and has no fractional part.
+        if (v.doubleValue == intV) {
+          intV
+        } else {
+          throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+            s"and without fractional part for columns ${$(userCol)} and ${$(itemCol)}. " +
+            s"Value $n was either out of Integer range or contained a fractional part that " +
+            s"could not be converted.")
+        }
+      case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+        s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was not numeric.")
     }
   }
 
@@ -288,9 +298,9 @@ class ALSModel private[ml] (
     }
     val predictions = dataset
       .join(userFactors,
-        checkedCast(dataset($(userCol)).cast(DoubleType)) === userFactors("id"), "left")
+        checkedCast(dataset($(userCol))) === userFactors("id"), "left")
       .join(itemFactors,
-        checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
+        checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
     getColdStartStrategy match {
@@ -491,8 +501,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(checkedCast(col($(userCol)).cast(DoubleType)),
-        checkedCast(col($(itemCol)).cast(DoubleType)), r)
+      .select(checkedCast(col($(userCol))), checkedCast(col($(itemCol))), r)
       .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
