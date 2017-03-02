@@ -166,9 +166,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val serializer = SparkEnv.get.closureSerializer.newInstance()
     val resultFunc = (context: TaskContext, itr: Iterator[Int]) => itr.size
 
-    // Submit a job where a fetch failure is thrown, but user code has a try/catch which hides
-    // the fetch failure.  The executor should still tell the driver that the task failed due to a
-    // fetch failure, not a generic exception from user code.
+    // Submit a job where a fetch failure is thrown, but then there is an OOM.  We should treat
+    // the fetch failure as a false positive, and just do normal OOM handling.
     val inputRDD = new FetchFailureThrowingRDD(sc)
     val secondRDD = new FetchFailureHidingRDD(sc, inputRDD, throwOOM = true)
     val taskBinary = sc.broadcast(serializer.serialize((secondRDD, resultFunc)).array())
@@ -189,6 +188,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
     val (failReason, uncaughtExceptionHandler) =
       runTaskGetFailReasonAndExceptionHandler(taskDescription)
+    // make sure the task failure just looks like a OOM, not a fetch failure
     assert(failReason.isInstanceOf[ExceptionFailure])
     val exceptionCaptor = ArgumentCaptor.forClass(classOf[Throwable])
     verify(uncaughtExceptionHandler).uncaughtException(any(), exceptionCaptor.capture())
