@@ -34,7 +34,6 @@ import org.apache.spark.sql.SparkSession
 object FPGrowthExample {
 
   def main(args: Array[String]): Unit = {
-
     val spark = SparkSession
       .builder
       .appName(s"${this.getClass.getSimpleName}")
@@ -42,7 +41,6 @@ object FPGrowthExample {
     import spark.implicits._
 
     // $example on$
-    // Loads data.
     val dataset = spark.createDataset(Seq(
       "1 2 5",
       "1 2 3 5",
@@ -53,16 +51,15 @@ object FPGrowthExample {
     val fpgrowth = new FPGrowth().setMinSupport(0.5).setMinConfidence(0.6)
     val model = fpgrowth.fit(dataset)
 
-    // get frequent itemsets.
+    // Display frequent itemsets.
     model.freqItemsets.show()
 
-    // get generated association rules.
+    // Display generated association rules.
     model.associationRules.show()
 
     // transform examines the input items against all the association rules and summarize the
     // consequents as prediction
     model.transform(dataset).show()
-
     // $example off$
 
     spark.stop()

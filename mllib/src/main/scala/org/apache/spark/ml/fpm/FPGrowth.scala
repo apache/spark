@@ -240,13 +240,8 @@ class FPGrowthModel private[ml] (
     val predictUDF = udf((items: Seq[_]) => {
       if (items != null) {
         val itemset = items.toSet
-        brRules.value.flatMap { rule =>
-          if (rule._1.forall(item => itemset.contains(item))) {
-            rule._2.filter(item => !itemset.contains(item))
-          } else {
-            Seq.empty
-          }
-        }
+        brRules.value.filter(_._1.forall(itemset.contains))
+          .flatMap(_._2.filter(!itemset.contains(_)))
       } else {
         Seq.empty
       }.distinct }, dt)
