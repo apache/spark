@@ -92,16 +92,16 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 
     // range with non aggregation operation
     val res14 = spark.range(0, 100, 2).toDF.filter("50 <= id")
-    res14.collect
-    assert(res14.count == 25)
+    val len14 = res14.collect.length
+    assert(len14 == 25)
 
     val res15 = spark.range(100, -100, -2).toDF.filter("id <= 0")
-    res15.collect
-    assert(res15.count == 50)
+    val len15 = res15.collect.length
+    assert(len15 == 50)
 
     val res16 = spark.range(-1500, 1500, 3).toDF.filter("0 <= id")
-    res16.collect
-    assert(res16.count == 500)
+    val len16 = res16.collect.length
+    assert(len16 == 500)
   }
 
   test("Range with randomized parameters") {
