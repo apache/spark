@@ -83,9 +83,7 @@ object StatFunctions extends Logging {
       while (i < summaries.length) {
         if (!row.isNullAt(i)) {
           val v = row.getDouble(i)
-          if (!v.isNaN) {
-            summaries(i) = summaries(i).insert(v)
-          }
+          if (!v.isNaN) summaries(i) = summaries(i).insert(v)
         }
         i += 1
       }
@@ -99,9 +97,7 @@ object StatFunctions extends Logging {
     }
     val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
 
-    summaries.map { summary =>
-      probabilities.flatMap(summary.query)
-    }
+    summaries.map { summary => probabilities.flatMap(summary.query) }
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

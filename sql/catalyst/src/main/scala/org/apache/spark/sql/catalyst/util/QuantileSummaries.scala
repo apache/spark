@@ -181,9 +181,7 @@ class QuantileSummaries(
     require(headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
 
-    if (sampled.isEmpty) {
-      return None
-    }
+    if (sampled.isEmpty) return None
 
     if (quantile <= relativeError) {
       return Some(sampled.head.value)
