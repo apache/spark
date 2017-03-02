@@ -247,7 +247,7 @@
               <goal>wget</goal>
             </goals>
             <configuration>
-              <url>https://storage.googleapis.com/minikube/releases/v0.12.2/minikube-linux-amd64</url>
+              <url>https://storage.googleapis.com/minikube/releases/v0.16.0/minikube-linux-amd64</url>
               <outputDirectory>${project.build.directory}/minikube-bin/linux-amd64</outputDirectory>
               <outputFileName>minikube</outputFileName>
             </configuration>
@@ -259,7 +259,7 @@
               <goal>wget</goal>
             </goals>
             <configuration>
-              <url>https://storage.googleapis.com/minikube/releases/v0.12.2/minikube-darwin-amd64</url>
+              <url>https://storage.googleapis.com/minikube/releases/v0.16.0/minikube-darwin-amd64</url>
               <outputDirectory>${project.build.directory}/minikube-bin/darwin-amd64</outputDirectory>
               <outputFileName>minikube</outputFileName>
             </configuration>
