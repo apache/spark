@@ -2443,7 +2443,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' @family normal_funcs
 #' @rdname from_json
 #' @name from_json
-#' @aliases from_json,structType,Column-method
+#' @aliases from_json,Column,structType-method
 #' @export
 #' @examples
 #' \dontrun{
