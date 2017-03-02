@@ -18,7 +18,6 @@ package org.apache.spark.deploy.kubernetes
 
 import java.io.File
 import java.security.SecureRandom
-import java.util
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.google.common.io.Files
@@ -73,6 +72,7 @@ private[spark] class Client(
 
   private val serviceAccount = sparkConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
   private val customLabels = sparkConf.get(KUBERNETES_DRIVER_LABELS)
+  private val customAnnotations = sparkConf.get(KUBERNETES_DRIVER_ANNOTATIONS)
 
   private val kubernetesResourceCleaner = new KubernetesResourceCleaner
 
@@ -90,7 +90,18 @@ private[spark] class Client(
       throw new SparkException(s"Main app resource file $mainAppResource is not a file or" +
         s" is a directory.")
     }
-    val parsedCustomLabels = parseCustomLabels(customLabels)
+    val parsedCustomLabels = parseKeyValuePairs(customLabels, KUBERNETES_DRIVER_LABELS.key,
+      "labels")
+    parsedCustomLabels.keys.foreach { key =>
+      require(key != SPARK_APP_ID_LABEL, "Label with key" +
+        s" $SPARK_APP_ID_LABEL cannot be used in" +
+        " spark.kubernetes.driver.labels, as it is reserved for Spark's" +
+        " internal configuration.")
+    }
+    val parsedCustomAnnotations = parseKeyValuePairs(
+      customAnnotations,
+      KUBERNETES_DRIVER_ANNOTATIONS.key,
+      "annotations")
     var k8ConfBuilder = new K8SConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(master)
@@ -134,6 +145,7 @@ private[spark] class Client(
           val (driverPod, driverService) = launchDriverKubernetesComponents(
             kubernetesClient,
             parsedCustomLabels,
+            parsedCustomAnnotations,
             submitServerSecret,
             sslConfiguration)
           configureOwnerReferences(
@@ -215,14 +227,15 @@ private[spark] class Client(
 
   private def launchDriverKubernetesComponents(
       kubernetesClient: KubernetesClient,
-      parsedCustomLabels: Map[String, String],
+      customLabels: Map[String, String],
+      customAnnotations: Map[String, String],
       submitServerSecret: Secret,
       sslConfiguration: SslConfiguration): (Pod, Service) = {
     val driverKubernetesSelectors = (Map(
       SPARK_DRIVER_LABEL -> kubernetesAppId,
       SPARK_APP_ID_LABEL -> kubernetesAppId,
       SPARK_APP_NAME_LABEL -> appName)
-      ++ parsedCustomLabels).asJava
+      ++ customLabels)
     val endpointsReadyFuture = SettableFuture.create[Endpoints]
     val endpointsReadyWatcher = new DriverEndpointsReadyWatcher(endpointsReadyFuture)
     val serviceReadyFuture = SettableFuture.create[Service]
@@ -249,6 +262,7 @@ private[spark] class Client(
           val driverPod = createDriverPod(
             kubernetesClient,
             driverKubernetesSelectors,
+            customAnnotations,
             submitServerSecret,
             sslConfiguration)
           kubernetesResourceCleaner.registerOrUpdateResource(driverPod)
@@ -342,7 +356,7 @@ private[spark] class Client(
 
   private def createDriverService(
       kubernetesClient: KubernetesClient,
-      driverKubernetesSelectors: java.util.Map[String, String],
+      driverKubernetesSelectors: Map[String, String],
       submitServerSecret: Secret): Service = {
     val driverSubmissionServicePort = new ServicePortBuilder()
       .withName(SUBMISSION_SERVER_PORT_NAME)
@@ -352,11 +366,11 @@ private[spark] class Client(
     kubernetesClient.services().createNew()
       .withNewMetadata()
         .withName(kubernetesAppId)
-        .withLabels(driverKubernetesSelectors)
+        .withLabels(driverKubernetesSelectors.asJava)
         .endMetadata()
       .withNewSpec()
         .withType("NodePort")
-        .withSelector(driverKubernetesSelectors)
+        .withSelector(driverKubernetesSelectors.asJava)
         .withPorts(driverSubmissionServicePort)
         .endSpec()
       .done()
@@ -364,7 +378,8 @@ private[spark] class Client(
 
   private def createDriverPod(
       kubernetesClient: KubernetesClient,
-      driverKubernetesSelectors: util.Map[String, String],
+      driverKubernetesSelectors: Map[String, String],
+      customAnnotations: Map[String, String],
       submitServerSecret: Secret,
       sslConfiguration: SslConfiguration): Pod = {
     val containerPorts = buildContainerPorts()
@@ -376,7 +391,8 @@ private[spark] class Client(
     kubernetesClient.pods().createNew()
       .withNewMetadata()
         .withName(kubernetesAppId)
-        .withLabels(driverKubernetesSelectors)
+        .withLabels(driverKubernetesSelectors.asJava)
+        .withAnnotations(customAnnotations.asJava)
         .endMetadata()
       .withNewSpec()
         .withRestartPolicy("Never")
@@ -601,20 +617,19 @@ private[spark] class Client(
       connectTimeoutMillis = 5000)
   }
 
-  private def parseCustomLabels(maybeLabels: Option[String]): Map[String, String] = {
-    maybeLabels.map(labels => {
-      labels.split(",").map(_.trim).filterNot(_.isEmpty).map(label => {
-        label.split("=", 2).toSeq match {
+  private def parseKeyValuePairs(
+      maybeKeyValues: Option[String],
+      configKey: String,
+      keyValueType: String): Map[String, String] = {
+    maybeKeyValues.map(keyValues => {
+      keyValues.split(",").map(_.trim).filterNot(_.isEmpty).map(keyValue => {
+        keyValue.split("=", 2).toSeq match {
           case Seq(k, v) =>
-            require(k != SPARK_APP_ID_LABEL, "Label with key" +
-              s" $SPARK_APP_ID_LABEL cannot be used in" +
-              " spark.kubernetes.driver.labels, as it is reserved for Spark's" +
-              " internal configuration.")
             (k, v)
           case _ =>
-            throw new SparkException("Custom labels set by spark.kubernetes.driver.labels" +
-              " must be a comma-separated list of key-value pairs, with format <key>=<value>." +
-              s" Got label: $label. All labels: $labels")
+            throw new SparkException(s"Custom $keyValueType set by $configKey must be a" +
+              s" comma-separated list of key-value pairs, with format <key>=<value>." +
+              s" Got value: $keyValue. All values: $keyValues")
         }
       }).toMap
     }).getOrElse(Map.empty[String, String])
