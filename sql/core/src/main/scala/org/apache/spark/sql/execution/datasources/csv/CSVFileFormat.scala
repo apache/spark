@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.{Charset, StandardCharsets}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -43,11 +37,15 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 
-  override def toString: String = "CSV"
-
-  override def hashCode(): Int = getClass.hashCode()
-
-  override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    val parsedOptions =
+      new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val csvDataSource = CSVDataSource(parsedOptions)
+    csvDataSource.isSplitable && super.isSplitable(sparkSession, options, path)
+  }
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -55,11 +53,10 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Option[StructType] = {
     require(files.nonEmpty, "Cannot infer schema from an empty set of files")
 
-    val csvOptions = new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
-    val paths = files.map(_.getPath.toString)
-    val lines: Dataset[String] = createBaseDataset(sparkSession, csvOptions, paths)
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    Some(CSVInferSchema.infer(lines, caseSensitive, csvOptions))
+    val parsedOptions =
+      new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+
+    CSVDataSource(parsedOptions).infer(sparkSession, files, parsedOptions)
   }
 
   override def prepareWrite(
@@ -115,49 +112,17 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
 
     (file: PartitionedFile) => {
-      val lines = {
-        val conf = broadcastedHadoopConf.value.value
-        val linesReader = new HadoopFileLinesReader(file, conf)
-        Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-        linesReader.map { line =>
-          new String(line.getBytes, 0, line.getLength, parsedOptions.charset)
-        }
-      }
-
-      val linesWithoutHeader = if (parsedOptions.headerFlag && file.start == 0) {
-        // Note that if there are only comments in the first block, the header would probably
-        // be not dropped.
-        CSVUtils.dropHeaderLine(lines, parsedOptions)
-      } else {
-        lines
-      }
-
-      val filteredLines = CSVUtils.filterCommentAndEmpty(linesWithoutHeader, parsedOptions)
+      val conf = broadcastedHadoopConf.value.value
       val parser = new UnivocityParser(dataSchema, requiredSchema, parsedOptions)
-      filteredLines.flatMap(parser.parse)
+      CSVDataSource(parsedOptions).readFile(conf, file, parser, parsedOptions)
     }
   }
 
-  private def createBaseDataset(
-      sparkSession: SparkSession,
-      options: CSVOptions,
-      inputPaths: Seq[String]): Dataset[String] = {
-    if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sparkSession.baseRelationToDataFrame(
-        DataSource.apply(
-          sparkSession,
-          paths = inputPaths,
-          className = classOf[TextFileFormat].getName
-        ).resolveRelation(checkFilesExist = false))
-        .select("value").as[String](Encoders.STRING)
-    } else {
-      val charset = options.charset
-      val rdd = sparkSession.sparkContext
-        .hadoopFile[LongWritable, Text, TextInputFormat](inputPaths.mkString(","))
-        .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
-      sparkSession.createDataset(rdd)(Encoders.STRING)
-    }
-  }
+  override def toString: String = "CSV"
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 }
 
 private[csv] class CsvOutputWriter(

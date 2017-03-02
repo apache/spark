@@ -88,7 +88,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
   @Test
   public void testTypedAggregationAverage() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.avg(value -> (double)(value._2() * 2)));
+    Dataset<Tuple2<String, Double>> agged = grouped.agg(typed.avg(value -> value._2() * 2.0));
     Assert.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 6.0)),
         agged.collectAsList());

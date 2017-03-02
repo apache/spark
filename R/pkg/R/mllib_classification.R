@@ -75,9 +75,9 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(iris)
-#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.svmLinear(training, Species ~ ., regParam = 0.5)
+#' t <- as.data.frame(Titanic)
+#' training <- createDataFrame(t)
+#' model <- spark.svmLinear(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -220,9 +220,9 @@ function(object, path, overwrite = FALSE) {
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' df <- createDataFrame(iris)
-#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.logit(training, Species ~ ., regParam = 0.5)
+#' t <- as.data.frame(Titanic)
+#' training <- createDataFrame(t)
+#' model <- spark.logit(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -239,8 +239,7 @@ function(object, path, overwrite = FALSE) {
 #'
 #' # multinomial logistic regression
 #'
-#' df <- createDataFrame(iris)
-#' model <- spark.logit(df, Species ~ ., regParam = 0.5)
+#' model <- spark.logit(training, Class ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' }
