@@ -35,11 +35,7 @@ class TopByKeyAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       (0, 5, 42f),
       (0, 6, 28f),
       (1, 3, 39f),
-      (1, 4, 26f),
-      (1, 5, 33f),
-      (1, 6, 16f),
       (2, 3, 51f),
-      (2, 4, 30f),
       (2, 5, 45f),
       (2, 6, 18f)
     ).toDS().groupByKey(_._1).agg(topKAggregator.toColumn)
@@ -51,7 +47,7 @@ class TopByKeyAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val expected = Map(
       0 -> Array((3, 54f), (4, 44f)),
-      1 -> Array((3, 39f), (5, 33f)),
+      1 -> Array((3, 39f)),
       2 -> Array((3, 51f), (5, 45f))
     )
     checkTopK(topK, expected)
@@ -63,8 +59,8 @@ class TopByKeyAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val expected = Map(
       0 -> Array((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
-      1 -> Array((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
-      2 -> Array((3, 51f), (5, 45f), (4, 30f), (6, 18f))
+      1 -> Array((3, 39f)),
+      2 -> Array((3, 51f), (5, 45f), (6, 18f))
     )
     checkTopK(topK, expected)
   }
@@ -72,10 +68,6 @@ class TopByKeyAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
   private def checkTopK(
       topK: Dataset[(Int, Array[(Int, Float)])],
       expected: Map[Int, Array[(Int, Float)]]): Unit = {
-    topK.collect().foreach { record =>
-      val id = record._1
-      val recs = record._2
-      assert(recs === expected(id))
-    }
+    topK.collect().foreach { case (id, recs) => assert(recs === expected(id)) }
   }
 }

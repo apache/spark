@@ -689,9 +689,9 @@ class ALSSuite
     assert(topItems.columns.contains("user"))
 
     val expected = Map(
-      0 -> Array(Row(3, 54f), Row(4, 44f)),
-      1 -> Array(Row(3, 39f), Row(5, 33f)),
-      2 -> Array(Row(3, 51f), Row(5, 45f))
+      0 -> Array((3, 54f), (4, 44f)),
+      1 -> Array((3, 39f), (5, 33f)),
+      2 -> Array((3, 51f), (5, 45f))
     )
     checkRecommendations(topItems, expected, "item")
   }
@@ -702,9 +702,9 @@ class ALSSuite
     assert(topItems.columns.contains("user"))
 
     val expected = Map(
-      0 -> Array(Row(3, 54f), Row(4, 44f), Row(5, 42f), Row(6, 28f)),
-      1 -> Array(Row(3, 39f), Row(5, 33f), Row(4, 26f), Row(6, 16f)),
-      2 -> Array(Row(3, 51f), Row(5, 45f), Row(4, 30f), Row(6, 18f))
+      0 -> Array((3, 54f), (4, 44f), (5, 42f), (6, 28f)),
+      1 -> Array((3, 39f), (5, 33f), (4, 26f), (6, 16f)),
+      2 -> Array((3, 51f), (5, 45f), (4, 30f), (6, 18f))
     )
     checkRecommendations(topItems, expected, "item")
   }
@@ -715,10 +715,10 @@ class ALSSuite
     assert(topUsers.columns.contains("item"))
 
     val expected = Map(
-      3 -> Array(Row(0, 54f), Row(2, 51f)),
-      4 -> Array(Row(0, 44f), Row(2, 30f)),
-      5 -> Array(Row(2, 45f), Row(0, 42f)),
-      6 -> Array(Row(0, 28f), Row(2, 18f))
+      3 -> Array((0, 54f), (2, 51f)),
+      4 -> Array((0, 44f), (2, 30f)),
+      5 -> Array((2, 45f), (0, 42f)),
+      6 -> Array((0, 28f), (2, 18f))
     )
     checkRecommendations(topUsers, expected, "user")
   }
@@ -729,23 +729,27 @@ class ALSSuite
     assert(topUsers.columns.contains("item"))
 
     val expected = Map(
-      3 -> Array(Row(0, 54f), Row(2, 51f), Row(1, 39f)),
-      4 -> Array(Row(0, 44f), Row(2, 30f), Row(1, 26f)),
-      5 -> Array(Row(2, 45f), Row(0, 42f), Row(1, 33f)),
-      6 -> Array(Row(0, 28f), Row(2, 18f), Row(1, 16f))
+      3 -> Array((0, 54f), (2, 51f), (1, 39f)),
+      4 -> Array((0, 44f), (2, 30f), (1, 26f)),
+      5 -> Array((2, 45f), (0, 42f), (1, 33f)),
+      6 -> Array((0, 28f), (2, 18f), (1, 16f))
     )
     checkRecommendations(topUsers, expected, "user")
   }
 
   private def checkRecommendations(
       topK: DataFrame,
-      expected: Map[Int, Array[Row]],
+      expected: Map[Int, Array[(Int, Float)]],
       dstColName: String): Unit = {
+    val spark = this.spark
+    import spark.implicits._
+
     assert(topK.columns.contains("recommendations"))
-    topK.collect().foreach { row =>
-      val id = row.getInt(0)
-      val recs = row.getAs[WrappedArray[Row]]("recommendations")
+    topK.as[(Int, Seq[(Int, Float)])].collect().foreach { case (id: Int, recs: Seq[(Int, Float)]) =>
       assert(recs === expected(id))
+    }
+    topK.collect().foreach { row =>
+      val recs = row.getAs[WrappedArray[Row]]("recommendations")
       assert(recs(0).fieldIndex(dstColName) == 0)
       assert(recs(0).fieldIndex("rating") == 1)
     }
