@@ -79,7 +79,7 @@ object SubqueryExpression {
    */
   def hasCorrelatedSubquery(e: Expression): Boolean = {
     e.find {
-      case s: SubqueryExpression if s.children.nonEmpty => true
+      case s: SubqueryExpression => s.children.nonEmpty
       case _ => false
     }.isDefined
   }

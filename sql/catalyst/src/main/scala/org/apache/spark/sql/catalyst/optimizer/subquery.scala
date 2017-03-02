@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -67,18 +68,18 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case (p, Not(Exists(sub, conditions, _))) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           Join(outerPlan, sub, LeftAnti, joinCond)
-        case (p, In(e, Seq(l @ ListQuery(sub, conditions, _)))) =>
-          val inConditions = getValueExpression(e).zip(sub.output).map(EqualTo.tupled)
+        case (p, In(value, Seq(ListQuery(sub, conditions, _)))) =>
+          val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           Join(outerPlan, sub, LeftSemi, joinCond)
-        case (p, Not(In(e, Seq(l @ ListQuery(sub, conditions, _))))) =>
+        case (p, Not(In(value, Seq(ListQuery(sub, conditions, _))))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join.
           // Use EXISTS if performance matters to you.
-          val inConditions = getValueExpression(e).zip(sub.output).map(EqualTo.tupled)
+          val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions ++ conditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -106,16 +107,15 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     var newPlan = plan
     val newExprs = exprs.map { e =>
       e transformUp {
-        case Exists(sub, conditions, exprId) =>
+        case Exists(sub, conditions, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          newPlan = Join(newPlan, sub,
-            ExistenceJoin(exists), conditions.reduceLeftOption(And))
+          newPlan = Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
           exists
-        case In(e, Seq(l@ ListQuery(sub, conditions, exprId))) =>
+        case In(value, Seq(ListQuery(sub, conditions, _))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          val inConditions = getValueExpression(e).zip(sub.output).map(EqualTo.tupled)
-          newPlan = Join(newPlan, sub,
-            ExistenceJoin(exists), (inConditions ++ conditions).reduceLeftOption(And))
+          val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
+          val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
+          newPlan = Join(newPlan, sub, ExistenceJoin(exists), newConditions)
           exists
       }
     }
@@ -154,7 +154,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     val transformed = BooleanSimplification(sub) transformUp {
       case f @ Filter(cond, child) =>
         val (correlated, local) =
-          splitConjunctivePredicates(cond).partition(SubExprUtils.containsOuter)
+          splitConjunctivePredicates(cond).partition(containsOuter)
 
         // Rewrite the filter without the correlated predicates if any.
         correlated match {
@@ -189,7 +189,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // In case of a collision, change the subquery plan's output to use
     // different attribute by creating alias(s).
     val baseConditions = predicateMap.values.flatten.toSeq
-    val (newplan: LogicalPlan, newcond: Seq[Expression]) = if (outer.nonEmpty) {
+    val (newPlan, newCond) = if (outer.nonEmpty) {
       val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
       val duplicates = transformed.outputSet.intersect(outputSet)
       val (plan, deDuplicatedConditions) = if (duplicates.nonEmpty) {
@@ -207,22 +207,22 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       } else {
         (transformed, baseConditions)
       }
-      (plan, SubExprUtils.stripOuterReferences(deDuplicatedConditions))
+      (plan, stripOuterReferences(deDuplicatedConditions))
     } else {
-      (transformed, SubExprUtils.stripOuterReferences(baseConditions))
+      (transformed, stripOuterReferences(baseConditions))
     }
-    (newplan, newcond)
+    (newPlan, newCond)
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, outerPlans: Seq[LogicalPlan]): LogicalPlan = {
     plan transformExpressions {
-      case s @ ScalarSubquery(sub, cond, exprId) if s.children.nonEmpty =>
+      case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         ScalarSubquery(newPlan, newCond, exprId)
-      case e @ Exists(sub, cond, exprId) if e.children.nonEmpty =>
+      case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         Exists(newPlan, newCond, exprId)
-      case l @ ListQuery(sub, cond, exprId) =>
+      case ListQuery(sub, _, exprId) =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
         ListQuery(newPlan, newCond, exprId)
     }

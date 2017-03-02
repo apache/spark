@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -155,10 +156,8 @@ trait CheckAnalysis extends PredicateHelper {
                 // are not part of the correlated columns.
                 val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
                 // Collect the local references from the correlated predicate in the subquery.
-                val subqueryColumns =
-                  SubExprUtils.getCorrelatedPredicates(query)
-                    .flatMap(_.references)
-                    .filterNot(conditions.flatMap(_.references).contains)
+                val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
+                  .filterNot(conditions.flatMap(_.references).contains)
                 val correlatedCols = AttributeSet(subqueryColumns)
                 val invalidCols = groupByCols -- correlatedCols
                 // GROUP BY columns must be a subset of columns in the predicates
@@ -208,9 +207,9 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case Filter(condition, _) if SubExprUtils.hasNullAwarePredicateWithinNot(condition) =>
+          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
             failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
-              s" conditions: $condition")
+              " conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
@@ -301,7 +300,7 @@ trait CheckAnalysis extends PredicateHelper {
           case p if p.expressions.exists(SubqueryExpression.hasInOrExistsSubquery) =>
             p match {
               case _: Filter => // Ok
-              case other => failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+              case _ => failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
             }
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>

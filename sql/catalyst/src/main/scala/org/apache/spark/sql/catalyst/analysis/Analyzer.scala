@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
@@ -1203,14 +1204,14 @@ class Analyzer(
 
       // Make sure a plan's subtree does not contain outer references
       def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
-        if (SubExprUtils.hasOuterReferences(p)) {
+        if (hasOuterReferences(p)) {
           failAnalysis(s"Accessing outer query column is not allowed in:\n$p")
         }
       }
 
       // Make sure a plan's expressions do not contain outer references
       def failOnOuterReference(p: LogicalPlan): Unit = {
-        if (p.expressions.exists(SubExprUtils.containsOuter)) {
+        if (p.expressions.exists(containsOuter)) {
           failAnalysis(
             "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
               s"clauses:\n$p")
@@ -1274,11 +1275,7 @@ class Analyzer(
 
         // Category 1:
         // BroadcastHint, Distinct, LeafNode, Repartition, and SubqueryAlias
-        case p: BroadcastHint =>
-        case p: Distinct =>
-        case p: LeafNode =>
-        case p: Repartition =>
-        case p: SubqueryAlias =>
+        case _: BroadcastHint | _: Distinct | _: LeafNode | _: Repartition | _: SubqueryAlias =>
 
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
@@ -1294,14 +1291,14 @@ class Analyzer(
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) =
-            splitConjunctivePredicates(cond).partition(SubExprUtils.containsOuter)
+            splitConjunctivePredicates(cond).partition(containsOuter)
 
           // Find any non-equality correlated predicates
           foundNonEqualCorrelatedPred = foundNonEqualCorrelatedPred || correlated.exists {
             case _: EqualTo | _: EqualNullSafe => false
             case _ => true
           }
-          outerReferences ++= SubExprUtils.getOuterReferences(correlated)
+          outerReferences ++= getOuterReferences(correlated)
 
         // Project cannot host any correlated expressions
         // but can be anywhere in a correlated subquery.
@@ -1426,14 +1423,14 @@ class Analyzer(
           resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, _, exprId) if !sub.resolved =>
           resolveSubQuery(e, plans)(Exists(_, _, exprId))
-        case In(e, Seq(l @ ListQuery(sub, _, exprId))) if e.resolved && !sub.resolved =>
+        case In(value, Seq(l @ ListQuery(sub, _, exprId))) if value.resolved && !sub.resolved =>
           // Get the left hand side expressions.
-          val expressions = e match {
+          val expressions = value match {
             case cns : CreateNamedStruct => cns.valExprs
             case expr => Seq(expr)
           }
           val expr = resolveSubQuery(l, plans, expressions.size)(ListQuery(_, _, exprId))
-          In(e, Seq(expr))
+          In(value, Seq(expr))
       }
     }
 
@@ -2559,7 +2556,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
       refExprs: Seq[Expression]): LogicalPlan = {
     plan transformAllExpressions { case e =>
       val outerAlias =
-        refExprs.find(stripAlias(_).semanticEquals(SubExprUtils.stripOuterReference(e)))
+        refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
       outerAlias match {
         case Some(a: Alias) => OuterReference(a.toAttribute)
         case _ => e

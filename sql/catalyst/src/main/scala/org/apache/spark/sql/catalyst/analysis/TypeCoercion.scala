@@ -387,8 +387,8 @@ object TypeCoercion {
   /**
    * Handles type coercion for both IN expression with subquery and IN
    * expressions without subquery.
-   * 1. In the first case, find the common type by comparing the left hand side
-   *    expression types against corresponding right hand side expression derived
+   * 1. In the first case, find the common type by comparing the left hand side (LHS)
+   *    expression types against corresponding right hand side (RHS) expression derived
    *    from the subquery expression's plan output. Inject appropriate casts in the
    *    LHS and RHS side of IN expression.
    *
@@ -406,7 +406,7 @@ object TypeCoercion {
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
       case i @ In(a, Seq(ListQuery(sub, children, exprId))) if !i.resolved =>
-        // lhs is the value expression of IN subquery.
+        // LHS is the value expression of IN subquery.
         val lhs = a match {
           // Multi columns in IN clause is represented as a CreateNamedStruct.
           // flatten the named struct to get the list of expressions.
@@ -414,7 +414,7 @@ object TypeCoercion {
           case expr => Seq(expr)
         }
 
-        // rhs is the subquery output.
+        // RHS is the subquery output.
         val rhs = sub.output
         require(lhs.length == rhs.length)
 
@@ -422,6 +422,8 @@ object TypeCoercion {
           findCommonTypeForBinaryComparison(l.dataType, r.dataType)
         }
 
+        // The number of columns/expressions must match between LHS and RHS of an
+        // IN subquery expression.
         if (commonTypes.length == lhs.length) {
           val castedRhs = rhs.zip(commonTypes).map {
             case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
@@ -432,11 +434,13 @@ object TypeCoercion {
             case (e, _) => e
           }
 
-          // Before constructing the In expression, wrap the multi values in lhs
+          // Before constructing the In expression, wrap the multi values in LHS
           // in a CreatedNamedStruct.
           val newLhs = a match {
             case cns: CreateNamedStruct =>
-              val nameValue = cns.nameExprs.zip(castedLhs).flatMap(pair => Seq(pair._1, pair._2))
+              val nameValue = cns.nameExprs.zip(castedLhs).flatMap {
+                case (name, value) => Seq(name, value)
+              }
               CreateNamedStruct(nameValue)
             case _ => castedLhs.head
           }
