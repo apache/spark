@@ -128,7 +128,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
       val iterator2 = validateData(array, expectedValues)
 
-      intercept[ConcurrentModificationException](iterator1.hasNext)
+      assert(!iterator1.hasNext)
       assert(!iterator2.hasNext)
     }
   }
@@ -152,7 +152,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       val iterator2 = validateData(array, expectedValues)
       assert(!iterator2.hasNext)
 
-      intercept[ConcurrentModificationException](iterator1.hasNext)
+      assert(!iterator1.hasNext)
       intercept[ConcurrentModificationException](iterator1.next())
     }
   }
@@ -239,7 +239,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
       // Adding more row(s) should invalidate any old iterators
       populateRows(array, 1)
-      intercept[ConcurrentModificationException](iterator.hasNext)
+      assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
 
       // Clearing the array should also invalidate any old iterators
@@ -248,7 +248,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       iterator.next()
 
       array.clear()
-      intercept[ConcurrentModificationException](iterator.hasNext)
+      assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
     }
   }
@@ -266,7 +266,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
 
       // Adding more row(s) should invalidate any old iterators
       populateRows(array, 1)
-      intercept[ConcurrentModificationException](iterator.hasNext)
+      assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
 
       // Clearing the array should also invalidate any old iterators
@@ -275,7 +275,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       iterator.next()
 
       array.clear()
-      intercept[ConcurrentModificationException](iterator.hasNext)
+      assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
     }
   }
@@ -293,7 +293,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       assert(array.length == 0)
 
       // Clearing an empty array should also invalidate any old iterators
-      intercept[ConcurrentModificationException](iterator.hasNext)
+      assert(!iterator.hasNext)
       intercept[ConcurrentModificationException](iterator.next())
     }
   }

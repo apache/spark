@@ -39,20 +39,19 @@ class UnsafeCartesianRDD(
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
-    // We will not sort the rows, so prefixComparator and recordComparator are null.
-    val sorter = new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+    val rowArray = new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
 
     val partition = split.asInstanceOf[CartesianPartition]
-    rdd2.iterator(partition.s2, context).foreach(sorter.add)
+    rdd2.iterator(partition.s2, context).foreach(rowArray.add)
 
-    // Create an iterator from sorter
-    def createIter(): Iterator[UnsafeRow] = sorter.generateIterator()
+    // Create an iterator from rowArray
+    def createIter(): Iterator[UnsafeRow] = rowArray.generateIterator()
 
     val resultIter =
       for (x <- rdd1.iterator(partition.s1, context);
            y <- createIter()) yield (x, y)
     CompletionIterator[(UnsafeRow, UnsafeRow), Iterator[(UnsafeRow, UnsafeRow)]](
-      resultIter, sorter.clear())
+      resultIter, rowArray.clear())
   }
 }
 

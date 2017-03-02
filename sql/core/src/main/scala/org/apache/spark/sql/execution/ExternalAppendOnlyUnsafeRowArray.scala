@@ -176,7 +176,9 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {
     private val expectedModificationsCount = modificationsCount
 
-    protected def checkForModification(): Unit = {
+    protected def isModified(): Boolean = expectedModificationsCount != modificationsCount
+
+    protected def throwExceptionIfModified(): Unit = {
       if (expectedModificationsCount != modificationsCount) {
         throw new ConcurrentModificationException(
           s"The backing ${classOf[ExternalAppendOnlyUnsafeRowArray].getName} has been modified " +
@@ -190,13 +192,10 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     private var currentIndex = startIndex
 
-    override def hasNext(): Boolean = {
-      checkForModification()
-      currentIndex < numRows
-    }
+    override def hasNext(): Boolean = !isModified() && currentIndex < numRows
 
     override def next(): UnsafeRow = {
-      checkForModification()
+      throwExceptionIfModified()
       val result = inMemoryBuffer(currentIndex)
       currentIndex += 1
       result
@@ -228,13 +227,10 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     // Traverse upto the given [[startIndex]]
     init()
 
-    override def hasNext(): Boolean = {
-      checkForModification()
-      iterator.hasNext
-    }
+    override def hasNext(): Boolean = !isModified() && iterator.hasNext
 
     override def next(): UnsafeRow = {
-      checkForModification()
+      throwExceptionIfModified()
       iterator.loadNext()
       currentRow.pointTo(iterator.getBaseObject, iterator.getBaseOffset, iterator.getRecordLength)
       currentRow
