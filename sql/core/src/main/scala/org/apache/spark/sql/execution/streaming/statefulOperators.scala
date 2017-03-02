@@ -417,7 +417,6 @@ case class StreamingReservoirSampleExec(
     outputMode: Option[OutputMode] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
-  /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
   ClusteredDistribution(keyExpressions) :: Nil
 
@@ -427,6 +426,8 @@ case class StreamingReservoirSampleExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics
+    val fieldTypes = (keyExpressions.map(_.dataType) ++ Seq(LongType)).toArray
+    val withSumFieldTypes = (keyExpressions.map(_.dataType) ++ Seq(LongType)).toArray
 
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
@@ -466,9 +467,9 @@ case class StreamingReservoirSampleExec(
         }
       }
 
-      val row = UnsafeProjection.create(Array[DataType](LongType))
+      val numRecordsTillNow = UnsafeProjection.create(Array[DataType](LongType))
         .apply(InternalRow.apply(numRecordsInPart + count))
-      store.put(NUM_RECORDS_IN_PARTITION, row)
+      store.put(NUM_RECORDS_IN_PARTITION, numRecordsTillNow)
       store.commit()
 
       outputMode match {
@@ -476,18 +477,31 @@ case class StreamingReservoirSampleExec(
           CompletionIterator[InternalRow, Iterator[InternalRow]](
             store.iterator().filter(kv => {
               !kv._1.asInstanceOf[UnsafeRow].equals(NUM_RECORDS_IN_PARTITION)
-            }).map(kv => kv._2), {})
+            }).map(kv => {
+              UnsafeProjection.create(withSumFieldTypes).apply(InternalRow.fromSeq(
+                new JoinedRow(kv._2, numRecordsTillNow)
+                  .toSeq(withSumFieldTypes)))
+            }), {})
         case Some(Update) =>
           CompletionIterator[InternalRow, Iterator[InternalRow]](
             store.updates()
               .filter(update => !update.key.equals(NUM_RECORDS_IN_PARTITION))
-              .map(update => update.value), {})
+              .map(update => {
+                UnsafeProjection.create(withSumFieldTypes).apply(InternalRow.fromSeq(
+                    new JoinedRow(update.value, numRecordsTillNow)
+                      .toSeq(withSumFieldTypes)))
+              }), {})
         case _ =>
           throw new UnsupportedOperationException(s"Invalid output mode: $outputMode " +
             s"for streaming sampling.")
       }
     }.repartition(1).mapPartitions(it => {
-      SamplingUtils.reservoirSampleAndCount(it, k)._1.iterator
+      SamplingUtils.reservoirSampleWithWeight(
+        it.map(item => (item, item.getLong(keyExpressions.size))), k)
+        .map(row =>
+          UnsafeProjection.create(fieldTypes)
+            .apply(InternalRow.fromSeq(row.toSeq(fieldTypes)))
+        ).iterator
     })
   }
 

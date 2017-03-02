@@ -653,9 +653,11 @@ case class ReservoirSampleExec(k: Int, child: SparkPlan) extends UnaryExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute()
       .mapPartitions(it => {
-        SamplingUtils.reservoirSampleAndCount(it, k)._1.iterator})
+        val (sample, count) = SamplingUtils.reservoirSampleAndCount(it, k)
+        sample.map((_, count)).toIterator
+      })
       .repartition(1)
       .mapPartitions(it => {
-        SamplingUtils.reservoirSampleAndCount(it, k)._1.iterator})
+        SamplingUtils.reservoirSampleWithWeight(it, k).iterator})
   }
 }

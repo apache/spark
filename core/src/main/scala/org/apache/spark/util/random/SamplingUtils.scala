@@ -70,6 +70,47 @@ private[spark] object SamplingUtils {
   }
 
   /**
+   * Weight reservoir sampling implementation.
+   *
+   * @param input input size
+   * @param k reservoir size
+   * @param seed random seed
+   * @return samples
+   */
+  def reservoirSampleWithWeight[T: ClassTag](
+      input: Iterator[(T, Long)],
+      k: Int,
+      seed: Long = Random.nextLong())
+    : Array[T] = {
+    val reservoir = new Array[T](k)
+    // Put the first k elements in the reservoir.
+    var i = 0
+    while (i < k && input.hasNext) {
+      val item = input.next()
+      reservoir(i) = item._1
+      i += 1
+    }
+
+    if (i < k) {
+      val trimReservoir = new Array[T](i)
+      System.arraycopy(reservoir, 0, trimReservoir, 0, i)
+      trimReservoir
+    } else {
+      var l = i.toLong
+      val rand = new XORShiftRandom(seed)
+      while (input.hasNext) {
+        val item = input.next()
+        l += 1
+        val replacementIndex = Math.pow(rand.nextDouble(), 1 / item._2).toInt
+        if (replacementIndex < k) {
+          reservoir(replacementIndex.toInt) = item._1
+        }
+      }
+      reservoir
+    }
+  }
+
+  /**
    * Returns a sampling rate that guarantees a sample of size greater than or equal to
    * sampleSizeLowerBound 99.99% of the time.
    *

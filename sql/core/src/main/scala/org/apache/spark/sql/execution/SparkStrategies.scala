@@ -255,7 +255,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Used to plan the steaming reservoir sample operator.
+   * Used to plan the streaming reservoir sample operator.
    */
   object ReservoirSampleStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

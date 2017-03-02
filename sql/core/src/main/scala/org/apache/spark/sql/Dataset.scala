@@ -2004,8 +2004,6 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
     val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
-      // It is possibly there are more than one columns with the same name,
-      // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))
       if (cols.isEmpty) {
         throw new AnalysisException(
@@ -2027,19 +2025,8 @@ class Dataset[T] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def reservoir(k: Int): Dataset[T] = withTypedPlan {
-    val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
-    val groupCols = this.columns.toSet.toSeq.flatMap { (colName: String) =>
-      // It is possibly there are more than one columns with the same name,
-      // so we call filter instead of find.
-      val cols = allColumns.filter(col => resolver(col.name, colName))
-      if (cols.isEmpty) {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
-      }
-      cols
-    }
-    ReservoirSample(groupCols, logicalPlan, k, isStreaming)
+    ReservoirSample(allColumns, logicalPlan, k, isStreaming)
   }
 
   /**
