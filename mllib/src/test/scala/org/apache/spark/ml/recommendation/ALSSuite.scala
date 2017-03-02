@@ -40,7 +40,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.types.{FloatType, IntegerType}
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -203,6 +204,70 @@ class ALSSuite
       i += 1
     }
     assert(decompressed.toSet === expected)
+  }
+
+  test("CheckedCast") {
+    val checkedCast = new ALS().checkedCast
+    val df = spark.range(1)
+
+    withClue("Valid Integer Ids") {
+      df.select(checkedCast(lit(123))).collect()
+    }
+
+    withClue("Valid Long Ids") {
+      df.select(checkedCast(lit(1231L))).collect()
+    }
+
+    withClue("Valid Decimal Ids") {
+      df.select(checkedCast(lit(123).cast(DecimalType(15, 2)))).collect()
+    }
+
+    withClue("Valid Double Ids") {
+      df.select(checkedCast(lit(123.0))).collect()
+    }
+
+    val msg = "either out of Integer range or contained a fractional part"
+    withClue("Invalid Long: out of range") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(1231000000000L))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Decimal: out of range") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(1231000000000.0).cast(DecimalType(15, 2)))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Decimal: fractional part") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(123.1).cast(DecimalType(15, 2)))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Double: out of range") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(1231000000000.0))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Double: fractional part") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit(123.1))).collect()
+      }
+      assert(e.getMessage.contains(msg))
+    }
+
+    withClue("Invalid Type") {
+      val e: SparkException = intercept[SparkException] {
+        df.select(checkedCast(lit("123.1"))).collect()
+      }
+      assert(e.getMessage.contains("was not numeric"))
+    }
   }
 
   /**
@@ -510,34 +575,35 @@ class ALSSuite
       (0, big, small, 0, big, small, 2.0),
       (1, 1L, 1d, 0, 0L, 0d, 5.0)
     ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
+    val msg = "either out of Integer range or contained a fractional part"
     withClue("fit should fail when ids exceed integer range. ") {
       assert(intercept[SparkException] {
         als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
       assert(intercept[SparkException] {
         als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
       assert(intercept[SparkException] {
         als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
       assert(intercept[SparkException] {
         als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
-      }.getCause.getMessage.contains("was out of Integer range"))
+      }.getCause.getMessage.contains(msg))
     }
     withClue("transform should fail when ids exceed integer range. ") {
       val model = als.fit(df)
       assert(intercept[SparkException] {
         model.transform(df.select(df("user_big").as("user"), df("item"))).first
-      }.getMessage.contains("was out of Integer range"))
+      }.getMessage.contains(msg))
       assert(intercept[SparkException] {
         model.transform(df.select(df("user_small").as("user"), df("item"))).first
-      }.getMessage.contains("was out of Integer range"))
+      }.getMessage.contains(msg))
       assert(intercept[SparkException] {
         model.transform(df.select(df("item_big").as("item"), df("user"))).first
-      }.getMessage.contains("was out of Integer range"))
+      }.getMessage.contains(msg))
       assert(intercept[SparkException] {
         model.transform(df.select(df("item_small").as("item"), df("user"))).first
-      }.getMessage.contains("was out of Integer range"))
+      }.getMessage.contains(msg))
     }
   }
 
