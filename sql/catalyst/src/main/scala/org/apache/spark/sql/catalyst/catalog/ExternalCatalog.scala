@@ -36,6 +36,17 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
   import CatalogTypes.TablePartitionSpec
 
+  val defaultDB: CatalogDatabase = {
+    val qualifiedWarehousePath = SessionCatalog
+      .makeQualifiedPath(warehousePath, hadoopConf).toString
+    CatalogDatabase(
+      SessionCatalog.DEFAULT_DATABASE,
+      "The default database created by Spark using current warehouse path",
+      qualifiedWarehousePath,
+      Map.empty
+    )
+  }
+
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
@@ -83,9 +94,7 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
     // Since the location of database stored in metastore is qualified,
     // we also make the warehouse location qualified.
     if (db == SessionCatalog.DEFAULT_DATABASE) {
-      val qualifiedWarehousePath = SessionCatalog
-        .makeQualifiedPath(warehousePath, hadoopConf).toString
-      database.copy(locationUri = qualifiedWarehousePath)
+      defaultDB
     } else {
       database
     }
