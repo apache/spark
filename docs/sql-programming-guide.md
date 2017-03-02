@@ -917,7 +917,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` parameter to `true`.
+For a regular multi-line JSON file, set the `wholeFile` parameter to `True`.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -931,7 +931,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, add a named parameter `wholeFile` to `true`.
+For a regular multi-line JSON file, set a named parameter `wholeFile` to `TRUE`.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
