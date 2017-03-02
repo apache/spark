@@ -188,6 +188,14 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.annotations</code></td>
+  <td>(none)</td>
+  <td>
+    Custom annotations that will be added to the driver pod. This should be a comma-separated list of label key-value
+    pairs, where each annotation is in the format <code>key=value</code>.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driverSubmitTimeout</code></td>
   <td>60s</td>
   <td>

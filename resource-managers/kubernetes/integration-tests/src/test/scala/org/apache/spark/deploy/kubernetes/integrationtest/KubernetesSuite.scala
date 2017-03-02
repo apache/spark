@@ -229,7 +229,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     expectationsForStaticAllocation(sparkMetricsService)
   }
 
-  test("Run with custom labels") {
+  test("Run with custom labels and annotations") {
     val args = Array(
       "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
       "--deploy-mode", "cluster",
@@ -246,26 +246,35 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.kubernetes.driver.labels=label1=label1value,label2=label2value",
+      "--conf", "spark.kubernetes.driver.annotations=" +
+        "annotation1=annotation1value," +
+        "annotation2=annotation2value",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR_FILE.getAbsolutePath)
     SparkSubmit.main(args)
-    val driverPodLabels = minikubeKubernetesClient
+    val driverPodMetadata = minikubeKubernetesClient
       .pods
       .withLabel("spark-app-name", "spark-pi")
       .list()
       .getItems
       .get(0)
       .getMetadata
-      .getLabels
+    val driverPodLabels = driverPodMetadata.getLabels
     // We can't match all of the selectors directly since one of the selectors is based on the
     // launch time.
-    assert(driverPodLabels.size == 5, "Unexpected number of pod labels.")
-    assert(driverPodLabels.get("spark-app-name") == "spark-pi", "Unexpected value for" +
+    assert(driverPodLabels.size === 5, "Unexpected number of pod labels.")
+    assert(driverPodLabels.get("spark-app-name") === "spark-pi", "Unexpected value for" +
       " spark-app-name label.")
     assert(driverPodLabels.get("spark-app-id").startsWith("spark-pi"), "Unexpected value for" +
       " spark-app-id label (should be prefixed with the app name).")
-    assert(driverPodLabels.get("label1") == "label1value", "Unexpected value for label1")
-    assert(driverPodLabels.get("label2") == "label2value", "Unexpected value for label2")
+    assert(driverPodLabels.get("label1") === "label1value", "Unexpected value for label1")
+    assert(driverPodLabels.get("label2") === "label2value", "Unexpected value for label2")
+    val driverPodAnnotations = driverPodMetadata.getAnnotations
+    assert(driverPodAnnotations.size === 2, "Unexpected number of pod annotations.")
+    assert(driverPodAnnotations.get("annotation1") === "annotation1value",
+      "Unexpected value for annotation1")
+    assert(driverPodAnnotations.get("annotation2") === "annotation2value",
+      "Unexpected value for annotation2")
   }
 
   test("Enable SSL on the driver submit server") {

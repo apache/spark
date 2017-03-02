@@ -118,6 +118,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_DRIVER_ANNOTATIONS =
+    ConfigBuilder("spark.kubernetes.driver.annotations")
+      .doc("""
+             | Custom annotations that will be added to the driver pod.
+             | This should be a comma-separated list of annotation key-value
+             | pairs, where each annotation is in the format key=value.
+           """.stripMargin)
+      .stringConf
+      .createOptional
+
   private[spark] val KUBERNETES_DRIVER_SUBMIT_TIMEOUT =
     ConfigBuilder("spark.kubernetes.driverSubmitTimeout")
       .doc("""
