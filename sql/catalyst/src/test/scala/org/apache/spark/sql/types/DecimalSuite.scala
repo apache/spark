@@ -193,7 +193,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     assert(Decimal(Long.MaxValue, 100, 0).toUnscaledLong === Long.MaxValue)
   }
 
-  test("changePrecision/toPrecission on compact decimal should respect rounding mode") {
+  test("changePrecision/toPrecision on compact decimal should respect rounding mode") {
     Seq(ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_UP, ROUND_HALF_EVEN).foreach { mode =>
       Seq("0.4", "0.5", "0.6", "1.0", "1.1", "1.6", "2.5", "5.5").foreach { n =>
         Seq("", "-").foreach { sign =>

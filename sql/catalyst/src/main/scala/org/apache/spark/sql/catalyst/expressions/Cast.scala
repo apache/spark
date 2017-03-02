@@ -339,6 +339,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   /**
+   * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
+   * returning null if it overflows or modifying `value` in-place and returning it if successful.
+   *
+   * NOTE: this modifies `value` in-place, so don't call it on external data.
+   */
+  private[this] def changePrecision(value: Decimal, decimalType: DecimalType): Decimal = {
+    if (value.changePrecision(decimalType.precision, decimalType.scale)) value else null
+  }
+
+  /**
    * Create new `Decimal` with precision and scale given in `decimalType` (if any),
    * returning null if it overflows or creating a new `value` and returning it if successful.
    *
@@ -346,10 +356,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def toPrecision(value: Decimal, decimalType: DecimalType): Decimal =
     value.toPrecision(decimalType.precision, decimalType.scale).orNull
 
+
   private[this] def castToDecimal(from: DataType, target: DecimalType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try {
-        toPrecision(Decimal(new JavaBigDecimal(s.toString)), target)
+        changePrecision(Decimal(new JavaBigDecimal(s.toString)), target)
       } catch {
         case _: NumberFormatException => null
       })
@@ -359,14 +370,14 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Int](_, d => null) // date can't cast to decimal in Hive
     case TimestampType =>
       // Note that we lose precision here.
-      buildCast[Long](_, t => toPrecision(Decimal(timestampToDouble(t)), target))
+      buildCast[Long](_, t => changePrecision(Decimal(timestampToDouble(t)), target))
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target)
     case t: IntegralType =>
-      b => toPrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+      b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
     case x: FractionalType =>
       b => try {
-        toPrecision(Decimal(x.fractional.asInstanceOf[Fractional[Any]].toDouble(b)), target)
+        changePrecision(Decimal(x.fractional.asInstanceOf[Fractional[Any]].toDouble(b)), target)
       } catch {
         case _: NumberFormatException => null
       }
