@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NGrams.NGramBuffer
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.unsafe.types.UTF8String
@@ -111,7 +111,12 @@ case class NGrams(child: Expression,
   }
 
   override def eval(buffer: NGramBuffer): Any = {
-    new GenericArrayData(buffer.getTopKNGrams())
+    val topKNGrams = buffer.getTopKNGrams().map((keyValuePair: (Array[UTF8String], Double)) => {
+      val arrayKey = new GenericArrayData(Array(new GenericArrayData(keyValuePair._1)))
+      val arrayValue = new GenericArrayData(Array(keyValuePair._2))
+      new ArrayBasedMapData(arrayKey, arrayValue)
+    }).toArray
+   new GenericArrayData(topKNGrams)
   }
 
   private def getNGrams(values: Array[UTF8String], n: Int): Array[Array[UTF8String]] = {
@@ -149,7 +154,7 @@ object NGrams {
   private def getAccuracy(kExpression: Expression, accuracyExpression: Expression): Expression = {
     val accuracy = accuracyExpression.eval().asInstanceOf[Int]
     val k = kExpression.eval().asInstanceOf[Int]
-    Literal(Math.max(accuracy, DEFAULT_ACCURACY / k))
+    Literal(accuracy.max(DEFAULT_ACCURACY / k))
   }
 
   val kryoSerializer: KryoSerializer = new KryoSerializer(new SparkConf())
@@ -187,12 +192,9 @@ object NGrams {
       }
     }
 
-    def getTopKNGrams(): Seq[Any] = {
+    def getTopKNGrams(): Seq[(Array[UTF8String], Double)] = {
       frequencyMap.asScala.iterator.toArray.sortWith(_._2 > _._2).zipWithIndex.takeWhile(_._2 < k).
-        map(_._1).map((keyValuePair: (Array[UTF8String], Double)) => {
-
-        Map[Array[UTF8String], Double]((keyValuePair._1, keyValuePair._2))
-      }).toSeq
+        map(_._1)
     }
 
   }
