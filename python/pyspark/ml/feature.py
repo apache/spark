@@ -258,7 +258,7 @@ class BucketedRandomProjectionLSH(JavaEstimator, LSHParams, HasInputCol, HasOutp
     def __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
                  bucketLength=None):
         """
-        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1,
+        __init__(self, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
                  bucketLength=None)
         """
         super(BucketedRandomProjectionLSH, self).__init__()
