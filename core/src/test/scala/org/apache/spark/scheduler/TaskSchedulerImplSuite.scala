@@ -178,29 +178,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  test("Scheduler does not crash when tasks are not serializable") {
-    val taskCpus = 2
-    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
-    val numFreeCores = 1
-    val taskSet = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
-    val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
-      new WorkerOffer("executor1", "host1", numFreeCores))
-    taskScheduler.submitTasks(taskSet)
-    var taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
-    assert(0 === taskDescriptions.length)
-    assert(failedTaskSet)
-    assert(failedTaskSetReason.contains("Failed to serialize task"))
-
-    // Now check that we can still submit tasks
-    // Even if one of the task sets has not-serializable tasks, the other task set should
-    // still be processed without error
-    taskScheduler.submitTasks(FakeTask.createTaskSet(1))
-    taskScheduler.submitTasks(taskSet)
-    taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
-    assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
-  }
-
   test("refuse to schedule concurrent attempts for the same stage (SPARK-8103)") {
     val taskScheduler = setupScheduler()
     val attempt1 = FakeTask.createTaskSet(1, 0)
@@ -903,5 +880,32 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("exec2", "host2", 1))).flatten
     assert(taskDescs.size === 1)
     assert(taskDescs.head.executorId === "exec2")
+  }
+
+  test("serialization task errors do not affect each other") {
+    import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    sc = new SparkContext(conf)
+
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler.initialize(mock[CoarseGrainedSchedulerBackend])
+    taskScheduler.setDAGScheduler(mock[DAGScheduler])
+    val taskSet1 = FakeTask.createTaskSet(1)
+    val taskSet2 = FakeTask.createTaskSet(1)
+    taskSet1.tasks(0) = new NotSerializableFakeTask(1, 0)
+    val taskIdToTaskSetManager = taskScheduler.taskIdToTaskSetManager
+    taskScheduler.submitTasks(taskSet1)
+    taskScheduler.submitTasks(taskSet2)
+    val offers = Array(WorkerOffer("1", "localhost", 2), WorkerOffer("2", "localhost", 2))
+    taskScheduler.makeOffersAndSerializeTasks(offers)
+
+    assert(taskIdToTaskSetManager.values.exists(_.taskSet == taskSet1))
+    assert(taskIdToTaskSetManager.values.exists(_.taskSet == taskSet2))
+    taskIdToTaskSetManager.values.filter(_.taskSet == taskSet1).foreach { taskSet =>
+      assert(taskSet.isZombie === true)
+    }
+    taskIdToTaskSetManager.values.filter(_.taskSet == taskSet2).foreach { taskSet =>
+      assert(taskSet.isZombie === false)
+    }
   }
 }
