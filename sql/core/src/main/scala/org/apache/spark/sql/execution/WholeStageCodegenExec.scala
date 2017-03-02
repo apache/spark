@@ -78,9 +78,6 @@ trait CodegenSupport extends SparkPlan {
   final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
 
-    // to track the existence of apply() call in the current produce-consume cycle
-    // if apply is not called (e.g. in aggregation), we can skip shoudStop in the inner-most loop
-    parent.shouldStopRequired = false
     ctx.freshNamePrefix = variablePrefix
     s"""
        |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
