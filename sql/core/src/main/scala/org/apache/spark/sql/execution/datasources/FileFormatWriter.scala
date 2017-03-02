@@ -210,11 +210,11 @@ object FileFormatWriter extends Logging {
     val taskAttemptContext: TaskAttemptContext = {
       // Set up the configuration object
       val hadoopConf = description.serializableHadoopConf.value
-      hadoopConf.set("mapred.job.id", jobId.toString)
-      hadoopConf.set("mapred.tip.id", taskAttemptId.getTaskID.toString)
-      hadoopConf.set("mapred.task.id", taskAttemptId.toString)
-      hadoopConf.setBoolean("mapred.task.is.map", true)
-      hadoopConf.setInt("mapred.task.partition", 0)
+      hadoopConf.set("mapreduce.job.id", jobId.toString)
+      hadoopConf.set("mapreduce.task.id", taskAttemptId.getTaskID.toString)
+      hadoopConf.set("mapreduce.task.attempt.id", taskAttemptId.toString)
+      hadoopConf.setBoolean("mapreduce.task.ismap", true)
+      hadoopConf.setInt("mapreduce.task.partition", 0)
 
       new TaskAttemptContextImpl(hadoopConf, taskAttemptId)
     }

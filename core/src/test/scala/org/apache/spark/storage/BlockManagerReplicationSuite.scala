@@ -37,32 +37,31 @@ import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
 
-/** Testsuite that tests block replication in BlockManager */
-class BlockManagerReplicationSuite extends SparkFunSuite
-    with Matchers
-    with BeforeAndAfter
-    with LocalSparkContext {
+trait BlockManagerReplicationBehavior extends SparkFunSuite
+  with Matchers
+  with BeforeAndAfter
+  with LocalSparkContext {
 
-  private val conf = new SparkConf(false).set("spark.app.id", "test")
-  private var rpcEnv: RpcEnv = null
-  private var master: BlockManagerMaster = null
-  private val securityMgr = new SecurityManager(conf)
-  private val bcastManager = new BroadcastManager(true, conf, securityMgr)
-  private val mapOutputTracker = new MapOutputTrackerMaster(conf, bcastManager, true)
-  private val shuffleManager = new SortShuffleManager(conf)
+  val conf: SparkConf
+  protected var rpcEnv: RpcEnv = null
+  protected var master: BlockManagerMaster = null
+  protected lazy val securityMgr = new SecurityManager(conf)
+  protected lazy val bcastManager = new BroadcastManager(true, conf, securityMgr)
+  protected lazy val mapOutputTracker = new MapOutputTrackerMaster(conf, bcastManager, true)
+  protected lazy val shuffleManager = new SortShuffleManager(conf)
 
   // List of block manager created during an unit test, so that all of the them can be stopped
   // after the unit test.
-  private val allStores = new ArrayBuffer[BlockManager]
+  protected val allStores = new ArrayBuffer[BlockManager]
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-  conf.set("spark.kryoserializer.buffer", "1m")
-  private val serializer = new KryoSerializer(conf)
+
+  protected lazy val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
-  private implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
+  protected implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
 
-  private def makeBlockManager(
+  protected def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     conf.set("spark.testing.memory", maxMem.toString)
@@ -355,7 +354,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite
    * is correct. Then it also drops the block from memory of each store (using LRU) and
    * again checks whether the master's knowledge gets updated.
    */
-  private def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
+  protected def testReplication(maxReplication: Int, storageLevels: Seq[StorageLevel]) {
     import org.apache.spark.storage.StorageLevel._
 
     assert(maxReplication > 1,
@@ -445,6 +444,64 @@ class BlockManagerReplicationSuite extends SparkFunSuite
         }
       }
       master.removeBlock(blockId)
+    }
+  }
+}
+
+class BlockManagerReplicationSuite extends BlockManagerReplicationBehavior {
+  val conf = new SparkConf(false).set("spark.app.id", "test")
+  conf.set("spark.kryoserializer.buffer", "1m")
+}
+
+class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehavior {
+  val conf = new SparkConf(false).set("spark.app.id", "test")
+  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set("spark.storage.replication.proactive", "true")
+  conf.set("spark.storage.exceptionOnPinLeak", "true")
+
+  (2 to 5).foreach{ i =>
+    test(s"proactive block replication - $i replicas - ${i - 1} block manager deletions") {
+      testProactiveReplication(i)
+    }
+  }
+
+  def testProactiveReplication(replicationFactor: Int) {
+    val blockSize = 1000
+    val storeSize = 10000
+    val initialStores = (1 to 10).map { i => makeBlockManager(storeSize, s"store$i") }
+
+    val blockId = "a1"
+
+    val storageLevel = StorageLevel(true, true, false, true, replicationFactor)
+    initialStores.head.putSingle(blockId, new Array[Byte](blockSize), storageLevel)
+
+    val blockLocations = master.getLocations(blockId)
+    logInfo(s"Initial locations : $blockLocations")
+
+    assert(blockLocations.size === replicationFactor)
+
+    // remove a random blockManager
+    val executorsToRemove = blockLocations.take(replicationFactor - 1)
+    logInfo(s"Removing $executorsToRemove")
+    executorsToRemove.foreach{exec =>
+      master.removeExecutor(exec.executorId)
+      // giving enough time for replication to happen and new block be reported to master
+      Thread.sleep(200)
+    }
+
+    // giving enough time for replication complete and locks released
+    Thread.sleep(500)
+
+    val newLocations = master.getLocations(blockId).toSet
+    logInfo(s"New locations : $newLocations")
+    assert(newLocations.size === replicationFactor)
+    // there should only be one common block manager between initial and new locations
+    assert(newLocations.intersect(blockLocations.toSet).size === 1)
+
+    // check if all the read locks have been released
+    initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
+      val locks = bm.releaseAllLocksForTask(BlockInfo.NON_TASK_WRITER)
+      assert(locks.size === 0, "Read locks unreleased!")
     }
   }
 }

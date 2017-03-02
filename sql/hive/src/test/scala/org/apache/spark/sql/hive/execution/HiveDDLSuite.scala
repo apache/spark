@@ -1588,7 +1588,7 @@ class HiveDDLSuite
     }
   }
 
-  test("create datasource table with an non-existent location") {
+  test("create datasource table with a non-existing location") {
     withTable("t", "t1") {
       withTempDir {
         dir =>
@@ -1601,7 +1601,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+          assert(table.location == dir.getAbsolutePath)
 
           spark.sql("INSERT INTO TABLE t SELECT 1, 2")
           assert(dir.exists())
@@ -1621,7 +1621,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          assert(table.location.stripSuffix("/") == dir.getAbsolutePath.stripSuffix("/"))
+          assert(table.location == dir.getAbsolutePath)
 
           spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
 
@@ -1633,7 +1633,7 @@ class HiveDDLSuite
     }
   }
 
-  test("create hive table with an non-existent location") {
+  test("create hive table with a non-existing location") {
     withTable("t", "t1") {
       withTempDir {
         dir =>
@@ -1646,8 +1646,9 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
-          assert(table.location.stripSuffix("/") == expectedPath)
+          val dirPath = new Path(dir.getAbsolutePath)
+          val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+          assert(new Path(table.location) == fs.makeQualified(dirPath))
 
           spark.sql("INSERT INTO TABLE t SELECT 1, 2")
           assert(dir.exists())
@@ -1667,8 +1668,9 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          val expectedPath = s"file:${dir.getAbsolutePath.stripSuffix("/")}"
-          assert(table.location.stripSuffix("/") == expectedPath)
+          val dirPath = new Path(dir.getAbsolutePath)
+          val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+          assert(new Path(table.location) == fs.makeQualified(dirPath))
 
           spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
 
@@ -1676,6 +1678,105 @@ class HiveDDLSuite
           assert(partDir.exists())
 
           checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existing" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == dir.getAbsolutePath)
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location == dir.getAbsolutePath)
+
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
+      }
+    }
+
+    test(s"CTAS for external hive table with a $tcName location") {
+      withTable("t", "t1") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTempDir {
+            dir =>
+              if (shouldDelete) {
+                dir.delete()
+              }
+              spark.sql(
+                s"""
+                   |CREATE TABLE t
+                   |USING hive
+                   |LOCATION '$dir'
+                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+                 """.stripMargin)
+              val dirPath = new Path(dir.getAbsolutePath)
+              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+              assert(new Path(table.location) == fs.makeQualified(dirPath))
+
+              checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+          }
+          // partition table
+          withTempDir {
+            dir =>
+              if (shouldDelete) {
+                dir.delete()
+              }
+              spark.sql(
+                s"""
+                   |CREATE TABLE t1
+                   |USING hive
+                   |PARTITIONED BY(a, b)
+                   |LOCATION '$dir'
+                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+                 """.stripMargin)
+              val dirPath = new Path(dir.getAbsolutePath)
+              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+              assert(new Path(table.location) == fs.makeQualified(dirPath))
+
+              val partDir = new File(dir, "a=3")
+              assert(partDir.exists())
+
+              checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+          }
+        }
       }
     }
   }

@@ -68,14 +68,14 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family = "gaussian")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian")
 #' summary(model)
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Freq", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -137,9 +137,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df, family = "gaussian")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- glm(Freq ~ Sex + Age, df, family = "gaussian")
 #' summary(model)
 #' }
 #' @note glm since 1.5.0
