@@ -288,7 +288,7 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
-  /** If this join node is ordered before.*/
+  /** Whether this join node is ordered before. Set true after it has been ordered. */
   var ordered: Boolean = false
 
   override def output: Seq[Attribute] = {

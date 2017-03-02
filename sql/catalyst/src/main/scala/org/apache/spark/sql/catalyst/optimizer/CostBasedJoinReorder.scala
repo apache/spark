@@ -38,7 +38,7 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
     } else {
       plan transform {
         case p @ Project(projectList, j @ Join(_, _, _: InnerLike, _)) if !j.ordered =>
-          p.copy(child = reorder(j, p.outputSet))
+          reorder(j, p.outputSet)
         case j @ Join(_, _, _: InnerLike, _) if !j.ordered =>
           reorder(j, j.outputSet)
       }
@@ -47,33 +47,46 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
 
   def reorder(plan: LogicalPlan, output: AttributeSet): LogicalPlan = {
     val (items, conditions) = extractInnerJoins(plan)
-    if (items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty) {
-      JoinReorderDP(conf, items, conditions, output).search().getOrElse(plan)
-    } else {
-      plan
-    }
+    val result =
+      if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty) {
+        JoinReorderDP(conf, items, conditions, output).search().getOrElse(plan)
+      } else {
+        plan
+      }
+    // Set all inside joins ordered.
+    setOrdered(result)
+    result
   }
 
   /**
    * Extract inner joinable items and join conditions.
    * This method works for bushy trees and left/right deep trees.
    */
-  def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
+  def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = plan match {
     case j @ Join(left, right, _: InnerLike, cond) =>
-      // Set ordered to true, such that if we fail to reorder the joins, we won't try to do again.
-      j.ordered = true
       val (leftPlans, leftConditions) = extractInnerJoins(left)
       val (rightPlans, rightConditions) = extractInnerJoins(right)
-      (leftPlans ++ rightPlans,
-        cond.map(splitConjunctivePredicates).getOrElse(Nil) ++ leftConditions ++ rightConditions)
+      (leftPlans ++ rightPlans, cond.map(splitConjunctivePredicates).getOrElse(Nil).toSet ++
+        leftConditions ++ rightConditions)
+    case Project(_, j @ Join(left, right, _: InnerLike, cond)) =>
+      val (leftPlans, leftConditions) = extractInnerJoins(left)
+      val (rightPlans, rightConditions) = extractInnerJoins(right)
+      (leftPlans ++ rightPlans, cond.map(splitConjunctivePredicates).getOrElse(Nil).toSet ++
+        leftConditions ++ rightConditions)
+    case _ =>
+      (Seq(plan), Set())
+  }
+
+  def setOrdered(plan: LogicalPlan): Unit = plan match {
+    case j @ Join(left, right, _: InnerLike, cond) =>
+      j.ordered = true
+      setOrdered(left)
+      setOrdered(right)
     case Project(_, j @ Join(left, right, _: InnerLike, cond)) =>
       j.ordered = true
-      val (leftPlans, leftConditions) = extractInnerJoins(left)
-      val (rightPlans, rightConditions) = extractInnerJoins(right)
-      (leftPlans ++ rightPlans,
-        cond.map(splitConjunctivePredicates).getOrElse(Nil) ++ leftConditions ++ rightConditions)
+      setOrdered(left)
+      setOrdered(right)
     case _ =>
-      (Seq(plan), Seq())
   }
 }
 
@@ -94,22 +107,25 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
  * level 3: p({A, B, C}), p({A, B, D}), p({A, C, D}), p({B, C, D})
  * level 4: p({A, B, C, D})
  * where p({A, B, C, D}) is the final output plan.
+ *
+ * For cost evaluation, since physical costs for operators are not available currently, we use
+ * cardinalities and sizes to compute costs.
  */
 case class JoinReorderDP(
     conf: CatalystConf,
     items: Seq[LogicalPlan],
-    conditions: Seq[Expression],
-    output: AttributeSet) extends PredicateHelper{
-  
+    conditions: Set[Expression],
+    topOutput: AttributeSet) extends PredicateHelper{
+
   /** Level i maintains all found plans for sets of i joinable items. */
   val foundPlans = new Array[mutable.Map[Set[Int], JoinPlan]](items.length + 1)
-  val itemIndex = items.zipWithIndex
-  val totalRequiredAttr = AttributeSet(conditions.flatMap(_.references)) ++ output
+  for (i <- 1 to items.length) foundPlans(i) = mutable.Map.empty
 
   def search(): Option[LogicalPlan] = {
     // Start from the first level: each plan is a single item with zero cost.
-    foundPlans(1) = mutable.Map[Set[Int], JoinPlan](
-      itemIndex.map { case (item, id) => Set(id) -> JoinPlan(Set(id), item, Cost(0, 0)) }: _*)
+    val itemIndex = items.zipWithIndex
+    foundPlans(1) ++=
+      itemIndex.map { case (item, id) => Set(id) -> JoinPlan(Set(id), item, Cost(0, 0)) }
 
     for (lev <- 2 to items.length) {
       searchForLevel(lev)
@@ -186,24 +202,44 @@ case class JoinReorderDP(
       val otherPlanStats = otherPlan.stats(conf)
       if (curPlanStats.rowCount.nonEmpty && otherPlanStats.rowCount.nonEmpty) {
         // Now both curPlan and otherPlan become intermediate joins, so the cost of the
-        // new join should also include their cost.
+        // new join should also include their costs.
         val cost = curJoinPlan.cost + otherJoinPlan.cost +
           Cost(curPlanStats.rowCount.get, curPlanStats.sizeInBytes) +
           Cost(otherPlanStats.rowCount.get, otherPlanStats.sizeInBytes)
 
-        val itemIds = curJoinPlan.itemIds.union(otherJoinPlan.itemIds)
-        val newJoin = Join(curPlan, otherPlan, Inner, joinCond.reduceOption(And))
+        // Put the deeper side on the left, tend to build a left-deep tree.
+        val (left, right) = if (curJoinPlan.itemIds.size >= otherJoinPlan.itemIds.size) {
+          (curPlan, otherPlan)
+        } else {
+          (otherPlan, curPlan)
+        }
+        val newJoin = Join(left, right, Inner, joinCond.reduceOption(And))
+        val remainingConds = conditions -- collectJoinConds(newJoin)
+        val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
         val newPlan =
-          if ((newJoin.outputSet -- newJoin.outputSet.filter(totalRequiredAttr.contains))
-            .nonEmpty) {
-            Project(newJoin.output.filter(totalRequiredAttr.contains), newJoin)
+          if ((newJoin.outputSet -- newJoin.outputSet.filter(neededAttr.contains)).nonEmpty) {
+            Project(newJoin.output.filter(neededAttr.contains), newJoin)
           } else {
             newJoin
           }
+        val itemIds = curJoinPlan.itemIds.union(otherJoinPlan.itemIds)
         return Some(JoinPlan(itemIds, newPlan, cost))
       }
     }
     None
+  }
+
+  private def collectJoinConds(plan: LogicalPlan): Set[Expression] = plan match {
+    case j @ Join(left, right, _: InnerLike, cond) =>
+      val leftConditions = collectJoinConds(left)
+      val rightConditions = collectJoinConds(right)
+      cond.map(splitConjunctivePredicates).getOrElse(Nil).toSet ++ leftConditions ++ rightConditions
+    case Project(_, j @ Join(left, right, _: InnerLike, cond)) =>
+      val leftConditions = collectJoinConds(left)
+      val rightConditions = collectJoinConds(right)
+      cond.map(splitConjunctivePredicates).getOrElse(Nil).toSet ++ leftConditions ++ rightConditions
+    case _ =>
+      Set()
   }
 
   /**
@@ -211,7 +247,7 @@ case class JoinReorderDP(
    *
    * @param itemIds Set of item ids participating in this partial plan.
    * @param plan The plan tree with the lowest cost for these items found so far.
-   * @param cost The cost of this plan is the sum of cost of all intermediate joins.
+   * @param cost The cost of this plan is the sum of costs of all intermediate joins.
    */
   case class JoinPlan(itemIds: Set[Int], plan: LogicalPlan, cost: Cost)
 }
