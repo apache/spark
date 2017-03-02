@@ -63,6 +63,7 @@ SELECT mydb1.t1.i1 FROM mydb1.t1, mydb2.t1;
 USE mydb2;
 -- TODO: Support this scenario
 SELECT mydb1.t1.i1 FROM t1, mydb1.t1;
+SET spark.sql.crossJoin.enabled = false;
 
 -- Scenario: Table with struct column
 USE mydb1;
@@ -72,13 +73,16 @@ SELECT t5.i1 FROM t5;
 SELECT t5.t5.i1 FROM t5;
 SELECT t5.t5.i1 FROM mydb1.t5;
 SELECT t5.i1 FROM mydb1.t5;
+SELECT t5.* FROM mydb1.t5;
+SELECT t5.t5.* FROM mydb1.t5;
 -- TODO: Support this scenario
 SELECT mydb1.t5.t5.i1 FROM mydb1.t5;
 -- TODO: Support this scenario
 SELECT mydb1.t5.t5.i2 FROM mydb1.t5;
+-- TODO: Support this scenario
+SELECT mydb1.t5.* FROM mydb1.t5;
 
 -- Cleanup and Reset
-SET spark.sql.crossJoin.enabled = false;
 USE default;
 DROP DATABASE mydb1 CASCADE;
 DROP DATABASE mydb2 CASCADE;

@@ -51,7 +51,7 @@ struct<>
 
 
 -- !query 6
-set spark.sql.crossJoin.enabled = true
+SET spark.sql.crossJoin.enabled = true
 -- !query 6 schema
 struct<key:string,value:string>
 -- !query 6 output
@@ -165,63 +165,63 @@ cannot resolve '`db1.t1.i1`' given input columns: [i1, i1]; line 1 pos 7
 
 
 -- !query 19
-USE mydb1
+SET spark.sql.crossJoin.enabled = false
 -- !query 19 schema
-struct<>
+struct<key:string,value:string>
 -- !query 19 output
-
+spark.sql.crossJoin.enabled	false
 
 
 -- !query 20
-SELECT mydb1.t1 FROM t1
+USE mydb1
 -- !query 20 schema
 struct<>
 -- !query 20 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1`' given input columns: [i1]; line 1 pos 7
+
 
 
 -- !query 21
-SELECT t1.x.y.* FROM t1
+SELECT mydb1.t1 FROM t1
 -- !query 21 schema
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 't1.x.y.*' give input columns 'i1';
+cannot resolve '`mydb1.t1`' given input columns: [i1]; line 1 pos 7
 
 
 -- !query 22
-SELECT t1 FROM mydb1.t1
+SELECT t1.x.y.* FROM t1
 -- !query 22 schema
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t1`' given input columns: [i1]; line 1 pos 7
+cannot resolve 't1.x.y.*' give input columns 'i1';
 
 
 -- !query 23
-USE mydb2
+SELECT t1 FROM mydb1.t1
 -- !query 23 schema
 struct<>
 -- !query 23 output
-
+org.apache.spark.sql.AnalysisException
+cannot resolve '`t1`' given input columns: [i1]; line 1 pos 7
 
 
 -- !query 24
-SELECT mydb1.t1.i1 FROM t1
+USE mydb2
 -- !query 24 schema
 struct<>
 -- !query 24 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '`mydb1.t1.i1`' given input columns: [i1]; line 1 pos 7
+
 
 
 -- !query 25
-set spark.sql.crossJoin.enabled = false
+SELECT mydb1.t1.i1 FROM t1
 -- !query 25 schema
-struct<key:string,value:string>
+struct<>
 -- !query 25 output
-spark.sql.crossJoin.enabled	false
+org.apache.spark.sql.AnalysisException
+cannot resolve '`mydb1.t1.i1`' given input columns: [i1]; line 1 pos 7
 
 
 -- !query 26

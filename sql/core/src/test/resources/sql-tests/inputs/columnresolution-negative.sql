@@ -8,7 +8,7 @@ USE mydb2;
 CREATE TABLE t1 USING parquet AS SELECT 20 AS i1;
 
 -- Negative tests: column resolution scenarios with ambiguous cases in join queries
-set spark.sql.crossJoin.enabled = true;
+SET spark.sql.crossJoin.enabled = true;
 USE mydb1;
 SELECT i1 FROM t1, mydb1.t1;
 SELECT t1.i1 FROM t1, mydb1.t1;
@@ -21,6 +21,7 @@ SELECT t1.i1 FROM t1, mydb1.t1;
 SELECT i1 FROM t1, mydb2.t1;
 SELECT t1.i1 FROM t1, mydb2.t1;
 SELECT db1.t1.i1 FROM t1, mydb2.t1;
+SET spark.sql.crossJoin.enabled = false;
 
 -- Negative tests
 USE mydb1;
@@ -31,6 +32,5 @@ USE mydb2;
 SELECT mydb1.t1.i1 FROM t1;
 
 -- reset
-set spark.sql.crossJoin.enabled = false;
 DROP DATABASE mydb1 CASCADE;
 DROP DATABASE mydb2 CASCADE;
