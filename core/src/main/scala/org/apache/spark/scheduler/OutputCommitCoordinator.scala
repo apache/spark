@@ -161,7 +161,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, partition, attemptNumber) =>
         logInfo(s"Denying attemptNumber=$attemptNumber to commit for stage=$stage," +
-        s" partition=$partition as task attempt $attemptNumber has already failed.")
+          s" partition=$partition as task attempt $attemptNumber has already failed.")
         false
       case Some(state) =>
         state.authorizedCommitters(partition) match {
