@@ -1363,7 +1363,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     @keyword_only
     def __init__(self, dropLast=True, inputCol=None, outputCol=None):
         """
-        __init__(self, includeFirst=True, inputCol=None, outputCol=None)
+        __init__(self, dropLast=True, inputCol=None, outputCol=None)
         """
         super(OneHotEncoder, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
