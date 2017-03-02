@@ -77,7 +77,6 @@ trait CodegenSupport extends SparkPlan {
    */
   final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
-
     ctx.freshNamePrefix = variablePrefix
     s"""
        |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
@@ -208,8 +207,11 @@ trait CodegenSupport extends SparkPlan {
     throw new UnsupportedOperationException
   }
 
-  /* for optimization */
-  var shouldStopRequired: Boolean = false
+  /*
+   * for optimization to suppress shouldStop() in a loop of WholeStageCodegen
+   */
+  // true: require to insert shouldStop() into a loop
+  protected var shouldStopRequired: Boolean = false
 
   def isShouldStopRequired: Boolean = {
     shouldStopRequired || (this.parent != null && this.parent.isShouldStopRequired)
