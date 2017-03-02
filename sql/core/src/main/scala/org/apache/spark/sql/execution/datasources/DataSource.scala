@@ -86,7 +86,7 @@ case class DataSource(
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  
+
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
    * it. In the read path, only managed tables by Hive provide the partition columns properly when
