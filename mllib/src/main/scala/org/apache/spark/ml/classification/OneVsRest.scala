@@ -212,6 +212,11 @@ final class OneVsRestModel private[ml] (
 
   @Since("2.0.0")
   override def write: MLWriter = new OneVsRestModel.OneVsRestModelWriter(this)
+
+  @Since("2.2.0")
+  override def toString: String = {
+    s"OneVsRestModel (uid=$uid) with ${models.size} base models"
+  }
 }
 
 @Since("2.0.0")

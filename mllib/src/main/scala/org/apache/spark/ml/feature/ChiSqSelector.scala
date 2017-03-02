@@ -305,6 +305,11 @@ final class ChiSqSelectorModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+
+  @Since("2.2.0")
+  override def toString: String = {
+    s"ChiSqSelectorModel (uid=$uid) with ${selectedFeatures.size} selected features"
+  }
 }
 
 @Since("1.6.0")

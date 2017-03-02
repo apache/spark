@@ -335,6 +335,12 @@ class MultilayerPerceptronClassificationModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new MultilayerPerceptronClassificationModel.MultilayerPerceptronClassificationModelWriter(this)
+
+  @Since("2.2.0")
+  override def toString: String = {
+    s"MultilayerPerceptronClassificationModel (uid=$uid) with ${layers.size} layers " +
+      s"and ${layers.last} classes"
+  }
 }
 
 @Since("2.0.0")
