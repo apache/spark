@@ -251,7 +251,7 @@ case class ScalarSubquery(
 object ScalarSubquery {
   def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
     e.find {
-      case s: ScalarSubquery if s.children.nonEmpty => true
+      case s: ScalarSubquery => s.children.nonEmpty
       case _ => false
     }.isDefined
   }
