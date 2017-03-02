@@ -110,7 +110,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
     // An eligible plan is a base table access with valid statistics.
     val foundEligibleJoin = input.forall { plan =>
       plan._1 match {
-        case BaseTableAccess(t, _) if t.statistics.rowCount.isDefined => true
+        case BaseTableAccess(t, _) if t.stats(conf).rowCount.isDefined => true
         case _ => false
       }
     }
@@ -222,7 +222,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
       val leafCol = findLeafNodeCol(column, plan)
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
-          val stats = t.statistics
+          val stats = t.stats(conf)
           stats.rowCount match {
             case Some(rowCount) if rowCount >= 0 =>
               if (stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)) {
@@ -276,8 +276,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
       val leafCol = findLeafNodeCol(column, plan)
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
-          val stats = t.statistics
-          val dataType = col.dataType
+          val stats = t.stats(conf)
           stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)
         case None => false
       }
@@ -339,8 +338,8 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   private def computeTableCardinality(
       input: LogicalPlan,
       conditions: Seq[Expression]): Option[BigInt] = input match {
-    case BaseTableAccess(t, cond) if t.statistics.rowCount.isDefined =>
-      val cardinality = t.statistics.rowCount.get
+    case BaseTableAccess(t, cond) if t.stats(conf).rowCount.isDefined =>
+      val cardinality = t.stats(conf).rowCount.get
       // Collect predicate selectivity, when available.
       // val predicates = conditions.filter(canEvaluate(_, p)) ++ cond
       // Compute the output cardinality = cardinality * predicates' selectivity.
@@ -366,7 +365,7 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
    * @param conditions a list of condition for join.
    */
   @tailrec
-  private def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
+  final def createOrderedJoin(input: Seq[(LogicalPlan, InnerLike)], conditions: Seq[Expression])
     : LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
