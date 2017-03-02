@@ -48,7 +48,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * Values at -inf, inf must be explicitly provided to cover all Double values;
    * otherwise, values outside the splits specified will be treated as errors.
    *
-   * See also [[handleInvalid]], which can optionally create an additional bucket for NaN/NULL values.
+   * See also [[handleInvalid]], which can optionally create an additional bucket for NaN/NULL
+   * values.
    *
    * @group param
    */
@@ -113,7 +114,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     }
 
     val bucketizer: UserDefinedFunction = udf { (row: Row) =>
-      Bucketizer.binarySearchForBuckets($(splits), row.getAs[java.lang.Double]($(inputCol)), keepInvalid)
+      Bucketizer.binarySearchForBuckets(
+        $(splits),
+        row.getAs[java.lang.Double]($(inputCol)),
+        keepInvalid
+      )
     }
 
     val newCol = bucketizer(struct(Array(filteredDataset($(inputCol))): _*))
@@ -186,8 +191,8 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
       if (keepInvalid) {
         splits.length - 1
       } else {
-        throw new SparkException("Bucketizer encountered NaN/NULL value. To handle or skip NaNs/NULLs," +
-          " try setting Bucketizer.handleInvalid.")
+        throw new SparkException("Bucketizer encountered NaN/NULL values. " +
+          "To handle or skip NaNs/NULLs, try setting Bucketizer.handleInvalid.")
       }
     } else if (feature == splits.last) {
       splits.length - 2
