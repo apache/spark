@@ -779,7 +779,7 @@ private[spark] class BlockManager(
       if (encrypt && securityManager.ioEncryptionKey.isDefined) {
         try {
           val data = bytes.toByteBuffer
-          val in = new ByteBufferInputStream(data, true)
+          val in = new ByteBufferInputStream(data)
           val byteBufOut = new ByteBufferOutputStream(data.remaining())
           val out = CryptoStreamUtils.createCryptoOutputStream(byteBufOut, conf,
             securityManager.ioEncryptionKey.get)
@@ -1065,9 +1065,7 @@ private[spark] class BlockManager(
           try {
             replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
-            if (!level.useOffHeap) {
-              bytesToReplicate.dispose()
-            }
+            bytesToReplicate.unmap()
           }
           logDebug("Put block %s remotely took %s"
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))

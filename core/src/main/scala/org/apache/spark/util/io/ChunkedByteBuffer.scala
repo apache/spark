@@ -132,14 +132,27 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
-   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
-   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
-   * unfortunately no standard API to do this.
+   * Attempt to clean up any ByteBuffer in this ChunkedByteBuffer which is direct or memory-mapped.
+   * See [[StorageUtils.dispose]] for more information.
+   *
+   * See also [[unmap]]
    */
   def dispose(): Unit = {
     if (!disposed) {
       chunks.foreach(StorageUtils.dispose)
+      disposed = true
+    }
+  }
+
+  /**
+   * Attempt to unmap any ByteBuffer in this ChunkedByteBuffer if it is memory-mapped. See
+   * [[StorageUtils.unmap]] for more information.
+   *
+   * See also [[dispose]]
+   */
+  def unmap(): Unit = {
+    if (!disposed) {
+      chunks.foreach(StorageUtils.unmap)
       disposed = true
     }
   }
