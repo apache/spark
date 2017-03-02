@@ -1843,10 +1843,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.location) == fs.makeQualified(dirPath))
 
         dir.delete
-        val tableLocFile = new File(table.location)
+        val tableLocFile = new File(new URI(table.location))
         assert(!tableLocFile.exists)
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
         assert(tableLocFile.exists)
@@ -1885,7 +1887,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.location) == fs.makeQualified(dirPath))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1911,7 +1915,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        val dirPath = new Path(dir.getAbsolutePath)
+        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+        assert(new Path(table.location) == fs.makeQualified(dirPath))
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
@@ -1967,8 +1973,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location == dir.getAbsolutePath)
+            val dirPath = new Path(dir.getAbsolutePath)
+            val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
 
+            assert(new Path(table.location) == fs.makeQualified(dirPath))
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
         // partition table
@@ -1986,7 +1994,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location == dir.getAbsolutePath)
+            val dirPath = new Path(dir.getAbsolutePath)
+            val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+            assert(new Path(table.location) == fs.makeQualified(dirPath))
 
             val partDir = new File(dir, "a=3")
             assert(partDir.exists())
