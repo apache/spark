@@ -28,8 +28,7 @@ import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, lit}
-import org.apache.spark.sql.types.{ByteType, DecimalType, FloatType, IntegerType, LongType,
-  ShortType}
+import org.apache.spark.sql.types._
 
 class AFTSurvivalRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
