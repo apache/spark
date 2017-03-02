@@ -213,11 +213,11 @@ trait CodegenSupport extends SparkPlan {
    * isShouldStopRequired: require to insert shouldStop() into the loop if true
    */
   def isShouldStopRequired: Boolean = {
-    shouldStopRequired || (this.parent != null && this.parent.isShouldStopRequired)
+    return shouldStopRequired && !(this.parent != null && !this.parent.isShouldStopRequired)
   }
 
-  // set true if doConsume() inserts append() method that requires shouldStop() in the loop
-  protected var shouldStopRequired: Boolean = false
+  // set false if doConsume() does not insert append() that requires shouldStop() in the loop
+  protected def shouldStopRequired: Boolean = true
 }
 
 
@@ -430,7 +430,6 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     } else {
       ""
     }
-    shouldStopRequired = true
     s"""
       |${row.code}
       |append(${row.value}$doCopy);

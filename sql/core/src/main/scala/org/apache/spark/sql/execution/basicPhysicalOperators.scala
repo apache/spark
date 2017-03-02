@@ -438,9 +438,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val range = ctx.freshName("range")
-    // we need to place consume() before calling isShouldStopRequired
-    // since consume() may update shouldStopRequired that will be accessed by isShouldStopRequired
-    val body = consume(ctx, Seq(ev))
     val shouldStop = if (isShouldStopRequired) {
       s"if (shouldStop()) { $number = $value + ${step}L; return; }"
     } else {
@@ -459,7 +456,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     int $localEnd = (int)($range / ${step}L);
       |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
       |       long $value = ((long)$localIdx * ${step}L) + $number;
-      |       $body
+      |       ${consume(ctx, Seq(ev))}
       |       $shouldStop
       |     }
       |     $number = $batchEnd;
