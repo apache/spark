@@ -1588,56 +1588,71 @@ class HiveDDLSuite
     }
   }
 
-  test("refresh non-cached table after alter the location") {
-    withTable("t", "t1", "t2", "t3") {
-      withTempDir { dir =>
-        spark.sql(
-          """
-            |CREATE TABLE t(a string)
-            |USING parquet
-          """.stripMargin)
-        spark.sql("INSERT INTO TABLE t SELECT 1")
-        checkAnswer(spark.table("t"), Row("1") :: Nil)
-        spark.sql(s"ALTER TABLE t SET LOCATION '$dir'")
-        checkAnswer(spark.table("t"), Nil)
-      }
+  Seq(true, false).foreach { shouldCache =>
+    val testName = if (shouldCache) "cached" else "non-cached"
+    test(s"refresh $testNames table after alter the location") {
+      withTable("t", "t1", "t2", "t3") {
+        withTempDir { dir =>
+          spark.sql(
+            """
+              |CREATE TABLE t(a string)
+              |USING parquet
+            """.stripMargin)
+          spark.sql("INSERT INTO TABLE t SELECT 1")
+          if (shouldCache) {
+            spark.catalog.cacheTable("t")
+          }
+          checkAnswer(spark.table("t"), Row("1") :: Nil)
+          spark.sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          checkAnswer(spark.table("t"), Nil)
+        }
 
-      withTempDir { dir =>
-        spark.sql(
-          """
-            |CREATE TABLE t1(a string, b string)
-            |USING parquet
-            |PARTITIONED BY(b)
-          """.stripMargin)
-        spark.sql("INSERT INTO TABLE t1  PARTITION(b=1) SELECT 2")
-        checkAnswer(spark.table("t1"), Row("2", "1") :: Nil)
-        spark.sql(s"ALTER TABLE t1 PARTITION(b=1)SET LOCATION '$dir'")
-        checkAnswer(spark.table("t1"), Nil)
-      }
+        withTempDir { dir =>
+          spark.sql(
+            """
+              |CREATE TABLE t1(a string, b string)
+              |USING parquet
+              |PARTITIONED BY(b)
+            """.stripMargin)
+          spark.sql("INSERT INTO TABLE t1  PARTITION(b=1) SELECT 2")
+          if (shouldCache) {
+            spark.catalog.cacheTable("t")
+          }
+          checkAnswer(spark.table("t1"), Row("2", "1") :: Nil)
+          spark.sql(s"ALTER TABLE t1 PARTITION(b=1)SET LOCATION '$dir'")
+          checkAnswer(spark.table("t1"), Nil)
+        }
 
-      withTempDir { dir =>
-        spark.sql(
-          """
-            |CREATE TABLE t2(a string)
-            |USING hive
-          """.stripMargin)
-        spark.sql("INSERT INTO TABLE t2 SELECT 1")
-        checkAnswer(spark.table("t2"), Row("1") :: Nil)
-        spark.sql(s"ALTER TABLE t2 SET LOCATION '$dir'")
-        checkAnswer(spark.table("t2"), Nil)
-      }
+        withTempDir { dir =>
+          spark.sql(
+            """
+              |CREATE TABLE t2(a string)
+              |USING hive
+            """.stripMargin)
+          spark.sql("INSERT INTO TABLE t2 SELECT 1")
+          if (shouldCache) {
+            spark.catalog.cacheTable("t")
+          }
+          checkAnswer(spark.table("t2"), Row("1") :: Nil)
+          spark.sql(s"ALTER TABLE t2 SET LOCATION '$dir'")
+          checkAnswer(spark.table("t2"), Nil)
+        }
 
-      withTempDir { dir =>
-        spark.sql(
-          """
-            |CREATE TABLE t3(a string, b string)
-            |USING hive
-            |PARTITIONED BY(b)
-          """.stripMargin)
-        spark.sql("INSERT INTO TABLE t3  PARTITION(b=1) SELECT 2")
-        checkAnswer(spark.table("t3"), Row("2", "1") :: Nil)
-        spark.sql(s"ALTER TABLE t3 PARTITION(b=1)SET LOCATION '$dir'")
-        checkAnswer(spark.table("t3"), Nil)
+        withTempDir { dir =>
+          spark.sql(
+            """
+              |CREATE TABLE t3(a string, b string)
+              |USING hive
+              |PARTITIONED BY(b)
+            """.stripMargin)
+          spark.sql("INSERT INTO TABLE t3  PARTITION(b=1) SELECT 2")
+          if (shouldCache) {
+            spark.catalog.cacheTable("t")
+          }
+          checkAnswer(spark.table("t3"), Row("2", "1") :: Nil)
+          spark.sql(s"ALTER TABLE t3 PARTITION(b=1)SET LOCATION '$dir'")
+          checkAnswer(spark.table("t3"), Nil)
+        }
       }
     }
   }
