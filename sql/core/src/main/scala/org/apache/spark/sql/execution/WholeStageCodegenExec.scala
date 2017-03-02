@@ -207,15 +207,17 @@ trait CodegenSupport extends SparkPlan {
     throw new UnsupportedOperationException
   }
 
-  /*
+  /**
    * for optimization to suppress shouldStop() in a loop of WholeStageCodegen
+   *
+   * isShouldStopRequired: require to insert shouldStop() into the loop if true
    */
-  // true: require to insert shouldStop() into a loop
-  protected var shouldStopRequired: Boolean = false
-
   def isShouldStopRequired: Boolean = {
     shouldStopRequired || (this.parent != null && this.parent.isShouldStopRequired)
   }
+
+  // set true if doConsume() inserts append() method that requires shouldStop() in the loop
+  protected var shouldStopRequired: Boolean = false
 }
 
 
