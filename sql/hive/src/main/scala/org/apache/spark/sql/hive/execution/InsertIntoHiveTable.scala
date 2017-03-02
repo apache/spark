@@ -311,7 +311,7 @@ case class InsertIntoHiveTable(
     FileFormatWriter.write(
       sparkSession = sparkSession,
       queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
-      fileFormat = new HiveFileFormat(fileSinkConf),
+      fileFormat = new HiveFileFormat(fileSinkConf, table),
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
       hadoopConf = hadoopConf,

@@ -26,9 +26,9 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogRelation
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.execution.HiveFileIndex
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -467,14 +467,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
               val queryExecution = df.queryExecution
               if (orcConversion == "true") {
                 queryExecution.analyzed.collectFirst {
-                  case _: LogicalRelation => ()
+                  case LogicalRelation(r: HadoopFsRelation, _, _)
+                      if !r.location.isInstanceOf[HiveFileIndex] => ()
                 }.getOrElse {
                   fail(s"Expecting the query plan to convert orc to data sources, " +
                     s"but got:\n$queryExecution")
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
-                  case _: CatalogRelation => ()
+                  case LogicalRelation(r: HadoopFsRelation, _, _)
+                      if r.location.isInstanceOf[HiveFileIndex] => ()
                 }.getOrElse {
                   fail(s"Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
-import java.net.URI
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -27,11 +26,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LocalRelation, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.HiveSerDe
 
@@ -170,6 +169,40 @@ object HiveAnalysis extends Rule[LogicalPlan] {
   }
 }
 
+class ReadHiveDataSource(session: SparkSession) extends Rule[LogicalPlan] {
+  import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case c: CatalogRelation if DDLUtils.isHiveTable(c.tableMeta) &&
+        // Hive tables with storage handler with be handled in a different way, in `HiveTableScans`.
+        !c.tableMeta.properties.contains(META_TABLE_STORAGE) =>
+      val path = new Path(c.tableMeta.location)
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val fs = path.getFileSystem(hadoopConf)
+      val qualified = fs.makeQualified(path)
+      if (fs.exists(qualified)) {
+        val defaultTableSize = session.sessionState.conf.defaultSizeInBytes
+        val fileIndex = new HiveFileIndex(
+          session,
+          c.tableMeta,
+          c.tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
+
+        val fsRelation = HadoopFsRelation(
+          fileIndex,
+          c.partitionCols.toStructType,
+          c.dataCols.toStructType,
+          c.tableMeta.bucketSpec,
+          // Don't need to specify fileSinkConf for read path.
+          new HiveFileFormat(null, c.tableMeta),
+          c.tableMeta.storage.properties)(session)
+
+        LogicalRelation(fsRelation, Some(c.output), Some(c.tableMeta))
+      } else {
+        LocalRelation(c.output)
+      }
+  }
+}
+
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
@@ -192,19 +225,13 @@ private[hive] trait HiveStrategies {
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: CatalogRelation) =>
-        // Filter out all predicates that only deal with partition keys, these are given to the
-        // hive table scan operator to be used for partition pruning.
-        val partitionKeyIds = AttributeSet(relation.partitionCols)
-        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
-          !predicate.references.isEmpty &&
-          predicate.references.subsetOf(partitionKeyIds)
-        }
+        assert(!relation.isPartitioned)
 
         pruneFilterProject(
           projectList,
-          otherPredicates,
+          predicates,
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
+          HiveTableScanExec(_, relation)(sparkSession)) :: Nil
       case _ =>
         Nil
     }

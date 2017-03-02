@@ -65,7 +65,7 @@ abstract class PartitioningAwareFileIndex(
       PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
-        case PartitionPath(values, path) =>
+        case PartitionPath(values, path, metadata) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
@@ -75,7 +75,7 @@ abstract class PartitioningAwareFileIndex(
               // Directory does not exist, or has no children files
               Nil
           }
-          PartitionDirectory(values, files)
+          PartitionDirectory(values, files, metadata)
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
@@ -180,7 +180,7 @@ abstract class PartitioningAwareFileIndex(
       })
 
       val selected = partitions.filter {
-        case PartitionPath(values, _) => boundPredicate(values)
+        case PartitionPath(values, _, _) => boundPredicate(values)
       }
       logInfo {
         val total = partitions.length

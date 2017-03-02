@@ -523,7 +523,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, _) =>
+      case LogicalRelation(r: HadoopFsRelation, _, _)
+          if !r.location.isInstanceOf[HiveFileIndex] =>
         if (!isDataSourceTable) {
           fail(
             s"${classOf[CatalogRelation].getCanonicalName} is expected, but found " +
@@ -536,7 +537,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         assert(catalogTable.provider.get === format)
 
-      case r: CatalogRelation =>
+      case LogicalRelation(r: HadoopFsRelation, _, _) =>
         if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
@@ -544,7 +545,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.tableMeta.location === CatalogUtils.stringToURI(location))
+            assert(catalogTable.location === CatalogUtils.stringToURI(location))
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
@@ -1030,9 +1031,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
       sql("CREATE TABLE explodeTest (key bigInt)")
       table("explodeTest").queryExecution.analyzed match {
-        case SubqueryAlias(_, r: CatalogRelation, _) => // OK
+        case SubqueryAlias(_, LogicalRelation(r: HadoopFsRelation, _, _), _)
+            if r.location.isInstanceOf[HiveFileIndex] => // OK
         case _ =>
-          fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
+          fail("To correctly test the fix of SPARK-5875, explodeTest should be a hive table")
       }
 
       sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")

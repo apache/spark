@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
@@ -70,13 +70,7 @@ class CatalogFileIndex(
     if (table.partitionColumnNames.nonEmpty) {
       val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
         table.identifier, filters)
-      val partitions = selectedPartitions.map { p =>
-        val path = new Path(p.location)
-        val fs = path.getFileSystem(hadoopConf)
-        PartitionPath(
-          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
-          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
-      }
+      val partitions = selectedPartitions.map(buildPartitionPath)
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       new PrunedInMemoryFileIndex(
         sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec)
@@ -84,6 +78,14 @@ class CatalogFileIndex(
       new InMemoryFileIndex(
         sparkSession, rootPaths, table.storage.properties, partitionSchema = None)
     }
+  }
+
+  protected def buildPartitionPath(p: CatalogTablePartition): PartitionPath = {
+    val path = new Path(p.location)
+    val fs = path.getFileSystem(hadoopConf)
+    PartitionPath(
+      p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+      fs.makeQualified(path))
   }
 
   override def inputFiles: Array[String] = filterPartitions(Nil).inputFiles
