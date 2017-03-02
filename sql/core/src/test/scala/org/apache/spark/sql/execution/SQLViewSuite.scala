@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext
@@ -486,10 +487,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("create view as insert into table") {
     withView("testView") {
-      val e = intercept[AnalysisException] {
+      // Single insert query
+      val e1 = intercept[ParseException] {
         sql(s"CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
       }.getMessage
-      assert(e.contains("Creating a view as insert into a table is not allowed"))
+      assert(e1.contains("Operation not allowed: CREATE VIEW ... AS INSERT INTO"))
+
+      // Multi insert query
+      val e2 = intercept[ParseException] {
+        sql(s"CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
+          s"INSERT INTO tbl2 SELECT * WHERE jt.id > 4")
+      }.getMessage
+      assert(e2.contains("Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+"))
     }
   }
 

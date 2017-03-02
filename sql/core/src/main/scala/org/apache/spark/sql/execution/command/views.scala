@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.datasources.{InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.types.MetadataBuilder
 
 
@@ -128,15 +127,6 @@ case class CreateViewCommand(
     val qe = sparkSession.sessionState.executePlan(child)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
-
-    // CREATE VIEW AS INSERT INTO ... is not allowed, we should throw an AnalysisException.
-    analyzedPlan match {
-      case i: InsertIntoHadoopFsRelationCommand =>
-        throw new AnalysisException("Creating a view as insert into a table is not allowed")
-      case i: InsertIntoDataSourceCommand =>
-        throw new AnalysisException("Creating a view as insert into a table is not allowed")
-      case _ => // OK
-    }
 
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {

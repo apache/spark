@@ -1329,6 +1329,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.identifierList != null) {
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
     } else {
+      // CREATE VIEW ... AS INSERT INTO is not allowed.
+      val query = ctx.query.queryNoWith
+      query match {
+        case s: SingleInsertQueryContext if s.insertInto != null =>
+          operationNotAllowed("CREATE VIEW ... AS INSERT INTO", ctx)
+        case m: MultiInsertQueryContext =>
+          operationNotAllowed("CREATE VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
+        case _ => // OK
+      }
+
       val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
         icl.identifierComment.asScala.map { ic =>
           ic.identifier.getText -> Option(ic.STRING).map(string)
