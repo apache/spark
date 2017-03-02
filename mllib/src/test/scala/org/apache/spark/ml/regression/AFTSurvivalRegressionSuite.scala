@@ -19,14 +19,15 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 class AFTSurvivalRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -399,6 +400,19 @@ class AFTSurvivalRegressionSuite
       1, Array(5.5), Array(0.8), 2, 42, 1.0, 2.0, 2.0), numSlices = 3).toDF()
     val trainer = new AFTSurvivalRegression()
     trainer.fit(dataset)
+  }
+
+  test("SPARK-19234: Fail fast on zero-valued labels") {
+    val dataset = spark.createDataFrame(Seq(
+      (1.218, 1.0, Vectors.dense(1.560, -0.605)),
+      (0.000, 0.0, Vectors.dense(0.346, 2.158)), // ← generates error; zero labels invalid
+      (4.199, 0.0, Vectors.dense(0.795, -0.226)))).toDF("label", "censor", "features")
+    val aft = new AFTSurvivalRegression()
+    withClue("label of AFTPoint must be positive") {
+      intercept[SparkException] {
+        aft.fit(dataset)
+      }
+    }
   }
 }
 
