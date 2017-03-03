@@ -65,6 +65,12 @@ class HiveDDLSuite
     fs.exists(filesystemPath)
   }
 
+  private def makeQualifiedPath(path: String): Path = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
+    fs.makeQualified(hadoopPath)
+  }
+
   test("drop tables") {
     withTable("tab1") {
       val tabName = "tab1"
@@ -1600,9 +1606,7 @@ class HiveDDLSuite
              |LOCATION '$dir'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val dirPath = new Path(dir.getAbsolutePath)
-        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-        assert(new Path(table.location) == fs.makeQualified(dirPath))
+        assert(new Path(table.location) == makeQualifiedPath(dir.getAbsolutePath))
 
         val tableLocFile = new File(new URI(table.location))
         tableLocFile.delete()
@@ -1644,14 +1648,12 @@ class HiveDDLSuite
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val dirPath = new Path(dir.getAbsolutePath)
-        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-        assert(new Path(table.location) == fs.makeQualified(dirPath))
+        assert(new Path(table.location) == makeQualifiedPath(dir.getAbsolutePath))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
 
-        val partLoc = new File(s"$dirPath/a=1")
+        val partLoc = new File(dir, "a=1")
         Utils.deleteRecursively(partLoc)
         assert(!partLoc.exists())
         // insert overwrite into a partition which location has been deleted.
@@ -1682,9 +1684,7 @@ class HiveDDLSuite
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val dirPath = new Path(dir.getAbsolutePath)
-        val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-        assert(new Path(table.location) == fs.makeQualified(dirPath))
+        assert(new Path(table.location) == makeQualifiedPath(dir.getAbsolutePath))
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
@@ -1800,10 +1800,8 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-              val dirPath = new Path(dir.getAbsolutePath)
-              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              assert(new Path(table.location) == fs.makeQualified(dirPath))
+              assert(new Path(table.location) == makeQualifiedPath(dir.getAbsolutePath))
 
               checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
           }
@@ -1821,10 +1819,8 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-              val dirPath = new Path(dir.getAbsolutePath)
-              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-              assert(new Path(table.location) == fs.makeQualified(dirPath))
+              assert(new Path(table.location) == makeQualifiedPath(dir.getAbsolutePath))
 
               val partDir = new File(dir, "a=3")
               assert(partDir.exists())
