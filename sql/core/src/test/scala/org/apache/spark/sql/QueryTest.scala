@@ -312,13 +312,23 @@ object QueryTest {
       sparkAnswer: Seq[Row],
       isSorted: Boolean = false): Option[String] = {
     if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
+      val expectedAnswerType = "RowType" + expectedAnswer.headOption
+        .map(row => s"[${row.schema.fields.map(_.dataType.typeName).mkString(",")}]")
+        .getOrElse("[]")
+
+      val sparkAnswerType = "RowType" + sparkAnswer.headOption
+        .map(row => s"[${row.schema.fields.map(_.dataType.typeName).mkString(",")}]")
+        .getOrElse("[]")
+
       val errorMessage =
         s"""
          |== Results ==
          |${sideBySide(
         s"== Correct Answer - ${expectedAnswer.size} ==" +:
+         expectedAnswerType +:
          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
         s"== Spark Answer - ${sparkAnswer.size} ==" +:
+         sparkAnswerType +:
          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
         """.stripMargin
       return Some(errorMessage)
