@@ -106,7 +106,7 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
-   * @param fileStatusCache fileStatusCache for InMemoryFileIndex
+   * @param fileStatusCache the shared cache for file statuses to speed up listing
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
