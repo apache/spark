@@ -23,8 +23,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] class KubernetesResourceCleaner
-    extends Logging {
+private[spark] class KubernetesResourceCleaner extends Logging {
 
   private val resources = mutable.HashMap.empty[(String, String), HasMetadata]
 

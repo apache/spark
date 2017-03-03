@@ -106,6 +106,36 @@ The above mechanism using `kubectl proxy` can be used when we have authenticatio
 kubernetes-client library does not support. Authentication using X509 Client Certs and oauth tokens
 is currently supported.
 
+### Determining the Driver Base URI
+
+Kubernetes pods run with their own IP address space. If Spark is run in cluster mode, the driver pod may not be
+accessible to the submitter. However, the submitter needs to send local dependencies from its local disk to the driver
+pod.
+
+By default, Spark will place a [Service](https://kubernetes.io/docs/user-guide/services/#type-nodeport) with a NodePort
+that is opened on every node. The submission client will then contact the driver at one of the node's
+addresses with the appropriate service port.
+
+There may be cases where the nodes cannot be reached by the submission client. For example, the cluster may
+only be reachable through an external load balancer. The user may provide their own external URI for Spark driver
+services. To use a your own external URI instead of a node's IP and node port, first set
+`spark.kubernetes.driver.serviceManagerType` to `ExternalAnnotation`. A service will be created with the annotation
+`spark-job.alpha.apache.org/provideExternalUri`, and this service routes to the driver pod. You will need to run a
+separate process that watches the API server for services that are created with this annotation in the application's
+namespace (set by `spark.kubernetes.namespace`). The process should determine a URI that routes to this service
+(potentially configuring infrastructure to handle the URI behind the scenes), and patch the service to include an
+annotation `spark-job.alpha.apache.org/resolvedExternalUri`, which has its value as the external URI that your process
+has provided (e.g. `https://example.com:8080/my-job`).
+
+Note that the URI provided in the annotation needs to route traffic to the appropriate destination on the pod, which has
+a empty path portion of the URI. This means the external URI provider will likely need to rewrite the path from the
+external URI to the destination on the pod, e.g. https://example.com:8080/spark-app-1/submit will need to route traffic
+to https://<pod_ip>:<service_port>/. Note that the paths of these two URLs are different.
+
+If the above is confusing, keep in mind that this functionality is only necessary if the submitter cannot reach any of
+the nodes at the driver's node port. It is recommended to use the default configuration with the node port service
+whenever possible.
+
 ### Spark Properties
 
 Below are some other common properties that are specific to Kubernetes. Most of the other configurations are the same
@@ -207,7 +237,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>false</code></td>
   <td>
     Whether to expose the driver Web UI port as a service NodePort. Turned off by default because NodePort is a limited
-    resource. Use alternatives such as Ingress if possible.
+    resource.
   </td>
 </tr>
 <tr>
@@ -223,6 +253,21 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>1s</code></td>
   <td>
     Interval between reports of the current Spark job status in cluster mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.serviceManagerType</code></td>
+  <td><code>NodePort</code></td>
+  <td>
+    A tag indicating which class to use for creating the Kubernetes service and determining its URI for the submission
+    client. Valid values are currently <code>NodePort</code> and <code>ExternalAnnotation</code>. By default, a service
+    is created with the <code>NodePort</code> type, and the driver will be contacted at one of the nodes at the port
+    that the nodes expose for the service. If the nodes cannot be contacted from the submitter's machine, consider
+    setting this to <code>ExternalAnnotation</code> as described in "Determining the Driver Base URI" above. One may
+    also include a custom implementation of <code>org.apache.spark.deploy.rest.kubernetes.DriverServiceManager</code> on
+    the submitter's classpath - spark-submit service loads an instance of that class. To use the custom
+    implementation, set this value to the custom implementation's return value of 
+    <code>DriverServiceManager#getServiceManagerType()</code>. This method should only be done as a last resort.
   </td>
 </tr>
 </table>

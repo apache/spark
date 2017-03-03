@@ -18,6 +18,7 @@ package org.apache.spark.deploy.kubernetes
 
 import java.io.File
 import java.security.SecureRandom
+import java.util.ServiceLoader
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.google.common.io.Files
@@ -55,6 +56,7 @@ private[spark] class Client(
   private val driverDockerImage = sparkConf.get(DRIVER_DOCKER_IMAGE)
   private val uiPort = sparkConf.getInt("spark.ui.port", DEFAULT_UI_PORT)
   private val driverSubmitTimeoutSecs = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_TIMEOUT)
+  private val driverServiceManagerType = sparkConf.get(DRIVER_SERVICE_MANAGER_TYPE)
   private val sparkFiles = sparkConf.getOption("spark.files")
     .map(_.split(","))
     .getOrElse(Array.empty[String])
@@ -90,6 +92,7 @@ private[spark] class Client(
       throw new SparkException(s"Main app resource file $mainAppResource is not a file or" +
         s" is a directory.")
     }
+    val driverServiceManager = getDriverServiceManager
     val parsedCustomLabels = parseKeyValuePairs(customLabels, KUBERNETES_DRIVER_LABELS.key,
       "labels")
     parsedCustomLabels.keys.foreach { key =>
@@ -118,32 +121,48 @@ private[spark] class Client(
 
     val k8ClientConfig = k8ConfBuilder.build
     Utils.tryWithResource(new DefaultKubernetesClient(k8ClientConfig)) { kubernetesClient =>
-      ShutdownHookManager.addShutdownHook(() =>
-        kubernetesResourceCleaner.deleteAllRegisteredResourcesFromKubernetes(kubernetesClient))
-      val sslConfigurationProvider = new SslConfigurationProvider(
-        sparkConf, kubernetesAppId, kubernetesClient, kubernetesResourceCleaner)
-      val submitServerSecret = kubernetesClient.secrets().createNew()
-        .withNewMetadata()
-          .withName(secretName)
-          .endMetadata()
-        .withData(Map((SUBMISSION_APP_SECRET_NAME, secretBase64String)).asJava)
-        .withType("Opaque")
-        .done()
-      kubernetesResourceCleaner.registerOrUpdateResource(submitServerSecret)
-      try {
-        val sslConfiguration = sslConfigurationProvider.getSslConfiguration()
-        // start outer watch for status logging of driver pod
-        val driverPodCompletedLatch = new CountDownLatch(1)
-        // only enable interval logging if in waitForAppCompletion mode
-        val loggingInterval = if (waitForAppCompletion) sparkConf.get(REPORT_INTERVAL) else 0
-        val loggingWatch = new LoggingPodStatusWatcher(driverPodCompletedLatch, kubernetesAppId,
-          loggingInterval)
-        Utils.tryWithResource(kubernetesClient
-            .pods()
-            .withName(kubernetesAppId)
-            .watch(loggingWatch)) { _ =>
+      driverServiceManager.start(kubernetesClient, kubernetesAppId, sparkConf)
+      // start outer watch for status logging of driver pod
+      // only enable interval logging if in waitForAppCompletion mode
+      val loggingInterval = if (waitForAppCompletion) sparkConf.get(REPORT_INTERVAL) else 0
+      val driverPodCompletedLatch = new CountDownLatch(1)
+      val loggingWatch = new LoggingPodStatusWatcher(driverPodCompletedLatch, kubernetesAppId,
+        loggingInterval)
+      Utils.tryWithResource(kubernetesClient
+          .pods()
+          .withName(kubernetesAppId)
+          .watch(loggingWatch)) { _ =>
+        val resourceCleanShutdownHook = ShutdownHookManager.addShutdownHook(() =>
+          kubernetesResourceCleaner.deleteAllRegisteredResourcesFromKubernetes(kubernetesClient))
+        val cleanupServiceManagerHook = ShutdownHookManager.addShutdownHook(
+          ShutdownHookManager.DEFAULT_SHUTDOWN_PRIORITY)(
+          () => driverServiceManager.stop())
+        // Place the error hook at a higher priority in order for the error hook to run before
+        // the stop hook.
+        val serviceManagerErrorHook = ShutdownHookManager.addShutdownHook(
+          ShutdownHookManager.DEFAULT_SHUTDOWN_PRIORITY + 1)(() =>
+          driverServiceManager.handleSubmissionError(
+            new SparkException("Submission shutting down early...")))
+        try {
+          val sslConfigurationProvider = new SslConfigurationProvider(
+            sparkConf, kubernetesAppId, kubernetesClient, kubernetesResourceCleaner)
+          val submitServerSecret = kubernetesClient.secrets().createNew()
+            .withNewMetadata()
+            .withName(secretName)
+            .endMetadata()
+            .withData(Map((SUBMISSION_APP_SECRET_NAME, secretBase64String)).asJava)
+            .withType("Opaque")
+            .done()
+          kubernetesResourceCleaner.registerOrUpdateResource(submitServerSecret)
+          val sslConfiguration = sslConfigurationProvider.getSslConfiguration()
+          val driverKubernetesSelectors = (Map(
+            SPARK_DRIVER_LABEL -> kubernetesAppId,
+            SPARK_APP_ID_LABEL -> kubernetesAppId,
+            SPARK_APP_NAME_LABEL -> appName)
+            ++ parsedCustomLabels)
           val (driverPod, driverService) = launchDriverKubernetesComponents(
             kubernetesClient,
+            driverServiceManager,
             parsedCustomLabels,
             parsedCustomAnnotations,
             submitServerSecret,
@@ -156,6 +175,7 @@ private[spark] class Client(
             driverService)
           submitApplicationToDriverServer(
             kubernetesClient,
+            driverServiceManager,
             sslConfiguration,
             driverService,
             submitterLocalFiles,
@@ -165,23 +185,43 @@ private[spark] class Client(
           // those.
           kubernetesResourceCleaner.unregisterResource(driverPod)
           kubernetesResourceCleaner.unregisterResource(driverService)
-          // wait if configured to do so
-          if (waitForAppCompletion) {
-            logInfo(s"Waiting for application $kubernetesAppId to finish...")
-            driverPodCompletedLatch.await()
-            logInfo(s"Application $kubernetesAppId finished.")
-          } else {
-            logInfo(s"Application $kubernetesAppId successfully launched.")
+        } catch {
+          case e: Throwable =>
+            driverServiceManager.handleSubmissionError(e)
+        } finally {
+          Utils.tryLogNonFatalError {
+            kubernetesResourceCleaner.deleteAllRegisteredResourcesFromKubernetes(kubernetesClient)
+          }
+          Utils.tryLogNonFatalError {
+            driverServiceManager.stop()
+          }
+
+          // Remove the shutdown hooks that would be redundant
+          Utils.tryLogNonFatalError {
+            ShutdownHookManager.removeShutdownHook(resourceCleanShutdownHook)
+          }
+          Utils.tryLogNonFatalError {
+            ShutdownHookManager.removeShutdownHook(cleanupServiceManagerHook)
+          }
+          Utils.tryLogNonFatalError {
+            ShutdownHookManager.removeShutdownHook(serviceManagerErrorHook)
           }
         }
-      } finally {
-        kubernetesResourceCleaner.deleteAllRegisteredResourcesFromKubernetes(kubernetesClient)
+        // wait if configured to do so
+        if (waitForAppCompletion) {
+          logInfo(s"Waiting for application $kubernetesAppId to finish...")
+          driverPodCompletedLatch.await()
+          logInfo(s"Application $kubernetesAppId finished.")
+        } else {
+          logInfo(s"Application $kubernetesAppId successfully launched.")
+        }
       }
     }
   }
 
   private def submitApplicationToDriverServer(
       kubernetesClient: KubernetesClient,
+      driverServiceManager: DriverServiceManager,
       sslConfiguration: SslConfiguration,
       driverService: Service,
       submitterLocalFiles: Iterable[String],
@@ -197,7 +237,10 @@ private[spark] class Client(
     sparkConf.setIfMissing("spark.driver.port", DEFAULT_DRIVER_PORT.toString)
     sparkConf.setIfMissing("spark.blockmanager.port",
       DEFAULT_BLOCKMANAGER_PORT.toString)
-    val driverSubmitter = buildDriverSubmissionClient(kubernetesClient, driverService,
+    val driverSubmitter = buildDriverSubmissionClient(
+      kubernetesClient,
+      driverServiceManager,
+      driverService,
       sslConfiguration)
     // Sanity check to see if the driver submitter is even reachable.
     driverSubmitter.ping()
@@ -227,6 +270,7 @@ private[spark] class Client(
 
   private def launchDriverKubernetesComponents(
       kubernetesClient: KubernetesClient,
+      driverServiceManager: DriverServiceManager,
       customLabels: Map[String, String],
       customAnnotations: Map[String, String],
       submitServerSecret: Secret,
@@ -254,10 +298,9 @@ private[spark] class Client(
             .endpoints()
             .withName(kubernetesAppId)
             .watch(endpointsReadyWatcher)) { _ =>
-          val driverService = createDriverService(
-            kubernetesClient,
-            driverKubernetesSelectors,
-            submitServerSecret)
+          val serviceTemplate = createDriverServiceTemplate(driverKubernetesSelectors)
+          val driverService = kubernetesClient.services().create(
+            driverServiceManager.customizeDriverService(serviceTemplate).build())
           kubernetesResourceCleaner.registerOrUpdateResource(driverService)
           val driverPod = createDriverPod(
             kubernetesClient,
@@ -265,7 +308,6 @@ private[spark] class Client(
             customAnnotations,
             submitServerSecret,
             sslConfiguration)
-          kubernetesResourceCleaner.registerOrUpdateResource(driverPod)
           waitForReadyKubernetesComponents(kubernetesClient, endpointsReadyFuture,
             serviceReadyFuture, podReadyFuture)
           (driverPod, driverService)
@@ -354,28 +396,6 @@ private[spark] class Client(
     }
   }
 
-  private def createDriverService(
-      kubernetesClient: KubernetesClient,
-      driverKubernetesSelectors: Map[String, String],
-      submitServerSecret: Secret): Service = {
-    val driverSubmissionServicePort = new ServicePortBuilder()
-      .withName(SUBMISSION_SERVER_PORT_NAME)
-      .withPort(SUBMISSION_SERVER_PORT)
-      .withNewTargetPort(SUBMISSION_SERVER_PORT)
-      .build()
-    kubernetesClient.services().createNew()
-      .withNewMetadata()
-        .withName(kubernetesAppId)
-        .withLabels(driverKubernetesSelectors.asJava)
-        .endMetadata()
-      .withNewSpec()
-        .withType("NodePort")
-        .withSelector(driverKubernetesSelectors.asJava)
-        .withPorts(driverSubmissionServicePort)
-        .endSpec()
-      .done()
-  }
-
   private def createDriverPod(
       kubernetesClient: KubernetesClient,
       driverKubernetesSelectors: Map[String, String],
@@ -388,7 +408,7 @@ private[spark] class Client(
       .withPath("/v1/submissions/ping")
       .withNewPort(SUBMISSION_SERVER_PORT_NAME)
       .build()
-    kubernetesClient.pods().createNew()
+    val driverPod = kubernetesClient.pods().createNew()
       .withNewMetadata()
         .withName(kubernetesAppId)
         .withLabels(driverKubernetesSelectors.asJava)
@@ -428,6 +448,26 @@ private[spark] class Client(
           .endContainer()
         .endSpec()
       .done()
+    kubernetesResourceCleaner.registerOrUpdateResource(driverPod)
+    driverPod
+  }
+
+   private def createDriverServiceTemplate(driverKubernetesSelectors: Map[String, String])
+      : ServiceBuilder = {
+    val driverSubmissionServicePort = new ServicePortBuilder()
+      .withName(SUBMISSION_SERVER_PORT_NAME)
+      .withPort(SUBMISSION_SERVER_PORT)
+      .withNewTargetPort(SUBMISSION_SERVER_PORT)
+      .build()
+    new ServiceBuilder()
+      .withNewMetadata()
+        .withName(kubernetesAppId)
+        .withLabels(driverKubernetesSelectors.asJava)
+        .endMetadata()
+      .withNewSpec()
+        .withSelector(driverKubernetesSelectors.asJava)
+        .withPorts(driverSubmissionServicePort)
+        .endSpec()
   }
 
   private class DriverPodReadyWatcher(resolvedDriverPod: SettableFuture[Pod]) extends Watcher[Pod] {
@@ -578,36 +618,14 @@ private[spark] class Client(
 
   private def buildDriverSubmissionClient(
       kubernetesClient: KubernetesClient,
+      driverServiceManager: DriverServiceManager,
       service: Service,
       sslConfiguration: SslConfiguration): KubernetesSparkRestApi = {
-    val urlScheme = if (sslConfiguration.sslOptions.enabled) {
-      "https"
-    } else {
-      logWarning("Submitting application details, application secret, and local" +
-        " jars to the cluster over an insecure connection. You should configure SSL" +
-        " to secure this step.")
-      "http"
-    }
-    val servicePort = service.getSpec.getPorts.asScala
-      .filter(_.getName == SUBMISSION_SERVER_PORT_NAME)
-      .head.getNodePort
-    val nodeUrls = kubernetesClient.nodes.list.getItems.asScala
-      .filterNot(node => node.getSpec.getUnschedulable != null &&
-        node.getSpec.getUnschedulable)
-      .flatMap(_.getStatus.getAddresses.asScala)
-      // The list contains hostnames, internal and external IP addresses.
-      // (https://kubernetes.io/docs/admin/node/#addresses)
-      // we want only external IP addresses and legacyHostIP addresses in our list
-      // legacyHostIPs are deprecated and will be removed in the future.
-      // (https://github.com/kubernetes/kubernetes/issues/9267)
-      .filter(address => address.getType == "ExternalIP" || address.getType == "LegacyHostIP")
-      .map(address => {
-        s"$urlScheme://${address.getAddress}:$servicePort"
-      }).toSet
-    require(nodeUrls.nonEmpty, "No nodes found to contact the driver!")
+    val serviceUris = driverServiceManager.getDriverServiceSubmissionServerUris(service)
+    require(serviceUris.nonEmpty, "No uris found to contact the driver!")
     HttpClientUtil.createClient[KubernetesSparkRestApi](
-      uris = nodeUrls,
-      maxRetriesPerServer = 3,
+      uris = serviceUris,
+      maxRetriesPerServer = 10,
       sslSocketFactory = sslConfiguration
         .driverSubmitClientSslContext
         .getSocketFactory,
@@ -633,6 +651,21 @@ private[spark] class Client(
         }
       }).toMap
     }).getOrElse(Map.empty[String, String])
+  }
+
+  private def getDriverServiceManager: DriverServiceManager = {
+    val driverServiceManagerLoader = ServiceLoader.load(classOf[DriverServiceManager])
+    val matchingServiceManagers = driverServiceManagerLoader
+      .iterator()
+      .asScala
+      .filter(_.getServiceManagerType == driverServiceManagerType)
+      .toList
+    require(matchingServiceManagers.nonEmpty,
+      s"No driver service manager found matching type $driverServiceManagerType")
+    require(matchingServiceManagers.size == 1, "Multiple service managers found" +
+      s" matching type $driverServiceManagerType, got: " +
+      matchingServiceManagers.map(_.getClass).toList.mkString(","))
+    matchingServiceManagers.head
   }
 }
 
