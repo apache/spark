@@ -526,7 +526,7 @@ private class AFTAggregator(
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
   // Here we optimize loss function over log(sigma), intercept and coefficients
-  private val gradientSumArray = Array.ofDim[Double](length)
+  private lazy val gradientSumArray = Array.ofDim[Double](length)
 
   def count: Long = totalCnt
   def loss: Double = {
