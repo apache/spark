@@ -193,7 +193,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        val expectedLocation = new Path(makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")).toUri
+        val expectedLocation = new Path(
+          makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")).toUri
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",

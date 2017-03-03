@@ -565,7 +565,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
         val newLocation = tableDefinition.storage.locationUri
         val storageWithPathOption = tableDefinition.storage.copy(
-          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> new Path(_).toString))
+          properties =
+            tableDefinition.storage.properties ++newLocation.map("path" -> new Path(_).toString))
 
         val oldLocation = getLocationFromStorageProps(oldTableDef)
         if (oldLocation == newLocation) {
