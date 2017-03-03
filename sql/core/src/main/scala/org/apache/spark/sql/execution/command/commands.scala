@@ -147,3 +147,25 @@ case class StreamingExplainCommand(
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 }
+
+/** An explain command for users to see how a streaming batch is executed. */
+case class StreamingExplainCommand(
+    queryExecution: IncrementalExecution,
+    extended: Boolean) extends RunnableCommand {
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("plan", StringType, nullable = true)())
+
+  // Run through the optimizer to generate the physical plan.
+  override def run(sparkSession: SparkSession): Seq[Row] = try {
+    val outputString =
+      if (extended) {
+        queryExecution.toString
+      } else {
+        queryExecution.simpleString
+      }
+    Seq(Row(outputString))
+  } catch { case cause: TreeNodeException[_] =>
+    ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  }
+}
