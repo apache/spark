@@ -61,13 +61,6 @@ object JacksonUtils {
     schema.foreach(field => verifyType(field.name, field.dataType))
   }
 
-  def strToStructType(schemaAsJson: String): StructType = Try {
-    DataType.fromJson(schemaAsJson).asInstanceOf[StructType]
-  }.getOrElse {
-    throw new AnalysisException(
-      s"""Illegal json string for representing a schema: $schemaAsJson"""")
-  }
-
   /** Convert a map literal to Map-type data. */
   def validateMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap => m.dataType.acceptsType(MapType(StringType, StringType, false))

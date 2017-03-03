@@ -199,7 +199,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-19637 Support to_json in SQL") {
-    // to_json
     val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
     checkAnswer(
       df1.selectExpr("to_json(a)"),
