@@ -19,9 +19,6 @@ package org.apache.spark.sql.catalyst.json
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{CreateMap, Expression}
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.types._
 
 object JacksonUtils {
@@ -57,16 +54,5 @@ object JacksonUtils {
     }
 
     schema.foreach(field => verifyType(field.name, field.dataType))
-  }
-
-  /** Convert a map literal to Map-type data. */
-  def validateMapData(exp: Expression): Map[String, String] = exp match {
-    case m: CreateMap => m.dataType.acceptsType(MapType(StringType, StringType, false))
-      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
-      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
-        key.toString -> value.toString
-      }.toMap
-    case _ =>
-      throw new AnalysisException("Must use a map() function for options")
   }
 }
