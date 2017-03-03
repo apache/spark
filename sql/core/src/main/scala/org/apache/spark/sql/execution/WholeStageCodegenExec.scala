@@ -208,15 +208,18 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-   * for optimization to suppress shouldStop() in a loop of WholeStageCodegen
-   *
-   * isShouldStopRequired: require to insert shouldStop() into the loop if true
+   * For optimization to suppress shouldStop() in a loop of WholeStageCodegen.
+   * Returning true means we need to insert shouldStop() into the loop producing rows, if any.
    */
   def isShouldStopRequired: Boolean = {
     return shouldStopRequired && !(this.parent != null && !this.parent.isShouldStopRequired)
   }
 
-  // set false if doConsume() does not insert append() that requires shouldStop() in the loop
+  /**
+   * Set to false if this plan consumes all rows produced by children but doesn't output row
+   * to buffer by calling append(), so the children don't require shouldStop()
+   * in the loop of producing rows.
+   */
   protected def shouldStopRequired: Boolean = true
 }
 
