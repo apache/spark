@@ -21,6 +21,8 @@ import java.util.concurrent.Callable
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -220,7 +222,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
     val plan = cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
-        val pathOption = table.storage.locationUri.map("path" -> _)
+        val pathOption = table.storage.locationUri.map("path" -> new Path(_).toString)
         val dataSource =
           DataSource(
             sparkSession,

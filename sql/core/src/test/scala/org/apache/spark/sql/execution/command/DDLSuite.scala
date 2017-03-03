@@ -72,14 +72,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", spark.sessionState.conf.warehousePath, Map()),
+      CatalogDatabase(name, "", new Path(spark.sessionState.conf.warehousePath).toUri, Map()),
       ignoreIfExists = false)
   }
 
   private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
     val storage =
       CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
+        locationUri = Some(new Path(catalog.defaultTablePath(name)).toUri),
         inputFormat = None,
         outputFormat = None,
         serde = None,
@@ -146,7 +146,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
+      val expectedLocation = new Path(makeQualifiedPath(s"spark-warehouse/$dbName.db")).toUri
       assert(db1 == CatalogDatabase(
         dbName,
         "",
@@ -169,7 +169,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-          val expPath = makeQualifiedPath(tmpDir.toString)
+          val expPath = new Path(makeQualifiedPath(tmpDir.toString)).toUri
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
@@ -193,7 +193,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")
+        val expectedLocation = new Path(makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")).toUri
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
@@ -1095,18 +1095,19 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.getPartition(tableIdent, partSpec).storage.properties.isEmpty)
     // Verify that the location is set to the expected string
     def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
+      val expectedUri = new Path(expected).toUri
       val storageFormat = spec
         .map { s => catalog.getPartition(tableIdent, s).storage }
         .getOrElse { catalog.getTableMetadata(tableIdent).storage }
       if (isDatasourceTable) {
         if (spec.isDefined) {
           assert(storageFormat.properties.isEmpty)
-          assert(storageFormat.locationUri === Some(expected))
+          assert(storageFormat.locationUri === Some(expectedUri))
         } else {
-          assert(storageFormat.locationUri === Some(expected))
+          assert(storageFormat.locationUri === Some(expectedUri))
         }
       } else {
-        assert(storageFormat.locationUri === Some(expected))
+        assert(storageFormat.locationUri === Some(expectedUri))
       }
     }
     // set table location
@@ -1255,7 +1256,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
     assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
-    assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option("paris"))
+    assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option(new URI("paris")))
     assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
 
     // add partitions without explicitly specifying database
@@ -1819,7 +1820,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
         // the previous table path should be still there.
-        assert(new File(new URI(defaultTablePath)).exists())
+        assert(new File(defaultTablePath).exists())
 
         sql("INSERT INTO tbl SELECT 2")
         checkAnswer(spark.table("tbl"), Row(2))
@@ -1843,28 +1844,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        assert(table.location == new URI(dir.getAbsolutePath))
 
         dir.delete
-        val tableLocFile = new File(table.location)
-        assert(!tableLocFile.exists)
+//        val tableLocFile = new File(table.location)
+        assert(!dir.exists)
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
-        assert(tableLocFile.exists)
+        assert(dir.exists)
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         Utils.deleteRecursively(dir)
-        assert(!tableLocFile.exists)
+        assert(!dir.exists)
         spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
-        assert(tableLocFile.exists)
+        assert(dir.exists)
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDir = newDirFile.toURI.toString
+        val newDir = newDirFile.getAbsolutePath
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == newDir)
+        assert(table1.location == new URI(newDir))
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1885,7 +1886,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        assert(table.location == new URI(dir.getAbsolutePath))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1911,13 +1912,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        assert(table.location == new URI(dir.getAbsolutePath))
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDir = newDirFile.toURI.toString
+        val newDir = newDirFile.toURI
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -1967,7 +1968,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location == dir.getAbsolutePath)
+            assert(table.location == new URI(dir.getAbsolutePath))
 
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
@@ -1986,7 +1987,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location == dir.getAbsolutePath)
+            assert(table.location == new URI(dir.getAbsolutePath))
 
             val partDir = new File(dir, "a=3")
             assert(partDir.exists())

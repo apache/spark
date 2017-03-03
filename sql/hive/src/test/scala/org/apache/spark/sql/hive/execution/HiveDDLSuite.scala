@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -710,7 +711,7 @@ class HiveDDLSuite
       }
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val dbPath = tmpDir.toURI.toString.stripSuffix("/")
+      val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
       assert(db1 == CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
@@ -747,11 +748,12 @@ class HiveDDLSuite
     sql(s"CREATE DATABASE $dbName")
     val catalog = spark.sessionState.catalog
     val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
+    val expectedDBUri = new Path(expectedDBLocation).toUri
     val db1 = catalog.getDatabaseMetadata(dbName)
     assert(db1 == CatalogDatabase(
       dbName,
       "",
-      expectedDBLocation,
+      expectedDBUri,
       Map.empty))
     // the database directory was created
     assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
@@ -1606,7 +1608,7 @@ class HiveDDLSuite
                """.stripMargin)
 
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location == dir.getAbsolutePath)
+            assert(table.location == new URI(dir.getAbsolutePath))
 
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
@@ -1626,7 +1628,7 @@ class HiveDDLSuite
                """.stripMargin)
 
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location == dir.getAbsolutePath)
+            assert(table.location == new URI(dir.getAbsolutePath))
 
             val partDir = new File(dir, "a=3")
             assert(partDir.exists())

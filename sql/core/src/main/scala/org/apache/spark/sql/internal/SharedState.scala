@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -94,8 +95,9 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 
   // Create the default database if it doesn't exist.
   {
+    val warehouseUri = new Path(warehousePath).toUri
     val defaultDbDefinition = CatalogDatabase(
-      SessionCatalog.DEFAULT_DATABASE, "default database", warehousePath, Map())
+      SessionCatalog.DEFAULT_DATABASE, "default database", warehouseUri, Map())
     // Initialize default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we

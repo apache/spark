@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -54,7 +55,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
   test("success sanity check") {
     val badClient = buildClient(HiveUtils.hiveExecutionVersion, new Configuration())
-    val db = new CatalogDatabase("default", "desc", "loc", Map())
+    val db = new CatalogDatabase("default", "desc", new URI("loc"), Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
@@ -120,10 +121,10 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
     // Database related API
     ///////////////////////////////////////////////////////////////////////////
 
-    val tempDatabasePath = Utils.createTempDir().getCanonicalPath
+    val tempDatabasePath = Utils.createTempDir().toURI
 
     test(s"$version: createDatabase") {
-      val defaultDB = CatalogDatabase("default", "desc", "loc", Map())
+      val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Map())
       client.createDatabase(defaultDB, ignoreIfExists = true)
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
@@ -341,7 +342,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
-      val newLocation = Utils.createTempDir().getPath()
+      val newLocation = Utils.createTempDir().toURI
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions
@@ -655,7 +656,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
-        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(table.location == new Path(expectedPath).toUri)
         assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
         checkAnswer(spark.table("t"), Row("1") :: Nil)
 
@@ -664,7 +665,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
 
-        assert(table1.location.stripSuffix("/") == expectedPath1)
+        assert(table1.location == new Path(expectedPath1).toUri)
         assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
         checkAnswer(spark.table("t1"), Row(2) :: Nil)
       }

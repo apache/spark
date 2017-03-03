@@ -170,7 +170,7 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
+    val qualifiedPath = makeQualifiedPath(new Path(dbDefinition.locationUri).toString).toUri
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
       ignoreIfExists)
