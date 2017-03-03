@@ -387,6 +387,10 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
         case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
+        // Inserting into a view is not allowed, we should throw an AnalysisException.
+        case v: View =>
+          throw new AnalysisException(s"${v.desc.identifier} is a view, inserting " +
+            "into a view is not allowed")
         case _ => i
       }
   }
