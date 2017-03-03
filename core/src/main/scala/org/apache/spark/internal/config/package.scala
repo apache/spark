@@ -169,6 +169,31 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val CONDA_BOOTSTRAP_PACKAGES = ConfigBuilder("spark.conda.bootstrapPackages")
+    .doc("The packages that will be added to the conda environment. "
+      + "Only relevant when main class is CondaRunner.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CONDA_CHANNEL_URLS = ConfigBuilder("spark.conda.channelUrls")
+    .doc("The URLs the Conda channels to use when resolving the conda packages. "
+      + "Only relevant when main class is CondaRunner.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CONDA_BINARY_PATH = ConfigBuilder("spark.conda.binaryPath")
+    .doc("The location of the conda binary. Only relevant when main class is CondaRunner.")
+    .stringConf
+    .createOptional
+
+  private[spark] val CONDA_DELEGATE_RUNNER = ConfigBuilder("spark.conda.delegateRunnerClass")
+    .doc("The runner class to delegate to after the Conda environment has been set up. "
+      + "Only relevant when main class is CondaRunner.")
+    .stringConf
+    .createOptional
+
   // To limit memory usage, we only track information for a fixed number of tasks
   private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
     .intConf
