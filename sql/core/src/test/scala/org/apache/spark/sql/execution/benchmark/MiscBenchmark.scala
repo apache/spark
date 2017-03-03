@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.Benchmark
 
 /**
@@ -27,6 +28,63 @@ import org.apache.spark.util.Benchmark
  * Benchmarks in this file are skipped in normal builds.
  */
 class MiscBenchmark extends BenchmarkBase {
+
+  ignore("sort aggregate") {
+    import sparkSession.implicits._
+    val preferSortAgg = "spark.sql.aggregate.preferSortAggregate"
+    val currnetValue = if (sparkSession.conf.contains(preferSortAgg)) {
+      Some(sparkSession.conf.get(preferSortAgg))
+    } else {
+      None
+    }
+
+    // Force a planner to use sort-based aggregate
+    sparkSession.conf.set(preferSortAgg, "true")
+
+    try {
+      val N = 1L << 23
+
+      /*
+      range/limit/sum:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ----------------------------------------------------------------------------------------------
+      range/limit/sum wholestage off               617 /  617         13.6          73.5       1.0X
+      range/limit/sum wholestage on                 70 /   92        120.2           8.3       8.8X
+      */
+      runBenchmark("range/limit/sum", N) {
+        sparkSession.range(N).groupBy().sum().collect()
+      }
+
+      /*
+      aggregate non-sorted data:              Best/Avg Time(ms)   Rate(M/s)  Per Row(ns)   Relative
+      ----------------------------------------------------------------------------------------------
+      non-sorted data wholestage off                2540 / 2735         3.3        302.8       1.0X
+      non-sorted data wholestage on                 1226 / 1528         6.8        146.1       2.1X
+      */
+      val inputDf = sparkSession.range(N).selectExpr(
+        "id % 1024 AS key", "rand() AS value1", "rand() AS value2", "rand() AS value3")
+      runBenchmark("non-sorted data", N) {
+        inputDf.filter("value1 > 0.1").groupBy($"key")
+          .agg(sum("value1"), sum("value2"), avg("value3")).collect()
+      }
+
+      // Sort and cache input data
+      val cachedDf = inputDf.sort($"key").cache
+      cachedDf.queryExecution.executedPlan.foreach(_ => {})
+
+      /*
+      aggregate cached and sorted data:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ----------------------------------------------------------------------------------------------
+      cached and sorted data wholestage off       1455 / 1586          5.8         173.4       1.0X
+      cached and sorted data wholestage on         663 /  767         12.7          79.0       2.2X
+      */
+      runBenchmark("cached and sorted data", N) {
+        cachedDf.filter("value1 > 0.1").groupBy($"key")
+          .agg(sum("value1"), sum("value2"), avg("value3")).collect()
+      }
+    } finally {
+      currnetValue.foreach(sparkSession.conf.set(preferSortAgg, _))
+    }
+  }
 
   ignore("filter & aggregate without group") {
     val N = 500L << 22

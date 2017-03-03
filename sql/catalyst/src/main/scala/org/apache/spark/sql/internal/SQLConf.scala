@@ -103,6 +103,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PREFER_SORTAGGREGATE = buildConf("spark.sql.aggregate.preferSortAggregate")
+    .internal()
+    .doc("When true, prefer sort aggregate over shuffle hash aggregate.")
+    .booleanConf
+    .createWithDefault(false)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -852,6 +858,8 @@ class SQLConf extends Serializable with Logging {
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def preferSortAggregate: Boolean = getConf(PREFER_SORTAGGREGATE)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
