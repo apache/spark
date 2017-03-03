@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedRel
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.types.MetadataBuilder
 
 
@@ -283,6 +283,18 @@ case class AlterViewAsCommand(
       throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
     }
 
+    // Detect cyclic view references, a cyclic view reference may be created by the following
+    // queries:
+    // CREATE VIEW testView AS SELECT id FROM tbl
+    // CREATE VIEW testView2 AS SELECT id FROM testView
+    // ALTER VIEW testView AS SELECT * FROM testView2
+    // In the above example, a reference cycle (testView -> testView2 -> testView) exsits.
+    //
+    // We disallow cyclic view references by checking that in ALTER VIEW command, when the
+    // `analyzedPlan` contains the same `View` node with the altered view, we should prevent the
+    // behavior and throw an AnalysisException.
+    checkCyclicViewReference(analyzedPlan, Seq(viewMeta.identifier), viewMeta.identifier)
+
     val newProperties = generateViewProperties(viewMeta.properties, session, analyzedPlan)
 
     val updatedViewMeta = viewMeta.copy(
@@ -291,6 +303,38 @@ case class AlterViewAsCommand(
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
+  }
+
+  /**
+   * Recursively search the logical plan to detect cyclic view references, throw an
+   * AnalysisException if cycle detected.
+   *
+   * @param plan the logical plan we detect cyclic view references from.
+   * @param path the path between the altered view and current node.
+   * @param viewIdent the table identifier of the altered view, we compare two views by the
+   *                  `desc.identifier`.
+   */
+  private def checkCyclicViewReference(
+      plan: LogicalPlan,
+      path: Seq[TableIdentifier],
+      viewIdent: TableIdentifier): Unit = {
+    plan match {
+      case v: View =>
+        val ident = v.desc.identifier
+        val newPath = path :+ ident
+        // If the table identifier equals to the `viewIdent`, current view node is the same with
+        // the altered view. We detect a view reference cycle, should throw an AnalysisException.
+        if (ident == viewIdent) {
+          throw new AnalysisException(s"Recursive view $viewIdent detected " +
+            s"(cycle: ${newPath.mkString(" -> ")})")
+        } else {
+          v.children.foreach { child =>
+            checkCyclicViewReference(child, newPath, viewIdent)
+          }
+        }
+      case _ =>
+        plan.children.foreach(child => checkCyclicViewReference(child, path, viewIdent))
+    }
   }
 }
 
