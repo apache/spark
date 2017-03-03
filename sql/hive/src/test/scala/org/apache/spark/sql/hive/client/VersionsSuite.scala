@@ -342,7 +342,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
-      val newLocation = Utils.createTempDir().toURI
+      val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions

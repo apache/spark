@@ -485,7 +485,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        "file:" + expectedWarehouseLocation.toString + "/testlocation"
+        new Path(s"file:${expectedWarehouseLocation.toString}/testlocation").toUri
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -500,8 +500,8 @@ object SetWarehouseLocationTest extends Logging {
       sparkSession.sql("create table testLocation (a int)")
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
-      val expectedLocation =
-        "file:" + expectedWarehouseLocation.toString + "/testlocationdb.db/testlocation"
+      val expectedLocation = new Path(
+        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation").toUri
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(

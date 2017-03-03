@@ -544,7 +544,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.tableMeta.location === location)
+            assert(r.tableMeta.location === new Path(location).toUri)
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
