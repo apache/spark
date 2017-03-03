@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -87,7 +88,7 @@ private[spark] object TaskDescription {
     taskDescription.properties.asScala.foreach { case (key, value) =>
       dataOut.writeUTF(key)
       // SPARK-19796 -- writeUTF doesn't work for long strings, which can happen for property values
-      val bytes = value.getBytes("utf-8")
+      val bytes = value.getBytes(StandardCharsets.UTF_8)
       dataOut.writeInt(bytes.length)
       dataOut.write(bytes)
     }
@@ -131,7 +132,7 @@ private[spark] object TaskDescription {
       val valueLength = dataIn.readInt()
       val valueBytes = new Array[Byte](valueLength)
       dataIn.readFully(valueBytes)
-      properties.setProperty(key, new String(valueBytes, "utf-8"))
+      properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
