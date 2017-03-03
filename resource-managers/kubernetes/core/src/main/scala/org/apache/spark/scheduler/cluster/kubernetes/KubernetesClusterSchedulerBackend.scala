@@ -60,15 +60,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
     .getOrElse(
       throw new SparkException("Must specify the driver pod name"))
 
-  private val executorMemory = conf.getOption("spark.executor.memory").getOrElse("1g")
-  private val executorMemoryBytes = Utils.byteStringAsBytes(executorMemory)
+  private val executorMemoryMb = conf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY)
+  private val executorMemoryString = conf.get(
+    org.apache.spark.internal.config.EXECUTOR_MEMORY.key,
+    org.apache.spark.internal.config.EXECUTOR_MEMORY.defaultValueString)
 
-  private val memoryOverheadBytes = conf
+  private val memoryOverheadMb = conf
     .get(KUBERNETES_EXECUTOR_MEMORY_OVERHEAD)
-    .map(overhead => Utils.byteStringAsBytes(overhead))
-    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryBytes).toInt,
+    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMb).toInt,
       MEMORY_OVERHEAD_MIN))
-  private val executorMemoryWithOverhead = executorMemoryBytes + memoryOverheadBytes
+  private val executorMemoryWithOverhead = executorMemoryMb + memoryOverheadMb
 
   private val executorCores = conf.getOption("spark.executor.cores").getOrElse("1")
 
@@ -165,10 +166,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val selectors = Map(SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> applicationId()).asJava
     val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(executorMemoryBytes.toString)
+      .withAmount(s"${executorMemoryMb}M")
       .build()
     val executorMemoryLimitQuantity = new QuantityBuilder(false)
-      .withAmount(executorMemoryWithOverhead.toString)
+      .withAmount(s"${executorMemoryWithOverhead}M")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCores)
@@ -177,7 +178,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       (ENV_EXECUTOR_CORES, executorCores),
-      (ENV_EXECUTOR_MEMORY, executorMemory),
+      (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId()),
       (ENV_EXECUTOR_ID, executorId)
     ).map(env => new EnvVarBuilder()
@@ -261,7 +262,5 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
 private object KubernetesClusterSchedulerBackend {
   private val DEFAULT_STATIC_PORT = 10000
-  private val MEMORY_OVERHEAD_FACTOR = 0.10
-  private val MEMORY_OVERHEAD_MIN = 384L
   private val EXECUTOR_ID_COUNTER = new AtomicLong(0L)
 }
