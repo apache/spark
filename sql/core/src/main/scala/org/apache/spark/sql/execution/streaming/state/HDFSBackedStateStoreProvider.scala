@@ -283,7 +283,9 @@ private[state] class HDFSBackedStateStoreProvider(
       // semantically correct because Structured Streaming requires rerunning a batch should
       // generate the same output. (SPARK-19677)
       // scalastyle:on
-      if (!fs.exists(finalDeltaFile) && !fs.rename(tempDeltaFile, finalDeltaFile)) {
+      if (fs.exists(finalDeltaFile)) {
+        fs.delete(tempDeltaFile, true)
+      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
         throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
       }
       loadedMaps.put(newVersion, map)
