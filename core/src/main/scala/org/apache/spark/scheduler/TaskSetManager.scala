@@ -695,7 +695,6 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
-    // Mark task as finished. Note that finishing time here should be bigger than 0.
     info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     removeRunningTask(tid)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
@@ -740,7 +739,6 @@ private[spark] class TaskSetManager(
       return
     }
     removeRunningTask(tid)
-    // Mark task as finished. Note that finishing time here should be bigger than 0.
     info.markFinished(state, clock.getTimeMillis())
     val index = info.index
     copiesRunning(index) -= 1
