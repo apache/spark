@@ -126,8 +126,8 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val tmpParent: MLlibKMeansModel = parentModel
-    val predictUDF = udf((vector: Vector) => tmpParent.predict(vector))
+    val localParent: MLlibKMeansModel = parentModel
+    val predictUDF = udf((vector: Vector) => localParent.predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
@@ -364,8 +364,10 @@ class KMeans @Since("1.5.0") (
     model
   }
 
-  @Since("1.5.0")
-  override def transformSchema(schema: StructType): StructType = {
+  /**
+   * Check validity for interactions between parameters.
+   */
+  private def assertInitialModelValid(): Unit = {
     if ($(initMode) == MLlibKMeans.K_MEANS_INITIAL_MODEL) {
       if (isSet(initialModel)) {
         val initialModelK = $(initialModel).parentModel.k
@@ -382,6 +384,11 @@ class KMeans @Since("1.5.0") (
         logWarning(s"Param initialModel will take no effect when initMode is $initMode.")
       }
     }
+  }
+
+  @Since("1.5.0")
+  override def transformSchema(schema: StructType): StructType = {
+    assertInitialModelValid()
     validateAndTransformSchema(schema)
   }
 

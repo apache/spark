@@ -43,7 +43,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     super.beforeAll()
 
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
-    rData = GaussianMixtureSuite.rData.map(GaussianMixtureSuite.FeatureData).toDF()
+    rData = GaussianMixtureSuite.rData.map(Tuple1.apply).toDF("features")
   }
 
   test("default parameters") {
