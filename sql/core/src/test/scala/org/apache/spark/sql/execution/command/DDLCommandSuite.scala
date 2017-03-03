@@ -319,7 +319,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create hive table - property values must be set") {
@@ -336,7 +336,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create table - with partitioned by") {

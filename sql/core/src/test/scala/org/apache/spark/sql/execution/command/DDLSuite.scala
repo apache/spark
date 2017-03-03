@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -1995,6 +1996,86 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
             checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
         }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
+    test(s"location uri contains $specialCharInLoc for datasource table") {
+      withTable("t", "t1") {
+        withTempDir { dir =>
+          val loc = new File(dir, specialCharInLoc)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string)
+               |USING parquet
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(new Path(table.location).toString.contains(specialCharInLoc))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t SELECT 1")
+          assert(loc.listFiles().length >= 1)
+          checkAnswer(spark.table("t"), Row("1") :: Nil)
+        }
+
+        withTempDir { dir =>
+          val loc = new File(dir, specialCharInLoc)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a string, b string)
+               |USING parquet
+               |PARTITIONED BY(b)
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(new Path(table.location).toString.contains(specialCharInLoc))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+          val partFile = new File(loc, "b=2")
+          assert(partFile.listFiles().length >= 1)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
+
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+          val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
+          assert(!partFile1.exists())
+          val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+          assert(partFile2.listFiles().length >= 1)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
+    test(s"location uri contains $specialCharInLoc for database") {
+      try {
+        withTable("t") {
+          withTempDir { dir =>
+            val loc = new File(dir, specialCharInLoc)
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
+            spark.sql("USE tmpdb")
+
+            import testImplicits._
+            Seq(1).toDF("a").write.saveAsTable("t")
+            val tblloc = new File(loc, "t")
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val tblPath = new Path(tblloc.getAbsolutePath)
+            val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
+            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(tblloc.listFiles().nonEmpty)
+          }
+        }
+      } finally {
+        spark.sql("DROP DATABASE IF EXISTS tmpdb")
       }
     }
   }

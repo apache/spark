@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -1685,6 +1686,164 @@ class HiveDDLSuite
               checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
           }
         }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
+    test(s"location uri contains $specialCharInLoc for datasource table") {
+      withTable("t", "t1") {
+        withTempDir { dir =>
+          val loc = new File(dir, specialCharInLoc)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string)
+               |USING parquet
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(new Path(table.location).toString.contains(specialCharInLoc))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t SELECT 1")
+          assert(loc.listFiles().length >= 1)
+          checkAnswer(spark.table("t"), Row("1") :: Nil)
+        }
+
+        withTempDir { dir =>
+          val loc = new File(dir, specialCharInLoc)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a string, b string)
+               |USING parquet
+               |PARTITIONED BY(b)
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(new Path(table.location).toString.contains(specialCharInLoc))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+          val partFile = new File(loc, "b=2")
+          assert(partFile.listFiles().length >= 1)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
+
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+          val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
+          assert(!partFile1.exists())
+          val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+          assert(partFile2.listFiles().length >= 1)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
+    test(s"location uri contains $specialCharInLoc for hive table") {
+      withTable("t") {
+        withTempDir { dir =>
+          val loc = new File(dir, specialCharInLoc)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string)
+               |USING hive
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          val path = new Path(loc.getAbsolutePath)
+          val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
+          assert(table.location == fs.makeQualified(path).toUri)
+          assert(new Path(table.location).toString.contains(specialCharInLoc))
+
+          assert(loc.listFiles().isEmpty)
+          if (specialCharInLoc != "a:b") {
+            spark.sql("INSERT INTO TABLE t SELECT 1")
+            assert(loc.listFiles().length >= 1)
+            checkAnswer(spark.table("t"), Row("1") :: Nil)
+          } else {
+            val e = intercept[InvocationTargetException] {
+              spark.sql("INSERT INTO TABLE t SELECT 1")
+            }.getTargetException.getMessage
+            assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+          }
+        }
+
+        withTempDir { dir =>
+          val loc = new File(dir, specialCharInLoc)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a string, b string)
+               |USING hive
+               |PARTITIONED BY(b)
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          val path = new Path(loc.getAbsolutePath)
+          val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
+          assert(table.location == fs.makeQualified(path).toUri)
+          assert(new Path(table.location).toString.contains(specialCharInLoc))
+
+          assert(loc.listFiles().isEmpty)
+          if (specialCharInLoc != "a:b") {
+            spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+            val partFile = new File(loc, "b=2")
+            assert(partFile.listFiles().length >= 1)
+            checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
+
+            spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+            val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
+            assert(!partFile1.exists())
+            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+            assert(partFile2.listFiles().length >= 1)
+            checkAnswer(spark.table("t1"),
+              Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+          } else {
+            val e = intercept[InvocationTargetException] {
+              spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+            }.getTargetException.getMessage
+            assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+
+            val e1 = intercept[InvocationTargetException] {
+              spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+            }.getTargetException.getMessage
+            assert(e1.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+          }
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
+    test(s"location uri contains $specialCharInLoc for database") {
+      try {
+        withTable("t") {
+          withTempDir { dir =>
+            val loc = new File(dir, specialCharInLoc)
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
+            spark.sql("USE tmpdb")
+
+            Seq(1).toDF("a").write.saveAsTable("t")
+            val tblloc = new File(loc, "t")
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val tblPath = new Path(tblloc.getAbsolutePath)
+            val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
+            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(tblloc.listFiles().nonEmpty)
+          }
+        }
+      } finally {
+        spark.sql("DROP DATABASE IF EXISTS tmpdb")
       }
     }
   }
