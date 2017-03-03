@@ -199,15 +199,14 @@ private[sql] object ArrowConverters {
     val arrowSchema = ArrowConverters.schemaToArrowSchema(schema)
     val out = new ByteArrayOutputStream()
     val writer = new ArrowWriter(Channels.newChannel(out), arrowSchema)
-    try {
-      payload.foreach(writer.writeRecordBatch)
-    } catch {
-      case e: Exception =>
-        throw e
-    } finally {
-      writer.close()
-      payload.foreach(_.close())
+    payload.foreach { batch =>
+      try {
+        writer.writeRecordBatch(batch)
+      } finally {
+        batch.close()
+      }
     }
+    writer.close()
     out.toByteArray
   }
 }
