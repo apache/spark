@@ -20,10 +20,12 @@ package org.apache.spark.sql.streaming
 import java.util.concurrent.CountDownLatch
 
 import org.apache.commons.lang3.RandomStringUtils
+import org.mockito.Mockito._
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -32,11 +34,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.util.BlockingSource
+import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider}
 import org.apache.spark.util.ManualClock
 
 
-class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
+class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
   import AwaitTerminationTester._
   import testImplicits._
@@ -478,6 +480,75 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging {
       q1.stop()
       q2.stop()
       q3.stop()
+    }
+  }
+
+  test("StreamExecution should call stop() on sources when a stream is stopped") {
+    var calledStop = false
+    val source = new Source {
+      override def stop(): Unit = {
+        calledStop = true
+      }
+      override def getOffset: Option[Offset] = None
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        spark.emptyDataFrame
+      }
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+
+    MockSourceProvider.withMockSources(source) {
+      val df = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+
+      testStream(df)(StopStream)
+
+      assert(calledStop, "Did not call stop on source for stopped stream")
+    }
+  }
+
+  testQuietly("SPARK-19774: StreamExecution should call stop() on sources when a stream fails") {
+    var calledStop = false
+    val source1 = new Source {
+      override def stop(): Unit = {
+        throw new RuntimeException("Oh no!")
+      }
+      override def getOffset: Option[Offset] = Some(LongOffset(1))
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        spark.range(2).toDF(MockSourceProvider.fakeSchema.fieldNames: _*)
+      }
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+    val source2 = new Source {
+      override def stop(): Unit = {
+        calledStop = true
+      }
+      override def getOffset: Option[Offset] = None
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        spark.emptyDataFrame
+      }
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+
+    MockSourceProvider.withMockSources(source1, source2) {
+      val df1 = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+        .as[Int]
+
+      val df2 = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+        .as[Int]
+
+      testStream(df1.union(df2).map(i => i / 0))(
+        AssertOnQuery { sq =>
+          intercept[StreamingQueryException](sq.processAllAvailable())
+          sq.exception.isDefined && !sq.isActive
+        }
+      )
+
+      assert(calledStop, "Did not call stop on source for stopped stream")
     }
   }
 
