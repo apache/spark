@@ -24,6 +24,7 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.stat.test.ChiSqTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class ChiSquareSuite
@@ -72,18 +73,21 @@ class ChiSquareSuite
   }
 
   test("fail on continuous features or labels") {
-    // Detect continuous features or labels
+    val tooManyCategories: Int = 100000
+    assert(tooManyCategories > ChiSqTest.maxCategories, "This unit test requires that " +
+      "tooManyCategories be large enough to cause ChiSqTest to throw an exception.")
+
     val random = new Random(11L)
-    val continuousLabel =
-      Seq.fill(100000)(LabeledPoint(random.nextDouble(), Vectors.dense(random.nextInt(2))))
+    val continuousLabel = Seq.fill(tooManyCategories)(
+      LabeledPoint(random.nextDouble(), Vectors.dense(random.nextInt(2))))
     withClue("ChiSquare should throw an exception when given a continuous-valued label") {
       intercept[SparkException] {
         val df = spark.createDataFrame(continuousLabel)
         ChiSquare.test(df, "features", "label")
       }
     }
-    val continuousFeature =
-      Seq.fill(100000)(LabeledPoint(random.nextInt(2), Vectors.dense(random.nextDouble())))
+    val continuousFeature = Seq.fill(tooManyCategories)(
+      LabeledPoint(random.nextInt(2), Vectors.dense(random.nextDouble())))
     withClue("ChiSquare should throw an exception when given continuous-valued features") {
       intercept[SparkException] {
         val df = spark.createDataFrame(continuousFeature)
