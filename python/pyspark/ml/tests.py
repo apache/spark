@@ -1237,8 +1237,7 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.allclose(model.coefficients.toArray(), [-0.4645, 0.3402], atol=1E-4))
         self.assertTrue(np.isclose(model.intercept, 0.7841, atol=1E-4))
 
-        glr2 = GeneralizedLinearRegression(family="tweedie", variancePower=1.6, linkPower=-1.0)
-        model2 = glr2.fit(df)
+        model2 = glr.setLinkPower(-1.0).fit(df)
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
 

@@ -1305,7 +1305,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     * "gamma"    -> "inverse", "identity", "log"
 
-    * "tweedie"  -> power link function specified through "linkPower".
+    * "tweedie"  -> power link function specified through "linkPower". \
                     The default link power in the tweedie family is 1 - variancePower.
 
     .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
