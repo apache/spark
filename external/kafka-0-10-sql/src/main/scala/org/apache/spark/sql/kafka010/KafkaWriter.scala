@@ -41,6 +41,8 @@ private[kafka010] object KafkaWriter extends Logging {
   val KEY_ATTRIBUTE_NAME: String = "key"
   val VALUE_ATTRIBUTE_NAME: String = "value"
 
+  override def toString: String = "KafkaWriter"
+
   def validateQuery(
       queryExecution: QueryExecution,
       kafkaParameters: ju.Map[String, Object],
