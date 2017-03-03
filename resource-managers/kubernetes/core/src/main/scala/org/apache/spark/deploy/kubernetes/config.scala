@@ -19,6 +19,7 @@ package org.apache.spark.deploy.kubernetes
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
+import org.apache.spark.deploy.rest.kubernetes.NodePortUrisDriverServiceManager
 import org.apache.spark.internal.config.ConfigBuilder
 
 package object config {
@@ -156,6 +157,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_SUBMIT_SSL_ENABLED =
+    ConfigBuilder("spark.ssl.kubernetes.submit.enabled")
+      .doc("""
+             | Whether or not to use SSL when sending the
+             | application dependencies to the driver pod.
+             |
+           """.stripMargin)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val KUBERNETES_DRIVER_SERVICE_NAME =
     ConfigBuilder("spark.kubernetes.driver.service.name")
         .doc("""
@@ -183,6 +194,16 @@ package object config {
       .internal()
       .stringConf
       .createOptional
+
+  private[spark] val DRIVER_SERVICE_MANAGER_TYPE =
+    ConfigBuilder("spark.kubernetes.driver.serviceManagerType")
+      .doc(s"""
+          | A tag indicating which class to use for creating the
+          | Kubernetes service and determining its URI for the submission
+          | client.
+        """.stripMargin)
+      .stringConf
+      .createWithDefault(NodePortUrisDriverServiceManager.TYPE)
 
   private[spark] val WAIT_FOR_APP_COMPLETION =
     ConfigBuilder("spark.kubernetes.submit.waitAppCompletion")

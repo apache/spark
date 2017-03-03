@@ -35,10 +35,13 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkSubmit
 import org.apache.spark.deploy.kubernetes.Client
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.integrationtest.docker.SparkDockerImageBuilder
 import org.apache.spark.deploy.kubernetes.integrationtest.minikube.Minikube
 import org.apache.spark.deploy.kubernetes.integrationtest.restapis.SparkRestApiV1
 import org.apache.spark.deploy.kubernetes.integrationtest.sslutil.SSLUtils
+import org.apache.spark.deploy.rest.kubernetes.ExternalSuppliedUrisDriverServiceManager
 import org.apache.spark.status.api.v1.{ApplicationStatus, StageStatus}
 import org.apache.spark.util.Utils
 
@@ -108,6 +111,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         .withGracePeriod(60)
         .delete
     })
+    // spark-submit sets system properties so we have to clear them
+    new SparkConf(true).getAll.map(_._1).foreach { System.clearProperty }
   }
 
   override def afterAll(): Unit = {
@@ -373,6 +378,51 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         .getLog
       assert(podLog.contains(s"File found at /opt/spark/${TEST_EXISTENCE_FILE.getName}" +
         s" with correct contents."), "Job did not find the file as expected.")
+    }
+  }
+
+  test("Use external URI provider") {
+    val externalUriProviderWatch = new ExternalUriProviderWatch(minikubeKubernetesClient)
+    Utils.tryWithResource(minikubeKubernetesClient.services()
+        .withLabel("spark-app-name", "spark-pi")
+        .watch(externalUriProviderWatch)) { _ =>
+      val args = Array(
+        "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
+        "--deploy-mode", "cluster",
+        "--kubernetes-namespace", NAMESPACE,
+        "--name", "spark-pi",
+        "--executor-memory", "512m",
+        "--executor-cores", "1",
+        "--num-executors", "1",
+        "--jars", HELPER_JAR_FILE.getAbsolutePath,
+        "--class", SPARK_PI_MAIN_CLASS,
+        "--conf", "spark.ui.enabled=true",
+        "--conf", "spark.testing=false",
+        "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
+        "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
+        "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+        "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
+        "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
+        "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
+        "--conf", s"${DRIVER_SERVICE_MANAGER_TYPE.key}=${ExternalSuppliedUrisDriverServiceManager.TYPE}",
+        EXAMPLES_JAR_FILE.getAbsolutePath)
+      SparkSubmit.main(args)
+      val sparkMetricsService = getSparkMetricsService("spark-pi")
+      expectationsForStaticAllocation(sparkMetricsService)
+      assert(externalUriProviderWatch.annotationSet.get)
+      val driverService = minikubeKubernetesClient
+        .services()
+        .withLabel("spark-app-name", "spark-pi")
+        .list()
+        .getItems
+        .asScala(0)
+      assert(driverService.getMetadata.getAnnotations.containsKey(ANNOTATION_PROVIDE_EXTERNAL_URI),
+          "External URI request annotation was not set on the driver service.")
+      // Unfortunately we can't check the correctness of the actual value of the URI, as it depends
+      // on the driver submission port set on the driver service but we remove that port from the
+      // service once the submission is complete.
+      assert(driverService.getMetadata.getAnnotations.containsKey(ANNOTATION_RESOLVED_EXTERNAL_URI),
+        "Resolved URI annotation not set on driver service.")
     }
   }
 }

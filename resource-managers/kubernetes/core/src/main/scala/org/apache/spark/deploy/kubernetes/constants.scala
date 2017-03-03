@@ -64,6 +64,12 @@ package object constants {
   private[spark] val ENV_APPLICATION_ID = "SPARK_APPLICATION_ID"
   private[spark] val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
 
+  // Annotation keys
+  private[spark] val ANNOTATION_PROVIDE_EXTERNAL_URI =
+      "spark-job.alpha.apache.org/provideExternalUri"
+  private[spark] val ANNOTATION_RESOLVED_EXTERNAL_URI =
+      "spark-job.alpha.apache.org/resolvedExternalUri"
+
   // Miscellaneous
   private[spark] val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   private[spark] val KUBERNETES_SUBMIT_SSL_NAMESPACE = "kubernetes.submit"
