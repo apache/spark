@@ -26,13 +26,15 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
 
   test("Imputer for Double with default missing Value NaN") {
     val df = spark.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0),
-      (1, 1.0, 1.0, 1.0),
-      (2, 3.0, 3.0, 3.0),
-      (3, 4.0, 4.0, 4.0),
-      (4, Double.NaN, 2.25, 1.0)
-    )).toDF("id", "value", "expected_mean", "expected_median")
-    val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
+      (0, 1.0, 4.0, 1.0, 1.0, 4.0, 4.0),
+      (1, 11.0, 12.0, 11.0, 11.0, 12.0, 12.0),
+      (2, 3.0, Double.NaN, 3.0, 3.0, 10.0, 12.0),
+      (3, Double.NaN, 14.0, 5.0, 3.0, 14.0, 14.0)
+    )).toDF("id", "value1", "value2", "expected_mean_value1", "expected_median_value1",
+      "expected_mean_value2", "expected_median_value2")
+    val imputer = new Imputer()
+      .setInputCols(Array("value1", "value2"))
+      .setOutputCols(Array("out1", "out2"))
     ImputerSuite.iterateStrategyTest(imputer, df)
   }
 
@@ -42,7 +44,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (1, 3.0, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN),
       (3, -1.0, 2.0, 3.0)
-    )).toDF("id", "value", "expected_mean", "expected_median")
+    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1.0)
     ImputerSuite.iterateStrategyTest(imputer, df)
@@ -55,38 +57,61 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 10.0F, 10.0F, 10.0F),
       (3, 10.0F, 10.0F, 10.0F),
       (4, -1.0F, 6.0F, 3.0F)
-    )).toDF("id", "value", "expected_mean", "expected_median")
+    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1)
     ImputerSuite.iterateStrategyTest(imputer, df)
   }
 
   test("Imputer should impute null as well as 'missingValue'") {
-    val df = spark.createDataFrame( Seq(
+    val rawDf = spark.createDataFrame( Seq(
       (0, 4.0, 4.0, 4.0),
       (1, 10.0, 10.0, 10.0),
       (2, 10.0, 10.0, 10.0),
       (3, Double.NaN, 8.0, 10.0),
       (4, -1.0, 8.0, 10.0)
-    )).toDF("id", "value", "expected_mean", "expected_median")
-    val df2 = df.selectExpr("*", "IF(value=-1.0, null, value) as nullable_value")
-    val imputer = new Imputer().setInputCols(Array("nullable_value")).setOutputCols(Array("out"))
-    ImputerSuite.iterateStrategyTest(imputer, df2)
+    )).toDF("id", "rawValue", "expected_mean_value", "expected_median_value")
+    val df = rawDf.selectExpr("*", "IF(rawValue=-1.0, null, rawValue) as value")
+    val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
+    ImputerSuite.iterateStrategyTest(imputer, df)
   }
-
 
   test("Imputer throws exception when surrogate cannot be computed") {
     val df = spark.createDataFrame( Seq(
       (0, Double.NaN, 1.0, 1.0),
       (1, Double.NaN, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN)
-    )).toDF("id", "value", "expected_mean", "expected_median")
+    )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
         .setStrategy(strategy)
       intercept[SparkException] {
         val model = imputer.fit(df)
       }
+    }
+  }
+
+  test("Imputer throws exception when inputCols does not match outputCols") {
+    val df = spark.createDataFrame( Seq(
+      (0, 1.0, 1.0, 1.0),
+      (1, Double.NaN, 3.0, 3.0),
+      (2, Double.NaN, Double.NaN, Double.NaN)
+    )).toDF("id", "value1", "value2", "value3")
+    Seq("mean", "median").foreach { strategy =>
+      // inputCols and outCols length different
+      val imputer = new Imputer()
+        .setInputCols(Array("value1", "value2"))
+        .setOutputCols(Array("out1"))
+        .setStrategy(strategy)
+      intercept[IllegalArgumentException] {
+        val model = imputer.fit(df)
+      }
+      // duplicate name in inputCols
+      imputer.setInputCols(Array("value1", "value1")).setOutputCols(Array("out1, out2"))
+      intercept[IllegalArgumentException] {
+        val model = imputer.fit(df)
+      }
+
     }
   }
 
@@ -120,16 +145,21 @@ object ImputerSuite{
    * @param df DataFrame with columns "id", "value", "expected_mean", "expected_median"
    */
   def iterateStrategyTest(imputer: Imputer, df: DataFrame): Unit = {
+    val inputCols = imputer.getInputCols
+
     Seq("mean", "median").foreach { strategy =>
       imputer.setStrategy(strategy)
       val model = imputer.fit(df)
-      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
-        case Row(exp: Float, out: Float) =>
-          assert((exp.isNaN && out.isNaN) || (exp == out),
-            s"Imputed values differ. Expected: $exp, actual: $out")
-        case Row(exp: Double, out: Double) =>
-          assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
-            s"Imputed values differ. Expected: $exp, actual: $out")
+      val resultDF = model.transform(df)
+      imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
+        resultDF.select(s"expected_${strategy}_$inputCol", outputCol).collect().foreach {
+          case Row(exp: Float, out: Float) =>
+            assert((exp.isNaN && out.isNaN) || (exp == out),
+              s"Imputed values differ. Expected: $exp, actual: $out")
+          case Row(exp: Double, out: Double) =>
+            assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
+              s"Imputed values differ. Expected: $exp, actual: $out")
+        }
       }
     }
   }
