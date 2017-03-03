@@ -37,9 +37,9 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
- * Common params for KMeans and KMeansModel
+ * Common params for KMeans and KMeansModel.
  */
-private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
+private[clustering] trait KMeansModelParams extends Params with HasMaxIter with HasFeaturesCol
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
@@ -99,6 +99,22 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 }
 
 /**
+ * Common params for KMeans.
+ */
+private[clustering] trait KMeansParams extends KMeansModelParams with HasInitialModel[KMeansModel] {
+
+  /**
+   * A KMeansModel to use for warm start.
+   * Note the cluster count of initial model must be equal with [[k]],
+   * otherwise, throws IllegalArgumentException.
+   * @group param
+   */
+  @Since("2.2.0")
+  final val initialModel: Param[KMeansModel] =
+    new Param[KMeansModel](this, "initialModel", "A KMeansModel to use for warm start.")
+}
+
+/**
  * Model fitted by KMeans.
  *
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
@@ -107,7 +123,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private[clustering] val parentModel: MLlibKMeansModel)
-  extends Model[KMeansModel] with KMeansParams with MLWritable {
+  extends Model[KMeansModel] with KMeansModelParams with MLWritable {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -255,18 +271,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 @Since("1.5.0")
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel]
-    with KMeansParams with HasInitialModel[KMeansModel] with MLWritable {
-
-  /**
-   * A KMeansModel to use for warm start.
-   * Note the cluster count of initial model must be equal with [[k]],
-   * otherwise, throws IllegalArgumentException.
-   * @group param
-   */
-  @Since("2.2.0")
-  final val initialModel: Param[KMeansModel] =
-    new Param[KMeansModel](this, "initialModel", "A KMeansModel to use for warm start.")
+  extends Estimator[KMeansModel] with KMeansParams with MLWritable {
 
   setDefault(
     k -> 2,
