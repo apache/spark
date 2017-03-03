@@ -27,6 +27,7 @@ import java.util.Arrays
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 import javax.net.ssl._
+import javax.servlet.http.HttpServletResponse
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.collection.JavaConverters._
@@ -186,12 +187,12 @@ private[spark] object TestUtils {
   }
 
   /**
-   * Returns the response code from an HTTP(S) URL.
+   * Returns the response code and url (if redirected) from an HTTP(S) URL.
    */
-  def httpResponseCode(
+  def httpResponseCodeAndURL(
       url: URL,
       method: String = "GET",
-      headers: Seq[(String, String)] = Nil): Int = {
+      headers: Seq[(String, String)] = Nil): (Int, Option[String]) = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod(method)
     headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
@@ -210,16 +211,30 @@ private[spark] object TestUtils {
       sslCtx.init(null, Array(trustManager), new SecureRandom())
       connection.asInstanceOf[HttpsURLConnection].setSSLSocketFactory(sslCtx.getSocketFactory())
       connection.asInstanceOf[HttpsURLConnection].setHostnameVerifier(verifier)
+      connection.setInstanceFollowRedirects(false)
     }
 
     try {
       connection.connect()
-      connection.getResponseCode()
+      if (connection.getResponseCode == HttpServletResponse.SC_FOUND) {
+        (connection.getResponseCode, Option(connection.getHeaderField("Location")))
+      } else {
+        (connection.getResponseCode(), None)
+      }
     } finally {
       connection.disconnect()
     }
   }
 
+  /**
+   * Returns the response code from an HTTP(S) URL.
+   */
+  def httpResponseCode(
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): Int = {
+    httpResponseCodeAndURL(url, method, headers)._1
+  }
 }
 
 
