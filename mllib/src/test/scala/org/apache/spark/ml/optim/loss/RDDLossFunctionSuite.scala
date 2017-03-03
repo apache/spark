@@ -20,7 +20,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
-import org.apache.spark.ml.optim.aggregator.TestAggregator
+import org.apache.spark.ml.optim.aggregator.DifferentiableLossAggregatorSuite.TestAggregator
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD

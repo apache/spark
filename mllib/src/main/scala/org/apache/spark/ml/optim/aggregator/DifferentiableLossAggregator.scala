@@ -48,7 +48,7 @@ private[ml] trait DifferentiableLossAggregator[
   /** Merge two aggregators. The `this` object will be modified in place and returned. */
   def merge(other: Agg): Agg = {
     require(dim == other.dim, s"Dimensions mismatch when merging with another " +
-      s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
+      s"${getClass.getSimpleName}. Expecting $dim but got ${other.dim}.")
 
     if (other.weightSum != 0) {
       weightSum += other.weightSum

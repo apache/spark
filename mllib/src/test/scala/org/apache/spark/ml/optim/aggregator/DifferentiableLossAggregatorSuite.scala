@@ -23,6 +23,8 @@ import org.apache.spark.ml.util.TestingUtils._
 
 class DifferentiableLossAggregatorSuite extends SparkFunSuite {
 
+  import DifferentiableLossAggregatorSuite.TestAggregator
+
   private val instances1 = Array(
     Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
     Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
@@ -34,7 +36,7 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
     Instance(1.5, 0.2, Vectors.dense(3.0, 0.2))
   )
 
-  def assertEqual[T, Agg <: DifferentiableLossAggregator[T, Agg]](
+  private def assertEqual[T, Agg <: DifferentiableLossAggregator[T, Agg]](
       agg1: DifferentiableLossAggregator[T, Agg],
       agg2: DifferentiableLossAggregator[T, Agg]): Unit = {
     assert(agg1.weight === agg2.weight)
@@ -71,7 +73,16 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
     val coefficients = Vectors.dense(0.5, -0.1)
     val agg1 = new TestAggregator(2)(coefficients)
     val agg2 = new TestAggregator(2)(coefficients)
+    val aggBadDim = new TestAggregator(1)(Vectors.dense(0.5))
+    aggBadDim.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
     instances1.foreach(agg1.add)
+
+    // merge incompatible aggregators
+    withClue("cannot merge aggregators with different dimensions") {
+      intercept[IllegalArgumentException] {
+        agg1.merge(aggBadDim)
+      }
+    }
 
     // merge empty other
     val mergedEmptyOther = agg1.merge(agg2)
@@ -127,21 +138,23 @@ class DifferentiableLossAggregatorSuite extends SparkFunSuite {
   }
 }
 
-/**
- * Dummy aggregator that represents least squares cost with no intercept.
- */
-class TestAggregator(numFeatures: Int)(coefficients: Vector)
-  extends DifferentiableLossAggregator[Instance, TestAggregator] {
+object DifferentiableLossAggregatorSuite {
+  /**
+   * Dummy aggregator that represents least squares cost with no intercept.
+   */
+  class TestAggregator(numFeatures: Int)(coefficients: Vector)
+    extends DifferentiableLossAggregator[Instance, TestAggregator] {
 
-  protected override val dim: Int = numFeatures
+    protected override val dim: Int = numFeatures
 
-  override def add(instance: Instance): TestAggregator = {
-    val error = instance.label - BLAS.dot(coefficients, instance.features)
-    weightSum += instance.weight
-    lossSum += instance.weight * error * error / 2.0
-    (0 until dim).foreach { j =>
-      gradientSumArray(j) += instance.weight * error * instance.features(j)
+    override def add(instance: Instance): TestAggregator = {
+      val error = instance.label - BLAS.dot(coefficients, instance.features)
+      weightSum += instance.weight
+      lossSum += instance.weight * error * error / 2.0
+      (0 until dim).foreach { j =>
+        gradientSumArray(j) += instance.weight * error * instance.features(j)
+      }
+      this
     }
-    this
   }
 }
