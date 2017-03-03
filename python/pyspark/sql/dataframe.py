@@ -391,18 +391,6 @@ class DataFrame(object):
             port = self._jdf.collectToPython()
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
-    @since(2.2)
-    def collectAsArrow(self):
-        """
-        Returns all records as list of deserialized ArrowPayloads, pyarrow must be installed
-        and available.
-
-        .. note:: Experimental.
-        """
-        with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(port, ArrowSerializer()))
-
     @ignore_unicode_prefix
     @since(2.0)
     def toLocalIterator(self):
@@ -1633,12 +1621,23 @@ class DataFrame(object):
         """
         if useArrow:
             from pyarrow.table import concat_tables
-            tables = self.collectAsArrow()
+            tables = self._collectAsArrow()
             table = concat_tables(tables)
             return table.to_pandas()
         else:
             import pandas as pd
             return pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+    def _collectAsArrow(self):
+        """
+        Returns all records as list of deserialized ArrowPayloads, pyarrow must be installed
+        and available.
+
+        .. note:: Experimental.
+        """
+        with SCCallSiteSync(self._sc) as css:
+            port = self._jdf.collectAsArrowToPython()
+        return list(_load_from_socket(port, ArrowSerializer()))
 
     ##########################################################################################
     # Pandas compatibility
