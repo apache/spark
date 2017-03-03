@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import scala.util.Try
-
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
 import org.apache.spark.sql.AnalysisException
