@@ -950,7 +950,13 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.RandomForestRegressionModel.setFeatureSubsetStrategy")
     ) ++ Seq(
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.KMeans$"),
-      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.KMeans")
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.KMeans"),
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.KMeansModel"),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.clustering.KMeansModelParams.org$apache$spark$ml$clustering$KMeansModelParams$_setter_$initMode_="),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.clustering.KMeansModelParams.org$apache$spark$ml$clustering$KMeansModelParams$_setter_$initSteps_="),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.clustering.KMeansModelParams.org$apache$spark$ml$clustering$KMeansModelParams$_setter_$k_="),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasInitialModel.initialModel"),
+      ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasInitialModel.getInitialModel")
     )
   }
 
