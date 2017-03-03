@@ -151,7 +151,12 @@ private[spark] object Utils extends Logging {
 
   /** Deserialize an object using Java serialization and the given ClassLoader */
   def deserialize[T](bytes: Array[Byte], loader: ClassLoader): T = {
-    val bis = new ByteArrayInputStream(bytes)
+    deserialize(ByteBuffer.wrap(bytes), loader)
+  }
+
+  /** Deserialize an object using Java serialization and the given ClassLoader */
+  def deserialize[T](bytes: ByteBuffer, loader: ClassLoader): T = {
+    val bis = new ByteBufferInputStream(bytes)
     val ois = new ObjectInputStream(bis) {
       override def resolveClass(desc: ObjectStreamClass): Class[_] = {
         // scalastyle:off classforname
