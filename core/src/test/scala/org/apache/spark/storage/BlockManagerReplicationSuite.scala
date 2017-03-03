@@ -486,7 +486,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     executorsToRemove.foreach{exec =>
       master.removeExecutor(exec.executorId)
       // giving enough time for replication to happen and new block be reported to master
-      Thread.sleep(200)
+      Thread.sleep(1000)
     }
 
     // giving enough time for replication complete and locks released
