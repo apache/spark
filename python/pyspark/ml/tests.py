@@ -1222,6 +1222,7 @@ class HashingTFTest(SparkSessionTestCase):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
+
 class GeneralizedLinearRegressionTest(SparkSessionTestCase):
 
     def test_tweedie_distribution(self):
@@ -1230,7 +1231,7 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
             [(1.0, Vectors.dense(0.0, 0.0)),
              (1.0, Vectors.dense(1.0, 2.0)),
              (2.0, Vectors.dense(0.0, 0.0)),
-             (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
+             (2.0, Vectors.dense(1.0, 1.0)), ], ["label", "features"])
 
         glr = GeneralizedLinearRegression(family="tweedie", variancePower=1.6)
         model = glr.fit(df)
@@ -1240,6 +1241,7 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         model2 = glr.setLinkPower(-1.0).fit(df)
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
+
 
 class ALSTest(SparkSessionTestCase):
 
