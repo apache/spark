@@ -100,10 +100,10 @@ case class ResolveInlineTables(conf: CatalystConf) extends Rule[LogicalPlan] {
           } else {
             Cast(e, targetType)
           }
-          castedExpr match {
-            case te: TimeZoneAwareExpression => te.withTimeZone(conf.sessionLocalTimeZone).eval()
-            case _ => castedExpr.eval()
-          }
+          castedExpr.transform {
+            case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
+              e.withTimeZone(conf.sessionLocalTimeZone)
+          }.eval()
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}")
