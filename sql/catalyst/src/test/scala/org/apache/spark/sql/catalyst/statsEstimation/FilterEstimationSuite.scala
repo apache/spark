@@ -73,7 +73,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(EqualTo(arInt, Literal(2)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      1)
+      rowCount = 1)
   }
 
   test("cint <=> 2") {
@@ -82,7 +82,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(EqualNullSafe(arInt, Literal(2)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      1)
+      rowCount = 1)
   }
 
   test("cint = 0") {
@@ -92,7 +92,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(EqualTo(arInt, Literal(0)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      rowCount = 0)
   }
 
   test("cint < 3") {
@@ -101,7 +101,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(LessThan(arInt, Literal(3)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      rowCount = 3)
   }
 
   test("cint < 0") {
@@ -111,7 +111,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(LessThan(arInt, Literal(0)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      rowCount = 0)
   }
 
   test("cint <= 3") {
@@ -120,7 +120,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(LessThanOrEqual(arInt, Literal(3)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      rowCount = 3)
   }
 
   test("cint > 6") {
@@ -129,7 +129,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(GreaterThan(arInt, Literal(6)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      5)
+      rowCount = 5)
   }
 
   test("cint > 10") {
@@ -139,7 +139,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(GreaterThan(arInt, Literal(10)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      rowCount = 0)
   }
 
   test("cint >= 6") {
@@ -148,7 +148,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(GreaterThanOrEqual(arInt, Literal(6)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      5)
+      rowCount = 5)
   }
 
   test("cint IS NULL") {
@@ -157,7 +157,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(IsNull(arInt), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 0, min = None, max = None,
         nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      rowCount = 0)
   }
 
   test("cint IS NOT NULL") {
@@ -166,7 +166,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(IsNotNull(arInt), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      10)
+      rowCount = 10)
   }
 
   test("cint > 3 AND cint <= 6") {
@@ -176,7 +176,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(condition, childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 3, min = Some(3), max = Some(6),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      4)
+      rowCount = 4)
   }
 
   test("cint = 3 OR cint = 6") {
@@ -186,7 +186,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(condition, childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      2)
+      rowCount = 2)
   }
 
   test("cint IN (3, 4, 5)") {
@@ -195,7 +195,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(InSet(arInt, Set(3, 4, 5)), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 3, min = Some(3), max = Some(5),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      rowCount = 3)
   }
 
   test("cint NOT IN (3, 4, 5)") {
@@ -204,7 +204,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(Not(InSet(arInt, Set(3, 4, 5))), childStatsTestPlan(Seq(arInt), 10L)),
       ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      7)
+      rowCount = 7)
   }
 
   test("cbool = true") {
@@ -213,17 +213,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(EqualTo(arBool, Literal(true)), childStatsTestPlan(Seq(arBool), 10L)),
       ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
         nullCount = 0, avgLen = 1, maxLen = 1),
-      5)
+      rowCount = 5)
   }
 
   test("cbool > false") {
-    // bool comparison is not supported yet, so stats remain same.
     validateEstimatedStats(
       arBool,
       Filter(GreaterThan(arBool, Literal(false)), childStatsTestPlan(Seq(arBool), 10L)),
-      ColumnStat(distinctCount = 2, min = Some(false), max = Some(true),
+      ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
         nullCount = 0, avgLen = 1, maxLen = 1),
-      10)
+      rowCount = 5)
   }
 
   test("cdate = cast('2017-01-02' AS DATE)") {
@@ -234,7 +233,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         childStatsTestPlan(Seq(arDate), 10L)),
       ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      1)
+      rowCount = 1)
   }
 
   test("cdate < cast('2017-01-03' AS DATE)") {
@@ -245,7 +244,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         childStatsTestPlan(Seq(arDate), 10L)),
       ColumnStat(distinctCount = 2, min = Some(dMin), max = Some(d20170103),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      rowCount = 3)
   }
 
   test("""cdate IN ( cast('2017-01-03' AS DATE),
@@ -259,7 +258,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         childStatsTestPlan(Seq(arDate), 10L)),
       ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      rowCount = 3)
   }
 
   test("cdecimal = 0.400000000000000000") {
@@ -270,7 +269,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         childStatsTestPlan(Seq(arDecimal), 4L)),
       ColumnStat(distinctCount = 1, min = Some(dec_0_40), max = Some(dec_0_40),
         nullCount = 0, avgLen = 8, maxLen = 8),
-      1)
+      rowCount = 1)
   }
 
   test("cdecimal < 0.60 ") {
@@ -281,7 +280,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         childStatsTestPlan(Seq(arDecimal), 4L)),
       ColumnStat(distinctCount = 3, min = Some(decMin), max = Some(dec_0_60),
         nullCount = 0, avgLen = 8, maxLen = 8),
-      3)
+      rowCount = 3)
   }
 
   test("cdouble < 3.0") {
@@ -290,7 +289,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(LessThan(arDouble, Literal(3.0)), childStatsTestPlan(Seq(arDouble), 10L)),
       ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
         nullCount = 0, avgLen = 8, maxLen = 8),
-      3)
+      rowCount = 3)
   }
 
   test("cstring = 'A2'") {
@@ -299,7 +298,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(EqualTo(arString, Literal("A2")), childStatsTestPlan(Seq(arString), 10L)),
       ColumnStat(distinctCount = 1, min = None, max = None,
         nullCount = 0, avgLen = 2, maxLen = 2),
-      1)
+      rowCount = 1)
   }
 
   // There is no min/max statistics for String type.  We estimate 10 rows returned.
@@ -309,7 +308,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(LessThan(arString, Literal("A2")), childStatsTestPlan(Seq(arString), 10L)),
       ColumnStat(distinctCount = 10, min = None, max = None,
         nullCount = 0, avgLen = 2, maxLen = 2),
-      10)
+      rowCount = 10)
   }
 
   // This is a corner test case.  We want to test if we can handle the case when the number of
@@ -329,7 +328,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Filter(InSet(arInt, Set(1, 2, 3, 4, 5)), cornerChildStatsTestplan),
       ColumnStat(distinctCount = 2, min = Some(1), max = Some(5),
         nullCount = 0, avgLen = 4, maxLen = 4),
-      2)
+      rowCount = 2)
   }
 
   private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {
