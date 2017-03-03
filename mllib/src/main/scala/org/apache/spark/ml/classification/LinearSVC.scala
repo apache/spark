@@ -57,9 +57,9 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
 @Since("2.2.0")
 @Experimental
 class LinearSVC @Since("2.2.0") (
-                                  @Since("2.2.0") override val uid: String)
+    @Since("2.2.0") override val uid: String)
   extends Classifier[Vector, LinearSVC, LinearSVCModel]
-    with LinearSVCParams with DefaultParamsWritable {
+  with LinearSVCParams with DefaultParamsWritable {
 
   @Since("2.2.0")
   def this() = this(Identifiable.randomUID("linearsvc"))
@@ -163,12 +163,12 @@ class LinearSVC @Since("2.2.0") (
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-                   instance: Instance) =>
-        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
+        instance: Instance) =>
+          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
 
       val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-                    c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-        (c1._1.merge(c2._1), c1._2.merge(c2._2))
+        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
+          (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
         new MultivariateOnlineSummarizer, new MultiClassSummarizer
@@ -270,11 +270,11 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 @Since("2.2.0")
 @Experimental
 class LinearSVCModel private[classification] (
-                                               @Since("2.2.0") override val uid: String,
-                                               @Since("2.2.0") val coefficients: Vector,
-                                               @Since("2.2.0") val intercept: Double)
+    @Since("2.2.0") override val uid: String,
+    @Since("2.2.0") val coefficients: Vector,
+    @Since("2.2.0") val intercept: Double)
   extends ClassificationModel[Vector, LinearSVCModel]
-    with LinearSVCParams with MLWritable {
+  with LinearSVCParams with MLWritable {
 
   @Since("2.2.0")
   override val numClasses: Int = 2
@@ -359,12 +359,12 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
  * LinearSVCCostFun implements Breeze's DiffFunction[T] for hinge loss function
  */
 private class LinearSVCCostFun(
-                                instances: RDD[Instance],
-                                fitIntercept: Boolean,
-                                standardization: Boolean,
-                                bcFeaturesStd: Broadcast[Array[Double]],
-                                regParamL2: Double,
-                                aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
+    instances: RDD[Instance],
+    fitIntercept: Boolean,
+    standardization: Boolean,
+    bcFeaturesStd: Broadcast[Array[Double]],
+    regParamL2: Double,
+    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
@@ -621,9 +621,9 @@ private class LinearSVCCostFun(
  * @param bcFeaturesStd The standard deviation values of the features.
  */
 private class LinearSVCAggregator(
-                                   bcCoefficients: Broadcast[Vector],
-                                   bcFeaturesStd: Broadcast[Array[Double]],
-                                   fitIntercept: Boolean) extends Serializable {
+    bcCoefficients: Broadcast[Vector],
+    bcFeaturesStd: Broadcast[Array[Double]],
+    fitIntercept: Boolean) extends Serializable {
 
   private val numFeatures: Int = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
