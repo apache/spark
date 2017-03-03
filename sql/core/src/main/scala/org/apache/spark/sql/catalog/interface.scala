@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 class Database(
     val name: String,
     @Nullable val description: String,
-    val locationUri: URI)
+    val locationUri: String)
   extends DefinedByConstructorParams {
 
   override def toString: String = {

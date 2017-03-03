@@ -253,9 +253,9 @@ class CatalogSuite
   }
 
   test("Database.toString") {
-    assert(new Database("cool_db", "cool_desc", new URI("cool_path")).toString ==
+    assert(new Database("cool_db", "cool_desc", "cool_path").toString ==
       "Database[name='cool_db', description='cool_desc', path='cool_path']")
-    assert(new Database("cool_db", null, new URI("cool_path")).toString ==
+    assert(new Database("cool_db", null, "cool_path").toString ==
       "Database[name='cool_db', path='cool_path']")
   }
 
@@ -288,7 +288,7 @@ class CatalogSuite
   }
 
   test("catalog classes format in Dataset.show") {
-    val db = new Database("nama", "descripta", new URI("locata"))
+    val db = new Database("nama", "descripta", "locata")
     val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
     val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
     val column = new Column(
