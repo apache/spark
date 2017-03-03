@@ -111,8 +111,12 @@ class ExecutorClassLoaderSuite
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorClassLoader(new SparkConf(), null, url1, parentLoader, true)
 
-    // load 'scala.Option'
+    // load 'scala.Option', using Class.forName to do the exact same behavior as
+    // what JavaDeserializationStream does
+
+    // scalastyle:off classforname
     val optionClass = Class.forName("scala.Option", false, classLoader)
+    // scalastyle:on classforname
     assert(optionClass.getClassLoader == classLoader, "scala.Option didn't come from ExecutorClassLoader")
   }
 
