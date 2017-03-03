@@ -482,17 +482,6 @@ case class JsonTuple(children: Seq[Expression])
 /**
  * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
-  extended = """
-    Examples:
-      > SELECT _FUNC_('{"a":1}', '{"type":"struct", "fields":[{"name":"a", "type":"integer", "nullable":true}]}');
-       {"a":1}
-      > SELECT _FUNC_('{"time":"26/08/2015"}', '{"type":"struct", "fields":[{"name":"time", "type":"timestamp", "nullable":true}]}', map('timestampFormat', 'dd/MM/yyyy'));
-       {"time":"2015-08-26 00:00:00.0"}
-  """)
-// scalastyle:on line.size.limit
 case class JsonToStruct(
     schema: DataType,
     options: Map[String, String],
@@ -503,21 +492,6 @@ case class JsonToStruct(
 
   def this(schema: DataType, options: Map[String, String], child: Expression) =
     this(schema, options, child, None)
-
-  // Used in `FunctionRegistry`
-  def this(child: Expression, schema: Expression) =
-    this(
-      schema = JacksonUtils.validateSchemaLiteral(schema),
-      options = Map.empty[String, String],
-      child = child,
-      timeZoneId = None)
-
-  def this(child: Expression, schema: Expression, options: Expression) =
-    this(
-      schema = JacksonUtils.validateSchemaLiteral(schema),
-      options = JacksonUtils.validateMapData(options),
-      child = child,
-      timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = schema match {
     case _: StructType | ArrayType(_: StructType, _) =>

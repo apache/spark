@@ -22,7 +22,7 @@ import scala.util.Try
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{CreateMap, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateMap, Expression}
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.types._
 
@@ -66,11 +66,6 @@ object JacksonUtils {
   }.getOrElse {
     throw new AnalysisException(
       s"""Illegal json string for representing a schema: $schemaAsJson"""")
-  }
-
-  def validateSchemaLiteral(exp: Expression): StructType = exp match {
-    case Literal(s, StringType) => strToStructType(s.toString)
-    case e => throw new AnalysisException(s"Must be a string literal, but: $e")
   }
 
   /** Convert a map literal to Map-type data. */

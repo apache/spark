@@ -198,7 +198,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(dfTwo, readBackTwo)
   }
 
-  test("SPARK-19637 Support to_json/from_json in SQL") {
+  test("SPARK-19637 Support to_json in SQL") {
     // to_json
     val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
     checkAnswer(
@@ -214,32 +214,5 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("to_json(a, named_struct('a', 1))")
     }
     assert(errMsg1.getMessage.startsWith("Must use a map() function for options"))
-
-    // from_json
-    val df3 = Seq("""{"a": 1}""").toDS()
-    val schema1 = new StructType().add("a", IntegerType)
-    checkAnswer(
-      df3.selectExpr(s"from_json(value, '${schema1.json}')"),
-      Row(Row(1)) :: Nil)
-
-    val df4 = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
-    val schema2 = new StructType().add("time", TimestampType)
-    checkAnswer(
-      df4.selectExpr(
-        s"from_json(value, '${schema2.json}', map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
-      Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
-
-    val errMsg2 = intercept[AnalysisException] {
-      df4.selectExpr(s"from_json(value, 1)")
-    }
-    assert(errMsg2.getMessage.startsWith("Must be a string literal, but:"))
-    val errMsg3 = intercept[AnalysisException] {
-      df4.selectExpr(s"""from_json(value, '{"a": 1}')""")
-    }
-    assert(errMsg3.getMessage.startsWith("Illegal json string for representing a schema:"))
-    val errMsg4 = intercept[AnalysisException] {
-      df4.selectExpr(s"from_json(value, '${schema2.json}', named_struct('a', 1))")
-    }
-    assert(errMsg4.getMessage.startsWith("Must use a map() function for options"))
   }
 }
