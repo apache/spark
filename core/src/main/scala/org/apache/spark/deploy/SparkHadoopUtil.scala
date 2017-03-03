@@ -95,11 +95,6 @@ class SparkHadoopUtil extends Logging {
         val sessionToken = System.getenv("AWS_SESSION_TOKEN")
         if (sessionToken != null) {
           hadoopConf.set("fs.s3a.session.token", sessionToken)
-          logDebug(s"Found 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY' and " +
-            s"'AWS_SESSION_TOKEN', propagate them to cluster.")
-        } else {
-          logDebug(s"Found 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY', " +
-            s"propagate them to cluster.")
         }
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
