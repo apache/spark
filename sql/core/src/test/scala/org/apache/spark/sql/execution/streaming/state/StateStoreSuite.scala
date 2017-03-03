@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, IOException}
 import java.net.URI
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -293,6 +295,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val provider = newStoreProvider(hadoopConf = conf)
     provider.getStore(0).commit()
     provider.getStore(0).commit()
+
+    // Verify we don't leak temp files
+    val tempFiles = FileUtils.listFiles(new File(provider.id.checkpointLocation),
+      null, true).asScala.filter(_.getName.startsWith("temp-"))
+    assert(tempFiles.isEmpty)
   }
 
   test("corrupted file handling") {
