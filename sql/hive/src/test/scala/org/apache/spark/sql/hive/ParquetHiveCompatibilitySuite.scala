@@ -17,19 +17,16 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
 import java.sql.Timestamp
 import java.util.TimeZone
 
 import org.apache.spark._
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityTest, ParquetFileFormat}
-import org.apache.spark.sql.hive.test.{TestHiveContext, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{StructType, TimestampType}
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
@@ -176,7 +173,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
             val tblProperties = explicitTz.map {
               tz => raw"""TBLPROPERTIES ($key="$tz")"""
             }.getOrElse("")
-            val defaultTz = if (setTableTzByDefault) Some("UTC") else None
+            val localTz = TimeZone.getDefault.getID()
+            val defaultTz = if (setTableTzByDefault) Some(localTz) else None
             spark.sql(
               raw"""CREATE TABLE $baseTable (
                     |  x int
@@ -211,12 +209,14 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
 
 
             import spark.implicits._
-            val rawData = spark.createDataset(Seq(
+            val originalTsStrings = Seq(
               "2015-12-31 23:50:59.123",
               "2015-12-31 22:49:59.123",
               "2016-01-01 00:39:59.123",
               "2016-01-01 01:29:59.123"
-            ).map { x => java.sql.Timestamp.valueOf(x) })
+            )
+            val rawData = spark.createDataset(
+              originalTsStrings.map { x => java.sql.Timestamp.valueOf(x) })
 
             // Check writing data out.
             // We write data into our tables, and then check the raw parquet files to see whether
@@ -241,19 +241,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
             val onDiskLocation = """file:(.*)""".r.findFirstMatchIn(spark.sessionState.catalog
               .getTableMetadata(TableIdentifier(s"insert_$baseTable")).location).get.group(1)
             val readFromDisk = spark.read.parquet(onDiskLocation).collect()
-              .map(_.getAs[Timestamp](0))
-            val expectedReadFromDisk = expectedTableTz match {
-              case Some("America/Los_Angeles") =>
-                // we should take a timestamp that is assumed to be in LA time, and shift it to UTC
-                // by subtracting the offset from UTC.
-                val tz = TimeZone.getTimeZone("America/Los_Angeles")
-                rawData.collect().map { ts =>
-                  new Timestamp(ts.getTime - tz.getOffset(ts.getTime))
-                }
-              case _ =>
-                rawData.collect()
-            }
-            assert(readFromDisk === expectedReadFromDisk, readFromDisk.mkString(","))
+              .map(_.getAs[Timestamp](0).toString())
+            assert(readFromDisk === originalTsStrings, readFromDisk.mkString(","))
 
             // check reading data back in
             // TODO check predicate pushdown

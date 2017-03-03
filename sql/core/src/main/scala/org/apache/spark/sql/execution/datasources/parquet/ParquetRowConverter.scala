@@ -260,16 +260,17 @@ private[parquet] class ParquetRowConverter(
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.
         // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
         val tzString = hadoopConf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
-        val tz = if (tzString == null) {
-          DateTimeUtils.TimeZoneGMT
+        val localTz = TimeZone.getDefault()
+        val storageTz = if (tzString == null) {
+          localTz
         } else {
           TimeZone.getTimeZone(tzString)
         }
         new ParquetPrimitiveConverter(updater) {
           // Converts nanosecond timestamps stored as INT96
           override def addBinary(value: Binary): Unit = {
-            val timestamp =
-              ParquetRowConverter.binaryToSQLTimestamp(value, tz)
+            val timestamp = ParquetRowConverter.binaryToSQLTimestamp(value, storageTz = storageTz,
+              localTz = localTz)
             updater.setLong(timestamp)
           }
         }
@@ -672,19 +673,24 @@ private[parquet] object ParquetRowConverter {
     unscaled
   }
 
-  def binaryToSQLTimestamp(binary: Binary, tz: TimeZone): SQLTimestamp = {
+  /**
+   * Converts an int96 to a SQLTimestamp, given both the storage timezone and the local timezone.
+   * The timestamp is really meant to be interpreted as a "floating time", but since we
+   * actually store it as micros since epoch, why we have to apply a conversion when timezones
+   * change.
+   * @param binary
+   * @return
+   */
+  def binaryToSQLTimestamp(binary: Binary, storageTz: TimeZone, localTz: TimeZone): SQLTimestamp = {
     assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
       s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
     val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
     val utcEpochMicros = DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
-    // avoid expensive time logic if possible
-    if (!DateTimeUtils.isUtcOrGmt(tz)) {
-      // TODO not really sure what the desired behavior here is ...
-      val millis = utcEpochMicros / 1000
-      val offset = tz.getOffset(millis)
-      ((millis + offset) * 1000) + (utcEpochMicros % 1000)
+    // avoid expensive time logic if possible.
+    if (storageTz.getID() != localTz.getID()) {
+      DateTimeUtils.convertTz(utcEpochMicros, storageTz, localTz)
     } else {
       utcEpochMicros
     }

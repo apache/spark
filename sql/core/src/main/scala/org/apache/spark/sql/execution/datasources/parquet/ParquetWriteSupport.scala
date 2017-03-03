@@ -73,7 +73,8 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
   // Reusable byte array used to write decimal values
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
-  private var timezone: TimeZone = _
+  private var storageTz: TimeZone = _
+  private var localTz: TimeZone = TimeZone.getDefault()
 
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
@@ -86,8 +87,8 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
     // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
     val tzString = configuration.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
-    timezone = if (tzString == null) {
-      DateTimeUtils.TimeZoneGMT
+    storageTz = if (tzString == null) {
+      localTz
     } else {
       TimeZone.getTimeZone(tzString)
     }
@@ -174,15 +175,10 @@ private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] wit
           // NOTE: Starting from Spark 1.5, Spark SQL `TimestampType` only has microsecond
           // precision.  Nanosecond parts of timestamp values read from INT96 are simply stripped.
           val rawMicros = row.getLong(ordinal)
-          val adjustedMicros = if (DateTimeUtils.isUtcOrGmt(timezone)) {
+          val adjustedMicros = if (localTz.getID() == storageTz.getID()) {
             rawMicros
           } else {
-            // For compatibility with HIVE-12767, always write data in UTC, so adjust *from* the
-            // table timezone *to* UTC.  Eg., if the table was created with TZ = America/Los_Angeles
-            // (UTC-8 w/out DST), then add 8 hours to the timestamp when we save.
-            val millisOffset = timezone.getOffset(rawMicros / 1000)
-            // scalstyle:off
-            rawMicros - (millisOffset * 1000L)
+            DateTimeUtils.convertTz(rawMicros, localTz, storageTz)
           }
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(adjustedMicros)
           val buf = ByteBuffer.wrap(timestampBuffer)

@@ -92,7 +92,8 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
-  private final TimeZone tz;
+  private final TimeZone storageTz;
+  private final TimeZone localTz = TimeZone.getDefault();
 
   public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader,
                                 Configuration conf)
@@ -102,9 +103,9 @@ public class VectorizedColumnReader {
     // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
     String tzString = conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
     if (tzString == null) {
-      tz = DateTimeUtils.TimeZoneGMT();
+      storageTz = DateTimeUtils.TimeZoneGMT();
     } else {
-      tz = TimeZone.getTimeZone(tzString);
+      storageTz = TimeZone.getTimeZone(tzString);
     }
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
@@ -288,7 +289,7 @@ public class VectorizedColumnReader {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             if (!column.isNullAt(i)) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v, tz));
+              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v, storageTz, localTz));
             }
           }
         } else {
@@ -413,7 +414,7 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12), tz));
+              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12), storageTz, localTz));
         } else {
           column.putNull(rowId + i);
         }
