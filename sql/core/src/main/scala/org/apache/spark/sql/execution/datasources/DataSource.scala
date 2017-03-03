@@ -106,10 +106,13 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
+   * @param fileStatusCache the shared cache for file statuses to speed up listing
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
-  private def getOrInferFileFormatSchema(format: FileFormat): (StructType, StructType) = {
+  private def getOrInferFileFormatSchema(
+      format: FileFormat,
+      fileStatusCache: FileStatusCache = NoopCache): (StructType, StructType) = {
     // the operations below are expensive therefore try not to do them if we don't need to, e.g.,
     // in streaming mode, we have already inferred and registered partition columns, we will
     // never have to materialize the lazy val below
@@ -122,7 +125,7 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
@@ -354,7 +357,8 @@ case class DataSource(
           globPath
         }.toArray
 
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
+        val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
@@ -364,7 +368,8 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
-          new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema))
+          new InMemoryFileIndex(
+            sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
         }
 
         HadoopFsRelation(
