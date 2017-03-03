@@ -1436,7 +1436,7 @@ private class LogisticAggregator(
     case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
       s"got type ${bcCoefficients.value.getClass}.)")
   }
-  private val gradientSumArray = new Array[Double](coefficientSize)
+  private lazy val gradientSumArray = new Array[Double](coefficientSize)
 
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +
