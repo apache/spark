@@ -98,6 +98,8 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       System.gc() // Hack to avoid SEGV on some JVM versions.
       val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")
+      // Hive changed the default of datanucleus.schema.autoCreateAll from true to false since 2.0
+      // For details, see the JIRA HIVE-6113
       if (version == "2.0") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
       }
