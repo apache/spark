@@ -995,7 +995,7 @@ object SPARK_19667_VERIFY_TABLE_PATH {
       // the location when it's created.
       assert(new Path(table1.location) != fs.makeQualified(
         new Path(warehousePath, "not_default.db/t1")))
-      assert(!new File(s"$warehousePath/not_default.db/t1").exists())
+      assert(!new File(warehousePath.toString, "not_default.db/t1").exists())
 
       spark.sql("CREATE TABLE t2(c string)")
       val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
