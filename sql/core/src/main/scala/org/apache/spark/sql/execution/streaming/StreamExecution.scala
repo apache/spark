@@ -38,6 +38,12 @@ import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
+/** States for [[StreamExecution]]'s lifecycle. */
+trait State
+case object INITIALIZING extends State
+case object ACTIVE extends State
+case object TERMINATED extends State
+
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
  * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at any
@@ -719,11 +725,6 @@ class StreamExecution(
 
 }
 
-/** States for [[StreamExecution]]'s lifecycle. */
-trait State
-case object INITIALIZING extends State
-case object ACTIVE extends State
-case object TERMINATED extends State
 
 /**
  * A special thread to run the stream query. Some codes require to run in the StreamExecutionThread
