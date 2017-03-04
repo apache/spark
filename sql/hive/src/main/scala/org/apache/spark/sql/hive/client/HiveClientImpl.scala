@@ -96,6 +96,7 @@ private[hive] class HiveClientImpl(
     case hive.v1_0 => new Shim_v1_0()
     case hive.v1_1 => new Shim_v1_1()
     case hive.v1_2 => new Shim_v1_2()
+    case hive.v2_0 => new Shim_v2_0()
   }
 
   // Create an internal session state for this HiveClientImpl.
