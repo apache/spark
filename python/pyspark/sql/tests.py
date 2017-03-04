@@ -436,6 +436,20 @@ class SQLTests(ReusedPySparkTestCase):
         res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
+    def test_wholefile_json(self):
+        people1 = self.spark.read.json("python/test_support/sql/people.json")
+        people_array = self.spark.read.json("python/test_support/sql/people_array.json",
+                                            wholeFile=True)
+        self.assertEqual(people1.collect(), people_array.collect())
+
+    def test_wholefile_csv(self):
+        ages_newlines = self.spark.read.csv(
+            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+        expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
+                    Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
+                    Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
+        self.assertEqual(ages_newlines.collect(), expected)
+
     def test_udf_with_input_file_name(self):
         from pyspark.sql.functions import udf, input_file_name
         from pyspark.sql.types import StringType
@@ -488,6 +502,100 @@ class SQLTests(ReusedPySparkTestCase):
             f._judf_placeholder,
             "judf should be initialized after UDF has been called."
         )
+
+    def test_udf_with_string_return_type(self):
+        from pyspark.sql.functions import UserDefinedFunction
+
+        add_one = UserDefinedFunction(lambda x: x + 1, "integer")
+        make_pair = UserDefinedFunction(lambda x: (-x, x), "struct<x:integer,y:integer>")
+        make_array = UserDefinedFunction(
+            lambda x: [float(x) for x in range(x, x + 3)], "array<double>")
+
+        expected = (2, Row(x=-1, y=1), [1.0, 2.0, 3.0])
+        actual = (self.spark.range(1, 2).toDF("x")
+                  .select(add_one("x"), make_pair("x"), make_array("x"))
+                  .first())
+
+        self.assertTupleEqual(expected, actual)
+
+    def test_udf_shouldnt_accept_noncallable_object(self):
+        from pyspark.sql.functions import UserDefinedFunction
+        from pyspark.sql.types import StringType
+
+        non_callable = None
+        self.assertRaises(TypeError, UserDefinedFunction, non_callable, StringType())
+
+    def test_udf_with_decorator(self):
+        from pyspark.sql.functions import lit, udf
+        from pyspark.sql.types import IntegerType, DoubleType
+
+        @udf(IntegerType())
+        def add_one(x):
+            if x is not None:
+                return x + 1
+
+        @udf(returnType=DoubleType())
+        def add_two(x):
+            if x is not None:
+                return float(x + 2)
+
+        @udf
+        def to_upper(x):
+            if x is not None:
+                return x.upper()
+
+        @udf()
+        def to_lower(x):
+            if x is not None:
+                return x.lower()
+
+        @udf
+        def substr(x, start, end):
+            if x is not None:
+                return x[start:end]
+
+        @udf("long")
+        def trunc(x):
+            return int(x)
+
+        @udf(returnType="double")
+        def as_double(x):
+            return float(x)
+
+        df = (
+            self.spark
+                .createDataFrame(
+                    [(1, "Foo", "foobar", 3.0)], ("one", "Foo", "foobar", "float"))
+                .select(
+                    add_one("one"), add_two("one"),
+                    to_upper("Foo"), to_lower("Foo"),
+                    substr("foobar", lit(0), lit(3)),
+                    trunc("float"), as_double("one")))
+
+        self.assertListEqual(
+            [tpe for _, tpe in df.dtypes],
+            ["int", "double", "string", "string", "string", "bigint", "double"]
+        )
+
+        self.assertListEqual(
+            list(df.first()),
+            [2, 3.0, "FOO", "foo", "foo", 3, 1.0]
+        )
+
+    def test_udf_wrapper(self):
+        from pyspark.sql.functions import udf
+        from pyspark.sql.types import IntegerType
+
+        def f(x):
+            """Identity"""
+            return x
+
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -855,9 +963,18 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(all(isinstance(c, Column) for c in cb))
         cbool = (ci & ci), (ci | ci), (~ci)
         self.assertTrue(all(isinstance(c, Column) for c in cbool))
-        css = cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(), cs.startswith('a'), cs.endswith('a')
+        css = cs.contains('a'), cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(),\
+            cs.startswith('a'), cs.endswith('a')
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
+
+    def test_column_getitem(self):
+        from pyspark.sql.functions import col
+
+        self.assertIsInstance(col("foo")[1:3], Column)
+        self.assertIsInstance(col("foo")[0], Column)
+        self.assertIsInstance(col("foo")["bar"], Column)
+        self.assertRaises(ValueError, lambda: col("foo")[0:10:2])
 
     def test_column_select(self):
         df = self.df
@@ -1807,6 +1924,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue("+" in functions)
         self.assertTrue("like" in functions)
         self.assertTrue("month" in functions)
+        self.assertTrue("to_date" in functions)
+        self.assertTrue("to_timestamp" in functions)
         self.assertTrue("to_unix_timestamp" in functions)
         self.assertTrue("current_database" in functions)
         self.assertEquals(functions["+"], Function(
@@ -2188,6 +2307,13 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         assert_runs_only_one_job_stage_and_task("take", lambda: df.take(1))
         # Regression test for SPARK-17514: limit(n).collect() should the perform same as take(n)
         assert_runs_only_one_job_stage_and_task("collect_limit", lambda: df.limit(1).collect())
+
+    def test_datetime_functions(self):
+        from pyspark.sql import functions
+        from datetime import date, datetime
+        df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
+        parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
+        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
     @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):

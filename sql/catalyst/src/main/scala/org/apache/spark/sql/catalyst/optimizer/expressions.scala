@@ -293,6 +293,12 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
         // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
+
+      case CaseWhen(branches, _) if branches.exists(_._1 == TrueLiteral) =>
+        // a branc with a TRue condition eliminates all following branches,
+        // these branches can be pruned away
+        val (h, t) = branches.span(_._1 != TrueLiteral)
+        CaseWhen( h :+ t.head, None)
     }
   }
 }
@@ -451,7 +457,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         // join is not always picked from its children, but can also be null.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(_, _, Inner, _) =>
+        case j @ Join(_, _, Inner, _) if !stop =>
           j.transformExpressions(replaceFoldable)
 
         // We can fold the projections an expand holds. However expand changes the output columns
