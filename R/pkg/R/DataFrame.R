@@ -92,8 +92,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' printSchema(df)
 #'}
 #' @note printSchema since 1.4.0
@@ -118,8 +117,7 @@ setMethod("printSchema",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' dfSchema <- schema(df)
 #'}
 #' @note schema since 1.4.0
@@ -144,8 +142,7 @@ setMethod("schema",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' explain(df, TRUE)
 #'}
 #' @note explain since 1.4.0
@@ -176,8 +173,7 @@ setMethod("explain",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' isLocal(df)
 #'}
 #' @note isLocal since 1.4.0
@@ -206,8 +202,7 @@ setMethod("isLocal",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' showDF(df)
 #'}
 #' @note showDF since 1.4.0
@@ -237,8 +232,7 @@ setMethod("showDF",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' show(df)
 #'}
 #' @note show(SparkDataFrame) since 1.4.0
@@ -265,8 +259,7 @@ setMethod("show", "SparkDataFrame",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' dtypes(df)
 #'}
 #' @note dtypes since 1.4.0
@@ -292,8 +285,7 @@ setMethod("dtypes",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' columns(df)
 #' colnames(df)
 #'}
@@ -441,8 +433,7 @@ setMethod("coltypes",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(faithful)
 #' coltypes(df) <- c("character", "integer") # set column types
 #' coltypes(df) <- c(NA, "numeric") # set column types
 #'}
@@ -490,8 +481,7 @@ setMethod("coltypes<-",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' createOrReplaceTempView(df, "json_df")
 #' new_df <- sql("SELECT * FROM json_df")
 #'}
@@ -517,8 +507,7 @@ setMethod("createOrReplaceTempView",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' registerTempTable(df, "json_df")
 #' new_df <- sql("SELECT * FROM json_df")
 #'}
@@ -548,10 +537,9 @@ setMethod("registerTempTable",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df <- read.df(path, "parquet")
-#' df2 <- read.df(path2, "parquet")
-#' createOrReplaceTempView(df, "table1")
-#' insertInto(df2, "table1", overwrite = TRUE)
+#' df <- limit(createDataFrame(faithful), 5)
+#' saveAsTable(df, "table1")
+#' insertInto(createDataFrame(data.frame(2.0, 55)), "table1")
 #'}
 #' @note insertInto since 1.4.0
 setMethod("insertInto",
@@ -577,8 +565,7 @@ setMethod("insertInto",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' cache(df)
 #'}
 #' @note cache since 1.4.0
@@ -608,8 +595,7 @@ setMethod("cache",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' persist(df, "MEMORY_AND_DISK")
 #'}
 #' @note persist since 1.4.0
@@ -638,8 +624,7 @@ setMethod("persist",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' persist(df, "MEMORY_AND_DISK")
 #' unpersist(df)
 #'}
@@ -666,8 +651,7 @@ setMethod("unpersist",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' persist(df, "MEMORY_AND_DISK")
 #' storageLevel(df)
 #'}
@@ -704,8 +688,7 @@ setMethod("storageLevel",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' newDF <- coalesce(df, 1L)
 #'}
 #' @note coalesce(SparkDataFrame) since 2.1.1
@@ -741,12 +724,12 @@ setMethod("coalesce",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
+#' newDF <- coalesce(df, 1L)
 #' newDF <- repartition(df, 2L)
 #' newDF <- repartition(df, numPartitions = 2L)
-#' newDF <- repartition(df, col = df$"col1", df$"col2")
-#' newDF <- repartition(df, 3L, col = df$"col1", df$"col2")
+#' newDF <- repartition(df, col = df[[1]], df[[2]])
+#' newDF <- repartition(df, 3L, col = df[[1]], df[[2]])
 #'}
 #' @note repartition since 1.4.0
 setMethod("repartition",
@@ -790,8 +773,7 @@ setMethod("repartition",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.parquet"
-#' df <- read.parquet(path)
+#' df <- createDataFrame(mtcars)
 #' df_json <- toJSON(df)
 #'}
 #' @note toJSON since 2.2.0
@@ -822,9 +804,8 @@ setMethod("toJSON",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' write.json(df, "/tmp/sparkr-tmp/")
+#' df <- createDataFrame(mtcars)
+#' write.json(df, tempfile())
 #'}
 #' @note write.json since 1.6.0
 setMethod("write.json",
@@ -853,9 +834,8 @@ setMethod("write.json",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' write.orc(df, "/tmp/sparkr-tmp1/")
+#' df <- createDataFrame(mtcars)
+#' write.orc(df, tempfile())
 #' }
 #' @note write.orc since 2.0.0
 setMethod("write.orc",
@@ -884,10 +864,9 @@ setMethod("write.orc",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' write.parquet(df, "/tmp/sparkr-tmp1/")
-#' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
+#' df <- createDataFrame(mtcars)
+#' write.parquet(df, tempfile())
+#' saveAsParquetFile(df, tempfile())
 #'}
 #' @note write.parquet since 1.6.0
 setMethod("write.parquet",
@@ -929,9 +908,8 @@ setMethod("saveAsParquetFile",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.txt"
-#' df <- read.text(path)
-#' write.text(df, "/tmp/sparkr-tmp/")
+#' df <- createDataFrame(mtcars)
+#' write.text(df, tempfile())
 #'}
 #' @note write.text since 2.0.0
 setMethod("write.text",
@@ -956,8 +934,7 @@ setMethod("write.text",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' distinctDF <- distinct(df)
 #'}
 #' @note distinct since 1.4.0
@@ -997,8 +974,7 @@ setMethod("unique",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' collect(sample(df, FALSE, 0.5))
 #' collect(sample(df, TRUE, 0.5))
 #'}
@@ -1040,8 +1016,7 @@ setMethod("sample_frac",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' count(df)
 #' }
 #' @note count since 1.4.0
@@ -1073,8 +1048,7 @@ setMethod("nrow",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' ncol(df)
 #' }
 #' @note ncol since 1.5.0
@@ -1097,8 +1071,7 @@ setMethod("ncol",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' dim(df)
 #' }
 #' @note dim since 1.5.0
@@ -1123,10 +1096,9 @@ setMethod("dim",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' collected <- collect(df)
-#' firstName <- collected[[1]]$name
+#' collected[[1]]
 #' }
 #' @note collect since 1.4.0
 setMethod("collect",
@@ -1204,8 +1176,7 @@ setMethod("collect",
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' limitedDF <- limit(df, 10)
 #' }
 #' @note limit since 1.4.0
@@ -1228,8 +1199,7 @@ setMethod("limit",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' take(df, 2)
 #' }
 #' @note take since 1.4.0
@@ -1257,8 +1227,7 @@ setMethod("take",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' head(df)
 #' }
 #' @note head since 1.4.0
@@ -1282,8 +1251,7 @@ setMethod("head",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' first(df)
 #' }
 #' @note first(SparkDataFrame) since 1.4.0
@@ -1303,8 +1271,7 @@ setMethod("first",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' rdd <- toRDD(df)
 #'}
 setMethod("toRDD",
@@ -2010,9 +1977,8 @@ setMethod("select",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' selectExpr(df, "col1", "(col2 * 5) as newCol")
+#' df <- createDataFrame(mtcars)
+#' selectExpr(df, "mpg", "(hp * 5) as newCol")
 #' }
 #' @note selectExpr since 1.4.0
 setMethod("selectExpr",
@@ -2041,15 +2007,14 @@ setMethod("selectExpr",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' newDF <- withColumn(df, "newCol", df$col1 * 5)
+#' df <- createDataFrame(mtcars)
+#' newDF <- withColumn(df, "hp", df$hp * 5)
 #' # Replace an existing column
-#' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
-#' newDF3 <- withColumn(newDF, "newCol", 42)
+#' newDF2 <- withColumn(newDF, "hp", newDF$hp)
+#' newDF3 <- withColumn(newDF, "hp", 42)
 #' # Use extract operator to set an existing or new column
-#' df[["age"]] <- 23
-#' df[[2]] <- df$col1
+#' df[["hp"]] <- 23
+#' df[[2]] <- df$hp
 #' df[[2]] <- NULL # drop column
 #' }
 #' @note withColumn since 1.4.0
@@ -2080,11 +2045,10 @@ setMethod("withColumn",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
+#' df <- createDataFrame(mtcars)
+#' newDF <- mutate(df, newCol = df$mpg * 5, newCol2 = df$mpg * 2)
 #' names(newDF) # Will contain newCol, newCol2
-#' newDF2 <- transform(df, newCol = df$col1 / 5, newCol2 = df$col1 * 2)
+#' newDF2 <- transform(df, newCol = df$mpg / 5, newCol2 = df$mpg * 2)
 #'
 #' df <- createDataFrame(list(list("Andy", 30L), list("Justin", 19L)), c("name", "age"))
 #' # Replace the "age" column
@@ -2175,9 +2139,8 @@ setMethod("transform",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' newDF <- withColumnRenamed(df, "col1", "newCol1")
+#' df <- createDataFrame(mtcars)
+#' newDF <- withColumnRenamed(df, "hp", "hp2")
 #' }
 #' @note withColumnRenamed since 1.4.0
 setMethod("withColumnRenamed",
@@ -2201,9 +2164,8 @@ setMethod("withColumnRenamed",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' newDF <- rename(df, col1 = df$newCol1)
+#' df <- createDataFrame(mtcars)
+#' newDF <- rename(df, hp2 = df$hp)
 #' }
 #' @note rename since 1.4.0
 setMethod("rename",
@@ -2246,12 +2208,11 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' arrange(df, df$col1)
-#' arrange(df, asc(df$col1), desc(abs(df$col2)))
-#' arrange(df, "col1", decreasing = TRUE)
-#' arrange(df, "col1", "col2", decreasing = c(TRUE, FALSE))
+#' df <- createDataFrame(mtcars)
+#' arrange(df, df$mpg)
+#' arrange(df, asc(df$mpg), desc(abs(df$disp)))
+#' arrange(df, "mpg", decreasing = TRUE)
+#' arrange(df, "mpg", "disp", decreasing = c(TRUE, FALSE))
 #' }
 #' @note arrange(SparkDataFrame, Column) since 1.4.0
 setMethod("arrange",
@@ -2326,10 +2287,9 @@ setMethod("orderBy",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' filter(df, "col1 > 0")
-#' filter(df, df$col2 != "abcdefg")
+#' df <- createDataFrame(mtcars)
+#' filter(df, "mpg > 20")
+#' filter(df, df$cyl != 6)
 #' }
 #' @note filter since 1.4.0
 setMethod("filter",
@@ -2369,11 +2329,9 @@ setMethod("where",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' dropDuplicates(df)
-#' dropDuplicates(df, "col1", "col2")
-#' dropDuplicates(df, c("col1", "col2"))
+#' df <- createDataFrame(mtcars)
+#' dropDuplicates(df, "cyl", "am")
+#' dropDuplicates(df, c("cyl", "am"))
 #' }
 #' @note dropDuplicates since 2.0.0
 setMethod("dropDuplicates",
@@ -2418,10 +2376,12 @@ setMethod("dropDuplicates",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df1 <- read.json(path)
-#' df2 <- read.json(path2)
-#' join(df1, df2, df1$col1 == df2$col2) # Performs an inner join based on expression
-#' join(df1, df2, df1$col1 == df2$col2, "right_outer")
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   test = c("yes", "no", "yes", "no")))
+#' join(df1, df2, df1$name == df2$name) # Performs an inner join based on expression
+#' join(df1, df2, df1$name == df2$name, "right_outer")
 #' join(df1, df2) # Attempts an inner join
 #' }
 #' @note join since 1.4.0
@@ -2470,8 +2430,10 @@ setMethod("join",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df1 <- read.json(path)
-#' df2 <- read.json(path2)
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   test = c("yes", "no", "yes", "no")))
 #' crossJoin(df1, df2) # Performs a Cartesian
 #' }
 #' @note crossJoin since 2.1.0
@@ -2518,15 +2480,17 @@ setMethod("crossJoin",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df1 <- read.json(path)
-#' df2 <- read.json(path2)
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   test = c("yes", "no", "yes", "no")))
 #' merge(df1, df2) # Performs an inner join by common columns
-#' merge(df1, df2, by = "col1") # Performs an inner join based on expression
-#' merge(df1, df2, by.x = "col1", by.y = "col2", all.y = TRUE)
-#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE)
-#' merge(df1, df2, by.x = "col1", by.y = "col2", all.x = TRUE, all.y = TRUE)
-#' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
-#' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
+#' merge(df1, df2, by = "name") # Performs an inner join based on expression
+#' merge(df1, df2, by.x = "name", by.y = "name", all.y = TRUE)
+#' merge(df1, df2, by.x = "name", by.y = "name", all.x = TRUE)
+#' merge(df1, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
+#' merge(df1, df2, by.x = "name", by.y = "name", all = TRUE, sort = FALSE)
+#' merge(df1, df2, by = "name", all = TRUE, suffixes = c("-X", "-Y"))
 #' merge(df1, df2, by = NULL) # Performs a Cartesian join
 #' }
 #' @note merge since 1.5.0
@@ -2657,10 +2621,11 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df1 <- read.json(path)
-#' df2 <- read.json(path2)
-#' unioned <- union(df, df2)
-#' unions <- rbind(df, df2, df3, df4)
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   age = c(29, 30, 10, 30)))
+#' unioned <- union(df1, df2)
 #' }
 #' @note union since 2.0.0
 setMethod("union",
@@ -2703,7 +2668,11 @@ setMethod("unionAll",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' unions <- rbind(df, df2, df3, df4)
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   age = c(29, 30, 10, 30)))
+#' unions <- rbind(df1, df2, df1)
 #' }
 #' @note rbind since 1.5.0
 setMethod("rbind",
@@ -2732,9 +2701,12 @@ setMethod("rbind",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df1 <- read.json(path)
-#' df2 <- read.json(path2)
-#' intersectDF <- intersect(df, df2)
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   age = c(29, 30, 10, 30)))
+#' intersectDF <- intersect(df1[, "name"], df2[, "name"])
+#' intersectDF <- intersect(df1, df2)
 #' }
 #' @note intersect since 1.4.0
 setMethod("intersect",
@@ -2760,8 +2732,10 @@ setMethod("intersect",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df1 <- read.json(path)
-#' df2 <- read.json(path2)
+#' df1 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
+#' df2 <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin", "Bob"),
+#'                                   age = c(29, 30, 10, 30)))
 #' exceptDF <- except(df, df2)
 #' }
 #' @rdname except
@@ -2805,10 +2779,9 @@ setMethod("except",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' write.df(df, "myfile", "parquet", "overwrite")
-#' saveDF(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
+#' df <- createDataFrame(mtcars)
+#' write.df(df, tempfile(), "parquet", "overwrite")
+#' saveDF(df, tempfile(), "parquet", mode = "overwrite")
 #' }
 #' @note write.df since 1.4.0
 setMethod("write.df",
@@ -2873,9 +2846,8 @@ setMethod("saveDF",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' saveAsTable(df, "myfile")
+#' df <- createDataFrame(mtcars)
+#' saveAsTable(df, "myTable")
 #' }
 #' @note saveAsTable since 1.4.0
 setMethod("saveAsTable",
@@ -2911,11 +2883,10 @@ setMethod("saveAsTable",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(mtcars)
 #' describe(df)
-#' describe(df, "col1")
-#' describe(df, "col1", "col2")
+#' describe(df, "mpg")
+#' describe(df, "mpg", "disp")
 #' }
 #' @note describe(SparkDataFrame, character) since 1.4.0
 setMethod("describe",
@@ -2976,8 +2947,8 @@ setMethod("summary",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
 #' dropna(df)
 #' }
 #' @note dropna since 1.4.0
@@ -3027,8 +2998,8 @@ setMethod("na.omit",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
+#' df <- createDataFrame(data.frame(name = c("Michael", "Andy", "Justin"),
+#'                                   age = c(NA, 30, 19)))
 #' fillna(df, 1)
 #' fillna(df, list("age" = 20, "name" = "unknown"))
 #' }
@@ -3254,11 +3225,10 @@ setMethod("str",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' path <- "path/to/file.json"
-#' df <- read.json(path)
-#' drop(df, "col1")
-#' drop(df, c("col1", "col2"))
-#' drop(df, df$col1)
+#' df <- createDataFrame(mtcars)
+#' drop(df, "mpg")
+#' drop(df, c("mpg", "cyl"))
+#' drop(df, df$mpg)
 #' }
 #' @note drop since 2.0.0
 setMethod("drop",
