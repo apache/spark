@@ -55,6 +55,15 @@ being contacted at `api_server_url`. If no HTTP protocol is specified in the URL
 setting the master to `k8s://example.com:443` is equivalent to setting it to `k8s://https://example.com:443`, but to
 connect without SSL on a different port, the master would be set to `k8s://http://example.com:8443`.
 
+
+If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
+
+    > kubectl cluster-info
+    Kubernetes master is running at http://127.0.0.1:8080
+
+In the above example, the specific Kubernetes cluster can be used with spark submit by specifying
+`--master k8s://http://127.0.0.1:8080` as an argument to spark-submit.
+
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
  
@@ -62,7 +71,7 @@ the cluster.
 
 Spark supports specifying JAR paths that are either on the submitting host's disk, or are located on the disk of the
 driver and executors. Refer to the [application submission](submitting-applications.html#advanced-dependency-management)
-section for details. Note that files specified with the `local` scheme should be added to the container image of both
+section for details. Note that files specified with the `local://` scheme should be added to the container image of both
 the driver and the executors. Files without a scheme or with the scheme `file://` are treated as being on the disk of
 the submitting machine, and are uploaded to the driver running in Kubernetes before launching the application.
  
