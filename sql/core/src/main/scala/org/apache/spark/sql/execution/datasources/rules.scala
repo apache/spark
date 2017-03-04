@@ -52,8 +52,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
-        val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(a, plan, None)).getOrElse(plan)
+        LogicalRelation(dataSource.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
@@ -380,7 +379,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: CatalogRelation =>
-          val metadata = relation.catalogTable
+          val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")

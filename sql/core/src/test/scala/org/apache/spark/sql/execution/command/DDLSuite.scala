@@ -1520,7 +1520,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
         assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
 
-        sql(s"CREATE TABLE tab2 using json location '${tempDir.getCanonicalPath}'")
+        sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
         checkAnswer(spark.table("tab2"), Row("a", "b"))
       }
     }
@@ -1814,7 +1814,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val defaultTablePath = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
 
-        sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
         spark.catalog.refreshTable("tbl")
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
@@ -1843,11 +1843,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
-        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(table.location == dir.getAbsolutePath)
 
         dir.delete
-        val tableLocFile = new File(table.location.stripPrefix("file:"))
+        val tableLocFile = new File(table.location)
         assert(!tableLocFile.exists)
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
         assert(tableLocFile.exists)
@@ -1859,8 +1858,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(tableLocFile.exists)
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
-        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
-        val newDirFile = new File(newDir)
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI.toString
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
@@ -1886,8 +1885,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
-        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(table.location == dir.getAbsolutePath)
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1913,18 +1911,18 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        val expectedPath = dir.getAbsolutePath.stripSuffix("/")
-        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(table.location == dir.getAbsolutePath)
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
 
-        val newDir = dir.getAbsolutePath.stripSuffix("/") + "/x"
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI.toString
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table1.location == newDir)
-        assert(!new File(newDir).exists())
+        assert(!newDirFile.exists())
         checkAnswer(spark.table("t"), Nil)
       }
     }
@@ -1948,6 +1946,53 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(!dir.exists())
         spark.sql("REFRESH TABLE t")
         checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existent" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == dir.getAbsolutePath)
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location == dir.getAbsolutePath)
+
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
       }
     }
   }

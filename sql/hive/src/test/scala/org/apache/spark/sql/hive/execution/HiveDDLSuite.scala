@@ -1570,7 +1570,7 @@ class HiveDDLSuite
         val dataPath = new File(new File(path, "d=1"), "b=1").getCanonicalPath
         Seq(1 -> 1).toDF("a", "c").write.save(dataPath)
 
-        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.getCanonicalPath}'")
+        sql(s"CREATE TABLE t3 USING parquet LOCATION '${path.toURI}'")
         assert(getTableColumns("t3") == Seq("a", "c", "d", "b"))
       }
 
@@ -1584,6 +1584,105 @@ class HiveDDLSuite
         Seq((1, 1, 1, 1)).toDF("a", "b", "c", "d").write.format("hive")
           .partitionBy("d", "b").saveAsTable("t6")
         assert(getTableColumns("t6") == Seq("a", "c", "d", "b"))
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existent" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == dir.getAbsolutePath)
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location == dir.getAbsolutePath)
+
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
+      }
+    }
+
+    test(s"CTAS for external hive table with a $tcName location") {
+      withTable("t", "t1") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTempDir {
+            dir =>
+              if (shouldDelete) {
+                dir.delete()
+              }
+              spark.sql(
+                s"""
+                   |CREATE TABLE t
+                   |USING hive
+                   |LOCATION '$dir'
+                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+                 """.stripMargin)
+              val dirPath = new Path(dir.getAbsolutePath)
+              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+              assert(new Path(table.location) == fs.makeQualified(dirPath))
+
+              checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+          }
+          // partition table
+          withTempDir {
+            dir =>
+              if (shouldDelete) {
+                dir.delete()
+              }
+              spark.sql(
+                s"""
+                   |CREATE TABLE t1
+                   |USING hive
+                   |PARTITIONED BY(a, b)
+                   |LOCATION '$dir'
+                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+                 """.stripMargin)
+              val dirPath = new Path(dir.getAbsolutePath)
+              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+              assert(new Path(table.location) == fs.makeQualified(dirPath))
+
+              val partDir = new File(dir, "a=3")
+              assert(partDir.exists())
+
+              checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+          }
+        }
       }
     }
   }
