@@ -3,8 +3,14 @@ layout: global
 title: Running Spark on Kubernetes
 ---
 
-Support for running on [Kubernetes](https://kubernetes.io/) is available in experimental status. The feature set is
+Support for running on [Kubernetes](https://kubernetes.io/docs/whatisk8s/) is available in experimental status. The feature set is
 currently limited and not well-tested. This should not be used in production environments.
+
+## Prerequisites
+
+* You must have a running Kubernetes cluster with access configured to it using [kubectl](https://kubernetes.io/docs/user-guide/prereqs/). If you do not already have a working Kubernetes cluster, you may setup a test cluster on your local machine using [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
+* You must have appropriate permissions to create and list [pods](https://kubernetes.io/docs/user-guide/pods/), [nodes](https://kubernetes.io/docs/admin/node/) and [services](https://kubernetes.io/docs/user-guide/services/) in your cluster. You can verify that you can list these resources by running `kubectl get nodes`, `kubectl get pods` and `kubectl get svc` which should give you a list of nodes, pods and services (if any) respectively.
+* You must have an extracted spark distribution with Kubernetes support, or build one from [source](https://github.com/apache-spark-on-k8s/spark).
 
 ## Setting Up Docker Images
 
@@ -81,7 +87,7 @@ the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/
 ### Kubernetes Clusters and the authenticated proxy endpoint
 
 Spark-submit also supports submission through the
-[local kubectl proxy](https://kubernetes.io/docs/user-guide/connecting-to-applications-proxy/). One can use the
+[local kubectl proxy](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#using-kubectl-proxy). One can use the
 authenticating proxy to communicate with the api server directly without passing credentials to spark-submit.
 
 The local proxy can be started by running:
