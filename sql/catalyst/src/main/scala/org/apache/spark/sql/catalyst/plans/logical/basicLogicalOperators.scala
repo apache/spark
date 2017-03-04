@@ -838,8 +838,9 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 /**
  * A base interface for [[RepartitionByExpression]] and [[Repartition]]
  */
-abstract class RepartitionOperation(numPartitions: Int) extends UnaryNode {
+abstract class RepartitionOperation extends UnaryNode {
   def shuffle: Boolean
+  def numPartitions: Int
   override def output: Seq[Attribute] = child.output
 }
 
@@ -850,7 +851,7 @@ abstract class RepartitionOperation(numPartitions: Int) extends UnaryNode {
  * of the output requires some specific ordering or distribution of the data.
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
-  extends RepartitionOperation(numPartitions) {
+  extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 }
 
@@ -863,7 +864,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Int) extends RepartitionOperation(numPartitions) {
+    numPartitions: Int) extends RepartitionOperation {
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
