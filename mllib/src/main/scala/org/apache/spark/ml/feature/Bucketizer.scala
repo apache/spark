@@ -114,11 +114,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     }
 
     val bucketizer: UserDefinedFunction = udf { (row: Row) =>
-      Bucketizer.binarySearchForBuckets(
-        $(splits),
-        row.getAs[java.lang.Double]($(inputCol)),
-        keepInvalid
-      )
+      val feature = if (row.isNullAt(0)) Double.NaN else row.getDouble(0)
+      Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
     }
 
     val newCol = bucketizer(struct(Array(filteredDataset($(inputCol))): _*))
@@ -185,9 +182,9 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
   private[feature] def binarySearchForBuckets(
       splits: Array[Double],
-      feature: java.lang.Double,
+      feature: Double,
       keepInvalid: Boolean): Double = {
-    if (feature == null || feature.isNaN) {
+    if (feature.isNaN) {
       if (keepInvalid) {
         splits.length - 1
       } else {
