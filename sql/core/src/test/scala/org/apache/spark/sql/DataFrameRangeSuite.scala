@@ -102,6 +102,9 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val res16 = spark.range(-1500, 1500, 3).toDF.filter("0 <= id")
     val len16 = res16.collect.length
     assert(len16 == 500)
+
+    val res17 = spark.range(10, 0, -1, 1).toDF.sortWithinPartitions("id")
+    assert(res17.collect === (1 to 10).map(i => Row(i)).toArray)
   }
 
   test("Range with randomized parameters") {
