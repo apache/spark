@@ -1330,11 +1330,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
     } else {
       // CREATE VIEW ... AS INSERT INTO is not allowed.
-      val query = ctx.query.queryNoWith
-      query match {
+      ctx.query.queryNoWith match {
         case s: SingleInsertQueryContext if s.insertInto != null =>
           operationNotAllowed("CREATE VIEW ... AS INSERT INTO", ctx)
-        case m: MultiInsertQueryContext =>
+        case _: MultiInsertQueryContext =>
           operationNotAllowed("CREATE VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
         case _ => // OK
       }
