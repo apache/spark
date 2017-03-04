@@ -833,3 +833,77 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
   }
 
 }
+
+private[client] class Shim_v2_0 extends Shim_v1_2 {
+  private lazy val loadPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "loadPartition",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadTableMethod =
+    findMethod(
+      classOf[Hive],
+      "loadTable",
+      classOf[Path],
+      classOf[String],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JLong.TYPE)
+
+  override def loadPartition(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      isSrcLocal: JBoolean, JBoolean.FALSE)
+  }
+
+  override def loadTable(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, isSrcLocal: JBoolean,
+      JBoolean.FALSE, JBoolean.FALSE)
+  }
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      listBucketingEnabled: Boolean): Unit = {
+    loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      numDP: JInteger, listBucketingEnabled: JBoolean, JBoolean.FALSE, 0L: JLong)
+  }
+
+}
