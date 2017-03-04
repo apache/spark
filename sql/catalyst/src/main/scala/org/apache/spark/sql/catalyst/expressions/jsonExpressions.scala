@@ -643,6 +643,9 @@ object StructToJson {
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         key.toString -> value.toString
       }
+    case m: CreateMap =>
+      throw new AnalysisException(
+        s"A type of keys and values in map() must be string, but got ${m.dataType}")
     case _ =>
       throw new AnalysisException("Must use a map() function for options")
   }

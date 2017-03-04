@@ -3059,7 +3059,7 @@ object functions {
    * @since 2.1.0
    */
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
-    from_json(e, DataType.fromJson(schema).asInstanceOf[StructType], options)
+    from_json(e, DataType.fromJson(schema), options)
 
   /**
    * (Scala-specific) Converts a column containing a `StructType` into a JSON string with the

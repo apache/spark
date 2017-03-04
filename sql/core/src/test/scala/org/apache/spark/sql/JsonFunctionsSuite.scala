@@ -213,5 +213,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("to_json(a, named_struct('a', 1))")
     }
     assert(errMsg1.getMessage.startsWith("Must use a map() function for options"))
+
+    val errMsg2 = intercept[AnalysisException] {
+      df2.selectExpr("to_json(a, map('a', 1))")
+    }
+    assert(errMsg2.getMessage.startsWith(
+      "A type of keys and values in map() must be string, but got"))
   }
 }
