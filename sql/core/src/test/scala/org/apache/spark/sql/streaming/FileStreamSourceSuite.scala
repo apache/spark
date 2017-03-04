@@ -1258,7 +1258,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     map.add("file:///a/b/c/d", 5)
     map.add("file:///a/b/c/e", 5)
-    assert(map.size == 2)
+    assert(map.size === 2)
 
     assert(!map.isNewFile("d", 5))
     assert(!map.isNewFile("file:///d", 5))
@@ -1268,7 +1268,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     map.add("s3:///bucket/d", 5)
     map.add("s3n:///bucket/d", 5)
     map.add("s3a:///bucket/d", 5)
-    assert(map.size == 2)
+    assert(map.size === 2)
   }
 
   test("SeenFilesMap should only consider a file old if it is earlier than last purge time") {
