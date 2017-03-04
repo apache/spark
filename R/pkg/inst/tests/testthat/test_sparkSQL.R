@@ -1822,6 +1822,9 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_equal(count(excepted), 2)
   expect_equal(first(excepted)$name, "Justin")
 
+  expected_error(union(df, df2[, c(2, 1)]),
+                 "Names of input data frames are different.")
+
   intersected <- arrange(intersect(df, df2), df$age)
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(intersected), 1)
