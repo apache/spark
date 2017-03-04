@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkUserAppException}
+import org.apache.spark.api.conda.CondaEnvironment
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{RedirectThread, Utils}
@@ -33,16 +34,27 @@ import org.apache.spark.util.{RedirectThread, Utils}
  * A main class used to launch Python applications. It executes python as a
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
-object PythonRunner {
-  def main(args: Array[String]) {
+object PythonRunner extends CondaRunner with Logging {
+  override def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit = {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
-    val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
+    val presetPythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
       .orElse(sparkConf.get(PYSPARK_PYTHON))
       .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
       .orElse(sys.env.get("PYSPARK_PYTHON"))
+
+    val pythonExec = maybeConda.map { conda =>
+      val actualBinFile = presetPythonExec.map { exec =>
+        require (!exec.contains("/"), s"It's forbidden to set the PYSPARK python path " +
+          s"to anything but a file name when using conda, but found: $exec")
+        exec
+      }.getOrElse("python")
+
+      conda.condaEnvDir + "/bin/" + actualBinFile
+    }
+      .orElse(presetPythonExec)
       .getOrElse("python")
 
     // Format python file paths before adding them to the PYTHONPATH
@@ -78,6 +90,8 @@ object PythonRunner {
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
+    // If there is a CondaEnvironment set up, initialise our process' env from that
+    maybeConda.foreach(_.initializeJavaEnvironment(env))
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string

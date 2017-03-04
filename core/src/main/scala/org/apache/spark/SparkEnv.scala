@@ -70,7 +70,10 @@ class SparkEnv (
     val conf: SparkConf) extends Logging {
 
   private[spark] var isStopped = false
-  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+
+  case class PythonWorkerKey(pythonExec: String, envVars: Map[String, String],
+                             condaPackages: List[String])
+  private val pythonWorkers = mutable.HashMap[PythonWorkerKey, PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -110,25 +113,29 @@ class SparkEnv (
   }
 
   private[spark]
-  def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
+  def createPythonWorker(pythonExec: String, envVars: Map[String, String],
+                         condaPackages: List[String]): java.net.Socket = {
     synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+      val key = PythonWorkerKey(pythonExec, envVars, condaPackages)
+      pythonWorkers.getOrElseUpdate(key,
+        new PythonWorkerFactory(pythonExec, envVars, condaPackages)).create()
     }
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String],
+                          condaPackages: List[String], worker: Socket) {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = PythonWorkerKey(pythonExec, envVars, condaPackages)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
 
   private[spark]
-  def releasePythonWorker(pythonExec: String, envVars: Map[String, String], worker: Socket) {
+  def releasePythonWorker(pythonExec: String, envVars: Map[String, String],
+                          condaPackages: List[String], worker: Socket) {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = PythonWorkerKey(pythonExec, envVars, condaPackages)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
     }
   }

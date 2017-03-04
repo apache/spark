@@ -26,10 +26,13 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
-private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
+private[spark] class PythonWorkerFactory(requestedPythonExec: String,
+                                         requestedEnvVars: Map[String, String],
+                                         condaPackages: List[String])
   extends Logging {
 
   import PythonWorkerFactory._
@@ -38,19 +41,52 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
   // only works on UNIX-based systems now because it uses signals for child management, so we can
   // also fall back to launching workers (pyspark/worker.py) directly.
-  val useDaemon = !System.getProperty("os.name").startsWith("Windows")
+  private[this] val useDaemon = !System.getProperty("os.name").startsWith("Windows")
 
-  var daemon: Process = null
-  val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
-  var daemonPort: Int = 0
-  val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
-  val idleWorkers = new mutable.Queue[Socket]()
-  var lastActivity = 0L
+  private[this] var daemon: Process = _
+  private[this] val daemonHost = InetAddress.getByAddress(Array[Byte](127, 0, 0, 1))
+  private[this] var daemonPort: Int = 0
+  private[this] val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
+  private[this] val idleWorkers = new mutable.Queue[Socket]()
+  private[this] var lastActivity = 0L
   new MonitorThread().start()
 
-  var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
+  private[this] val simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
 
-  val pythonPath = PythonUtils.mergePythonPaths(
+  private[this] val condaEnv = {
+    // Set up conda environment if there are any conda packages requested
+    if (condaPackages.nonEmpty) {
+      val env = SparkEnv.get
+      val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
+      val envDir = {
+        // Which local dir to create it in?
+        val localDirs = env.blockManager.diskBlockManager.localDirs
+        val hash = Utils.nonNegativeHash(condaPackages)
+        val dirId = hash % localDirs.length
+        Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
+      }
+      val condaEnvironment = condaEnvManager.create(envDir, condaPackages)
+      Some(condaEnvironment)
+    } else {
+      None
+    }
+  }
+
+  private[this] val envVars: Map[String, String] = {
+    condaEnv.map(_.activatedEnvironment(requestedEnvVars)).getOrElse(requestedEnvVars)
+  }
+
+  private[this] val pythonExec = {
+    condaEnv.map { conda =>
+      require (!requestedPythonExec.contains("/"),
+        s"It's forbidden to set the PYSPARK python path " +
+        s"to anything but a file name when using conda, but found: $requestedPythonExec")
+
+      conda.condaEnvDir + "/bin/" + requestedPythonExec
+    }.getOrElse(requestedPythonExec)
+  }
+
+  private[this] val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
@@ -58,7 +94,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   def create(): Socket = {
     if (useDaemon) {
       synchronized {
-        if (idleWorkers.size > 0) {
+        if (idleWorkers.nonEmpty) {
           return idleWorkers.dequeue()
         }
       }
@@ -108,7 +144,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   private def createSimpleWorker(): Socket = {
     var serverSocket: ServerSocket = null
     try {
-      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
+      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array[Byte](127, 0, 0, 1)))
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", "pyspark.worker"))

@@ -188,12 +188,6 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val CONDA_DELEGATE_RUNNER = ConfigBuilder("spark.conda.delegateRunnerClass")
-    .doc("The runner class to delegate to after the Conda environment has been set up. "
-      + "Only relevant when main class is CondaRunner.")
-    .stringConf
-    .createOptional
-
   // To limit memory usage, we only track information for a fixed number of tasks
   private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
     .intConf
