@@ -58,7 +58,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     spark.listenerManager.unregister(listener)
   }
 
-  test("execute callback functions when a DataFrame action failed") {
+  testQuietly("execute callback functions when a DataFrame action failed") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Exception)]
     val listener = new QueryExecutionListener {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
@@ -73,8 +73,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val errorUdf = udf[Int, Int] { _ => throw new RuntimeException("udf error") }
     val df = sparkContext.makeRDD(Seq(1 -> "a")).toDF("i", "j")
 
-    // Ignore the log when we are expecting an exception.
-    sparkContext.setLogLevel("FATAL")
     val e = intercept[SparkException](df.select(errorUdf($"i")).collect())
 
     assert(metrics.length == 1)
