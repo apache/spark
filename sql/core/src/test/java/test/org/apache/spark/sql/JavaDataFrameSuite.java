@@ -414,4 +414,13 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(df.schema().length(), 0);
     Assert.assertEquals(df.collectAsList().size(), 1);
   }
+
+  @Test
+  public void testJsonRDDToDataFrame() {
+    // This is a test for the deprecated API in SPARK-15615.
+    JavaRDD<String> rdd = jsc.parallelize(Arrays.asList("{\"a\": 2}"));
+    Dataset<Row> df = spark.read().json(rdd);
+    Assert.assertEquals(1L, df.count());
+    Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
+  }
 }

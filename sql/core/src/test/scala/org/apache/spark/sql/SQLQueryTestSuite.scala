@@ -98,7 +98,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(
-    "blacklist.sql"  // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist.sql",  // Do NOT remove this one. It is here to test the blacklist functionality.
+    ".DS_Store"       // A meta-file that may be created on Mac by Finder App.
+                      // We should ignore this file from processing.
   )
 
   // Create all the test cases.
@@ -121,7 +123,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.contains(testCase.name.toLowerCase)) {
+    if (blackList.exists(t => testCase.name.toLowerCase.contains(t.toLowerCase))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else {
@@ -226,12 +228,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
 
     } catch {
-      case a: AnalysisException if a.plan.nonEmpty =>
+      case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
-        (StructType(Seq.empty),
-          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#\\d+", "#x")))
+        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
+        (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))
@@ -241,7 +243,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def listTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).map { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-      TestCase(file.getName, file.getAbsolutePath, resultFile)
+      val absPath = file.getAbsolutePath
+      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      TestCase(testCaseName, absPath, resultFile)
     }
   }
 

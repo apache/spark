@@ -592,7 +592,12 @@ class SessionCatalog(
             child = parser.parsePlan(viewText))
           SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
         } else {
-          SubqueryAlias(table, SimpleCatalogRelation(metadata), None)
+          val tableRelation = CatalogRelation(
+            metadata,
+            // we assume all the columns are nullable.
+            metadata.dataSchema.asNullable.toAttributes,
+            metadata.partitionSchema.asNullable.toAttributes)
+          SubqueryAlias(table, tableRelation, None)
         }
       } else {
         SubqueryAlias(table, tempTables(table), None)
@@ -836,7 +841,7 @@ class SessionCatalog(
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.listPartitionsByFilter(db, table, predicates)
+    externalCatalog.listPartitionsByFilter(db, table, predicates, conf.sessionLocalTimeZone)
   }
 
   /**

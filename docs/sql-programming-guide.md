@@ -386,8 +386,8 @@ For example:
 
 The [built-in DataFrames functions](api/scala/index.html#org.apache.spark.sql.functions$) provide common
 aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
-While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in 
-[Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and 
+While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in
+[Scala](api/scala/index.html#org.apache.spark.sql.expressions.scalalang.typed$) and
 [Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.
 Moreover, users are not limited to the predefined aggregate functions and can create their own.
 
@@ -397,7 +397,7 @@ Moreover, users are not limited to the predefined aggregate functions and can cr
 
 <div data-lang="scala"  markdown="1">
 
-Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction) 
+Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction)
 abstract class to implement a custom untyped aggregate function. For example, a user-defined average
 can look like:
 
@@ -888,8 +888,9 @@ or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `wholeFile` option to `true`.
 
 {% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -901,8 +902,9 @@ or a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `wholeFile` option to `true`.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
@@ -913,8 +915,9 @@ This conversion can be done using `SparkSession.read.json` on a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set the `wholeFile` parameter to `True`.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -926,8 +929,9 @@ files is a JSON object.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. For more information, please see
-[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a
-consequence, a regular multi-line JSON file will most often fail.
+[JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
+
+For a regular multi-line JSON file, set a named parameter `wholeFile` to `TRUE`.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
