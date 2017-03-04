@@ -61,6 +61,9 @@ sealed trait TaskFailedReason extends TaskEndReason {
    * on was killed.
    */
   def countTowardsTaskFailures: Boolean = true
+
+  /** Whether this task should be retried by the scheduler. */
+  def shouldRetry: Boolean = false
 }
 
 /**
@@ -212,8 +215,8 @@ case object TaskResultLost extends TaskFailedReason {
  * Task was killed intentionally and needs to be rescheduled.
  */
 @DeveloperApi
-case object TaskKilled extends TaskFailedReason {
-  override def toErrorString: String = "TaskKilled (killed intentionally)"
+case class TaskKilled(reason: String, override val shouldRetry: Boolean) extends TaskFailedReason {
+  override def toErrorString: String = s"TaskKilled ($reason)"
   override def countTowardsTaskFailures: Boolean = false
 }
 

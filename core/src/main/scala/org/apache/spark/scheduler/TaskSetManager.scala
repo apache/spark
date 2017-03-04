@@ -710,7 +710,9 @@ private[spark] class TaskSetManager(
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
-      sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
+      sched.backend.killTask(
+        attemptInfo.taskId, attemptInfo.executorId, interruptThread = true,
+        reason = "another attempt succeeded", shouldRetry = false)
     }
     if (!successful(index)) {
       tasksSuccessful += 1

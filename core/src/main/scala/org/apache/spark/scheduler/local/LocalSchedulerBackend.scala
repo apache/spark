@@ -34,7 +34,8 @@ private case class ReviveOffers()
 
 private case class StatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
-private case class KillTask(taskId: Long, interruptThread: Boolean)
+private case class KillTask(
+  taskId: Long, interruptThread: Boolean, reason: String, shouldRetry: Boolean)
 
 private case class StopExecutor()
 
@@ -70,8 +71,8 @@ private[spark] class LocalEndpoint(
         reviveOffers()
       }
 
-    case KillTask(taskId, interruptThread) =>
-      executor.killTask(taskId, interruptThread)
+    case KillTask(taskId, interruptThread, reason, shouldRetry) =>
+      executor.killTask(taskId, interruptThread, reason, shouldRetry)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -143,8 +144,10 @@ private[spark] class LocalSchedulerBackend(
   override def defaultParallelism(): Int =
     scheduler.conf.getInt("spark.default.parallelism", totalCores)
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
-    localEndpoint.send(KillTask(taskId, interruptThread))
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String,
+      shouldRetry: Boolean) {
+    localEndpoint.send(KillTask(taskId, interruptThread, reason, shouldRetry))
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {

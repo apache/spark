@@ -300,7 +300,8 @@ private[ui] class StagePagedTable(
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
           completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
-          skipped = 0, killed = stageData.numKilledTasks, total = info.numTasks)}
+          skipped = 0, killed = stageData.numKilledTasks,
+          total = info.numTasks)}
         </td>
         <td>{data.inputReadWithUnit}</td>
         <td>{data.outputWriteWithUnit}</td>

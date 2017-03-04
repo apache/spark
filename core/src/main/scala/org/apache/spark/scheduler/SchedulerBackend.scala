@@ -30,8 +30,20 @@ private[spark] trait SchedulerBackend {
   def reviveOffers(): Unit
   def defaultParallelism(): Int
 
-  def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =
+  /**
+   * Requests that an executor kills a running task.
+   *
+   * @param taskId Id of the task.
+   * @param executorId Id of the executor the task is running on.
+   * @param interruptThread Whether the executor should interrupt the task thread.
+   * @param reason The reason for the task kill.
+   * @param shouldRetry Whether the scheduler should retry the task.
+   */
+  def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String,
+      shouldRetry: Boolean): Unit =
     throw new UnsupportedOperationException
+
   def isReady(): Boolean = true
 
   /**

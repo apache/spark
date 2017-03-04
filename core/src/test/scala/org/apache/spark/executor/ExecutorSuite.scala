@@ -110,7 +110,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       }
       // we know the task will be started, but not yet deserialized, because of the latches we
       // use in mockExecutorBackend.
-      executor.killAllTasks(true)
+      executor.killAllTasks(true, "test")
       executorSuiteHelper.latch2.countDown()
       if (!executorSuiteHelper.latch3.await(5, TimeUnit.SECONDS)) {
         fail("executor did not send second status update in time")

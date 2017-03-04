@@ -158,7 +158,8 @@ private[spark] class Executor(
     threadPool.execute(tr)
   }
 
-  def killTask(taskId: Long, interruptThread: Boolean): Unit = {
+  def killTask(
+      taskId: Long, interruptThread: Boolean, reason: String, shouldRetry: Boolean): Unit = {
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
       if (taskReaperEnabled) {
@@ -168,7 +169,9 @@ private[spark] class Executor(
             case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
           }
           if (shouldCreateReaper) {
-            val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
+            val taskReaper = new TaskReaper(
+              taskRunner, interruptThread = interruptThread, reason = reason,
+              shouldRetry = shouldRetry)
             taskReaperForTask(taskId) = taskReaper
             Some(taskReaper)
           } else {
@@ -178,7 +181,8 @@ private[spark] class Executor(
         // Execute the TaskReaper from outside of the synchronized block.
         maybeNewTaskReaper.foreach(taskReaperPool.execute)
       } else {
-        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.kill(
+          interruptThread = interruptThread, reason = reason, shouldRetry = shouldRetry)
       }
     }
   }
@@ -189,8 +193,9 @@ private[spark] class Executor(
    * tasks instead of taking the JVM down.
    * @param interruptThread whether to interrupt the task thread
    */
-  def killAllTasks(interruptThread: Boolean) : Unit = {
-    runningTasks.keys().asScala.foreach(t => killTask(t, interruptThread = interruptThread))
+  def killAllTasks(interruptThread: Boolean, reason: String) : Unit = {
+    runningTasks.keys().asScala.foreach(t =>
+      killTask(t, interruptThread = interruptThread, reason = reason, shouldRetry = false))
   }
 
   def stop(): Unit = {
@@ -220,6 +225,12 @@ private[spark] class Executor(
     /** Whether this task has been killed. */
     @volatile private var killed = false
 
+    /** The reason this task was killed. */
+    @volatile private var killReason: String = null
+
+    /** Whether to retry this killed task. */
+    @volatile private var retryIfKilled: Boolean = false
+
     @volatile private var threadId: Long = -1
 
     def getThreadId: Long = threadId
@@ -239,8 +250,10 @@ private[spark] class Executor(
      */
     @volatile var task: Task[Any] = _
 
-    def kill(interruptThread: Boolean): Unit = {
-      logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
+    def kill(interruptThread: Boolean, reason: String, shouldRetry: Boolean): Unit = {
+      logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
+      retryIfKilled = shouldRetry
+      killReason = reason
       killed = true
       if (task != null) {
         synchronized {
@@ -427,14 +440,17 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case _: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId)")
+          logInfo(s"Executor killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          execBackend.statusUpdate(
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason, retryIfKilled)))
 
         case _: InterruptedException if task.killed =>
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId)")
+          logInfo(
+            s"Executor interrupted and preempted $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          execBackend.statusUpdate(
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason, retryIfKilled)))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason
@@ -512,7 +528,9 @@ private[spark] class Executor(
    */
   private class TaskReaper(
       taskRunner: TaskRunner,
-      val interruptThread: Boolean)
+      val interruptThread: Boolean,
+      val reason: String,
+      val shouldRetry: Boolean)
     extends Runnable {
 
     private[this] val taskId: Long = taskRunner.taskId
@@ -533,7 +551,8 @@ private[spark] class Executor(
         // Only attempt to kill the task once. If interruptThread = false then a second kill
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
         // effective to interrupt multiple times:
-        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.kill(
+          interruptThread = interruptThread, reason = reason, shouldRetry = shouldRetry)
         // Monitor the killed task until it exits. The synchronization logic here is complicated
         // because we don't want to synchronize on the taskRunner while possibly taking a thread
         // dump, but we also need to be careful to avoid races between checking whether the task
