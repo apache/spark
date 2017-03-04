@@ -250,7 +250,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
     def __init__(self, seed=None):
         super(TestParams, self).__init__()
         self._setDefault(maxIter=10)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -259,7 +259,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
         setParams(self, seed=None)
         Sets params for this test.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 
@@ -271,7 +271,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
     def __init__(self, seed=None):
         super(OtherTestParams, self).__init__()
         self._setDefault(maxIter=10)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -280,7 +280,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
         setParams(self, seed=None)
         Sets params for this test.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 
