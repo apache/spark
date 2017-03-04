@@ -3062,11 +3062,11 @@ setMethod("fillna",
 #' @family SparkDataFrame functions
 #' @aliases as.data.frame,SparkDataFrame-method
 #' @rdname as.data.frame
-#' @examples \dontrun{
-#'
-#' irisDF <- createDataFrame(iris)
-#' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
-#' }
+#' @examples
+#'\dontrun{
+#' carsDF <- createDataFrame(mtcars)
+#' df <- as.data.frame(carsDF[carsDF$mpg > 20, ])
+#'}
 #' @note as.data.frame since 1.6.0
 setMethod("as.data.frame",
           signature(x = "SparkDataFrame"),
@@ -3091,8 +3091,9 @@ setMethod("as.data.frame",
 #' from attaching the database, unless that SparkDataFrame contains an object
 #' @examples
 #' \dontrun{
-#' attach(irisDf)
-#' summary(Sepal_Width)
+#' df <- createDataFrame(mtcars)
+#' attach(df)
+#' summary(mpg)
 #' }
 #' @seealso \link{detach}
 #' @note attach since 1.6.0
@@ -3119,7 +3120,8 @@ setMethod("attach",
 #' @param ... arguments to be passed to future methods.
 #' @examples
 #' \dontrun{
-#' with(irisDf, nrow(Sepal_Width))
+#' df <- createDataFrame(mtcars)
+#' with(df, nrow(mpg))
 #' }
 #' @seealso \link{attach}
 #' @note with since 1.6.0
@@ -3140,12 +3142,10 @@ setMethod("with",
 #' @aliases str,SparkDataFrame-method
 #' @family SparkDataFrame functions
 #' @param object a SparkDataFrame
-#' @examples \dontrun{
-#' # Create a SparkDataFrame from the Iris dataset
-#' irisDF <- createDataFrame(iris)
-#'
-#' # Show the structure of the SparkDataFrame
-#' str(irisDF)
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(mtcars)
+#' str(df)
 #' }
 #' @note str since 1.6.1
 setMethod("str",
@@ -3270,12 +3270,10 @@ setMethod("drop",
 #' @export
 #' @examples
 #' \dontrun{
-#'
-#' # Create a SparkDataFrame from the Iris dataset
-#' irisDF <- createDataFrame(iris)
+#' df <- createDataFrame(mtcars)
 #'
 #' # Compute histogram statistics
-#' histStats <- histogram(irisDF, irisDF$Sepal_Length, nbins = 12)
+#' histStats <- histogram(df, df$mpg, nbins = 12)
 #'
 #' # Once SparkR has computed the histogram statistics, the histogram can be
 #' # rendered using the ggplot2 library:
@@ -3283,7 +3281,7 @@ setMethod("drop",
 #' require(ggplot2)
 #' plot <- ggplot(histStats, aes(x = centroids, y = counts)) +
 #'         geom_bar(stat = "identity") +
-#'         xlab("Sepal_Length") + ylab("Frequency")
+#'         xlab("mpg") + ylab("Frequency")
 #' }
 #' @note histogram since 2.0.0
 setMethod("histogram",
@@ -3470,7 +3468,7 @@ setMethod("randomSplit",
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(cars, numPartitions = 2)
+#' df <- createDataFrame(mtcars, numPartitions = 2)
 #' getNumPartitions(df)
 #' }
 #' @note getNumPartitions since 2.1.1
