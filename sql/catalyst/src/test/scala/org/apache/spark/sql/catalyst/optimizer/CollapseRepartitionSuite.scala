@@ -34,61 +34,82 @@ class CollapseRepartitionSuite extends PlanTest {
 
 
   test("collapse two adjacent coalesces into one") {
-    val query = testRelation
+    // Always respects the top coalesces amd removes useless coalesce below coalesce
+    val query1 = testRelation
       .coalesce(10)
       .coalesce(20)
+    val query2 = testRelation
+      .coalesce(30)
+      .coalesce(20)
 
-    val optimized = Optimize.execute(query.analyze)
+    val optimized1 = Optimize.execute(query1.analyze)
+    val optimized2 = Optimize.execute(query2.analyze)
+
     val correctAnswer = testRelation.coalesce(20).analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
   }
 
   test("collapse two adjacent repartitions into one") {
-    val query = testRelation
+    // Always respects the top repartition amd removes useless repartition below repartition
+    val query1 = testRelation
       .repartition(10)
       .repartition(20)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.repartition(20).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("collapse one coalesce and one repartition into one") {
-    // Remove useless coalesce below repartition
-    val query1 = testRelation
-      .coalesce(20)
-      .repartition(5)
+    val query2 = testRelation
+      .repartition(30)
+      .repartition(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.repartition(5).analyze
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer = testRelation.repartition(20).analyze
+
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
+  }
+
+  test("coalesce above repartition") {
+    // Remove useless coalesce above repartition
+    val query1 = testRelation
+      .repartition(10)
+      .coalesce(20)
+
+    val optimized1 = Optimize.execute(query1.analyze)
+    val correctAnswer1 = testRelation.repartition(10).analyze
 
     comparePlans(optimized1, correctAnswer1)
 
-    // Remove useless coalesce above repartition when its numPartitions is larger than or equal to
-    // the child's numPartitions
+    // No change in this case
     val query2 = testRelation
-      .repartition(5)
+      .repartition(30)
       .coalesce(20)
 
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.repartition(5).analyze
+    val correctAnswer2 = query2.analyze
 
     comparePlans(optimized2, correctAnswer2)
-
-    // Keep coalesce above repartition unchanged when its numPartitions is smaller than the child
-    val query3 = testRelation
-      .repartition(5)
-      .coalesce(3)
-
-    val optimized3 = Optimize.execute(query3.analyze)
-    val correctAnswer3 = testRelation.repartition(5).coalesce(3).analyze
-
-    comparePlans(optimized3, correctAnswer3)
   }
 
-  test("collapse repartition and repartitionBy into one") {
+  test("repartition above coalesce") {
+    // Always respects the top repartition amd removes useless coalesce below repartition
+    val query1 = testRelation
+      .coalesce(10)
+      .repartition(20)
+    // Remove useless coalesce above repartition
+    val query2 = testRelation
+      .coalesce(30)
+      .repartition(20)
+
+    val optimized1 = Optimize.execute(query1.analyze)
+    val optimized2 = Optimize.execute(query2.analyze)
+
+    val correctAnswer = testRelation.repartition(20).analyze
+
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
+  }
+
+  test("repartitionBy above repartition") {
     val query1 = testRelation
       .repartition(10)
       .distribute('a)(20)
@@ -99,7 +120,7 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized1, correctAnswer1)
 
     val query2 = testRelation
-      .coalesce(10)
+      .repartition(30)
       .distribute('a)(20)
 
     val optimized2 = Optimize.execute(query2.analyze)
@@ -108,7 +129,27 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized2, correctAnswer2)
   }
 
-  test("collapse repartitionBy and repartition into one") {
+  test("repartitionBy above coalesce") {
+    val query1 = testRelation
+      .coalesce(10)
+      .distribute('a)(20)
+
+    val optimized1 = Optimize.execute(query1.analyze)
+    val correctAnswer1 = testRelation.distribute('a)(20).analyze
+
+    comparePlans(optimized1, correctAnswer1)
+
+    val query2 = testRelation
+      .coalesce(20)
+      .distribute('a)(30)
+
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation.distribute('a)(30).analyze
+
+    comparePlans(optimized2, correctAnswer2)
+  }
+
+  test("repartition above repartitionBy") {
     val query1 = testRelation
       .distribute('a)(20)
       .repartition(10)
@@ -123,30 +164,48 @@ class CollapseRepartitionSuite extends PlanTest {
       .repartition(30)
 
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.distribute('a)(20).analyze
+    val correctAnswer2 = testRelation.distribute('a)(30).analyze
 
     comparePlans(optimized2, correctAnswer2)
   }
 
   test("coalesce above repartitionBy") {
-    val query = testRelation
+    val query1 = testRelation
       .distribute('a)(20)
       .coalesce(10)
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.distribute('a)(20).coalesce(10).analyze
+    val optimized1 = Optimize.execute(query1.analyze)
+    val correctAnswer1 = testRelation.distribute('a)(20).coalesce(10).analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized1, correctAnswer1)
+
+    val query2 = testRelation
+      .distribute('a)(20)
+      .coalesce(30)
+
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation.distribute('a)(20).analyze
+
+    comparePlans(optimized2, correctAnswer2)
   }
 
   test("collapse two adjacent repartitionBys into one") {
-    val query = testRelation
+    val query1 = testRelation
       .distribute('b)(10)
       .distribute('a)(20)
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.distribute('a)(20).analyze
+    val optimized1 = Optimize.execute(query1.analyze)
+    val correctAnswer1 = testRelation.distribute('a)(20).analyze
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized1, correctAnswer1)
+
+    val query2 = testRelation
+      .distribute('b)(30)
+      .distribute('a)(20)
+
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation.distribute('a)(20).analyze
+
+    comparePlans(optimized2, correctAnswer2)
   }
 }

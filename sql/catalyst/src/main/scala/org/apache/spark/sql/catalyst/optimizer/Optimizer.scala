@@ -562,46 +562,43 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
- * by keeping only the one.
- * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]] if their shuffle types
- *    are the same or the parent's shuffle is true.
- * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
- * 3. When a shuffle-enabled [[Repartition]] is above a [[RepartitionByExpression]], collapse as a
- *    single [[RepartitionByExpression]] with the expression and the last number of partition.
- * 4. When a [[RepartitionByExpression]] is above a [[Repartition]], collapse as a single
- *    [[RepartitionByExpression]] with the expression and the last number of partition.
+ * Combines adjacent [[RepartitionOperation]] operators
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // Case 1
-    case r @ Repartition(numPartitions, shuffle, child @ Repartition(_, _, grandChild)) =>
-      (shuffle, child.shuffle) match {
-        case (true, true) | (true, false) | (false, false) =>
-          Repartition(numPartitions, shuffle, grandChild)
-        case (false, true) if numPartitions >= child.numPartitions =>
-          child
-        case _ =>
-          r
+    // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
+    // we can collapse it with the child based on the type of shuffle and the specified number
+    // of partitions.
+    case r @ Repartition(_, _, child: Repartition) =>
+      collapseRepartition(r, child)
+    case r @ Repartition(_, _, child: RepartitionByExpression) =>
+      collapseRepartition(r, child)
+    // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
+    // we can remove the child.
+    case r @ RepartitionByExpression(_, child: RepartitionByExpression, _) =>
+      r.copy(child = child.child)
+    case r @ RepartitionByExpression(_, child: Repartition, _) =>
+      r.copy(child = child.child)
+  }
+
+  /**
+   * Collapses the [[Repartition]] with its child [[RepartitionOperation]], if possible.
+   * - Case 1 the top [[Repartition]] does not enable shuffle (i.e., coalesce API):
+   *   If the last numPartitions is bigger, returns the child node; otherwise, keep unchanged.
+   * - Case 2 the top [[Repartition]] enables shuffle (i.e., repartition API):
+   *   returns the child node with the last numPartitions.
+   */
+  private def collapseRepartition(r: Repartition, child: RepartitionOperation): LogicalPlan = {
+    (r.shuffle, child.shuffle) match {
+      case (false, true) => child match {
+        case c: Repartition => if (r.numPartitions >= c.numPartitions) c else r
+        case c: RepartitionByExpression => if (r.numPartitions >= c.numPartitions) c else r
       }
-    // Case 2
-    case RepartitionByExpression(exprs, RepartitionByExpression(_, grandChild, _), numPartitions) =>
-      RepartitionByExpression(exprs, grandChild, numPartitions)
-    // Case 3
-    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
-      r.copy(numPartitions = numPartitions)
-    // Case 3
-    case r @ Repartition(numPartitions, shuffle, child: RepartitionByExpression) =>
-      if (shuffle) {
-        child.copy(numPartitions = numPartitions)
-      } else if (numPartitions >= child.numPartitions) {
-        r
-      } else {
-        r
+      case _ => child match {
+        case child: Repartition => child.copy(numPartitions = r.numPartitions, shuffle = r.shuffle)
+        case child: RepartitionByExpression => child.copy(numPartitions = r.numPartitions)
       }
-    // Case 4
-    case RepartitionByExpression(exprs, Repartition(_, _, grandChild), numPartitions) =>
-      RepartitionByExpression(exprs, grandChild, numPartitions)
+    }
   }
 }
 
