@@ -903,24 +903,24 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempView("show1a", "show2b") {
       sql(
         """
-          |CREATE TEMPORARY TABLE show1a
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |
-          |)
+         |CREATE TEMPORARY VIEW show1a
+         |USING org.apache.spark.sql.sources.DDLScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10',
+         |  Table 'test1'
+         |
+         |)
         """.stripMargin)
       sql(
         """
-          |CREATE TEMPORARY TABLE show2b
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
+         |CREATE TEMPORARY VIEW show2b
+         |USING org.apache.spark.sql.sources.DDLScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10',
+         |  Table 'test1'
+         |)
         """.stripMargin)
       assert(
         sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
@@ -958,20 +958,20 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
-  test("drop table - temporary table") {
+  test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY TABLE tab1
-        |USING org.apache.spark.sql.sources.DDLScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10',
-        |  Table 'test1'
-        |)
+       |CREATE TEMPORARY VIEW tab1
+       |USING org.apache.spark.sql.sources.DDLScanSource
+       |OPTIONS (
+       |  From '1',
+       |  To '10',
+       |  Table 'test1'
+       |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
-    sql("DROP TABLE tab1")
+    sql("DROP VIEW tab1")
     assert(catalog.listTables("default") == Nil)
   }
 
@@ -1520,7 +1520,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
         assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
 
-        sql(s"CREATE TABLE tab2 using json location '${tempDir.getCanonicalPath}'")
+        sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
         checkAnswer(spark.table("tab2"), Row("a", "b"))
       }
     }
@@ -1690,6 +1690,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("block creating duplicate temp table") {
+    withView("t_temp") {
+      sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
+      }.getMessage
+      assert(e.contains("Temporary table 't_temp' already exists"))
+    }
+  }
+
   test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
     withTempPath { tempDir =>
@@ -1804,7 +1814,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val defaultTablePath = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
 
-        sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
         spark.catalog.refreshTable("tbl")
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
@@ -1819,6 +1829,170 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("DROP TABLE tbl")
         // the new table path will be removed after DROP TABLE.
         assert(!dir.exists())
+      }
+    }
+  }
+
+  test("insert data to a data source table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        dir.delete
+        val tableLocFile = new File(table.location)
+        assert(!tableLocFile.exists)
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        Utils.deleteRecursively(dir)
+        assert(!tableLocFile.exists)
+        spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI.toString
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists)
+
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(newDirFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+      }
+    }
+  }
+
+  test("insert into a data source table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        val partLoc = new File(s"${dir.getAbsolutePath}/a=1")
+        Utils.deleteRecursively(partLoc)
+        assert(!partLoc.exists())
+        // insert overwrite into a partition which location has been deleted.
+        spark.sql("INSERT OVERWRITE TABLE t PARTITION(a=1, b=2) SELECT 7, 8")
+        assert(partLoc.exists())
+        checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        dir.delete()
+        checkAnswer(spark.table("t"), Nil)
+
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI.toString
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists())
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
+           """.stripMargin)
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        // select from a partition which location has been deleted.
+        Utils.deleteRecursively(dir)
+        assert(!dir.exists())
+        spark.sql("REFRESH TABLE t")
+        checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existent" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == dir.getAbsolutePath)
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location == dir.getAbsolutePath)
+
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
       }
     }
   }

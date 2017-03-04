@@ -52,8 +52,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
-        val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(a, plan, None)).getOrElse(plan)
+        LogicalRelation(dataSource.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
@@ -226,9 +225,21 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     }
     checkDuplication(columnNames, "table definition of " + table.identifier)
 
-    table.copy(
-      partitionColumnNames = normalizePartitionColumns(schema, table),
-      bucketSpec = normalizeBucketSpec(schema, table))
+    val normalizedPartCols = normalizePartitionColumns(schema, table)
+    val normalizedBucketSpec = normalizeBucketSpec(schema, table)
+
+    normalizedBucketSpec.foreach { spec =>
+      for (bucketCol <- spec.bucketColumnNames if normalizedPartCols.contains(bucketCol)) {
+        throw new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
+          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+      }
+      for (sortCol <- spec.sortColumnNames if normalizedPartCols.contains(sortCol)) {
+        throw new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
+          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+      }
+    }
+
+    table.copy(partitionColumnNames = normalizedPartCols, bucketSpec = normalizedBucketSpec)
   }
 
   private def normalizePartitionColumns(schema: StructType, table: CatalogTable): Seq[String] = {
@@ -368,7 +379,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: CatalogRelation =>
-          val metadata = relation.catalogTable
+          val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")

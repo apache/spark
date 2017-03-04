@@ -42,7 +42,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- * A command to create a MANAGED table with the same definition of the given existing table.
+ * A command to create a table with the same definition of the given existing table.
  * In the target table definition, the table comment is always empty but the column comments
  * are identical to the ones defined in the source table.
  *
@@ -52,12 +52,13 @@ import org.apache.spark.util.Utils
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name
+ *   LIKE [other_db_name.]existing_table_name [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -70,12 +71,15 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
+    // If the location is specified, we create an external table internally.
+    // Otherwise create a managed table.
+    val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
+
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
-        tableType = CatalogTableType.MANAGED,
-        // We are creating a new managed table, which should not have custom table location.
-        storage = sourceTableDesc.storage.copy(locationUri = None),
+        tableType = tblType,
+        storage = sourceTableDesc.storage.copy(locationUri = location),
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
@@ -265,8 +269,8 @@ case class LoadDataCommand(
         } else {
           // Follow Hive's behavior:
           // If no schema or authority is provided with non-local inpath,
-          // we will use hadoop configuration "fs.default.name".
-          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.default.name")
+          // we will use hadoop configuration "fs.defaultFS".
+          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
           val defaultFS = if (defaultFSConf == null) {
             new URI("")
           } else {
@@ -308,7 +312,6 @@ case class LoadDataCommand(
         loadPath.toString,
         partition.get,
         isOverwrite,
-        holdDDLTime = false,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)
     } else {
@@ -316,7 +319,6 @@ case class LoadDataCommand(
         targetTable.identifier,
         loadPath.toString,
         isOverwrite,
-        holdDDLTime = false,
         isSrcLocal = isLocal)
     }
 

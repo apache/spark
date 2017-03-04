@@ -82,23 +82,19 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   @Override
   public void fetchBlocks(
-      final String host,
-      final int port,
-      final String execId,
+      String host,
+      int port,
+      String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
-        new RetryingBlockFetcher.BlockFetchStarter() {
-          @Override
-          public void createAndStart(String[] blockIds, BlockFetchingListener listener)
-              throws IOException {
+          (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId, blockIds, listener).start();
-          }
-        };
+            new OneForOneBlockFetcher(client, appId, execId, blockIds1, listener1).start();
+          };
 
       int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {
@@ -129,14 +125,11 @@ public class ExternalShuffleClient extends ShuffleClient {
       String host,
       int port,
       String execId,
-      ExecutorShuffleInfo executorInfo) throws IOException {
+      ExecutorShuffleInfo executorInfo) throws IOException, InterruptedException {
     checkInit();
-    TransportClient client = clientFactory.createUnmanagedClient(host, port);
-    try {
+    try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
       client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
-    } finally {
-      client.close();
     }
   }
 

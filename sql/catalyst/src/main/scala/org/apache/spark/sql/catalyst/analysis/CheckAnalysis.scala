@@ -18,10 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -321,12 +319,12 @@ trait CheckAnalysis extends PredicateHelper {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (!dt1.sameType(dt2)) {
+                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. $dt1 <> $dt2 at the ${ordinalNumber(ci)} column of
-                      |the ${ordinalNumber(ti + 1)} table
+                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
@@ -386,6 +384,10 @@ trait CheckAnalysis extends PredicateHelper {
                  | ${o.expressions.map(_.sql).mkString(",")}
                  |in operator ${operator.simpleString}
                """.stripMargin)
+
+          case _: Hint =>
+            throw new IllegalStateException(
+              "Internal error: logical hint operator should have been removed during analysis")
 
           case _ => // Analysis successful!
         }
