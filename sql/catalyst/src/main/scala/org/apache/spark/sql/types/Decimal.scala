@@ -229,7 +229,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return `Some(decimal)` if successful or `None` if overflow would occur
    */
   private[sql] def toPrecision(
-                     precision: Int, scale: Int,
+                     precision: Int,
+                     scale: Int,
                      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Option[Decimal] = {
     val copy = clone()
     if (copy.changePrecision(precision, scale, roundMode)) Some(copy) else None

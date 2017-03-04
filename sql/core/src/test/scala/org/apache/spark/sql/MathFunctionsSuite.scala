@@ -240,7 +240,7 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
     checkAnswer(
-      df.withColumn("value_rounded", bround('value)),
+      df.withColumn("value_brounded", bround('value)),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
   }
