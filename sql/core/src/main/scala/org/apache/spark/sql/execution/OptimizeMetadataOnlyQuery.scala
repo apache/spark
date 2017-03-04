@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -103,11 +103,13 @@ case class OptimizeMetadataOnlyQuery(
 
           case relation: CatalogRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
+            val caseInsensitiveProperties =
+              CaseInsensitiveMap(relation.tableMeta.storage.properties)
+            val timeZoneId = caseInsensitiveProperties.get("timeZone")
+              .getOrElse(conf.sessionLocalTimeZone)
             val partitionData = catalog.listPartitions(relation.tableMeta.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
-                // TODO: use correct timezone for partition values.
-                Cast(Literal(p.spec(attr.name)), attr.dataType,
-                  Option(DateTimeUtils.defaultTimeZone().getID)).eval()
+                Cast(Literal(p.spec(attr.name)), attr.dataType, Option(timeZoneId)).eval()
               })
             }
             LocalRelation(partAttrs, partitionData)

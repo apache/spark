@@ -163,7 +163,8 @@ case class HiveTableScanExec(
       sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
         relation.tableMeta.database,
         relation.tableMeta.identifier.table,
-        normalizedFilters)
+        normalizedFilters,
+        sparkSession.sessionState.conf.sessionLocalTimeZone)
     } else {
       sparkSession.sharedState.externalCatalog.listPartitions(
         relation.tableMeta.database,

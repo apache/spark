@@ -544,7 +544,8 @@ class InMemoryCatalog(
   override def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
     // TODO: Provide an implementation
     throw new UnsupportedOperationException(
       "listPartitionsByFilter is not implemented for InMemoryCatalog")

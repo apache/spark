@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SQLExecution}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -68,7 +68,8 @@ object FileFormatWriter extends Logging {
       val bucketIdExpression: Option[Expression],
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
-      val maxRecordsPerFile: Long)
+      val maxRecordsPerFile: Long,
+      val timeZoneId: String)
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),
@@ -122,9 +123,11 @@ object FileFormatWriter extends Logging {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
     }
 
+    val caseInsensitiveOptions = CaseInsensitiveMap(options)
+
     // Note: prepareWrite has side effect. It sets "job".
     val outputWriterFactory =
-      fileFormat.prepareWrite(sparkSession, job, options, dataColumns.toStructType)
+      fileFormat.prepareWrite(sparkSession, job, caseInsensitiveOptions, dataColumns.toStructType)
 
     val description = new WriteJobDescription(
       uuid = UUID.randomUUID().toString,
@@ -136,8 +139,10 @@ object FileFormatWriter extends Logging {
       bucketIdExpression = bucketIdExpression,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
-      maxRecordsPerFile = options.get("maxRecordsPerFile").map(_.toLong)
-        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile)
+      maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
+        .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
+      timeZoneId = caseInsensitiveOptions.get("timeZone")
+        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
     )
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
@@ -330,11 +335,10 @@ object FileFormatWriter extends Logging {
     /** Expressions that given partition columns build a path string like: col1=val/col2=val/... */
     private def partitionPathExpression: Seq[Expression] = {
       desc.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
-        // TODO: use correct timezone for partition values.
         val escaped = ScalaUDF(
           ExternalCatalogUtils.escapePathName _,
           StringType,
-          Seq(Cast(c, StringType, Option(DateTimeUtils.defaultTimeZone().getID))),
+          Seq(Cast(c, StringType, Option(desc.timeZoneId))),
           Seq(StringType))
         val str = If(IsNull(c), Literal(ExternalCatalogUtils.DEFAULT_PARTITION_NAME), escaped)
         val partitionName = Literal(c.name + "=") :: str :: Nil
