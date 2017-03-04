@@ -201,8 +201,10 @@ class KinesisSequenceRangeIterator(
   /**
    * Get records starting from or after the given sequence number.
    */
-  private def getRecords(iteratorType: ShardIteratorType, seqNum: String,
-                         recordCount: Int): Iterator[Record] = {
+  private def getRecords(
+      iteratorType: ShardIteratorType,
+      seqNum: String,
+      recordCount: Int): Iterator[Record] = {
     val shardIterator = getKinesisIterator(iteratorType, seqNum)
     val result = getRecordsAndNextKinesisIterator(shardIterator, recordCount)
     result._1
