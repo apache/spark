@@ -55,6 +55,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
+  private val filenameSpecialChr = "filename19340*.csv"
+
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -972,6 +974,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { wholeFile =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
@@ -1089,5 +1092,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(df.schema === spark.emptyDataFrame.schema)
       checkAnswer(df, spark.emptyDataFrame)
     }
+
+  test("SPARK-19340 special characters in csv file name") {
+    val csvDF = spark.read
+      .option("header", "false")
+      // testFile doesn't work with filenames that contain special characters
+      .csv(testFile("test-data") + "/" + filenameSpecialChr ).take(1)
   }
 }

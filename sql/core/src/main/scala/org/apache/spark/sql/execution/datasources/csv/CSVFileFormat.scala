@@ -52,7 +52,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     require(files.nonEmpty, "Cannot infer schema from an empty set of files")
-
+    
     val parsedOptions =
       new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
 
@@ -110,7 +110,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
           "The field for corrupt records must be string type and nullable")
       }
     }
-
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
       val parser = new UnivocityParser(dataSchema, requiredSchema, parsedOptions)

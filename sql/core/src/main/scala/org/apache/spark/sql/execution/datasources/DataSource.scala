@@ -356,29 +356,8 @@ case class DataSource(
           }
           globPath
         }.toArray
-
-        val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
-
-        val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
-            catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
-          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
-          new CatalogFileIndex(
-            sparkSession,
-            catalogTable.get,
-            catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
-        } else {
-          new InMemoryFileIndex(
-            sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
-        }
-
-        HadoopFsRelation(
-          fileCatalog,
-          partitionSchema = partitionSchema,
-          dataSchema = dataSchema.asNullable,
-          bucketSpec = bucketSpec,
-          format,
-          caseInsensitiveOptions)(sparkSession)
+      
+        createHadoopRelation(format, globbedPaths)
 
       case _ =>
         throw new AnalysisException(
@@ -386,6 +365,36 @@ case class DataSource(
     }
 
     relation
+  }
+  /**
+   * Creates Hadoop relation based on format and globbed file paths
+   * @param format format of the data source file
+   * @param globPaths Path to the file resolved by Hadoop library
+   * @return Hadoop relation object
+   */
+  def createHadoopRelation(format: FileFormat,
+                           globPaths: Array[Path]): BaseRelation = {
+    val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+    val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
+   
+    val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
+      catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
+      val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
+      new CatalogFileIndex(
+        sparkSession,
+        catalogTable.get,
+        catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
+    } else {
+      new InMemoryFileIndex(sparkSession, globPaths, options, Some(partitionSchema))
+    }
+
+    HadoopFsRelation(
+      fileCatalog,
+      partitionSchema = partitionSchema,
+      dataSchema = dataSchema.asNullable,
+      bucketSpec = bucketSpec,
+      format,
+      caseInsensitiveOptions)(sparkSession)
   }
 
   /**
