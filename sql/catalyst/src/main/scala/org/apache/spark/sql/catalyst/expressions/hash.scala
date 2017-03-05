@@ -771,8 +771,8 @@ object HiveHashFunction extends InterpretedHashFunction {
       return null
     }
 
-    val maxScale =
-      Math.min(HIVE_DECIMAL_MAX_SCALE, Math.min(HIVE_DECIMAL_MAX_PRECISION - intDigits, result.scale))
+    val maxScale = Math.min(HIVE_DECIMAL_MAX_SCALE,
+      Math.min(HIVE_DECIMAL_MAX_PRECISION - intDigits, result.scale))
     if (result.scale > maxScale) {
       result = result.setScale(maxScale, RoundingMode.HALF_UP)
       // Trimming is again necessary, because rounding may introduce new trailing 0's.
