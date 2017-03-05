@@ -254,6 +254,9 @@ WHERE  t1b NOT IN (SELECT cte1.t1b
                    WHERE  cte1.t1b < 0) AND
        t1c > 10;
 
+-- turn on cross join
+set spark.sql.crossJoin.enabled=true;
+
 -- TC 01.10
 WITH cte1 AS
 (

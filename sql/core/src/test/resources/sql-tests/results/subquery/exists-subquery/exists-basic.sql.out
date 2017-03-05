@@ -57,7 +57,7 @@ set spark.sql.crossJoin.enabled=false
 -- !query 3 schema
 struct<key:string,value:string>
 -- !query 3 output
-spark.sql.crossJoin.enabled
+spark.sql.crossJoin.enabled	false
 
 
 -- !query 4
@@ -68,13 +68,17 @@ WHERE  EXISTS (SELECT 1
                WHERE  dept.dept_id > 10
                       AND dept.dept_id < 30)
 -- !query 4 schema
-struct<>
+struct<id:int,emp_name:string,hiredate:date,salary:double,dept_id:int>
 -- !query 4 output
-org.apache.spark.sql.AnalysisException
-Both sides of this join are outside the broadcasting threshold and
-computing it could be prohibitively expensive. To explicitly enable it,
-Please set spark.sql.crossJoin.enabled = true.
-             ;
+100	emp 1	2005-01-01	100.0	10
+100	emp 1	2005-01-01	100.0	10
+200	emp 2	2003-01-01	200.0	10
+300	emp 3	2002-01-01	300.0	20
+400	emp 4	2005-01-01	400.0	30
+500	emp 5	2001-01-01	400.0	NULL
+600	emp 6 - no dept	2001-01-01	400.0	100
+700	emp 7	2010-01-01	400.0	100
+800	emp 8	2016-01-01	150.0	70
 
 
 -- !query 5
@@ -82,7 +86,7 @@ set spark.sql.crossJoin.enabled=true
 -- !query 5 schema
 struct<key:string,value:string>
 -- !query 5 output
-spark.sql.crossJoin.enabled
+spark.sql.crossJoin.enabled	true
 
 
 -- !query 6

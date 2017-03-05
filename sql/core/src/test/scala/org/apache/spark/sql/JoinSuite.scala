@@ -231,31 +231,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("subquery converted to cartesian product join") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      val msg1 = "Both sides of this join are outside the broadcasting threshold"
-      val msg2 = "Please set spark.sql.crossJoin.enabled = true"
-      val e = intercept[AnalysisException] {
-        sql(
-          """
-            |SELECT b FROM testData2
-            |WHERE EXISTS(SELECT a FROM testData3)
-          """.stripMargin).collect()
-      }.getMessage
-      assert(e.contains(msg1) && e.contains(msg2))
-    }
-
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql(
-          """
-            |SELECT b FROM testData2
-            |WHERE EXISTS(SELECT a FROM testData3)
-          """.stripMargin),
-        Row(1) :: Row(1) :: Row(1) :: Row(2) :: Row(2) :: Row(2) :: Nil)
-    }
-  }
-
   test("outer join outside the broadcasting threshold") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       checkAnswer(
@@ -650,7 +625,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       "SELECT * FROM testData left outer join testData2",
       "SELECT * FROM testData right outer join testData2",
       "SELECT * FROM testData full outer join testData2",
-      "SELECT * FROM testData full outer join testData2 on testData.key > testData2.a")
+      "SELECT * FROM testData full outer join testData2 on testData.key > testData2.a",
+      "SELECT b FROM testData2 WHERE EXISTS(SELECT a FROM testData3)"
+    )
 
     def checkBroadcastNestedLoopJoinDetection(query: String): Unit = {
       val e = intercept[AnalysisException](sql(query).collect()).getMessage
