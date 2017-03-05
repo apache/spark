@@ -145,9 +145,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
 
     result.zip(model.findSynonymsArray("a", 2)).foreach {
-      case (expectedSynonymAndSimilarity, actualSynonymAndSimilarity) =>
-        assert(expectedSynonymAndSimilarity._1 === actualSynonymAndSimilarity._1)
-        assert(expectedSynonymAndSimilarity._2 ~== actualSynonymAndSimilarity._2 absTol 1E-5)
+      case ((expectedSynonym, expectedSimilarity), (actualSynonym, actualSimilarity)) =>
+        assert(expectedSynonym === actualSynonym)
+        assert(expectedSimilarity ~== actualSimilarity absTol 1E-5)
     }
   }
 
