@@ -73,6 +73,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   }
 
   val utils = new MesosSchedulerUtils { }
+
   // scalastyle:on structural.type
 
   test("use at-least minimum overhead") {
@@ -252,5 +253,34 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
       .partitionPortResources(List(), portResourceList)
     val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
     portsToUse.isEmpty shouldBe true
+  }
+
+  test("Parse arbitrary parameter to pass into docker containerizer") {
+    val parsed = MesosSchedulerBackendUtil.parseParamsSpec("a=1,b=2,c=3")
+    parsed(0).getKey shouldBe "a"
+    parsed(0).getValue shouldBe "1"
+    parsed(1).getKey shouldBe "b"
+    parsed(1).getValue shouldBe "2"
+    parsed(2).getKey shouldBe "c"
+    parsed(2).getValue shouldBe "3"
+
+    val invalid = MesosSchedulerBackendUtil.parseParamsSpec("a,b")
+    invalid.length shouldBe 0
+  }
+
+  test("ContainerInfo contains parsed arbitrary parameters") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.executor.docker.params", "a=1,b=2,c=3")
+    conf.set("spark.mesos.executor.docker.image", "test")
+
+    val containerInfo = MesosSchedulerBackendUtil.containerInfo(conf)
+    val params = containerInfo.getDocker.getParametersList
+    params.size() shouldBe 3
+    params.get(0).getKey shouldBe "a"
+    params.get(0).getValue shouldBe "1"
+    params.get(1).getKey shouldBe "b"
+    params.get(1).getValue shouldBe "2"
+    params.get(2).getKey shouldBe "c"
+    params.get(2).getValue shouldBe "3"
   }
 }
