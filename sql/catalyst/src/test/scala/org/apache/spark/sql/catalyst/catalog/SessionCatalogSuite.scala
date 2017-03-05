@@ -1205,15 +1205,16 @@ class SessionCatalogSuite extends PlanTest {
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
       val analyzer = new Analyzer(catalog, conf)
 
+      // The analyzer should report the undefined function rather than the undefined table first.
       val cause = intercept[AnalysisException] {
         analyzer.execute(
-          UnresolvedRelation(TableIdentifier("unknown")).select(
-            UnresolvedFunction("foo", Nil, isDistinct = false)
+          UnresolvedRelation(TableIdentifier("undefined_table")).select(
+            UnresolvedFunction("undefine_fn", Nil, isDistinct = false)
           )
         )
       }
 
-      assert(cause.getMessage.contains("undefined function foo"))
+      assert(cause.getMessage.contains("undefined function undefined_fn"))
     }
   }
 }
