@@ -254,17 +254,6 @@ class UnivocityParser(
     }
   }
 
-  /**
-   * This function deals with the cases it fails to parse in PERMISSIVE mode. The failure reasons
-   * of this mode are 1) the shorter/longer lengths of tokens or 2) format exceptions
-   * (e.g., NumberFormatException).
-   */
-  private def failedRecordWithPermissiveMode(): Option[InternalRow] = {
-    val row = new GenericInternalRow(requiredSchema.length)
-    corruptFieldIndex.foreach(row(_) = UTF8String.fromString(getCurrentInput()))
-    Some(row)
-  }
-
   private def convertWithParseMode(
       tokens: Array[String])(convert: Array[String] => InternalRow): Option[InternalRow] = {
     if (options.dropMalformed && dataSchema.length != tokens.length) {
@@ -282,27 +271,43 @@ class UnivocityParser(
       throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
         s"${tokens.mkString(options.delimiter.toString)}")
     } else {
-      if (options.permissive && dataSchema.length != tokens.length) {
-        failedRecordWithPermissiveMode()
-      } else {
-        try {
-          Some(convert(tokens))
-        } catch {
-          case NonFatal(e) if options.permissive =>
-            failedRecordWithPermissiveMode()
-          case NonFatal(e) if options.dropMalformed =>
-            if (numMalformedRecords < options.maxMalformedLogPerPartition) {
-              logWarning("Parse exception. " +
-                s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")
-            }
-            if (numMalformedRecords == options.maxMalformedLogPerPartition - 1) {
-              logWarning(
-                s"More than ${options.maxMalformedLogPerPartition} malformed records have been " +
-                  "found on this partition. Malformed records from now on will not be logged.")
-            }
-            numMalformedRecords += 1
-            None
+      // If a length of parsed tokens is not equal to expected one, it makes the length the same
+      // with the expected. If the length is shorter, it adds extra tokens in the tail.
+      // If longer, it drops extra tokens.
+      //
+      // TODO: Revisit this; if a length of tokens does not match an expected length in the schema,
+      // we probably need to treat it as a malformed record.
+      // See an URL below for related discussions:
+      // https://github.com/apache/spark/pull/16928#discussion_r102657214
+      val checkedTokens = if (options.permissive && dataSchema.length != tokens.length) {
+        if (dataSchema.length > tokens.length) {
+          tokens ++ new Array[String](dataSchema.length - tokens.length)
+        } else {
+          tokens.take(dataSchema.length)
         }
+      } else {
+        tokens
+      }
+
+      try {
+        Some(convert(checkedTokens))
+      } catch {
+        case NonFatal(e) if options.permissive =>
+          val row = new GenericInternalRow(requiredSchema.length)
+          corruptFieldIndex.foreach(row(_) = UTF8String.fromString(getCurrentInput()))
+          Some(row)
+        case NonFatal(e) if options.dropMalformed =>
+          if (numMalformedRecords < options.maxMalformedLogPerPartition) {
+            logWarning("Parse exception. " +
+              s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")
+          }
+          if (numMalformedRecords == options.maxMalformedLogPerPartition - 1) {
+            logWarning(
+              s"More than ${options.maxMalformedLogPerPartition} malformed records have been " +
+                "found on this partition. Malformed records from now on will not be logged.")
+          }
+          numMalformedRecords += 1
+          None
       }
     }
   }

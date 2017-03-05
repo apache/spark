@@ -266,10 +266,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("wholeFile", wholeFile)
         .options(Map("header" -> "true", "mode" -> "dropmalformed"))
-        .option("comment", "~")
-        .load(testFile(carsMalformedFile))
+        .load(testFile(carsFile))
 
-      assert(cars.select("year").collect().size === 1)
+      assert(cars.select("year").collect().size === 2)
     }
   }
 
@@ -291,13 +290,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .format("csv")
           .option("wholeFile", wholeFile)
           .options(Map("header" -> "true", "mode" -> "failfast"))
-          .option("comment", "~")
-          .load(testFile(carsMalformedFile)).collect()
+          .load(testFile(carsFile)).collect()
       }
 
-      assert(exception.getMessage.contains(
-        "Malformed line in FAILFAST mode: 2012,Tesla,S,No comment,,null,null"))
+      assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
     }
+  }
+
+  test("test for tokens more than the fields in the schema") {
+    val cars = spark
+      .read
+      .format("csv")
+      .option("header", "false")
+      .option("comment", "~")
+      .load(testFile(carsMalformedFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 
   test("test with null quote character") {
@@ -963,6 +971,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val expectedSchema = StructType(fields)
         assert(actualSchema == expectedSchema)
       }
+    }
+  }
+
+  test("load null when the schema is larger than parsed tokens ") {
+    withTempPath { path =>
+      Seq("1").toDF().write.text(path.getAbsolutePath)
+      val schema = StructType(
+        StructField("a", IntegerType, true) ::
+        StructField("b", IntegerType, true) :: Nil)
+      val df = spark.read
+        .schema(schema)
+        .option("header", "false")
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Row(1, null))
     }
   }
 
