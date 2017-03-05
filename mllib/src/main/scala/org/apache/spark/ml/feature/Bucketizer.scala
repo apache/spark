@@ -78,16 +78,19 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
-   * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
-   * additional bucket).
+   * Param for how to handle invalid entries containing either NaN or null values.
+   * Values outside the splits will always be treated as errors.
+   * Options are 'skip' (filter out rows with invalid values), 'error' (throw an error),
+   * or 'keep' (keep invalid values in a special additional bucket).
    * Default: "error"
    * @group param
    */
   // TODO: SPARK-18619 Make Bucketizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
-    "invalid entries. Options are skip (filter out rows with invalid values), " +
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "how to handle invalid entries containing either NaN or null values. " +
+    "Values outside the splits will always be treated as errors. " +
+    "Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
 
