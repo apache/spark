@@ -107,36 +107,24 @@ class CacheManager extends Logging {
   }
 
   /**
-   * Tries to remove the cache entry of the given query, no operation, if it's already uncached.
-   * Note that all other caches that refer to this plan will be re-cached.
-   *
-   * @return true if a cache entry is found and removed, false otherwise.
+   * Un-cache all the cache entries that refer to the given plan.
    */
-  def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Boolean = writeLock {
+  def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
     uncacheQuery(query.sparkSession, query.logicalPlan, blocking)
   }
 
   /**
-   * Tries to remove the cache entry of the given plan, no operation, if it's already uncached.
-   * Note that all other caches that refer to this plan will be re-cached.
-   *
-   * @return true if a cache entry is found and removed, false otherwise.
+   * Un-cache all the cache entries that refer to the given plan.
    */
-  def uncacheQuery(spark: SparkSession, plan: LogicalPlan, blocking: Boolean): Boolean = writeLock {
+  def uncacheQuery(spark: SparkSession, plan: LogicalPlan, blocking: Boolean): Unit = writeLock {
     val it = cachedData.iterator()
-    var found = false
-    while (it.hasNext && !found) {
+    while (it.hasNext) {
       val cd = it.next()
-      if (cd.plan.sameResult(plan)) {
+      if (cd.plan.find(_.sameResult(plan)).isDefined) {
         cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
         it.remove()
-        found = true
       }
     }
-    if (found) {
-      recacheByPlan(spark, plan)
-    }
-    found
   }
 
   /**

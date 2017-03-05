@@ -24,15 +24,15 @@ import scala.language.postfixOps
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.CleanerListener
-import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.AccumulatorContext
+import org.apache.spark.util.{AccumulatorContext, Utils}
 
 private case class BigData(s: String)
 
@@ -636,18 +636,22 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  test("SPARK-19765: UNCACHE TABLE should re-cache all cached plans that refer to this table") {
+  test("SPARK-19765: UNCACHE TABLE should un-cache all cached plans that refer to this table") {
     withTable("t") {
-      Seq(1 -> "a").toDF("i", "j").write.saveAsTable("t")
-      spark.catalog.cacheTable("t")
-      spark.table("t").select($"i").cache()
-      checkAnswer(spark.table("t").select($"i"), Row(1))
-      assertCached(spark.table("t").select($"i"))
+      withTempPath { path =>
+        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
+        sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+        spark.catalog.cacheTable("t")
+        spark.table("t").select($"i").cache()
+        checkAnswer(spark.table("t").select($"i"), Row(1))
+        assertCached(spark.table("t").select($"i"))
 
-      sql("INSERT OVERWRITE TABLE t SELECT 2, 'b'")
-      spark.catalog.uncacheTable("t")
-      checkAnswer(spark.table("t").select($"i"), Row(2))
-      assert(getNumInMemoryRelations(spark.table("t").select($"i")) == 1)
+        Utils.deleteRecursively(path)
+        spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
+        spark.catalog.uncacheTable("t")
+        assert(spark.table("t").select($"i").count() == 0)
+        assert(getNumInMemoryRelations(spark.table("t").select($"i")) == 0)
+      }
     }
   }
 
