@@ -254,8 +254,8 @@ test_that("read/write csv as DataFrame", {
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
                    "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt,,",
-                   "NA,Dummy,Placeholder,,")
+                   "2015,Chevy,Volt",
+                   "NA,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
   # default "header" is false, inferSchema to handle "year" as "int"
@@ -274,8 +274,8 @@ test_that("read/write csv as DataFrame", {
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
                    "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt,,",
-                   "Empty,Dummy,Placeholder,,")
+                   "2015,Chevy,Volt",
+                   "Empty,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
   df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "Empty")
@@ -302,8 +302,8 @@ test_that("Support other types for options", {
   mockLinesCsv <- c("year,make,model,comment,blank",
   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
   "1997,Ford,E350,\"Go get one now they are going fast\",",
-  "2015,Chevy,Volt,,",
-  "NA,Dummy,Placeholder,,")
+  "2015,Chevy,Volt",
+  "NA,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
   csvDf <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
