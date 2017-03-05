@@ -134,38 +134,22 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .fit(docDF)
 
     val expectedSimilarity = Array(0.2608488929093532, -0.8271274846926078)
-    val (synonyms, similarity) = model.findSynonyms("a", 2).rdd.map {
+    val result = model.findSynonyms("a", 2).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
-    }.collect().unzip
+    }.collect()
+    val (synonyms, similarity) = result.unzip
 
     assert(synonyms === Array("b", "c"))
     expectedSimilarity.zip(similarity).foreach {
       case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
     }
-  }
 
-  test("findSynonymsArray") {
-
-    val spark = this.spark
-    import spark.implicits._
-
-    val sentence = "a b " * 100 + "a c " * 10
-    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
-    val docDF = doc.zip(doc).toDF("text", "alsotext")
-
-    val model = new Word2Vec()
-      .setVectorSize(3)
-      .setInputCol("text")
-      .setOutputCol("result")
-      .setSeed(42L)
-      .fit(docDF)
-
-    val expectedSimilarity = Array(0.2608488929093532, -0.8271274846926078)
-    val (synonyms, similarity) = model.findSynonymsArray("a", 2).unzip
-
-    assert(synonyms === Array("b", "c"))
-    expectedSimilarity.zip(similarity).foreach {
-      case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
+    result.zip(model.findSynonymsArray("a", 2)).foreach {
+      case (expectedSynonymAndSimilarity, actualSynonymAndSimilarity) =>
+        assert(expectedSynonymAndSimilarity._1 === actualSynonymAndSimilarity._1)
+        assert(
+          math.abs((expectedSynonymAndSimilarity._2 - actualSynonymAndSimilarity._2)
+            / expectedSynonymAndSimilarity._2) < 1E-5)
     }
   }
 
