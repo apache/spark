@@ -1346,9 +1346,10 @@ test_that("column functions", {
   schema <- structType(structField("age", "integer"),
                        structField("height", "double"))
   s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
-  #order
+  expect_equal(ncol(s), 1)
+  expect_equal(nrow(s), 3)
   expect_is(s[[1]][[1]], "struct")
-  expect_equal(s[[1]][[1]]$age, 16)
+  expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
 
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
