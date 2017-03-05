@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions.{from_json, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{CalendarIntervalType, IntegerType, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -131,6 +131,29 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(from_json($"value", schema)),
       Row(null) :: Nil)
+  }
+
+  test("from_json invalid schema") {
+    val df = Seq("""{"a" 1}""").toDS()
+    val schema = ArrayType(StringType)
+    val message = intercept[AnalysisException] {
+      df.select(from_json($"value", schema))
+    }.getMessage
+
+    assert(message.contains(
+      "Input schema array<string> must be a struct or an array of structs."))
+  }
+
+  test("from_json array support") {
+    val df = Seq("""[{"a": 1, "b": "a"}, {"a": 2}, { }]""").toDS()
+    val schema = ArrayType(
+      StructType(
+        StructField("a", IntegerType) ::
+        StructField("b", StringType) :: Nil))
+
+    checkAnswer(
+      df.select(from_json($"value", schema)),
+      Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
   }
 
   test("to_json") {
