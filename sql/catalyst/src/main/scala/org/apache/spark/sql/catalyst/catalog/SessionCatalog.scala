@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -131,7 +132,7 @@ class SessionCatalog(
    * does not contain a scheme, this path will not be changed after the default
    * FileSystem is changed.
    */
-  private def makeQualifiedPath(path: String): Path = {
+  private def makeQualifiedPath(path: URI): Path = {
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(hadoopConf)
     fs.makeQualified(hadoopPath)
@@ -170,7 +171,7 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(new Path(dbDefinition.locationUri).toString).toUri
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toUri
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
       ignoreIfExists)

@@ -387,7 +387,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(location)
+    val customLocation = storage.locationUri.orElse(CatalogUtils.stringToURI(location))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -398,8 +398,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val tableDesc = CatalogTable(
       identifier = table,
       tableType = tableType,
-      storage = storage.copy(locationUri = customLocation.map{ loc =>
-        new Path(loc.toString).toUri}),
+      storage = storage.copy(locationUri = customLocation),
       schema = schema.getOrElse(new StructType),
       provider = Some(provider),
       partitionColumnNames = partitionColumnNames,
@@ -1083,7 +1082,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
     }
 
-    val locUri = location.map{ loc => new Path(loc).toUri }
+    val locUri = CatalogUtils.stringToURI(location)
     val storage = CatalogStorageFormat(
       locationUri = locUri,
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),

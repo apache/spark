@@ -1849,7 +1849,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(table.location == new URI(dir.getAbsolutePath))
 
         dir.delete
-//        val tableLocFile = new File(table.location)
         assert(!dir.exists)
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
         assert(dir.exists)

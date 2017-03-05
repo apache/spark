@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalog
 
-import java.net.URI
 import javax.annotation.Nullable
 
 import org.apache.spark.annotation.InterfaceStability

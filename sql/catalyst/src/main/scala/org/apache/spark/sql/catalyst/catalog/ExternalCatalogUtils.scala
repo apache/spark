@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
@@ -160,6 +162,28 @@ object CatalogUtils {
       normalizeColumnName(tableName, tableCols, colName, "sort", resolver)
     }
     BucketSpec(numBuckets, normalizedBucketCols, normalizedSortCols)
+  }
+
+  /**
+   * Convert URI to String.
+   * Since URI.toString does not decode for the uri string, we need to use
+   * Path(uri).toString to decode it.
+   * @param uri the URI of the path
+   * @return the String of the path
+   */
+  def URIToString(uri: Option[URI]): Option[String] = {
+    uri.map(new Path(_).toString)
+  }
+
+  /**
+   * Convert String to URI.
+   * Since new URI(string) does not encode for the path string, we need to use
+   * Path(string).toURI to encode it.
+   * @param str the String of the path
+   * @return the URI of the path
+   */
+  def stringToURI(str: Option[String]): Option[URI] = {
+    str.map(new Path(_).toUri)
   }
 
   private def normalizeColumnName(

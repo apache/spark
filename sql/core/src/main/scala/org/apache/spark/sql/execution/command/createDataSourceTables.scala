@@ -184,7 +184,7 @@ case class CreateDataSourceTableAsSelectCommand(
       mode: SaveMode,
       tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
-    val pathOption = tableLocation.map("path" -> new Path(_).toString)
+    val pathOption = CatalogUtils.URIToString(tableLocation).map("path" -> _)
     val dataSource = DataSource(
       session,
       className = table.provider.get,

@@ -427,7 +427,7 @@ case class AlterTableAddPartitionCommand(
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(normalizedSpec, table.storage.copy(
-        locationUri = location.map(new Path(_).toUri)))
+        locationUri = CatalogUtils.stringToURI(location)))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]

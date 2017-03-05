@@ -342,8 +342,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       "db1",
       "tbl",
       Map("partCol1" -> "1", "partCol2" -> "2")).location
-    val tableLocationPath = new Path(catalog.getTable("db1", "tbl").location)
-    val defaultPartitionLocation = new Path(new Path(tableLocationPath, "partCol1=1"), "partCol2=2")
+    val tableLocation = new Path(catalog.getTable("db1", "tbl").location)
+    val defaultPartitionLocation = new Path(new Path(tableLocation, "partCol1=1"), "partCol2=2")
     assert(new Path(partitionLocation) == defaultPartitionLocation)
   }
 
@@ -367,10 +367,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
     val partition1 =
       CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"),
-        storageFormat.copy(locationUri = Some(new Path(newLocationPart1).toUri)))
+        storageFormat.copy(locationUri = Some(newLocationPart1)))
     val partition2 =
       CatalogTablePartition(Map("partCol1" -> "3", "partCol2" -> "4"),
-        storageFormat.copy(locationUri = Some(new Path(newLocationPart2).toUri)))
+        storageFormat.copy(locationUri = Some(newLocationPart2)))
     catalog.createPartitions("db1", "tbl", Seq(partition1), ignoreIfExists = false)
     catalog.createPartitions("db1", "tbl", Seq(partition2), ignoreIfExists = false)
 
@@ -510,7 +510,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
-    val tableLocationPath = new Path(catalog.getTable("db1", "tbl").location)
+    val tableLocation = new Path(catalog.getTable("db1", "tbl").location)
 
     val mixedCasePart1 = CatalogTablePartition(
       Map("partCol1" -> "1", "partCol2" -> "2"), storageFormat)
@@ -520,12 +520,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.createPartitions("db1", "tbl", Seq(mixedCasePart1), ignoreIfExists = false)
     assert(
       new Path(catalog.getPartition("db1", "tbl", mixedCasePart1.spec).location) ==
-        new Path(new Path(tableLocationPath, "partCol1=1"), "partCol2=2"))
+        new Path(new Path(tableLocation, "partCol1=1"), "partCol2=2"))
 
     catalog.renamePartitions("db1", "tbl", Seq(mixedCasePart1.spec), Seq(mixedCasePart2.spec))
     assert(
       new Path(catalog.getPartition("db1", "tbl", mixedCasePart2.spec).location) ==
-        new Path(new Path(tableLocationPath, "partCol1=3"), "partCol2=4"))
+        new Path(new Path(tableLocation, "partCol1=3"), "partCol2=4"))
 
     // For external tables, RENAME PARTITION should not update the partition location.
     val existingPartLoc = catalog.getPartition("db2", "tbl2", part1.spec).location
@@ -555,21 +555,21 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("alter partitions") {
     val catalog = newBasicCatalog()
     try {
-      val newLocationUri = new Path(newUriForDatabase()).toUri
+      val newLocation = new Path(newUriForDatabase()).toUri
       val newSerde = "com.sparkbricks.text.EasySerde"
       val newSerdeProps = Map("spark" -> "bricks", "compressed" -> "false")
       // alter but keep spec the same
       val oldPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
       val oldPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
       catalog.alterPartitions("db2", "tbl2", Seq(
-        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocationUri))),
-        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocationUri)))))
+        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocation))),
+        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))))
       val newPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
       val newPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
-      assert(newPart1.storage.locationUri == Some(newLocationUri))
-      assert(newPart2.storage.locationUri == Some(newLocationUri))
-      assert(oldPart1.storage.locationUri != Some(newLocationUri))
-      assert(oldPart2.storage.locationUri != Some(newLocationUri))
+      assert(newPart1.storage.locationUri == Some(newLocation))
+      assert(newPart2.storage.locationUri == Some(newLocation))
+      assert(oldPart1.storage.locationUri != Some(newLocation))
+      assert(oldPart2.storage.locationUri != Some(newLocation))
       // alter other storage information
       catalog.alterPartitions("db2", "tbl2", Seq(
         oldPart1.copy(storage = storageFormat.copy(serde = Some(newSerde))),
