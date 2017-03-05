@@ -141,15 +141,13 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     assert(synonyms === Array("b", "c"))
     expectedSimilarity.zip(similarity).foreach {
-      case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
+      case (expected, actual) => assert(expected ~== actual absTol 1E-5)
     }
 
     result.zip(model.findSynonymsArray("a", 2)).foreach {
       case (expectedSynonymAndSimilarity, actualSynonymAndSimilarity) =>
         assert(expectedSynonymAndSimilarity._1 === actualSynonymAndSimilarity._1)
-        assert(
-          math.abs((expectedSynonymAndSimilarity._2 - actualSynonymAndSimilarity._2)
-            / expectedSynonymAndSimilarity._2) < 1E-5)
+        assert(expectedSynonymAndSimilarity._2 ~== actualSynonymAndSimilarity._2 absTol 1E-5)
     }
   }
 
