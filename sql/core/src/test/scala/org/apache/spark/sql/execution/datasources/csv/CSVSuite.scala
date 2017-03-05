@@ -312,14 +312,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(result.schema.fieldNames.size === 1)
   }
 
-  test("test with empty file without schema") {
-    val result = spark.read
-      .csv(testFile(emptyFile))
-
-    assert(result.collect().isEmpty)
-    assert(result.schema.fieldNames.isEmpty)
-  }
-
   test("DDL test with empty file") {
     withView("carsTable") {
       spark.sql(
@@ -1080,14 +1072,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Empty file produces empty dataframe with empty schema - wholeFile option") {
-    withTempPath { path =>
-      path.createNewFile()
-
+  test("Empty file produces empty dataframe with empty schema") {
+    Seq(false, true).foreach { wholeFile =>
       val df = spark.read.format("csv")
         .option("header", true)
-        .option("wholeFile", true)
-        .load(path.getAbsolutePath)
+        .option("wholeFile", wholeFile)
+        .load(testFile(emptyFile))
 
       assert(df.schema === spark.emptyDataFrame.schema)
       checkAnswer(df, spark.emptyDataFrame)
