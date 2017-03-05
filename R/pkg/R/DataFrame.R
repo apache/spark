@@ -2712,7 +2712,7 @@ setMethod("rbind",
           signature(... = "SparkDataFrame"),
           function(x, ..., deparse.level = 1) {
             nm <- lapply(list(x, ...), names)
-            if (!isTRUE(Reduce(all.equal, nm))) {
+            if (length(unique(nm)) != 1) {
               stop("Names of input data frames are different.")
             }
             if (nargs() == 3) {
