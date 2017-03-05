@@ -313,12 +313,12 @@ object QueryTest {
       isSorted: Boolean = false): Option[String] = {
     if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
       val getRowType: Option[Row] => String = row =>
-        "RowType" + row.map(row =>
+        row.map(row =>
             if (row.schema == null) {
-              "[]"
+              "struct<>"
             } else {
-              s"[${row.schema.fields.map(_.dataType.typeName).mkString(",")}]"
-            }).getOrElse("[]")
+                s"${row.schema.catalogString}"
+            }).getOrElse("struct<>")
 
       val errorMessage =
         s"""
