@@ -2666,9 +2666,6 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 setMethod("union",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
-            if (!isTRUE(all.equal(names(x), names(y)))) {
-              stop("Names of input data frames are different.")
-            }
             unioned <- callJMethod(x@sdf, "union", y@sdf)
             dataFrame(unioned)
           })
@@ -2712,6 +2709,10 @@ setMethod("unionAll",
 setMethod("rbind",
           signature(... = "SparkDataFrame"),
           function(x, ..., deparse.level = 1) {
+            nm <- lapply(list(x, ...), names)
+            if (!isTRUE(Reduce(all.equal, nm))) {
+              stop("Names of input data frames are different.")
+            }            
             if (nargs() == 3) {
               union(x, ...)
             } else {
