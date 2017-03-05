@@ -743,11 +743,11 @@ object HiveHashFunction extends InterpretedHashFunction {
     HiveHasher.hashUnsafeBytes(base, offset, len)
   }
 
-  private val HiveDecimalMaxPrecision = 38
-  private val HiveDecimalMaxScale = 38
+  private val HIVE_DECIMAL_MAX_PRECISION = 38
+  private val HIVE_DECIMAL_MAX_SCALE = 38
 
   // Mimics normalization done for decimals in Hive at HiveDecimalV1.normalize()
-  def normalizeDecimal(input: BigDecimal, allowRounding: Boolean): BigDecimal = {
+  def normalizeDecimal(input: BigDecimal): BigDecimal = {
     if (input == null) return null
 
     def trimDecimal(input: BigDecimal) = {
@@ -767,20 +767,16 @@ object HiveHashFunction extends InterpretedHashFunction {
 
     var result = trimDecimal(input)
     val intDigits = result.precision - result.scale
-    if (intDigits > HiveDecimalMaxPrecision) {
+    if (intDigits > HIVE_DECIMAL_MAX_PRECISION) {
       return null
     }
 
     val maxScale =
-      Math.min(HiveDecimalMaxScale, Math.min(HiveDecimalMaxPrecision - intDigits, result.scale))
+      Math.min(HIVE_DECIMAL_MAX_SCALE, Math.min(HIVE_DECIMAL_MAX_PRECISION - intDigits, result.scale))
     if (result.scale > maxScale) {
-      if (allowRounding) {
-        result = result.setScale(maxScale, RoundingMode.HALF_UP)
-        // Trimming is again necessary, because rounding may introduce new trailing 0's.
-        result = trimDecimal(result)
-      } else {
-        result = null
-      }
+      result = result.setScale(maxScale, RoundingMode.HALF_UP)
+      // Trimming is again necessary, because rounding may introduce new trailing 0's.
+      result = trimDecimal(result)
     }
     result
   }
@@ -839,7 +835,7 @@ object HiveHashFunction extends InterpretedHashFunction {
         result
 
       case d: Decimal =>
-        normalizeDecimal(d.toJavaBigDecimal, allowRounding = true).hashCode()
+        normalizeDecimal(d.toJavaBigDecimal).hashCode()
 
       case _ => super.hash(value, dataType, seed)
     }
