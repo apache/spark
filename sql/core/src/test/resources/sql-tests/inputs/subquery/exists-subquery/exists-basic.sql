@@ -33,22 +33,7 @@ CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
   ("emp 6 - no dept", 500.00D)
 AS BONUS(emp_name, bonus_amt);
 
--- turn off cross join
-set spark.sql.crossJoin.enabled=false;
-
--- uncorrelated exist query without enabling crossjoin
--- TC.01.01
-SELECT *
-FROM   emp
-WHERE  EXISTS (SELECT 1
-               FROM   dept
-               WHERE  dept.dept_id > 10
-                      AND dept.dept_id < 30);
-
--- turn on cross join
-set spark.sql.crossJoin.enabled=true;
-
--- uncorrelated exist query with enabling crossjoin
+-- uncorrelated exist query
 -- TC.01.01
 SELECT * 
 FROM   emp 
