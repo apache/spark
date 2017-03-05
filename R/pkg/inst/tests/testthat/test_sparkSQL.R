@@ -1819,9 +1819,9 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
 
   df3 <- df2
   names(df3)[1] <- "newName"
-  expect_error(union(df, df3),
+  expect_error(rbind(df, df3),
                "Names of input data frames are different.")
-  expect_error(union(df, df2, df3),
+  expect_error(rbind(df, df2, df3),
                "Names of input data frames are different.")
 
   excepted <- arrange(except(df, df2), desc(df$age))

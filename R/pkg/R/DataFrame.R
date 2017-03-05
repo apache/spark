@@ -2642,6 +2642,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
 #' and another SparkDataFrame. This is equivalent to \code{UNION ALL} in SQL.
+#' Input SparkDataFrames can have different schemas (names and data types).
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
@@ -2685,7 +2686,8 @@ setMethod("unionAll",
 
 #' Union two or more SparkDataFrames
 #'
-#' Union two or more SparkDataFrames. This is equivalent to \code{UNION ALL} in SQL.
+#' Union two or more SparkDataFrames by row. In constrast with \link{union}, this method
+#' requires that the SparkDataFrames to be unioned have the same column names.
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
@@ -2712,7 +2714,7 @@ setMethod("rbind",
             nm <- lapply(list(x, ...), names)
             if (!isTRUE(Reduce(all.equal, nm))) {
               stop("Names of input data frames are different.")
-            }            
+            }
             if (nargs() == 3) {
               union(x, ...)
             } else {
