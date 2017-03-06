@@ -604,13 +604,11 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        val newTable = EliminateSubqueryAliases(lookupTableFromCatalog(u))
-        // Inserting into a view is not allowed, we should throw an AnalysisException.
-        if (newTable.isInstanceOf[View]) {
-          u.failAnalysis(s"${newTable.asInstanceOf[View].desc.identifier} is a view, inserting " +
-            s"into a view is not allowed")
+        lookupTableFromCatalog(u).canonicalized match {
+          case v: View =>
+            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+          case other => i.copy(table = other)
         }
-        i.copy(table = newTable)
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
