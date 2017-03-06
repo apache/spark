@@ -2686,7 +2686,7 @@ setMethod("unionAll",
 
 #' Union two or more SparkDataFrames
 #'
-#' Union two or more SparkDataFrames by row. In constrast to \link{union}, this method
+#' Union two or more SparkDataFrames by row. As in R's \code{rbind}, this method
 #' requires that the input SparkDataFrames have the same column names.
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
