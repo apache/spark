@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
+import org.apache.spark.sql.streaming.{KeyedState, KeyedStateTimeout}
 
 /**
  * :: Experimental ::
@@ -230,16 +231,19 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func Function to be called on every group.
    *
-   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   *             See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.1.1
    */
   @Experimental
   @InterfaceStability.Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
-      func: (K, Iterator[V], KeyedState[S]) => U): Dataset[U] = {
+      func: (K, Iterator[V], KeyedState[S]) => U,
+      timeout: KeyedStateTimeout = null): Dataset[U] = {
     flatMapGroupsWithState[S, U](
-      (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func(key, it, s)))
+      (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func(key, it, s)),
+      timeout)
   }
 
   /**
@@ -267,8 +271,39 @@ class KeyValueGroupedDataset[K, V] private[sql](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U]): Dataset[U] = {
+    mapGroupsWithState(func, stateEncoder, outputEncoder, null)
+  }
+
+  /**
+   * ::Experimental::
+   * (Java-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[KeyedState]] for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param timeout       Timeout information for groups that do not get data for a while.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.1.1
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def mapGroupsWithState[S, U](
+      func: MapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeout: KeyedStateTimeout): Dataset[U] = {
     flatMapGroupsWithState[S, U](
-      (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func.call(key, it.asJava, s))
+      (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func.call(key, it.asJava, s)),
+      timeout
     )(stateEncoder, outputEncoder)
   }
 
@@ -284,6 +319,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func Function to be called on every group.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.1.1
@@ -291,13 +327,15 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
-      func: (K, Iterator[V], KeyedState[S]) => Iterator[U]): Dataset[U] = {
+      func: (K, Iterator[V], KeyedState[S]) => Iterator[U],
+      timeout: KeyedStateTimeout = null): Dataset[U] = {
     Dataset[U](
       sparkSession,
       MapGroupsWithState[K, V, S, U](
         func.asInstanceOf[(Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any]],
         groupingAttributes,
         dataAttributes,
+        timeout,
         logicalPlan))
   }
 
@@ -326,8 +364,38 @@ class KeyValueGroupedDataset[K, V] private[sql](
       func: FlatMapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U]): Dataset[U] = {
+    flatMapGroupsWithState[S, U](func, stateEncoder, outputEncoder, null)
+  }
+
+  /**
+   * ::Experimental::
+   * (Java-specific)
+   * Applies the given function to each group of data, while maintaining a user-defined per-group
+   * state. The result Dataset will represent the objects returned by the function.
+   * For a static batch Dataset, the function will be invoked once per group. For a streaming
+   * Dataset, the function will be invoked for each group repeatedly in every trigger, and
+   * updates to each group's state will be saved across invocations.
+   * See [[KeyedState]] for more details.
+   *
+   * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param func          Function to be called on every group.
+   * @param stateEncoder  Encoder for the state type.
+   * @param outputEncoder Encoder for the output type.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   * @since 2.1.1
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def flatMapGroupsWithState[S, U](
+      func: FlatMapGroupsWithStateFunction[K, V, S, U],
+      stateEncoder: Encoder[S],
+      outputEncoder: Encoder[U],
+      timeout: KeyedStateTimeout): Dataset[U] = {
     flatMapGroupsWithState[S, U](
-      (key: K, it: Iterator[V], s: KeyedState[S]) => func.call(key, it.asJava, s).asScala
+      (key: K, it: Iterator[V], s: KeyedState[S]) => func.call(key, it.asJava, s).asScala,
+      null
     )(stateEncoder, outputEncoder)
   }
 

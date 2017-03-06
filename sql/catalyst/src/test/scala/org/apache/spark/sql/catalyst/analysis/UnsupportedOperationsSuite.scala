@@ -142,23 +142,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   val att = new AttributeReference(name = "a", dataType = LongType)()
   assertSupportedInBatchPlan(
     "mapGroupsWithState - mapGroupsWithState on batch relation",
-    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), batchRelation))
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, null, batchRelation))
 
   assertSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState on streaming relation before aggregation",
-    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), streamRelation),
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, null, streamRelation),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState on streaming relation after aggregation",
-    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att),
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, null,
       Aggregate(Nil, aggExprs("c"), streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("(map/flatMap)GroupsWithState"))
 
   assertSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState on batch relation inside streaming relation",
-    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, att, Seq(att), batchRelation),
+    MapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, null, batchRelation),
     outputMode = Append
   )
 

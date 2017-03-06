@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.KeyedState
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming.{KeyedStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.StateStore
@@ -81,6 +80,33 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
     intercept[IllegalArgumentException] {
       state.update(null)
     }
+  }
+
+  test("KeyedState - isTimingOut, setTimeoutDuration") {
+    var state: KeyedStateImpl[String] = null
+    state = new KeyedStateImpl[String](None)
+
+    assert(state.isTimingOut === false)
+    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_NOT_SET)
+    intercept[UnsupportedOperationException] {
+      state.setTimeoutDuration(1000)
+    }
+    intercept[UnsupportedOperationException] {
+      state.setTimeoutDuration("1 day")
+    }
+    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_NOT_SET)
+
+    state = new KeyedStateImpl[String](None, 1000, isTimingOut = false)
+    assert(state.isTimingOut === false)
+    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_NOT_SET)
+    state.setTimeoutDuration(1000)
+    assert(state.getTimeoutTimestamp === 2000)
+    state.setTimeoutDuration("2 second")
+    assert(state.getTimeoutTimestamp === 3000)
+    assert(state.isTimingOut === false)
+
+    state = new KeyedStateImpl[String](None, 1000, isTimingOut = true)
+    assert(state.isTimingOut === true)
   }
 
   test("KeyedState - primitive type") {
@@ -227,6 +253,61 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1
       CheckLastBatch(("a", "1"), ("c", "1")),
       assertNumStateRows(total = 3, updated = 2)
+    )
+  }
+
+  test("mapGroupsWithState - streaming with processing time timeout") {
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
+      if (state.isTimingOut) {
+        state.remove()
+        (key, "-1")
+      } else {
+        val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+        state.update(RunningCount(count))
+        state.setTimeoutDuration("10 seconds")
+        (key, count.toString)
+      }
+    }
+
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    val timeout = KeyedStateTimeout.withProcessingTime
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .mapGroupsWithState(stateFunc, timeout) // Types = State: MyState, Out: (Str, Str)
+
+    testStream(result, Append)(
+      StartStream(ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      CheckLastBatch(("a", "1")),
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(1 * 1000),
+      CheckLastBatch(("b", "1")),
+      assertNumStateRows(total = 2, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch(("a", "-1"), ("b", "2")),
+      assertNumStateRows(total = 1, updated = 2),
+
+      StopStream,
+      StartStream(ProcessingTime("1 second"), triggerClock = clock),
+
+      AddData(inputData, "c"),
+      AdvanceManualClock(20 * 1000),
+      CheckLastBatch(("b", "-1"), ("c", "1")),
+      assertNumStateRows(total = 1, updated = 2),
+
+      AddData(inputData, "c"),
+      AdvanceManualClock(20 * 1000),
+      CheckLastBatch(("c", "2")),
+      assertNumStateRows(total = 1, updated = 1)
     )
   }
 

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.streaming.KeyedStateTimeout
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -316,13 +317,19 @@ case class MapGroups(
 /** Internal class representing State */
 trait LogicalKeyedState[S]
 
+case object ProcessingTimeTimeout extends KeyedStateTimeout
+
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object MapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
       func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
+      timeout: KeyedStateTimeout,
       child: LogicalPlan): LogicalPlan = {
+
+    val encoder = encoderFor[S]
+
     val mapped = new MapGroupsWithState(
       func,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
@@ -330,8 +337,8 @@ object MapGroupsWithState {
       groupingAttributes,
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
-      encoderFor[S].resolveAndBind().deserializer,
-      encoderFor[S].namedExpressions,
+      encoder.asInstanceOf[ExpressionEncoder[Any]],
+      timeout,
       child)
     CatalystSerde.serialize[U](mapped)
   }
@@ -358,8 +365,8 @@ case class MapGroupsWithState(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    stateDeserializer: Expression,
-    stateSerializer: Seq[NamedExpression],
+    stateEncoder: ExpressionEncoder[Any],
+    timeout: KeyedStateTimeout,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */

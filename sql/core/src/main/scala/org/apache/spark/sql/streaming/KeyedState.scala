@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.sql.{Encoder, KeyValueGroupedDataset}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
 
 /**
@@ -137,4 +138,10 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
 
   /** Remove this keyed state. */
   def remove(): Unit
+
+  def isTimingOut: Boolean
+
+  def setTimeoutDuration(durationMs: Long): Unit
+
+  def setTimeoutDuration(duration: String): Unit
 }

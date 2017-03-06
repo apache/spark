@@ -332,10 +332,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object MapGroupsWithStateStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case MapGroupsWithState(
-          f, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateDeser, stateSer, child) =>
+          f, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, timeout, child) =>
         val execPlan = MapGroupsWithStateExec(
-          f, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateDeser, stateSer,
-          planLater(child))
+          f, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr,
+          None, stateEnc, timeout, -1, planLater(child))
         execPlan :: Nil
       case _ =>
         Nil

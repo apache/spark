@@ -50,6 +50,8 @@ trait StateStore {
   /** Get the current value of a key. */
   def get(key: UnsafeRow): Option[UnsafeRow]
 
+  def filter(condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)]
+
   /** Put a new value for a key. */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
