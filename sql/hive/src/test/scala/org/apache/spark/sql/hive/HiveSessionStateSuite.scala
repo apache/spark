@@ -28,15 +28,14 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 class HiveSessionStateSuite extends SessionStateSuite
   with TestHiveSingleton with BeforeAndAfterEach {
 
-  override def afterEach(): Unit = {}
-
-  override def beforeAll(): Unit = {}
-
-  override def afterAll(): Unit = {
-    hiveContext.reset()
+  override def beforeAll(): Unit = {
+    // Reuse the singleton session
+    activeSession = spark
   }
 
-  override def createSession(): Unit = {
-    activeSession = spark.newSession() // TestHiveSparkSession from TestHiveSingleton
+  override def afterAll(): Unit = {
+    // Set activeSession to null to avoid stopping the singleton session
+    activeSession = null
+    super.afterAll()
   }
 }

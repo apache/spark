@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.SparkContext
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,84 +27,98 @@ import org.apache.spark.sql.catalyst.rules.Rule
 class SessionStateSuite extends SparkFunSuite
     with BeforeAndAfterEach with BeforeAndAfterAll {
 
+  /**
+   * A shared SparkSession for all tests in this suite. Make sure you reset any changes to this
+   * session as this is a singleton HiveSparkSession in HiveSessionStateSuite and it's shared
+   * with all Hive test suites.
+   */
   protected var activeSession: SparkSession = _
-  protected var sparkContext: SparkContext = null
 
   override def beforeAll(): Unit = {
-    sparkContext = SparkSession.builder().master("local").getOrCreate().sparkContext
-  }
-
-  protected def createSession(): Unit = {
-    activeSession =
-      SparkSession.builder().master("local").sparkContext(sparkContext).getOrCreate()
-  }
-
-  override def beforeEach(): Unit = {
-    createSession()
+    activeSession = SparkSession.builder().master("local").getOrCreate()
   }
 
   override def afterAll(): Unit = {
-    if (sparkContext != null) {
-      sparkContext.stop()
+    if (activeSession != null) {
+      activeSession.stop()
+      activeSession = null
     }
+    super.afterAll()
   }
 
   test("fork new session and inherit RuntimeConfig options") {
     val key = "spark-config-clone"
     activeSession.conf.set(key, "active")
+    try {
+      // inheritance
+      val forkedSession = activeSession.cloneSession()
+      assert(forkedSession ne activeSession)
+      assert(forkedSession.conf ne activeSession.conf)
+      assert(forkedSession.conf.get(key) == "active")
 
-    // inheritance
-    val forkedSession = activeSession.cloneSession()
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.conf ne activeSession.conf)
-    assert(forkedSession.conf.get(key) == "active")
-
-    // independence
-    forkedSession.conf.set(key, "forked")
-    assert(activeSession.conf.get(key) == "active")
-    activeSession.conf.set(key, "dontcopyme")
-    assert(forkedSession.conf.get(key) == "forked")
+      // independence
+      forkedSession.conf.set(key, "forked")
+      assert(activeSession.conf.get(key) == "active")
+      activeSession.conf.set(key, "dontcopyme")
+      assert(forkedSession.conf.get(key) == "forked")
+    } finally {
+      activeSession.conf.unset(key)
+    }
   }
 
   test("fork new session and inherit function registry and udf") {
-    activeSession.udf.register("strlenScala", (_: String).length + (_: Int))
-    val forkedSession = activeSession.cloneSession()
+    val testFuncName1 = "strlenScala"
+    val testFuncName2 = "addone"
+    try {
+      activeSession.udf.register(testFuncName1, (_: String).length + (_: Int))
+      val forkedSession = activeSession.cloneSession()
 
-    // inheritance
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.sessionState.functionRegistry ne
-      activeSession.sessionState.functionRegistry)
-    assert(forkedSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
+      // inheritance
+      assert(forkedSession ne activeSession)
+      assert(forkedSession.sessionState.functionRegistry ne
+        activeSession.sessionState.functionRegistry)
+      assert(forkedSession.sessionState.functionRegistry.lookupFunction(testFuncName1).nonEmpty)
 
-    // independence
-    forkedSession.sessionState.functionRegistry.dropFunction("strlenScala")
-    assert(activeSession.sessionState.functionRegistry.lookupFunction("strlenScala").nonEmpty)
-    activeSession.udf.register("addone", (_: Int) + 1)
-    assert(forkedSession.sessionState.functionRegistry.lookupFunction("addone").isEmpty)
+      // independence
+      forkedSession.sessionState.functionRegistry.dropFunction(testFuncName1)
+      assert(activeSession.sessionState.functionRegistry.lookupFunction(testFuncName1).nonEmpty)
+      activeSession.udf.register(testFuncName2, (_: Int) + 1)
+      assert(forkedSession.sessionState.functionRegistry.lookupFunction(testFuncName2).isEmpty)
+    } finally {
+      activeSession.sessionState.functionRegistry.dropFunction(testFuncName1)
+      activeSession.sessionState.functionRegistry.dropFunction(testFuncName2)
+    }
   }
 
   test("fork new session and inherit experimental methods") {
-    object DummyRule1 extends Rule[LogicalPlan] {
-      def apply(p: LogicalPlan): LogicalPlan = p
-    }
-    object DummyRule2 extends Rule[LogicalPlan] {
-      def apply(p: LogicalPlan): LogicalPlan = p
-    }
-    val optimizations = List(DummyRule1, DummyRule2)
-    activeSession.experimental.extraOptimizations = optimizations
-    val forkedSession = activeSession.cloneSession()
+    val originalExtraOptimizations = activeSession.experimental.extraOptimizations
+    val originalExtraStrategies = activeSession.experimental.extraStrategies
+    try {
+      object DummyRule1 extends Rule[LogicalPlan] {
+        def apply(p: LogicalPlan): LogicalPlan = p
+      }
+      object DummyRule2 extends Rule[LogicalPlan] {
+        def apply(p: LogicalPlan): LogicalPlan = p
+      }
+      val optimizations = List(DummyRule1, DummyRule2)
+      activeSession.experimental.extraOptimizations = optimizations
+      val forkedSession = activeSession.cloneSession()
 
-    // inheritance
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.experimental ne activeSession.experimental)
-    assert(forkedSession.experimental.extraOptimizations.toSet ==
-      activeSession.experimental.extraOptimizations.toSet)
+      // inheritance
+      assert(forkedSession ne activeSession)
+      assert(forkedSession.experimental ne activeSession.experimental)
+      assert(forkedSession.experimental.extraOptimizations.toSet ==
+        activeSession.experimental.extraOptimizations.toSet)
 
-    // independence
-    forkedSession.experimental.extraOptimizations = List(DummyRule2)
-    assert(activeSession.experimental.extraOptimizations == optimizations)
-    activeSession.experimental.extraOptimizations = List(DummyRule1)
-    assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
+      // independence
+      forkedSession.experimental.extraOptimizations = List(DummyRule2)
+      assert(activeSession.experimental.extraOptimizations == optimizations)
+      activeSession.experimental.extraOptimizations = List(DummyRule1)
+      assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
+    } finally {
+      activeSession.experimental.extraOptimizations = originalExtraOptimizations
+      activeSession.experimental.extraStrategies = originalExtraStrategies
+    }
   }
 
   test("fork new sessions and run query on inherited table") {
@@ -119,19 +132,26 @@ class SessionStateSuite extends SparkFunSuite
         Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
     }
 
-    implicit val enc = Encoders.tuple(Encoders.scalaInt, Encoders.STRING)
+    val spark = activeSession
+    // Cannot use `import activeSession.implicits._` due to the compiler limitation.
+    import spark.implicits._
+
     activeSession
       .createDataset[(Int, String)](Seq(1, 2, 3).map(i => (i, i.toString)))
       .toDF("int", "str")
       .createOrReplaceTempView("df")
-    checkTableExists(activeSession)
+    try {
+      checkTableExists(activeSession)
 
-    val forkedSession = activeSession.cloneSession()
-    assert(forkedSession ne activeSession)
-    assert(forkedSession.sessionState ne activeSession.sessionState)
-    checkTableExists(forkedSession)
-    checkTableExists(activeSession.cloneSession()) // ability to clone multiple times
-    checkTableExists(forkedSession.cloneSession()) // clone of clone
+      val forkedSession = activeSession.cloneSession()
+      assert(forkedSession ne activeSession)
+      assert(forkedSession.sessionState ne activeSession.sessionState)
+      checkTableExists(forkedSession)
+      checkTableExists(activeSession.cloneSession()) // ability to clone multiple times
+      checkTableExists(forkedSession.cloneSession()) // clone of clone
+    } finally {
+      activeSession.sql("drop table df")
+    }
   }
 
   test("fork new session and inherit reference to SharedState") {
