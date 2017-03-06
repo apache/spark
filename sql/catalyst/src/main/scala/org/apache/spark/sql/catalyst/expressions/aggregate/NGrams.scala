@@ -90,12 +90,12 @@ case class NGrams(child: Expression,
   }
 
   override def createAggregationBuffer(): NGramBuffer = {
-    new NGramBuffer(n, k, accuracy, new HashMap[Array[UTF8String], Double]())
+    new NGramBuffer(n, k, accuracy, new HashMap[Vector[UTF8String], Double]())
   }
 
   override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
     val genericArrayData: GenericArrayData = child.eval(inputRow).asInstanceOf[GenericArrayData]
-    val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toArray
+    val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toVector
     if (values != null) {
       val nGrams = getNGrams(values, n)
       nGrams.foreach(buffer.add(_))
@@ -111,16 +111,16 @@ case class NGrams(child: Expression,
   }
 
   override def eval(buffer: NGramBuffer): Any = {
-    val topKNGrams = buffer.getTopKNGrams().map((keyValuePair: (Array[UTF8String], Double)) => {
-      val arrayKey = new GenericArrayData(Array(new GenericArrayData(keyValuePair._1)))
-      val arrayValue = new GenericArrayData(Array(keyValuePair._2))
+    val topKNGrams = buffer.getTopKNGrams().map((keyValuePair: (Vector[UTF8String], Double)) => {
+      val arrayKey = new GenericArrayData(Vector(new GenericArrayData(keyValuePair._1)))
+      val arrayValue = new GenericArrayData(Vector(keyValuePair._2))
       new ArrayBasedMapData(arrayKey, arrayValue)
-    }).toArray
+    }).toVector
    new GenericArrayData(topKNGrams)
   }
 
-  private def getNGrams(values: Array[UTF8String], n: Int): Array[Array[UTF8String]] = {
-    values.sliding(n).toArray
+  private def getNGrams(values: Vector[UTF8String], n: Int): Vector[Vector[UTF8String]] = {
+    values.sliding(n).toVector
   }
 
   override def withNewMutableAggBufferOffset(newOffset: Int): NGrams =
@@ -164,8 +164,8 @@ object NGrams {
   class NGramBuffer(val n: Int,
                     val k: Int,
                     val precisionFactor: Int,
-                    val frequencyMap: HashMap[Array[UTF8String], Double]) {
-    def add(ng: Array[UTF8String]): Unit = {
+                    val frequencyMap: HashMap[Vector[UTF8String], Double]) {
+    def add(ng: Vector[UTF8String]): Unit = {
       var currentFrequency: Double = frequencyMap.get(ng)
       if (currentFrequency == null.asInstanceOf[Double]) {
         currentFrequency = 1.0D
@@ -176,7 +176,7 @@ object NGrams {
     }
 
     def merge(other: NGramBuffer): Unit = {
-      other.frequencyMap.asScala.foreach((keyValuePair: (Array[UTF8String], Double)) => {
+      other.frequencyMap.asScala.foreach((keyValuePair: (Vector[UTF8String], Double)) => {
         val key = keyValuePair._1
         val value = keyValuePair._2
         val originalValue = frequencyMap.getOrDefault(key, 0.0D)
@@ -186,14 +186,14 @@ object NGrams {
 
     def trim(): Unit = {
       if (frequencyMap.size() > 2 * k * precisionFactor) {
-        val orderedWithIndex = frequencyMap.asScala.iterator.toArray.sortWith(_._2 < _._2).zipWithIndex
+        val orderedWithIndex = frequencyMap.asScala.iterator.toVector.sortWith(_._2 < _._2).zipWithIndex
         orderedWithIndex.takeWhile(_._2 < frequencyMap.size() - k * precisionFactor).map(_._1).
           foreach(keyValuePair => frequencyMap.remove(keyValuePair._1))
       }
     }
 
-    def getTopKNGrams(): Seq[(Array[UTF8String], Double)] = {
-      frequencyMap.asScala.iterator.toArray.sortWith(_._2 > _._2).zipWithIndex.takeWhile(_._2 < k).
+    def getTopKNGrams(): Seq[(Vector[UTF8String], Double)] = {
+      frequencyMap.asScala.iterator.toVector.sortWith(_._2 > _._2).zipWithIndex.takeWhile(_._2 < k).
         map(_._1)
     }
 

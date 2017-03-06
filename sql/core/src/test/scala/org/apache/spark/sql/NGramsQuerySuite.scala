@@ -16,19 +16,22 @@ class NGramsQuerySuite extends QueryTest with SharedSQLContext {
   val pattern1 = Array[String](abc, abc, bcd, abc, bcd)
   val pattern2 = Array[String](bcd, abc, abc, abc, abc, bcd)
 
-  val expected = Row(Array(Map[mutable.WrappedArray[AnyRef], Double](mutable.WrappedArray.make[AnyRef](Array(bcd, abc)) -> 1.0)))
+  val expected = Row(Array(
+    Map[mutable.WrappedArray[AnyRef], Double](mutable.WrappedArray.make[AnyRef](Array(abc, bcd)) -> 2.0),
+    Map[mutable.WrappedArray[AnyRef], Double](mutable.WrappedArray.make[AnyRef](Array(bcd, abc)) -> 1.0),
+    Map[mutable.WrappedArray[AnyRef], Double](mutable.WrappedArray.make[AnyRef](Array(abc, abc)) -> 1.0)
+  ))
   test("nGrams") {
-    withTempView(table) {
-      List[String](pattern1.mkString(" "), pattern2.mkString(" ")).toDF("col").createOrReplaceTempView(table)
+    withTempView( ) {
       checkAnswer(
         spark.sql(
           s"""
              |SELECT
-             |  ngrams(array('abc', 'abc', 'bcd', 'abc', 'bcd'), 2, 3)
-             |FROM $table
+             |  ngrams(array('abc', 'abc', 'bcd', 'abc', 'bcd'), 2, 4)
            """.stripMargin),
         expected
       )
     }
+
   }
 }
