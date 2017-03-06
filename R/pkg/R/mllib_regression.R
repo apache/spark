@@ -39,20 +39,16 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
-#' Family object for tweedie.
+#' Family object for tweedie .
 #'
 #' @param var.power the power index in the variance function.
 #' @param link.power the power index in the link function.
-#' @rdname tweedie
+#' @noRd
 #' @return a list for internal use in spark.glm
-#' @aliases tweedie
-#' @name tweedie
-#' @export
-#' @seealso \link{spark.glm}
 tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
   list(family = "tweedie",
-       var.power = var.power,
-       link.power = link.power,
+       variance = function (mu) mu^var.power,
+       linkfun = function (mu) mu^link.power,
        link = paste("mu^", as.character(link.power), sep = ""))
 }
 
@@ -71,9 +67,12 @@ tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
 #'               \code{Gamma}, \code{poisson} and \code{tweedie}.
-#'               The tweedie family is specified in a similar way as in the \code{statmod} package,
-#'               e.g., \code{tweedie(var.power = 0, link.power = 1)} is gaussian with idenity link and
+#'               Note that when package \code{statmod} is loaded, the tweedie family is specified using the
+#'               family definition therein, i.e., \code{tweedie(var.power, link.power)}.
+#'               For example, \code{tweedie(var.power = 0, link.power = 1)} is gaussian with idenity link and
 #'               \code{tweedie(1, 0)} is poisson with log link.
+#'               When package \code{statmod} is not available,  one can use the SparkR internal definition
+#'               \code{SparkR:::tweedie(var.power, link.power)}.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
@@ -106,7 +105,7 @@ tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
 #' summary(savedModel)
 #'
 #' # fit tweedie model
-#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family = tweedie(1.2, 0.0))
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = SparkR:::tweedie(1.2, 0.0))
 #' summary(model)
 #' }
 #' @note spark.glm since 2.0.0
@@ -136,8 +135,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             variancePower <- 0.0
             linkPower <- 1.0
             if (tolower(family$family) == "tweedie") {
-              variancePower <- family$var.power
-              linkPower <- family$link.power
+              variancePower <- log(family$variance(exp(1)))
+              linkPower <- log(family$linkfun(exp(1)))
             }
 
             # For known families, Gamma is upper-cased

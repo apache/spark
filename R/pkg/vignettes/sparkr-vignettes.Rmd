@@ -682,7 +682,7 @@ There are three ways to specify the `family` argument.
 
 * Result returned by a family function, e.g. `family = poisson(link = log)`.
 
-* Note that the tweedie family is specified as `tweedie(var.power, link.power)`, where `var.power` is the power index of the variance function and `link.power` is the index of the the power link function (the default value is `link.power = 1.0 - var.power`). This is consistent with the `tweedie` family defined in the `statmod` package, but the package is not needed in order to use the `tweedie` family. Some examples: `family = tweedie(0.0)` is  gaussian with identity link, `family = tweedie(1.0)` poisson with log link, `family = tweedie(2.0)` Gamma with inverse link, and `family = tweedie(1.5, 0.0)` compound Poisson with log link.
+* Note that when package `statmod` is loaded, the tweedie family is specified as `tweedie(var.power, link.power)`. Otherwise, one can use the SparkR internal definition `SparkR:::tweedie(var.power, link.power)`. In the above, `var.power` is the power index of the variance function and `link.power` is the index of the the power link function (the default value is `link.power = 1.0 - var.power`). This is consistent with the `tweedie` family defined in the `statmod` package.  Some examples: `family = tweedie(0.0)` is  gaussian with identity link, `family = tweedie(1.0)` poisson with log link, `family = tweedie(2.0)` Gamma with inverse link, and `family = tweedie(1.5, 0.0)` compound Poisson with log link.
 
 For more information regarding the families and their link functions, see the Wikipedia page [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 
@@ -700,12 +700,12 @@ head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
 
 The following is the same fit using the tweedie family:
 ```{r}
-tweedieGLM1 <- spark.glm(carsDF, mpg ~ wt + hp, family = tweedie(0.0))
+tweedieGLM1 <- spark.glm(carsDF, mpg ~ wt + hp, family = SparkR:::tweedie(0.0))
 summary(tweedieGLM1)
 ```
 We can try other distributions in the tweedie family, for example, a compound Poisson distribution with a log link:
 ```{r}
-tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = tweedie(1.2, 0.0))
+tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = SparkR:::tweedie(1.2, 0.0))
 summary(tweedieGLM2)
 ```
 
