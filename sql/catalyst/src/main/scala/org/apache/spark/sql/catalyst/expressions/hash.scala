@@ -650,14 +650,13 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override protected def genHashCalendarInterval(input: String, result: String): String = {
     s"""
       $result = (int)
-        org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashCalendarInterval($input);
+        ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashCalendarInterval($input);
      """
   }
 
   override protected def genHashTimestamp(input: String, result: String): String =
     s"""
-      $result = (int)
-        org.apache.spark.sql.catalyst.expressions.HiveHashFunction.hashTimestamp($input);
+      $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
      """
 
   override protected def genHashString(input: String, result: String): String = {
@@ -809,15 +808,26 @@ object HiveHashFunction extends InterpretedHashFunction {
    *
    * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
    *
-   * This method mimics HiveIntervalDayTime.hashCode() in Hive. If the `INTERVAL` is backed as
-   * HiveIntervalYearMonth in Hive, then this method will not produce Hive compatible result.
-   * The reason being Spark's representation of calendar does not have such categories based on
-   * the interval and is unified.
+   * This method mimics HiveIntervalDayTime.hashCode() in Hive.
+   *
+   * Two differences wrt Hive due to how intervals are stored in Spark vs Hive:
+   *
+   * - If the `INTERVAL` is backed as HiveIntervalYearMonth in Hive, then this method will not
+   *   produce Hive compatible result. The reason being Spark's representation of calendar does not
+   *   have such categories based on the interval and is unified.
+   *
+   * - Spark's [[CalendarInterval]] has precision upto microseconds but Hive's
+   *   HiveIntervalDayTime can store data with precision upto nanoseconds. So, any input intervals
+   *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
-    val totalSeconds = calendarInterval.milliseconds() / 1000
-    val result = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
-    result * 37
+    val totalSeconds = calendarInterval.microseconds / CalendarInterval.MICROS_PER_SECOND.toInt
+    val result: Int = (17 * 37) + (totalSeconds ^ totalSeconds >> 32).toInt
+
+    val nanoSeconds =
+      (calendarInterval.microseconds -
+        (totalSeconds * CalendarInterval.MICROS_PER_SECOND.toInt)).toInt * 1000
+     (result * 37) + nanoSeconds
   }
 
   override def hash(value: Any, dataType: DataType, seed: Long): Long = {
