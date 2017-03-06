@@ -101,7 +101,9 @@ public class VectorizedColumnReader {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     // If the table has a timezone property, apply the correct conversions.  See SPARK-12297.
-    String tzString = conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
+    // The conf is sometimes null in tests.
+    String tzString =
+        conf == null ? null : conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
     if (tzString == null || tzString == "") {
       storageTz = localTz;
     } else {
