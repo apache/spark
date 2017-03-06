@@ -864,14 +864,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = {
-    if (contains(StaticSQLConf.WAREHOUSE_PATH.key) &&
-        getConf(StaticSQLConf.WAREHOUSE_PATH).isDefined) {
-      new Path(getConf(StaticSQLConf.WAREHOUSE_PATH).get).toString
-    } else {
-      new Path(getConf(StaticSQLConf.DEFAULT_WAREHOUSE_PATH)).toString
-    }
-  }
+  def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
 
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
@@ -1019,7 +1012,7 @@ object StaticSQLConf {
   val WAREHOUSE_PATH = buildStaticConf("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
     .stringConf
-    .createOptional
+    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
   val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
     .internal()

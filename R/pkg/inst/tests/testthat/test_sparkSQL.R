@@ -2890,6 +2890,20 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
+test_that("Default warehouse dir should be set to tempdir", {
+  setHiveContext(sc)
+
+  # Create a temporary database and a table in it
+  sql("CREATE DATABASE db1")
+  sql("USE db1")
+  sql("CREATE TABLE boxes (width INT, length INT, height INT)")
+  # spark-warehouse should be written only tempdir() and not current working directory
+  expect_true(file.exists(file.path(tempdir(), "spark-warehouse", "db1.db", "boxes")))
+  sql("DROP TABLE boxes")
+  sql("DROP DATABASE db1")
+  unsetHiveContext(sc)
+})
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)

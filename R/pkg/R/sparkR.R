@@ -377,12 +377,6 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
-  # NOTE(shivaram): Set default warehouse dir to tmpdir to meet CRAN requirements
-  # See SPARK-18817 for more details
-  if (!exists("spark.sql.default.warehouse.dir", envir = sparkConfigMap)) {
-    assign("spark.sql.default.warehouse.dir", tempdir(), envir = sparkConfigMap)
-  }
-
   deployMode <- ""
   if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
     deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
@@ -407,11 +401,16 @@ sparkR.session <- function(
                 sparkConfigMap)
   } else {
     jsc <- get(".sparkRjsc", envir = .sparkREnv)
+    # NOTE(shivaram): Pass in a tempdir that is optionally used if the user has not
+    # overridden this. See SPARK-18817 for more details
+    warehouseTmpDir <- file.path(tempdir(), "spark-warehouse")
+
     sparkSession <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                 "getOrCreateSparkSession",
                                 jsc,
                                 sparkConfigMap,
-                                enableHiveSupport)
+                                enableHiveSupport,
+                                warehouseTmpDir)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
   sparkSession
