@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -45,9 +45,12 @@ private[libsvm] class LibSVMOutputWriter(
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
-  override def write(row: Row): Unit = {
-    val label = row.get(0)
-    val vector = row.get(1).asInstanceOf[Vector]
+  // This `asInstanceOf` is safe because it's guaranteed by `LibSVMFileFormat.verifySchema`
+  private val udt = dataSchema(1).dataType.asInstanceOf[VectorUDT]
+
+  override def write(row: InternalRow): Unit = {
+    val label = row.getDouble(0)
+    val vector = udt.deserialize(row.getStruct(1, udt.sqlType.length))
     writer.write(label.toString)
     vector.foreachActive { case (i, v) =>
       writer.write(s" ${i + 1}:$v")
@@ -115,6 +118,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    verifySchema(dataSchema)
     new OutputWriterFactory {
       override def newInstance(
           path: String,

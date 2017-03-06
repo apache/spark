@@ -376,7 +376,9 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val opId = 0
     val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
     val storeId = StateStoreId(dir, opId, 0)
-    val storeConf = StateStoreConf.empty
+    val sqlConf = new SQLConf()
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
@@ -393,6 +395,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
     }
 
+    val timeoutDuration = 60 seconds
+
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
@@ -401,7 +405,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           // Generate sufficient versions of store for snapshots
           generateStoreVersions()
 
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             // Store should have been reported to the coordinator
             assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
 
@@ -420,14 +424,14 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           generateStoreVersions()
 
           // Earliest delta file should get cleaned up
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
           }
 
           // If driver decides to deactivate all instances of the store, then this instance
           // should be unloaded
           coordinatorRef.deactivateInstances(dir)
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -437,7 +441,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
           // If some other executor loads the store, then this instance should be unloaded
           coordinatorRef.reportActiveInstance(storeId, "other-host", "other-exec")
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -448,7 +452,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(timeoutDuration)) {
         require(SparkEnv.get === null)
         assert(!StateStore.isLoaded(storeId))
         assert(!StateStore.isMaintenanceRunning)
@@ -458,7 +462,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
   test("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
-    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toURI.getPath
     val conf = new Configuration()
     conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
     val provider = newStoreProvider(dir = dir, hadoopConf = conf)
@@ -606,6 +610,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     ): HDFSBackedStateStoreProvider = {
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
+    sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     new HDFSBackedStateStoreProvider(
       StateStoreId(dir, opId, partition),
       keySchema,

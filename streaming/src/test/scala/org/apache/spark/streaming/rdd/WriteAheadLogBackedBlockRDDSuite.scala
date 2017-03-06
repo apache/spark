@@ -108,7 +108,7 @@ class WriteAheadLogBackedBlockRDDSuite
 
   /**
    * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to block manager
-   * and the rest to a write ahead log, and then reading reading it all back using the RDD.
+   * and the rest to a write ahead log, and then reading it all back using the RDD.
    * It can also test if the partitions that were read from the log were again stored in
    * block manager.
    *

@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
@@ -41,10 +39,23 @@ class JDBCOptions(
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
+  /**
+   * Returns a property with all options.
+   */
+  val asProperties: Properties = {
+    val properties = new Properties()
+    parameters.foreach { case (k, v) => properties.setProperty(k, v) }
+    properties
+  }
+
+  /**
+   * Returns a property with all options except Spark internal data source options like `url`,
+   * `dbtable`, and `numPartition`. This should be used when invoking JDBC API like `Driver.connect`
+   * because each DBMS vendor has its own property list for JDBC driver. See SPARK-17776.
+   */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    // We should avoid to pass the options into properties. See SPARK-17776.
-    parameters.filterKeys(!jdbcOptionNames.contains(_))
+    parameters.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -126,10 +137,10 @@ class JDBCOptions(
 }
 
 object JDBCOptions {
-  private val jdbcOptionNames = ArrayBuffer.empty[String]
+  private val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
-    jdbcOptionNames += name
+    jdbcOptionNames += name.toLowerCase
     name
   }
 

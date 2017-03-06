@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -38,7 +37,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path '${path.toString}'
+        |  path '${path.toURI.toString}'
         |)
       """.stripMargin)
   }

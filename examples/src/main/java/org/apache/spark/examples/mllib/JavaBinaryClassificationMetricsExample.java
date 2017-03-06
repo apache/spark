@@ -111,5 +111,7 @@ public class JavaBinaryClassificationMetricsExample {
     model.save(sc, "target/tmp/LogisticRegressionModel");
     LogisticRegressionModel.load(sc, "target/tmp/LogisticRegressionModel");
     // $example off$
+
+    sc.stop();
   }
 }

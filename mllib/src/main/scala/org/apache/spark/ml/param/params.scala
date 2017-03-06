@@ -728,7 +728,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
-   * [[extractParamMap]] with no extra values.
+   * `extractParamMap` with no extra values.
    */
   final def extractParamMap(): ParamMap = {
     extractParamMap(ParamMap.empty)

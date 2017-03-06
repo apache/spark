@@ -21,9 +21,9 @@ import java.io.IOException
 
 import scala.collection.mutable
 
-import org.apache.spark.{Partition => RDDPartition, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, TaskContext, TaskKilledException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.{InputFileNameHolder, RDD}
+import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
@@ -99,7 +99,15 @@ class FileScanRDD(
       private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
 
-      def hasNext: Boolean = (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      def hasNext: Boolean = {
+        // Kill the task in case it has been marked as killed. This logic is from
+        // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
+        // to avoid performance overhead.
+        if (context.isInterrupted()) {
+          throw new TaskKilledException
+        }
+        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      }
       def next(): Object = {
         val nextElement = currentIterator.next()
         // TODO: we should have a better separation of row based and batch based scan, so that we
@@ -121,12 +129,23 @@ class FileScanRDD(
         if (files.hasNext) {
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
-          InputFileNameHolder.setInputFileName(currentFile.filePath)
+          // Sets InputFileBlockHolder for the file block's information
+          InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
           try {
             if (ignoreCorruptFiles) {
               currentIterator = new NextIterator[Object] {
-                private val internalIter = readFunction(currentFile)
+                private val internalIter = {
+                  try {
+                    // The readFunction may read files before consuming the iterator.
+                    // E.g., vectorized Parquet reader.
+                    readFunction(currentFile)
+                  } catch {
+                    case e @(_: RuntimeException | _: IOException) =>
+                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
+                      Iterator.empty
+                  }
+                }
 
                 override def getNext(): AnyRef = {
                   try {
@@ -138,6 +157,7 @@ class FileScanRDD(
                     }
                   } catch {
                     case e: IOException =>
+                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
                       finished = true
                       null
                   }
@@ -149,6 +169,9 @@ class FileScanRDD(
               currentIterator = readFunction(currentFile)
             }
           } catch {
+            case e: IOException if ignoreCorruptFiles =>
+              logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
+              currentIterator = Iterator.empty
             case e: java.io.FileNotFoundException =>
               throw new java.io.FileNotFoundException(
                 e.getMessage + "\n" +
@@ -162,7 +185,7 @@ class FileScanRDD(
           hasNext
         } else {
           currentFile = null
-          InputFileNameHolder.unsetInputFileName()
+          InputFileBlockHolder.unset()
           false
         }
       }
@@ -170,7 +193,7 @@ class FileScanRDD(
       override def close(): Unit = {
         updateBytesRead()
         updateBytesReadWithFileSize()
-        InputFileNameHolder.unsetInputFileName()
+        InputFileBlockHolder.unset()
       }
     }
 

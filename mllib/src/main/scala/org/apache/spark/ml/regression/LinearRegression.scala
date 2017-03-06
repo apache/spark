@@ -91,7 +91,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(regParam -> 0.0)
 
   /**
-   * Set if we should fit the intercept
+   * Set if we should fit the intercept.
    * Default is true.
    *
    * @group setParam
@@ -204,6 +204,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Instance(label, weight, features)
     }
 
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, weightCol, predictionCol, solver, tol,
+      elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
+    instr.logNumFeatures(numFeatures)
+
     if (($(solver) == "auto" &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
@@ -226,7 +231,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         model.diagInvAtWA.toArray,
         model.objectiveHistory)
 
-      return lrModel.setSummary(Some(trainingSummary))
+      lrModel.setSummary(Some(trainingSummary))
+      instr.logSuccess(lrModel)
+      return lrModel
     }
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -251,10 +258,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val rawYStd = math.sqrt(ySummarizer.variance(0))
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
-        // If the rawYStd is zero and fitIntercept=true, then the intercept is yMean with
+        // If the rawYStd==0 and fitIntercept==true, then the intercept is yMean with
         // zero coefficient; as a result, training is not needed.
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
-        // the fitIntercept
+        // the fitIntercept.
         if (yMean == 0.0) {
           logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
             s"and the intercept will all be zero; as a result, training is not needed.")
@@ -279,7 +286,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           model,
           Array(0D),
           Array(0D))
-        return model.setSummary(Some(trainingSummary))
+
+        model.setSummary(Some(trainingSummary))
+        instr.logSuccess(model)
+        return model
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
@@ -401,7 +411,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       model,
       Array(0D),
       objectiveHistory)
+
     model.setSummary(Some(trainingSummary))
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.4.0")

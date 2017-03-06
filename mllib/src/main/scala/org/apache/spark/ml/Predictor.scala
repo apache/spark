@@ -40,7 +40,7 @@ private[ml] trait PredictorParams extends Params
    * @param schema input schema
    * @param fitting whether this is in fitting
    * @param featuresDataType  SQL DataType for FeaturesType.
-   *                          E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+   *                          E.g., [[VectorUDT]] for vector features.
    * @return output schema
    */
   protected def validateAndTransformSchema(
@@ -51,6 +51,14 @@ private[ml] trait PredictorParams extends Params
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
+
+      this match {
+        case p: HasWeightCol =>
+          if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
+            SchemaUtils.checkNumericType(schema, $(p.weightCol))
+          }
+        case _ =>
+      }
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
@@ -59,10 +67,12 @@ private[ml] trait PredictorParams extends Params
 /**
  * :: DeveloperApi ::
  * Abstraction for prediction problems (regression and classification). It accepts all NumericType
- * labels and will automatically cast it to DoubleType in `fit()`.
+ * labels and will automatically cast it to DoubleType in `fit()`. If this predictor supports
+ * weights, it accepts all NumericType weights, which will be automatically casted to DoubleType
+ * in `fit()`.
  *
  * @tparam FeaturesType  Type of features.
- *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+ *                       E.g., [[VectorUDT]] for vector features.
  * @tparam Learner  Specialization of this class.  If you subclass this type, use this type
  *                  parameter to specify the concrete type.
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
@@ -91,7 +101,19 @@ abstract class Predictor[
 
     // Cast LabelCol to DoubleType and keep the metadata.
     val labelMeta = dataset.schema($(labelCol)).metadata
-    val casted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+    val labelCasted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+
+    // Cast WeightCol to DoubleType and keep the metadata.
+    val casted = this match {
+      case p: HasWeightCol =>
+        if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
+          val weightMeta = dataset.schema($(p.weightCol)).metadata
+          labelCasted.withColumn($(p.weightCol), col($(p.weightCol)).cast(DoubleType), weightMeta)
+        } else {
+          labelCasted
+        }
+      case _ => labelCasted
+    }
 
     copyValues(train(casted).setParent(this))
   }
@@ -138,7 +160,7 @@ abstract class Predictor[
  * Abstraction for a model for prediction tasks (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
- *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+ *                       E.g., [[VectorUDT]] for vector features.
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
  */

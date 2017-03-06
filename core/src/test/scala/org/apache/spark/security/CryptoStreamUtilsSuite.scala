@@ -24,6 +24,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.network.util.CryptoUtils
 import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.TempShuffleBlockId
@@ -33,11 +34,11 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
   test("crypto configuration conversion") {
     val sparkKey1 = s"${SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX}a.b.c"
     val sparkVal1 = "val1"
-    val cryptoKey1 = s"${COMMONS_CRYPTO_CONF_PREFIX}a.b.c"
+    val cryptoKey1 = s"${CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX}a.b.c"
 
     val sparkKey2 = SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX.stripSuffix(".") + "A.b.c"
     val sparkVal2 = "val2"
-    val cryptoKey2 = s"${COMMONS_CRYPTO_CONF_PREFIX}A.b.c"
+    val cryptoKey2 = s"${CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX}A.b.c"
     val conf = new SparkConf()
     conf.set(sparkKey1, sparkVal1)
     conf.set(sparkKey2, sparkVal2)

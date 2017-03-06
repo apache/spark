@@ -3,7 +3,7 @@
 importFrom("methods", "setGeneric", "setMethod", "setOldClass")
 importFrom("methods", "is", "new", "signature", "show")
 importFrom("stats", "gaussian", "setNames")
-importFrom("utils", "download.file", "object.size", "packageVersion", "untar")
+importFrom("utils", "download.file", "object.size", "packageVersion", "tail", "untar")
 
 # Disable native libraries till we figure out how to package it
 # See SPARKR-7839
@@ -16,6 +16,7 @@ export("sparkR.stop")
 export("sparkR.session.stop")
 export("sparkR.conf")
 export("sparkR.version")
+export("sparkR.uiWebUrl")
 export("print.jobj")
 
 export("sparkR.newJObject")
@@ -132,6 +133,7 @@ exportMethods("arrange",
               "summarize",
               "summary",
               "take",
+              "toJSON",
               "transform",
               "union",
               "unionAll",

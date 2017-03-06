@@ -26,9 +26,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -135,7 +137,7 @@ abstract class AbstractCommandBuilder {
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
 
-    List<String> cp = new ArrayList<>();
+    Set<String> cp = new LinkedHashSet<>();
     addToClassPath(cp, getenv("SPARK_CLASSPATH"));
     addToClassPath(cp, appClassPath);
 
@@ -158,12 +160,13 @@ abstract class AbstractCommandBuilder {
         "launcher",
         "mllib",
         "repl",
+        "resource-managers/mesos",
+        "resource-managers/yarn",
         "sql/catalyst",
         "sql/core",
         "sql/hive",
         "sql/hive-thriftserver",
-        "streaming",
-        "yarn"
+        "streaming"
       );
       if (prependClasses) {
         if (!isTesting) {
@@ -200,7 +203,7 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
-    return cp;
+    return new ArrayList<>(cp);
   }
 
   /**
@@ -209,7 +212,7 @@ abstract class AbstractCommandBuilder {
    * @param cp List to which the new entries are appended.
    * @param entries New classpath entries (separated by File.pathSeparator).
    */
-  private void addToClassPath(List<String> cp, String entries) {
+  private void addToClassPath(Set<String> cp, String entries) {
     if (isEmpty(entries)) {
       return;
     }

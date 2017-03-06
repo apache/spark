@@ -61,5 +61,6 @@ public class JavaPCAExample {
     for (Vector vector : collectPartitions) {
       System.out.println("\t" + vector);
     }
+    sc.stop();
   }
 }

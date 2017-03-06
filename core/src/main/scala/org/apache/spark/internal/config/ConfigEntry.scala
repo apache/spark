@@ -17,12 +17,6 @@
 
 package org.apache.spark.internal.config
 
-import java.util.{Map => JMap}
-
-import scala.util.matching.Regex
-
-import org.apache.spark.SparkConf
-
 /**
  * An entry contains all meta information for a configuration.
  *
@@ -34,7 +28,6 @@ import org.apache.spark.SparkConf
  * value declared as a string.
  *
  * @param key the key for the configuration
- * @param defaultValue the default value for the configuration
  * @param valueConverter how to convert a string to the value. It should throw an exception if the
  *                       string does not have the required format.
  * @param stringConverter how to convert a value to a string that the user can use it as a valid
@@ -76,7 +69,7 @@ private class ConfigEntryWithDefault[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean)
-    extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
+  extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
 
@@ -95,7 +88,7 @@ private class ConfigEntryWithDefaultString[T] (
     stringConverter: T => String,
     doc: String,
     isPublic: Boolean)
-    extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
+  extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
 
   override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
 
@@ -118,8 +111,8 @@ private[spark] class OptionalConfigEntry[T](
     val rawStringConverter: T => String,
     doc: String,
     isPublic: Boolean)
-    extends ConfigEntry[Option[T]](key, s => Some(rawValueConverter(s)),
-      v => v.map(rawStringConverter).orNull, doc, isPublic) {
+  extends ConfigEntry[Option[T]](key, s => Some(rawValueConverter(s)),
+    v => v.map(rawStringConverter).orNull, doc, isPublic) {
 
   override def defaultValueString: String = "<undefined>"
 
@@ -137,7 +130,7 @@ private class FallbackConfigEntry[T] (
     doc: String,
     isPublic: Boolean,
     private[config] val fallback: ConfigEntry[T])
-    extends ConfigEntry[T](key, fallback.valueConverter, fallback.stringConverter, doc, isPublic) {
+  extends ConfigEntry[T](key, fallback.valueConverter, fallback.stringConverter, doc, isPublic) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"
 

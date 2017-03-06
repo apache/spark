@@ -19,11 +19,16 @@ package org.apache.spark.network.util;
 
 import com.google.common.collect.Maps;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
 /** ConfigProvider based on a Map (copied in the constructor). */
 public class MapConfigProvider extends ConfigProvider {
+
+  public static final MapConfigProvider EMPTY = new MapConfigProvider(
+      Collections.<String, String>emptyMap());
+
   private final Map<String, String> config;
 
   public MapConfigProvider(Map<String, String> config) {
@@ -38,4 +43,10 @@ public class MapConfigProvider extends ConfigProvider {
     }
     return value;
   }
+
+  @Override
+  public Iterable<Map.Entry<String, String>> getAll() {
+    return config.entrySet();
+  }
+
 }

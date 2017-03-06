@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
-  private[client] abstract class HiveVersion(
+  private[hive] abstract class HiveVersion(
       val fullVersion: String,
       val extraDeps: Seq[String] = Nil,
       val exclusions: Seq[String] = Nil)

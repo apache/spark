@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.util.Arrays;
 
+import com.google.common.collect.ImmutableMap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -33,12 +34,12 @@ import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleSecuritySuite {
 
-  TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
   TransportServer server;
 
   @Before
@@ -88,8 +89,14 @@ public class ExternalShuffleSecuritySuite {
 
   /** Creates an ExternalShuffleClient and attempts to register with the server. */
   private void validate(String appId, String secretKey, boolean encrypt) throws IOException {
+    TransportConf testConf = conf;
+    if (encrypt) {
+      testConf = new TransportConf("shuffle", new MapConfigProvider(
+        ImmutableMap.of("spark.authenticate.enableSaslEncryption", "true")));
+    }
+
     ExternalShuffleClient client =
-      new ExternalShuffleClient(conf, new TestSecretKeyHolder(appId, secretKey), true, encrypt);
+      new ExternalShuffleClient(testConf, new TestSecretKeyHolder(appId, secretKey), true);
     client.init(appId);
     // Registration either succeeds or throws an exception.
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(), "exec0",

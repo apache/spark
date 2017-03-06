@@ -81,7 +81,14 @@ private object JsonUtils {
    */
   def partitionOffsets(partitionOffsets: Map[TopicPartition, Long]): String = {
     val result = new HashMap[String, HashMap[Int, Long]]()
-    partitionOffsets.foreach { case (tp, off) =>
+    implicit val ordering = new Ordering[TopicPartition] {
+      override def compare(x: TopicPartition, y: TopicPartition): Int = {
+        Ordering.Tuple2[String, Int].compare((x.topic, x.partition), (y.topic, y.partition))
+      }
+    }
+    val partitions = partitionOffsets.keySet.toSeq.sorted  // sort for more determinism
+    partitions.foreach { tp =>
+        val off = partitionOffsets(tp)
         val parts = result.getOrElse(tp.topic, new HashMap[Int, Long])
         parts += tp.partition -> off
         result += tp.topic -> parts

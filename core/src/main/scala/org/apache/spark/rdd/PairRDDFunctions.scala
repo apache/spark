@@ -109,7 +109,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * functions. This method is here for backward compatibility. It does not provide combiner
    * classtag information to the shuffle.
    *
-   * @see [[combineByKeyWithClassTag]]
+   * @see `combineByKeyWithClassTag`
    */
   def combineByKey[C](
       createCombiner: V => C,
@@ -127,7 +127,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * This method is here for backward compatibility. It does not provide combiner
    * classtag information to the shuffle.
    *
-   * @see [[combineByKeyWithClassTag]]
+   * @see `combineByKeyWithClassTag`
    */
   def combineByKey[C](
       createCombiner: V => C,
@@ -608,7 +608,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * existing partitioner/parallelism level. This method is here for backward compatibility. It
    * does not provide combiner classtag information to the shuffle.
    *
-   * @see [[combineByKeyWithClassTag]]
+   * @see `combineByKeyWithClassTag`
    */
   def combineByKey[C](
       createCombiner: V => C,

@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.StructType
 
-private[orc] object OrcFileOperator extends Logging {
+private[hive] object OrcFileOperator extends Logging {
   /**
    * Retrieves an ORC file reader from a given path.  The path can point to either a directory or a
    * single ORC file.  If it points to a directory, it picks any non-empty ORC file within that

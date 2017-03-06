@@ -180,6 +180,7 @@ public class RequestTimeoutIntegrationSuite {
 
   // The timeout is relative to the LAST request sent, which is kinda weird, but still.
   // This test also makes sure the timeout works for Fetch requests as well as RPCs.
+  @Ignore // palantir/spark
   @Test
   public void furtherRequestsDelay() throws Exception {
     final byte[] response = new byte[16];

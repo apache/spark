@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.TaskContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder, ForeachWriter}
-import org.apache.spark.sql.catalyst.plans.logical.CatalystSerde
+import org.apache.spark.sql.{DataFrame, Encoder, ForeachWriter}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 
 /**
  * A [[Sink]] that forwards all data into [[ForeachWriter]] according to the contract defined by
@@ -32,46 +31,26 @@ import org.apache.spark.sql.catalyst.plans.logical.CatalystSerde
 class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    // TODO: Refine this method when SPARK-16264 is resolved; see comments below.
-
     // This logic should've been as simple as:
     // ```
     //   data.as[T].foreachPartition { iter => ... }
     // ```
     //
     // Unfortunately, doing that would just break the incremental planing. The reason is,
-    // `Dataset.foreachPartition()` would further call `Dataset.rdd()`, but `Dataset.rdd()` just
-    // does not support `IncrementalExecution`.
+    // `Dataset.foreachPartition()` would further call `Dataset.rdd()`, but `Dataset.rdd()` will
+    // create a new plan. Because StreamExecution uses the existing plan to collect metrics and
+    // update watermark, we should never create a new plan. Otherwise, metrics and watermark are
+    // updated in the new plan, and StreamExecution cannot retrieval them.
     //
-    // So as a provisional fix, below we've made a special version of `Dataset` with its `rdd()`
-    // method supporting incremental planning. But in the long run, we should generally make newly
-    // created Datasets use `IncrementalExecution` where necessary (which is SPARK-16264 tries to
-    // resolve).
-    val incrementalExecution = data.queryExecution.asInstanceOf[IncrementalExecution]
-    val datasetWithIncrementalExecution =
-      new Dataset(data.sparkSession, incrementalExecution, implicitly[Encoder[T]]) {
-        override lazy val rdd: RDD[T] = {
-          val objectType = exprEnc.deserializer.dataType
-          val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-
-          // was originally: sparkSession.sessionState.executePlan(deserialized) ...
-          val newIncrementalExecution = new IncrementalExecution(
-            this.sparkSession,
-            deserialized,
-            incrementalExecution.outputMode,
-            incrementalExecution.checkpointLocation,
-            incrementalExecution.currentBatchId,
-            incrementalExecution.currentEventTimeWatermark)
-          newIncrementalExecution.toRdd.mapPartitions { rows =>
-            rows.map(_.get(0, objectType))
-          }.asInstanceOf[RDD[T]]
-        }
-      }
-    datasetWithIncrementalExecution.foreachPartition { iter =>
+    // Hence, we need to manually convert internal rows to objects using encoder.
+    val encoder = encoderFor[T].resolveAndBind(
+      data.logicalPlan.output,
+      data.sparkSession.sessionState.analyzer)
+    data.queryExecution.toRdd.foreachPartition { iter =>
       if (writer.open(TaskContext.getPartitionId(), batchId)) {
         try {
           while (iter.hasNext) {
-            writer.process(iter.next())
+            writer.process(encoder.fromRow(iter.next()))
           }
         } catch {
           case e: Throwable =>

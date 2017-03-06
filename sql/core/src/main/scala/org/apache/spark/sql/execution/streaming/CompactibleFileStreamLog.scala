@@ -52,6 +52,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   /** Needed to serialize type T into JSON when using Jackson */
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
+  protected val minBatchesToRetain = sparkSession.sessionState.conf.minBatchesToRetain
+
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
    * processes may see the old files are deleted but still cannot see the compaction file using
@@ -152,11 +154,16 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   override def add(batchId: Long, logs: Array[T]): Boolean = {
-    if (isCompactionBatch(batchId, compactInterval)) {
-      compact(batchId, logs)
-    } else {
-      super.add(batchId, logs)
+    val batchAdded =
+      if (isCompactionBatch(batchId, compactInterval)) {
+        compact(batchId, logs)
+      } else {
+        super.add(batchId, logs)
+      }
+    if (batchAdded && isDeletingExpiredLog) {
+      deleteExpiredLog(batchId)
     }
+    batchAdded
   }
 
   /**
@@ -167,9 +174,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
     val allLogs = validBatches.flatMap(batchId => super.get(batchId)).flatten ++ logs
     if (super.add(batchId, compactLogs(allLogs).toArray)) {
-      if (isDeletingExpiredLog) {
-        deleteExpiredLog(batchId)
-      }
       true
     } else {
       // Return false as there is another writer.
@@ -210,26 +214,41 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
   }
 
   /**
-   * Since all logs before `compactionBatchId` are compacted and written into the
-   * `compactionBatchId` log file, they can be removed. However, due to the eventual consistency of
-   * S3, the compaction file may not be seen by other processes at once. So we only delete files
-   * created `fileCleanupDelayMs` milliseconds ago.
+   * Delete expired log entries that proceed the currentBatchId and retain
+   * sufficient minimum number of batches (given by minBatchsToRetain). This
+   * equates to retaining the earliest compaction log that proceeds
+   * batch id position currentBatchId + 1 - minBatchesToRetain. All log entries
+   * prior to the earliest compaction log proceeding that position will be removed.
+   * However, due to the eventual consistency of S3, the compaction file may not
+   * be seen by other processes at once. So we only delete files created
+   * `fileCleanupDelayMs` milliseconds ago.
    */
-  private def deleteExpiredLog(compactionBatchId: Long): Unit = {
-    val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
-    fileManager.list(metadataPath, new PathFilter {
-      override def accept(path: Path): Boolean = {
-        try {
-          val batchId = getBatchIdFromFileName(path.getName)
-          batchId < compactionBatchId
-        } catch {
-          case _: NumberFormatException =>
-            false
+  private def deleteExpiredLog(currentBatchId: Long): Unit = {
+    if (compactInterval <= currentBatchId + 1 - minBatchesToRetain) {
+      // Find the first compaction batch id that maintains minBatchesToRetain
+      val minBatchId = currentBatchId + 1 - minBatchesToRetain
+      val minCompactionBatchId = minBatchId - (minBatchId % compactInterval) - 1
+      assert(isCompactionBatch(minCompactionBatchId, compactInterval),
+        s"$minCompactionBatchId is not a compaction batch")
+
+      logInfo(s"Current compact batch id = $currentBatchId " +
+        s"min compaction batch id to delete = $minCompactionBatchId")
+
+      val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
+      fileManager.list(metadataPath, new PathFilter {
+        override def accept(path: Path): Boolean = {
+          try {
+            val batchId = getBatchIdFromFileName(path.getName)
+            batchId < minCompactionBatchId
+          } catch {
+            case _: NumberFormatException =>
+              false
+          }
         }
-      }
-    }).foreach { f =>
-      if (f.getModificationTime <= expiredTime) {
-        fileManager.delete(f.getPath)
+      }).foreach { f =>
+        if (f.getModificationTime <= expiredTime) {
+          fileManager.delete(f.getPath)
+        }
       }
     }
   }

@@ -103,6 +103,8 @@ public class JavaLBFGSExample {
       System.out.println(l);
     System.out.println("Area under ROC = " + auROC);
     // $example off$
+
+    sc.stop();
   }
 }
 

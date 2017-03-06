@@ -21,10 +21,13 @@ import java.{lang => jl}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
@@ -37,7 +40,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   import testImplicits._
 
   private def checkTableStats(tableName: String, expectedRowCount: Option[Int])
-    : Option[Statistics] = {
+    : Option[CatalogStatistics] = {
     val df = spark.table(tableName)
     val stats = df.queryExecution.analyzed.collect { case rel: LogicalRelation =>
       assert(rel.catalogTable.get.stats.flatMap(_.rowCount) === expectedRowCount)
@@ -56,7 +59,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val df = df1.join(df2, Seq("k"), "left")
 
       val sizes = df.queryExecution.analyzed.collect { case g: Join =>
-        g.statistics.sizeInBytes
+        g.stats(conf).sizeInBytes
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
@@ -103,9 +106,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
     val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
     val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
-    assert(df.queryExecution.analyzed.statistics.sizeInBytes >
+    assert(df.queryExecution.analyzed.stats(conf).sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
-    assert(df.selectExpr("a").queryExecution.analyzed.statistics.sizeInBytes >
+    assert(df.selectExpr("a").queryExecution.analyzed.stats(conf).sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
@@ -117,14 +120,14 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         val df = sql(s"""SELECT * FROM test limit $limit""")
 
         val sizesGlobalLimit = df.queryExecution.analyzed.collect { case g: GlobalLimit =>
-          g.statistics.sizeInBytes
+          g.stats(conf).sizeInBytes
         }
         assert(sizesGlobalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
         assert(sizesGlobalLimit.head === BigInt(expected),
           s"expected exact size $expected for table 'test', got: ${sizesGlobalLimit.head}")
 
         val sizesLocalLimit = df.queryExecution.analyzed.collect { case l: LocalLimit =>
-          l.statistics.sizeInBytes
+          l.stats(conf).sizeInBytes
         }
         assert(sizesLocalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
         assert(sizesLocalLimit.head === BigInt(expected),
@@ -133,6 +136,40 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("column stats round trip serialization") {
+    // Make sure we serialize and then deserialize and we will get the result data
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    stats.zip(df.schema).foreach { case ((k, v), field) =>
+      withClue(s"column $k with type ${field.dataType}") {
+        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
+  test("analyze column command - result verification") {
+    // (data.head.productArity - 1) because the last column does not support stats collection.
+    assert(stats.size == data.head.productArity - 1)
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+    checkColStats(df, stats)
+  }
+
+  test("column stats collection for null columns") {
+    val dataTypes: Seq[(DataType, Int)] = Seq(
+      BooleanType, ByteType, ShortType, IntegerType, LongType,
+      DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT,
+      StringType, BinaryType, DateType, TimestampType
+    ).zipWithIndex
+
+    val df = sql("select " + dataTypes.map { case (tpe, idx) =>
+      s"cast(null as ${tpe.sql}) as col$idx"
+    }.mkString(", "))
+
+    val expectedColStats = dataTypes.map { case (tpe, idx) =>
+      (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
+    }
+    checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+  }
 }
 
 
@@ -180,39 +217,90 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "ctimestamp" -> ColumnStat(2, Some(t1), Some(t2), 1, 8, 8)
   )
 
-  test("column stats round trip serialization") {
-    // Make sure we serialize and then deserialize and we will get the result data
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-    stats.zip(df.schema).foreach { case ((k, v), field) =>
-      withClue(s"column $k with type ${field.dataType}") {
-        val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap)
-        assert(roundtrip == Some(v))
-      }
-    }
-  }
+  private val randomName = new Random(31)
 
-  test("analyze column command - result verification") {
-    val tableName = "column_stats_test2"
-    // (data.head.productArity - 1) because the last column does not support stats collection.
-    assert(stats.size == data.head.productArity - 1)
-    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-
+  /**
+   * Compute column stats for the given DataFrame and compare it with colStats.
+   */
+  def checkColStats(
+      df: DataFrame,
+      colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
+    val tableName = "column_stats_test_" + randomName.nextInt(1000)
     withTable(tableName) {
       df.write.saveAsTable(tableName)
 
       // Collect statistics
-      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
+      sql(s"analyze table $tableName compute STATISTICS FOR COLUMNS " +
+        colStats.keys.mkString(", "))
 
       // Validate statistics
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
       assert(table.stats.isDefined)
-      assert(table.stats.get.colStats.size == stats.size)
+      assert(table.stats.get.colStats.size == colStats.size)
 
-      stats.foreach { case (k, v) =>
+      colStats.foreach { case (k, v) =>
         withClue(s"column $k") {
           assert(table.stats.get.colStats(k) == v)
         }
       }
     }
+  }
+
+  // This test will be run twice: with and without Hive support
+  test("SPARK-18856: non-empty partitioned table should not report zero size") {
+    withTable("ds_tbl", "hive_tbl") {
+      spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
+      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats(conf)
+      assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
+
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+        sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
+        sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
+        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats(conf)
+        assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
+      }
+    }
+  }
+
+  // This test will be run twice: with and without Hive support
+  test("conversion from CatalogStatistics to Statistics") {
+    withTable("ds_tbl", "hive_tbl") {
+      // Test data source table
+      checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
+      // Test hive serde table
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+        checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
+      }
+    }
+  }
+
+  private def checkStatsConversion(tableName: String, isDatasourceTable: Boolean): Unit = {
+    // Create an empty table and run analyze command on it.
+    val createTableSql = if (isDatasourceTable) {
+      s"CREATE TABLE $tableName (c1 INT, c2 STRING) USING PARQUET"
+    } else {
+      s"CREATE TABLE $tableName (c1 INT, c2 STRING)"
+    }
+    sql(createTableSql)
+    // Analyze only one column.
+    sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
+    val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
+      case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
+      case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
+    }.head
+    val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
+    // Check catalog statistics
+    assert(catalogTable.stats.isDefined)
+    assert(catalogTable.stats.get.sizeInBytes == 0)
+    assert(catalogTable.stats.get.rowCount == Some(0))
+    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
+
+    // Check relation statistics
+    assert(relation.stats(conf).sizeInBytes == 0)
+    assert(relation.stats(conf).rowCount == Some(0))
+    assert(relation.stats(conf).attributeStats.size == 1)
+    val (attribute, colStat) = relation.stats(conf).attributeStats.head
+    assert(attribute.name == "c1")
+    assert(colStat == emptyColStat)
   }
 }

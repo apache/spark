@@ -930,7 +930,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 /**
  * Asserts that input values of a non-nullable child expression are not null.
  *
- * Note that there are cases where `child.nullable == true`, while we still needs to add this
+ * Note that there are cases where `child.nullable == true`, while we still need to add this
  * assertion.  Consider a nullable column `s` whose data type is a struct containing a non-nullable
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
@@ -961,7 +961,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null.
-    val errMsgField = ctx.addReferenceObj(errMsg)
+    val errMsgField = ctx.addReferenceMinorObj(errMsg)
 
     val code = s"""
       ${childGen.code}
@@ -998,7 +998,7 @@ case class GetExternalRowField(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the field is null.
-    val errMsgField = ctx.addReferenceObj(errMsg)
+    val errMsgField = ctx.addReferenceMinorObj(errMsg)
     val row = child.genCode(ctx)
     val code = s"""
       ${row.code}
@@ -1038,7 +1038,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj(errMsg)
+    val errMsgField = ctx.addReferenceMinorObj(errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 

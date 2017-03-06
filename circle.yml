@@ -3,6 +3,7 @@ machine:
     version: oraclejdk8
   post:
     - sudo apt-get --assume-yes install r-base r-base-dev
+    - pyenv global 2.7.11 3.4.4 #pypy-4.0.1
   environment:
     TERM: dumb
     R_HOME: /usr/lib/R
@@ -16,11 +17,24 @@ checkout:
     - echo "host=api.bintray.com" >> .credentials
 
 dependencies:
+  pre:
+    - PYENV_VERSION=2.7.11 pip install numpy
+    - PYENV_VERSION=3.4.4 pip install numpy
+    #- PYENV_VERSION=pypy-4.0.1 pip install numpy
   override:
-    - ./build/mvn -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
+    - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
+
+general:
+  artifacts:
+    - "python/unit-tests.log"
+    - "R/unit-tests.out"
 
 test:
   override:
+    - set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log" | grep -v -i info:
+        parallel: true
+        timeout: 1800
+        max-runtime: 14400
     - ? |
           set -euo pipefail
           version=$(git describe --tags)
@@ -33,7 +47,7 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
           }
 
           make_dist() {
@@ -50,7 +64,7 @@ test:
             publish_artifacts
             ;;
           1)
-            make_dist hadoop-2.7 "-Phadoop-2.7 -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
+            make_dist hadoop-2.8.0-palantir2 "-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
             ;;
           2)
             make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr"

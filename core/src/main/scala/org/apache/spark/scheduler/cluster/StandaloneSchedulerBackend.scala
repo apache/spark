@@ -139,7 +139,7 @@ private[spark] class StandaloneSchedulerBackend(
         scheduler.error(reason)
       } finally {
         // Ensure the application terminates, as we can no longer run jobs.
-        sc.stop()
+        sc.stopInNewThread()
       }
     }
   }

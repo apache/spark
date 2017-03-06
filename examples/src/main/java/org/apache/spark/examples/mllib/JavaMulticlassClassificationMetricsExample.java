@@ -91,5 +91,7 @@ public class JavaMulticlassClassificationMetricsExample {
     LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc,
       "target/tmp/LogisticRegressionModel");
     // $example off$
+
+    sc.stop();
   }
 }

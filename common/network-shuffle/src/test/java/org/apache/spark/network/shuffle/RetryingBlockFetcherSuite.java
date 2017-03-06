@@ -27,8 +27,6 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -39,7 +37,7 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.util.SystemPropertyConfigProvider;
+import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import static org.apache.spark.network.shuffle.RetryingBlockFetcher.BlockFetchStarter;
 
@@ -52,18 +50,6 @@ public class RetryingBlockFetcherSuite {
   ManagedBuffer block0 = new NioManagedBuffer(ByteBuffer.wrap(new byte[13]));
   ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
   ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
-
-  @Before
-  public void beforeEach() {
-    System.setProperty("spark.shuffle.io.maxRetries", "2");
-    System.setProperty("spark.shuffle.io.retryWait", "0");
-  }
-
-  @After
-  public void afterEach() {
-    System.clearProperty("spark.shuffle.io.maxRetries");
-    System.clearProperty("spark.shuffle.io.retryWait");
-  }
 
   @Test
   public void testNoFailures() throws IOException {
@@ -254,7 +240,10 @@ public class RetryingBlockFetcherSuite {
                                           BlockFetchingListener listener)
     throws IOException {
 
-    TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    MapConfigProvider provider = new MapConfigProvider(ImmutableMap.of(
+      "spark.shuffle.io.maxRetries", "2",
+      "spark.shuffle.io.retryWait", "0"));
+    TransportConf conf = new TransportConf("shuffle", provider);
     BlockFetchStarter fetchStarter = mock(BlockFetchStarter.class);
 
     Stubber stub = null;

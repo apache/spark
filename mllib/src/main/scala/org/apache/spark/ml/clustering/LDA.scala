@@ -512,7 +512,7 @@ abstract class LDAModel private[ml] (
   }
 
   /**
-   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * Calculate an upper bound on perplexity.  (Lower is better.)
    * See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
    *
    * WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when [[optimizer]]
@@ -888,6 +888,12 @@ class LDA @Since("1.6.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): LDAModel = {
     transformSchema(dataset.schema, logging = true)
+
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
+      checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
+      learningDecay, optimizer, learningOffset, seed)
+
     val oldLDA = new OldLDA()
       .setK($(k))
       .setDocConcentration(getOldDocConcentration)
@@ -905,7 +911,11 @@ class LDA @Since("1.6.0") (
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
     }
-    copyValues(newModel).setParent(this)
+
+    instr.logNumFeatures(newModel.vocabSize)
+    val model = copyValues(newModel).setParent(this)
+    instr.logSuccess(model)
+    model
   }
 
   @Since("1.6.0")

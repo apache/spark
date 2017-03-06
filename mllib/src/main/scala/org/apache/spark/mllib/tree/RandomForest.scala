@@ -172,7 +172,7 @@ object RandomForest extends Serializable with Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.RandomForest$#trainClassifier]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.RandomForest.trainClassifier`
    */
   @Since("1.2.0")
   def trainClassifier(
@@ -259,7 +259,7 @@ object RandomForest extends Serializable with Logging {
   }
 
   /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.RandomForest$#trainRegressor]]
+   * Java-friendly API for `org.apache.spark.mllib.tree.RandomForest.trainRegressor`
    */
   @Since("1.2.0")
   def trainRegressor(

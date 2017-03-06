@@ -18,13 +18,11 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, ZoneId}
 
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
-import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetOutputFormat}
+import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -43,42 +41,13 @@ import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
  * NOTE:
  *
  * 1. `!(a cmp b)` is always transformed to its negated form `a cmp' b` by the
- *    `BooleanSimplification` optimization rule whenever possible. As a result, predicate
- *    `!(a < 1)` results in a `GtEq` filter predicate rather than a `Not`.
+ *    `BooleanSimplification` optimization rule whenever possible. As a result, predicate `!(a < 1)`
+ *    results in a `GtEq` filter predicate rather than a `Not`.
  *
  * 2. `Tuple1(Option(x))` is used together with `AnyVal` types like `Int` to ensure the inferred
  *    data type is nullable.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
-  private def checkNoFilterPredicate(predicate: Predicate)(implicit df: DataFrame) = {
-    val output = predicate.collect { case a: Attribute => a }.distinct
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val query = df
-          .select(output.map(e => Column(e)): _*)
-          .where(Column(predicate))
-
-        var maybeRelation: Option[HadoopFsRelation] = None
-        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
-            maybeRelation = Some(relation)
-            filters
-        }.flatten.reduceLeftOption(_ && _)
-        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
-
-        val (_, selectedFilters, _) =
-          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-        assert(selectedFilters.nonEmpty, "No filter is pushed down")
-
-        selectedFilters.foreach { pred =>
-          val maybeFilter = ParquetFilters.createFilter(df.schema, pred,
-            spark.sessionState.conf.isParquetINT96AsTimestamp)
-          assert(maybeFilter.isEmpty, s"Predicate should not be created for $pred")
-        }
-      }
-    }
-  }
-
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -87,33 +56,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val query = df
-          .select(output.map(e => Column(e)): _*)
-          .where(Column(predicate))
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
+      val query = df
+        .select(output.map(e => Column(e)): _*)
+        .where(Column(predicate))
 
-        var maybeRelation: Option[HadoopFsRelation] = None
-        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
-            maybeRelation = Some(relation)
-            filters
-        }.flatten.reduceLeftOption(_ && _)
-        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+      var maybeRelation: Option[HadoopFsRelation] = None
+      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+        case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
+          maybeRelation = Some(relation)
+          filters
+      }.flatten.reduceLeftOption(_ && _)
+      assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-        val (_, selectedFilters, _) =
-          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-        assert(selectedFilters.nonEmpty, "No filter is pushed down")
+      val (_, selectedFilters, _) =
+        DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+      assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-        selectedFilters.foreach { pred =>
-          val maybeFilter = ParquetFilters.createFilter(df.schema, pred,
-            spark.sessionState.conf.isParquetINT96AsTimestamp)
-          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-          maybeFilter.exists(_.getClass === filterClass)
-        }
-        checker(query, expected)
+      selectedFilters.foreach { pred =>
+        val maybeFilter = ParquetFilters.createFilter(df.schema, pred,
+          spark.sessionState.conf.isParquetINT96AsTimestamp)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+        // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+        maybeFilter.exists(_.getClass === filterClass)
       }
+      checker(stripSparkFilter(query), expected)
     }
   }
 
@@ -324,80 +293,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("filter pushdown - timestamp") {
-    val baseMillis = System.currentTimeMillis()
-    def base(): Timestamp = new Timestamp(baseMillis)
-
-    val timestamps = (0 to 3).map { i =>
-      val ts = base()
-      ts.setNanos(i * 1000)
-      ts
-    }
-
-    withSQLConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key -> "false") {
-      withParquetDataFrame(timestamps.map(i => Tuple1(Option(i)))) { implicit df =>
-        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], timestamps.map(Row.apply(_)))
-
-        checkFilterPredicate('_1 === timestamps(0), classOf[Eq[_]], timestamps(0))
-        checkFilterPredicate('_1 <=> timestamps(0), classOf[Eq[_]], timestamps(0))
-        checkFilterPredicate('_1 =!= timestamps(0), classOf[NotEq[_]],
-          timestamps.slice(1, 4).map(Row.apply(_)))
-
-        checkFilterPredicate('_1 < timestamps(1), classOf[Lt[_]], timestamps(0))
-        checkFilterPredicate('_1 > timestamps(2), classOf[Gt[_]], timestamps(3))
-        checkFilterPredicate('_1 <= timestamps(0), classOf[LtEq[_]], timestamps(0))
-        checkFilterPredicate('_1 >= timestamps(3), classOf[GtEq[_]], timestamps(3))
-
-        checkFilterPredicate(Literal(timestamps(0)) === '_1, classOf[Eq[_]], timestamps(0))
-        checkFilterPredicate(Literal(timestamps(0)) <=> '_1, classOf[Eq[_]], timestamps(0))
-        checkFilterPredicate(Literal(timestamps(1)) > '_1, classOf[Lt[_]], timestamps(0))
-        checkFilterPredicate(Literal(timestamps(2)) < '_1, classOf[Gt[_]], timestamps(3))
-        checkFilterPredicate(Literal(timestamps(0)) >= '_1, classOf[LtEq[_]], timestamps(0))
-        checkFilterPredicate(Literal(timestamps(3)) <= '_1, classOf[GtEq[_]], timestamps(3))
-
-        checkFilterPredicate(!('_1 < timestamps(3)), classOf[GtEq[_]], timestamps(3))
-        checkFilterPredicate('_1 < timestamps(1) || '_1 > timestamps(2), classOf[Operators.Or],
-          Seq(Row(timestamps(0)), Row(timestamps(3))))
-      }
-    }
-  }
-
-  test("filter pushdown - date") {
-    val dates = (0 to 3).map { i =>
-      val millis = LocalDate.of(2016, 1, i + 1)
-        .atStartOfDay(ZoneId.systemDefault())
-        .toInstant
-        .toEpochMilli
-      new Date(millis)
-    }
-    withParquetDataFrame(dates.map(i => Tuple1(Option(i)))) { implicit df =>
-      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], dates.map(Row.apply(_)))
-
-      checkFilterPredicate('_1 === dates(0), classOf[Eq[_]], dates(0))
-      checkFilterPredicate('_1 <=> dates(0), classOf[Eq[_]], dates(0))
-      checkFilterPredicate('_1 =!= dates(0), classOf[NotEq[_]],
-        dates.slice(1, 4).map(Row.apply(_)))
-
-      checkFilterPredicate('_1 < dates(1), classOf[Lt[_]], dates(0))
-      checkFilterPredicate('_1 > dates(2), classOf[Gt[_]], dates(3))
-      checkFilterPredicate('_1 <= dates(0), classOf[LtEq[_]], dates(0))
-      checkFilterPredicate('_1 >= dates(3), classOf[GtEq[_]], dates(3))
-
-      checkFilterPredicate(Literal(dates(0)) === '_1, classOf[Eq[_]], dates(0))
-      checkFilterPredicate(Literal(dates(0)) <=> '_1, classOf[Eq[_]], dates(0))
-      checkFilterPredicate(Literal(dates(1)) > '_1, classOf[Lt[_]], dates(0))
-      checkFilterPredicate(Literal(dates(2)) < '_1, classOf[Gt[_]], dates(3))
-      checkFilterPredicate(Literal(dates(0)) >= '_1, classOf[LtEq[_]], dates(0))
-      checkFilterPredicate(Literal(dates(3)) <= '_1, classOf[GtEq[_]], dates(3))
-
-      checkFilterPredicate(!('_1 < dates(3)), classOf[GtEq[_]], dates(3))
-      checkFilterPredicate('_1 < dates(1) || '_1 > dates(2), classOf[Operators.Or],
-        Seq(Row(dates(0)), Row(dates(3))))
-    }
-  }
-
   test("SPARK-6554: don't push down predicates which reference partition columns") {
     import testImplicits._
 
@@ -475,7 +370,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
     import testImplicits._
-    Seq("true", "false").foreach { vectorized =>
+    Seq("true", "false").map { vectorized =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
         SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
@@ -551,15 +446,19 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
     import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/part=1"
-          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-          val df = spark.read.parquet(path).filter("a = 2")
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+      ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+        val df = spark.read.parquet(path).filter("a = 2")
 
-          assert(df.count == 1)
-        }
+        // The result should be single row.
+        // When a filter is pushed to Parquet, Parquet can apply it to every row.
+        // So, we can check the number of rows returned from the Parquet
+        // to make sure our filter pushdown work.
+        assert(stripSparkFilter(df).count == 1)
       }
     }
   }
@@ -640,7 +539,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     import testImplicits._
 
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
-      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       withTempPath { dir =>
         val path = s"${dir.getCanonicalPath}/table"
         (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
@@ -662,79 +561,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             }
           }
       }
-    }
-  }
-
-  test("In filters are pushed down") {
-    import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/table1"
-          (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
-          val df = spark.read.parquet(path).where("b in (0,2)")
-          assert(df.count == 3)
-          val df1 = spark.read.parquet(path).where("not (b in (1))")
-          assert(df1.count == 3)
-          val df2 = spark.read.parquet(path).where("not (b in (1,3) or a <= 2)")
-          assert(df2.count == 2)
-          val df3 = spark.read.parquet(path).where("not (b in (1,3) and a <= 2)")
-          assert(df3.count == 4)
-          val df4 = spark.read.parquet(path).where("not (a <= 2)")
-          assert(df4.count == 3)
-        }
-      }
-    }
-  }
-
-  test("Large In filters work with UDP") {
-    import testImplicits._
-    withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL",
-      ParquetInputFormat.DICTIONARY_FILTERING_ENABLED -> "true") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/table1"
-        (1 to 1000).toDF().write.parquet(path)
-        val df = spark.read.parquet(path)
-        val filter = (1 to 499).map(i => i.toString).mkString(",")
-        assert(df.where(s"value in (${filter})").count() == 499)
-        assert(df.where(s"value not in (${filter})").count() == 501)
-      }
-    }
-  }
-
-  test("Do not create Timestamp filters when interpreting from INT96") {
-    val baseMillis = System.currentTimeMillis()
-
-    def base(): Timestamp = new Timestamp(baseMillis)
-
-    val timestamps = (0 to 3).map { i =>
-      val ts = base()
-      ts.setNanos(i * 1000)
-      ts
-    }
-    withParquetDataFrame(timestamps.map(i => Tuple1(Option(i)))) { implicit df =>
-      val schema = df.schema
-      checkNoFilterPredicate('_1.isNull)
-      checkNoFilterPredicate('_1.isNotNull)
-
-      checkNoFilterPredicate('_1 === timestamps(0))
-      checkNoFilterPredicate('_1 <=> timestamps(0))
-      checkNoFilterPredicate('_1 =!= timestamps(0))
-
-      checkNoFilterPredicate('_1 < timestamps(1))
-      checkNoFilterPredicate('_1 > timestamps(2))
-      checkNoFilterPredicate('_1 <= timestamps(0))
-      checkNoFilterPredicate('_1 >= timestamps(3))
-
-      checkNoFilterPredicate(Literal(timestamps(0)) === '_1)
-      checkNoFilterPredicate(Literal(timestamps(0)) <=> '_1)
-      checkNoFilterPredicate(Literal(timestamps(1)) > '_1)
-      checkNoFilterPredicate(Literal(timestamps(2)) < '_1)
-      checkNoFilterPredicate(Literal(timestamps(0)) >= '_1)
-      checkNoFilterPredicate(Literal(timestamps(3)) <= '_1)
-
-      checkNoFilterPredicate(!('_1 < timestamps(3)))
-      checkNoFilterPredicate('_1 < timestamps(1) || '_1 > timestamps(2))
     }
   }
 

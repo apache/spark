@@ -171,7 +171,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
     }
   }
 
-  test("foreach with watermark") {
+  test("foreach with watermark: complete") {
     val inputData = MemoryStream[Int]
 
     val windowedAggregation = inputData.toDF()
@@ -200,6 +200,72 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         ForeachSinkSuite.Close(None)
       )
       assert(allEvents === Seq(expectedEvents))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("foreach with watermark: append") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"count".as[Long])
+      .map(_.toInt)
+      .repartition(1)
+
+    val query = windowedAggregation
+      .writeStream
+      .outputMode(OutputMode.Append)
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+      inputData.addData(25) // Advance watermark to 15 seconds
+      query.processAllAvailable()
+      inputData.addData(25) // Evict items less than previous watermark
+      query.processAllAvailable()
+
+      // There should be 3 batches and only does the last batch contain a value.
+      val allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 3)
+      val expectedEvents = Seq(
+        Seq(
+          ForeachSinkSuite.Open(partition = 0, version = 0),
+          ForeachSinkSuite.Close(None)
+        ),
+        Seq(
+          ForeachSinkSuite.Open(partition = 0, version = 1),
+          ForeachSinkSuite.Close(None)
+        ),
+        Seq(
+          ForeachSinkSuite.Open(partition = 0, version = 2),
+          ForeachSinkSuite.Process(value = 3),
+          ForeachSinkSuite.Close(None)
+        )
+      )
+      assert(allEvents === expectedEvents)
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("foreach sink should support metrics") {
+    val inputData = MemoryStream[Int]
+    val query = inputData.toDS()
+      .writeStream
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+      val recentProgress = query.recentProgress.filter(_.numInputRows != 0).headOption
+      assert(recentProgress.isDefined && recentProgress.get.numInputRows === 3,
+        s"recentProgress[${query.recentProgress.toList}] doesn't contain correct metrics")
     } finally {
       query.stop()
     }
