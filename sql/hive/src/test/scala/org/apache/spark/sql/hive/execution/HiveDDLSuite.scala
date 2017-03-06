@@ -1590,15 +1590,9 @@ class HiveDDLSuite
 
   test("create datasource table with a non-existing location") {
     withTable("t", "t1") {
-      withTempDir {
+      withTempPath {
         dir =>
-          dir.delete()
-          spark.sql(
-            s"""
-               |CREATE TABLE t(a int, b int)
-               |USING parquet
-               |LOCATION '$dir'
-             """.stripMargin)
+          spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.location == dir.getAbsolutePath)
@@ -1609,16 +1603,9 @@ class HiveDDLSuite
           checkAnswer(spark.table("t"), Row(1, 2))
       }
       // partition table
-      withTempDir {
+      withTempPath {
         dir =>
-          dir.delete()
-          spark.sql(
-            s"""
-               |CREATE TABLE t1(a int, b int)
-               |USING parquet
-               |PARTITIONED BY(a)
-               |LOCATION '$dir'
-             """.stripMargin)
+          spark.sql(s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'")
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location == dir.getAbsolutePath)
@@ -1635,15 +1622,9 @@ class HiveDDLSuite
 
   test("create hive table with a non-existing location") {
     withTable("t", "t1") {
-      withTempDir {
+      withTempPath {
         dir =>
-          dir.delete()
-          spark.sql(
-            s"""
-               |CREATE TABLE t(a int, b int)
-               |USING hive
-               |LOCATION '$dir'
-             """.stripMargin)
+          spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           val dirPath = new Path(dir.getAbsolutePath)
@@ -1656,9 +1637,8 @@ class HiveDDLSuite
           checkAnswer(spark.table("t"), Row(1, 2))
       }
       // partition table
-      withTempDir {
+      withTempPath {
         dir =>
-          dir.delete()
           spark.sql(
             s"""
                |CREATE TABLE t1(a int, b int)
