@@ -58,7 +58,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = table.storage.locationUri.map("path" -> new Path(_).toString)
+    val pathOption = CatalogUtils.URIToString(table.storage.locationUri).map("path" -> _)
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
