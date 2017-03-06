@@ -2031,7 +2031,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location == new Path(loc.getAbsolutePath).toUri)
-          assert(new Path(table.location).toString.contains(specialCharInLoc))
+          assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
