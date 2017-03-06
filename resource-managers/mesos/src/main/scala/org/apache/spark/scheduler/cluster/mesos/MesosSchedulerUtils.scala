@@ -46,9 +46,6 @@ trait MesosSchedulerUtils extends Logging {
   // Lock used to wait for scheduler to be registered
   private final val registerLatch = new CountDownLatch(1)
 
-  // Driver for talking to Mesos
-  // protected var driver: SchedulerDriver = null
-
   /**
    * Creates a new MesosSchedulerDriver that communicates to the Mesos master.
    *
