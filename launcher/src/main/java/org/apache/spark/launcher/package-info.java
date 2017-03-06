@@ -21,12 +21,14 @@
  * <p>
  * This library allows applications to launch Spark programmatically. There's only one entry
  * point to the library - the {@link org.apache.spark.launcher.SparkLauncher} class.
+ * Under YARN manager cluster mode, it supports launching in Application in thread or
+ * child JVM process.
  * </p>
  *
  * <p>
  * The {@link org.apache.spark.launcher.SparkLauncher#startApplication(
  * org.apache.spark.launcher.SparkAppHandle.Listener...)} can be used to start Spark application
- * as a process and providea handle to monitor and control the running application:
+ * as a process and provide a handle to monitor and control the running application:
  * </p>
  *
  * <pre>
@@ -49,14 +51,10 @@
  * </pre>
  *
  * <p>
- * Currently, while launching spark application with
- * {@link org.apache.spark.launcher.SparkLauncher#startApplication(
- * org.apache.spark.launcher.SparkAppHandle.Listener...)}, there are two options available
- * for YARN manager in cluster deploy mode:
- *  - to launch Spark Application as a Thread inside current JVM using
- *    the {@link org.apache.spark.launcher.SparkLauncher#launchAsThread(boolean)}
- *  - to request application be killed if launcher process exits using
- *    the {@link org.apache.spark.launcher.SparkLauncher#stopIfLauncherShutdown()}.
+ * Here is example of launching application in thread mode for yarn cluster mode
+ * with the stop if launcher shutdown option enabled. Showing use case of both
+ * {@link org.apache.spark.launcher.SparkLauncher#stopOnShutdown} and
+ * {@link org.apache.spark.launcher.SparkLauncher#launchAsThread} methods
  * </p>
  *
  * <pre>
@@ -71,7 +69,7 @@
  *         .setMainClass("my.spark.app.Main")
  *         .setMaster("yarn")
  *         .setDeployMode("cluster")
- *         .stopIfLauncherShutdown()
+ *         .autoShutdown()
  *         .launchAsThread(true)
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
  *         .startApplication();

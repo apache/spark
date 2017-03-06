@@ -38,7 +38,6 @@ class SparkSubmitRunner implements Runnable {
   }
 
   /**
-   * It is important that spark-submit class is available in the classpath.
    * Trying to see if "org.apache.spark.deploy.SparkSubmit#Main" method is available in the classpath.
    *
    * @return Method to execute for starting Spark Application

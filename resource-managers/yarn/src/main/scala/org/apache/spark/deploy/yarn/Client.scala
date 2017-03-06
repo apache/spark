@@ -88,7 +88,7 @@ private[spark] class Client(
   private val launcherServerSecret : String =
     sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, "")
   private val launcherServerStopIfShutdown : Boolean =
-    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_IF_SHUTDOWN, "false").toBoolean
+    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, "false").toBoolean
   // AM related configurations
   private val amMemory = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY).toInt

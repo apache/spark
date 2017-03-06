@@ -686,9 +686,6 @@ object SparkSubmit extends CommandLineUtils {
       addJarToClasspath(jar, loader)
     }
 
-    val threadEnabled = sysProps.getOrElse(SparkLauncher.LAUNCHER_INTERNAL_THREAD_ENABLED,
-      "false").toBoolean
-
     var mainClass: Class[_] = null
 
     try {
@@ -719,13 +716,17 @@ object SparkSubmit extends CommandLineUtils {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val sparkAppMainMethodArr = mainClass.getMethods().filter{_.getName() == "sparkMain"}
+    val sparkAppMainMethodArr = mainClass.getMethods().filter(_.getName() == "sparkMain")
     val isSparkApp = sparkAppMainMethodArr.length > 0
 
-    val childSparkConf = sysProps.filter{ p => p._1.startsWith("spark.")}.toMap
+    val childSparkConf = sysProps.filter( p => p._1.startsWith("spark.")).toMap
+
+    val threadEnabled = sysProps.getOrElse(SparkLauncher.LAUNCHER_INTERNAL_USE_THREAD,
+      "false").toBoolean
+
     // If running sparkApp or in thread mode, the System properties should not be cluttered.
     // This helps keep clean isolation between multiple Spark Apps launched in different threads.
-    if (!isSparkApp || !threadEnabled) {
+    if (!isSparkApp) {
       sysProps.foreach { case (key, value) =>
         System.setProperty(key, value)
       }

@@ -78,9 +78,9 @@ public class SparkLauncher {
 
   public static final String LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET = "spark.launcher.internal.secret";
 
-  public static final String LAUNCHER_INTERNAL_STOP_IF_SHUTDOWN = "spark.launcher.internal.stop.if.shutdown";
+  public static final String LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN = "spark.launcher.internal.stop.on.shutdown";
 
-  public static final String LAUNCHER_INTERNAL_THREAD_ENABLED = "spark.launcher.internal.thread.enabled";
+  public static final String LAUNCHER_INTERNAL_USE_THREAD = "spark.launcher.internal.use.thread";
 
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
@@ -103,7 +103,7 @@ public class SparkLauncher {
 
   static final Map<String, String> launcherConfig = new HashMap<>();
 
-  private boolean stopIfLauncherShutdown = false;
+  private boolean stopOnShutdown = false;
 
   /** Flag to decide on launching spark-submit as a child process or a thread **/
   private boolean launchAsThread = false;
@@ -128,14 +128,14 @@ public class SparkLauncher {
    * @since 2.2.0
    * @return This launcher.
    */
-  public SparkLauncher stopIfLauncherShutdown() {
-    this.stopIfLauncherShutdown = true;
+  public SparkLauncher autoShutdown() {
+    this.stopOnShutdown = true;
     return this;
   }
 
   /**
-   * Specifies that Spark Submit be launched as a daemon thread using reflection.
-   * Please note this feature is currently supported only for YARN cluster deployment mode.
+   * Specifies that Spark Submit be launched as a daemon thread. Please note
+   * this feature is currently supported only for YARN cluster deployment mode.
    *
    * @since 2.2.0
    * @return This launcher.
@@ -538,7 +538,7 @@ public class SparkLauncher {
    * that happens after that cannot be monitored. If the underlying application is launched as
    * a child process, {@link SparkAppHandle#kill()} can still be used to kill the child process.
    * <p>
-   * If the applications are launched as child processes. The child's stdout and stderr
+   * If the application is launched as child process, the child's stdout and stderr
    * are merged and written to a logger (see <code>java.util.logging</code>) only if redirection
    * has not otherwise been configured on this <code>SparkLauncher</code>. The logger's name can be
    * defined by setting {@link #CHILD_PROCESS_LOGGER_NAME} in the app's configuration. If that
@@ -547,9 +547,8 @@ public class SparkLauncher {
    * In all cases, the logger name will start with "org.apache.spark.launcher.app", to fit more
    * easily into the configuration of commonly-used logging systems.
    *
-   * If the applications are launched as a thread, the {@link SparkLauncher#redirectError} and
-   * {@link SparkLauncher#redirectToLog}, are not supported at this time. The existing process
-   * stdout and stderr will get all the log entries.
+   * If the application is launched as a thread, the log redirection methods are not supported,
+   * and the parent process's output and log configuration will be used.
    *
    * @since 1.6.0
    * @param listeners Listeners to add to the handle before the app is launched.
@@ -582,7 +581,7 @@ public class SparkLauncher {
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
-    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_IF_SHUTDOWN, String.valueOf(stopIfLauncherShutdown));
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_IF_SHUTDOWN, String.valueOf(stopOnShutdown));
     try {
       handle.setChildProc(pb.start(), loggerName);
     } catch (IOException ioe) {
@@ -601,10 +600,10 @@ public class SparkLauncher {
     String appName = getAppName();
     setConf(LAUNCHER_INTERNAL_PORT, String.valueOf(LauncherServer.getServerInstance().getPort()));
     setConf(LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, handle.getSecret());
-    setConf(LAUNCHER_INTERNAL_STOP_IF_SHUTDOWN, String.valueOf(stopIfLauncherShutdown));
-    setConf(LAUNCHER_INTERNAL_THREAD_ENABLED, "true");
+    setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(stopOnShutdown));
+    setConf(LAUNCHER_INTERNAL_USE_THREAD, "true");
     try {
-      // It is important that spark-submit class is available in the classpath.
+      // It is important that SparkSubmit class is available in the classpath.
       // Trying to see if method is available in the classpath else throws Exception.
       Method main = SparkSubmitRunner.getSparkSubmitMain();
       Thread submitJobThread = new Thread(new SparkSubmitRunner(main, builder.buildSparkSubmitArgs()));
@@ -613,9 +612,11 @@ public class SparkLauncher {
       handle.setChildThread(submitJobThread);
       submitJobThread.start();
     } catch (ClassNotFoundException cnfe) {
-      throw new IOException("Please make sure spark-core is in the classpath.", cnfe);
+      throw new IOException("Please make sure the spark jar containing SparkSubmit is in the classpath.",
+          cnfe);
     } catch (NoSuchMethodException nsme) {
-      throw new IOException("Please make sure spark-core version is correct.", nsme);
+      throw new IOException("Please make sure the spark jar containing SparkSubmit version is correct.",
+          nsme);
     }
     return handle;
   }

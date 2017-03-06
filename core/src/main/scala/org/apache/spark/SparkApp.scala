@@ -34,7 +34,7 @@ private[spark] trait SparkApp {
    */
   def sparkMain(
     args: Array[String],
-    conf: scala.collection.immutable.Map[String, String],
-    envvars: scala.collection.immutable.Map[String, String]): Unit
+    conf: Map[String, String],
+    envvars: Map[String, String]): Unit
 
 }

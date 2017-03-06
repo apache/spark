@@ -90,9 +90,9 @@ class LauncherServer implements Closeable {
 
   /**
    * Creates a handle for an app to be launched using ChildProc.
-   * This method will start a server if one hasn't been
-   * started yet. The server is shared for multiple handles, and once all handles are disposed of,
-   * the server is shut down.
+   * This method will start a server if one hasn't been started yet.
+   * The server is shared for multiple handles, and once all handles
+   * are disposed of, the server is shut down.
    */
   static synchronized ChildProcAppHandle newAppHandle() throws IOException {
     return (ChildProcAppHandle) LauncherServer.newAppHandle(false);
@@ -177,7 +177,6 @@ class LauncherServer implements Closeable {
    * amount of time, and if one doesn't arrive, it will transition to an error state.
    */
   AbstractSparkAppHandle newAppHandle(String secret, boolean isThreadHandle) {
-
     AbstractSparkAppHandle handle;
     if (isThreadHandle) {
       handle = new ChildThreadAppHandle(secret, this);
