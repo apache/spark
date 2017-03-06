@@ -68,6 +68,8 @@ private[r] object RWrappers extends MLReader[Object] {
         BisectingKMeansWrapper.load(path)
       case "org.apache.spark.ml.r.LinearSVCWrapper" =>
         LinearSVCWrapper.load(path)
+      case "org.apache.spark.ml.r.FPGrowthWrapper" =>
+        FPGrowthWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }
