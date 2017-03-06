@@ -967,6 +967,9 @@ class SQLTests(ReusedPySparkTestCase):
             cs.startswith('a'), cs.endswith('a')
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
+        self.assertRaisesRegexp(ValueError,
+                                "Cannot apply 'in' operator against a column",
+                                lambda: 1 in cs)
 
     def test_column_getitem(self):
         from pyspark.sql.functions import col
