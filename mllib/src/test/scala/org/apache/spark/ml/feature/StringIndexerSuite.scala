@@ -94,7 +94,7 @@ class StringIndexerSuite
     val transformedKeep = indexer.transform(df2)
     val attrKeep = Attribute.fromStructField(transformedKeep.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
-    assert(attrKeep.values.get === Array("b", "a"))
+    assert(attrKeep.values.get === Array("b", "a", "__unknown"))
     val outputKeep = transformedKeep.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet

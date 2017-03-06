@@ -549,7 +549,7 @@ to transform another:
 
 - throw an exception (which is the default)
 - skip the row containing the unseen label entirely
-- map the unseen labels with indices [numLabels]
+- put unseen labels in a special additional bucket, at index numLabels
 
 **Examples**
 
@@ -594,7 +594,7 @@ will be generated:
  4  | e        | 3.0
 ~~~~
 
-Notice that the rows containing "d" or "e" are mapped with indices "3.0"
+Notice that the rows containing "d" or "e" are mapped to index "3.0"
 
 <div class="codetabs">
 
