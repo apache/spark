@@ -1745,11 +1745,11 @@ class HiveDDLSuite
     }
   }
 
-  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
-    test(s"location uri contains $specialCharInLoc for hive table") {
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for hive table") {
       withTable("t") {
         withTempDir { dir =>
-          val loc = new File(dir, specialCharInLoc)
+          val loc = new File(dir, specialChars)
           loc.mkdir()
           spark.sql(
             s"""
@@ -1778,7 +1778,7 @@ class HiveDDLSuite
         }
 
         withTempDir { dir =>
-          val loc = new File(dir, specialCharInLoc)
+          val loc = new File(dir, specialChars)
           loc.mkdir()
           spark.sql(
             s"""
@@ -1824,12 +1824,12 @@ class HiveDDLSuite
     }
   }
 
-  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
-    test(s"location uri contains $specialCharInLoc for database") {
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for database") {
       try {
         withTable("t") {
           withTempDir { dir =>
-            val loc = new File(dir, specialCharInLoc)
+            val loc = new File(dir, specialChars)
             spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
             spark.sql("USE tmpdb")
 

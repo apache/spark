@@ -1995,11 +1995,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
-    test(s"location uri contains $specialCharInLoc for datasource table") {
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for datasource table") {
       withTable("t", "t1") {
         withTempDir { dir =>
-          val loc = new File(dir, specialCharInLoc)
+          val loc = new File(dir, specialChars)
           loc.mkdir()
           spark.sql(
             s"""
@@ -2010,7 +2010,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.location == new Path(loc.getAbsolutePath).toUri)
-          assert(new Path(table.location).toString.contains(specialCharInLoc))
+          assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t SELECT 1")
@@ -2019,7 +2019,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         }
 
         withTempDir { dir =>
-          val loc = new File(dir, specialCharInLoc)
+          val loc = new File(dir, specialChars)
           loc.mkdir()
           spark.sql(
             s"""
@@ -2050,12 +2050,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
-    test(s"location uri contains $specialCharInLoc for database") {
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for database") {
       try {
         withTable("t") {
           withTempDir { dir =>
-            val loc = new File(dir, specialCharInLoc)
+            val loc = new File(dir, specialChars)
             spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
             spark.sql("USE tmpdb")
 
