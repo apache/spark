@@ -85,33 +85,51 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
         .setStrategy(strategy)
-      intercept[SparkException] {
-        val model = imputer.fit(df)
+      withClue("Imputer should fail all the values are invalid") {
+        val e: SparkException = intercept[SparkException] {
+          val model = imputer.fit(df)
+        }
+        assert(e.getMessage.contains("surrogate cannot be computed"))
       }
     }
   }
 
-  test("Imputer throws exception when inputCols does not match outputCols") {
+  test("Imputer input & output column validation") {
     val df = spark.createDataFrame( Seq(
       (0, 1.0, 1.0, 1.0),
       (1, Double.NaN, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN)
     )).toDF("id", "value1", "value2", "value3")
     Seq("mean", "median").foreach { strategy =>
-      // inputCols and outCols length different
-      val imputer = new Imputer()
-        .setInputCols(Array("value1", "value2"))
-        .setOutputCols(Array("out1"))
-        .setStrategy(strategy)
-      intercept[IllegalArgumentException] {
-        val model = imputer.fit(df)
-      }
-      // duplicate name in inputCols
-      imputer.setInputCols(Array("value1", "value1")).setOutputCols(Array("out1, out2"))
-      intercept[IllegalArgumentException] {
-        val model = imputer.fit(df)
+      withClue("Imputer should fail if inputCols and outputCols are different length") {
+        val e: IllegalArgumentException = intercept[IllegalArgumentException] {
+          val imputer = new Imputer().setStrategy(strategy)
+            .setInputCols(Array("value1", "value2"))
+            .setOutputCols(Array("out1"))
+          val model = imputer.fit(df)
+        }
+        assert(e.getMessage.contains("should have the same length"))
       }
 
+      withClue("Imputer should fail if inputCols contains duplicates") {
+        val e: IllegalArgumentException = intercept[IllegalArgumentException] {
+          val imputer = new Imputer().setStrategy(strategy)
+            .setInputCols(Array("value1", "value1"))
+            .setOutputCols(Array("out1", "out2"))
+          val model = imputer.fit(df)
+        }
+        assert(e.getMessage.contains("inputCols contains duplicates"))
+      }
+
+      withClue("Imputer should fail if outputCols contains duplicates") {
+        val e: IllegalArgumentException = intercept[IllegalArgumentException] {
+          val imputer = new Imputer().setStrategy(strategy)
+            .setInputCols(Array("value1", "value2"))
+            .setOutputCols(Array("out1", "out1"))
+          val model = imputer.fit(df)
+        }
+        assert(e.getMessage.contains("outputCols contains duplicates"))
+      }
     }
   }
 
@@ -133,12 +151,13 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
     val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.surrogateDF.columns === instance.surrogateDF.columns)
     assert(newInstance.surrogateDF.collect() === instance.surrogateDF.collect())
   }
 
 }
 
-object ImputerSuite{
+object ImputerSuite {
 
   /**
    * Imputation strategy. Available options are ["mean", "median"].

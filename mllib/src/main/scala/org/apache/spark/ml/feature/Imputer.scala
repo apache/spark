@@ -37,8 +37,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
   /**
    * The imputation strategy.
    * If "mean", then replace missing values using the mean value of the feature.
-   * If "median", then replace missing values using the approximate median value of the
-   * feature (relative error less than 0.001).
+   * If "median", then replace missing values using the approximate median value of the feature.
    * Default: mean
    *
    * @group param
@@ -76,10 +75,10 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    require($(inputCols).length == $(inputCols).distinct.length, s"inputCols duplicates:" +
-      s" (${$(inputCols).mkString(", ")})")
-    require($(outputCols).length == $(outputCols).distinct.length, s"outputCols duplicates:" +
-      s" (${$(outputCols).mkString(", ")})")
+    require($(inputCols).length == $(inputCols).distinct.length, s"inputCols contains" +
+      s" duplicates: (${$(inputCols).mkString(", ")})")
+    require($(outputCols).length == $(outputCols).distinct.length, s"outputCols contains" +
+      s" duplicates: (${$(outputCols).mkString(", ")})")
     require($(inputCols).length == $(outputCols).length, s"inputCols(${$(inputCols).length})" +
       s" and outputCols(${$(outputCols).length}) should have the same length")
     val outputFields = $(inputCols).zip($(outputCols)).map { case (inputCol, outputCol) =>
@@ -99,7 +98,8 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
  * (SPARK-15041) and possibly creates incorrect values for a categorical feature.
  *
  * Note that the mean/median value is computed after filtering out missing values.
- * All Null values in the input column are treated as missing, and so are also imputed.
+ * All Null values in the input column are treated as missing, and so are also imputed. For
+ * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
 @Experimental
 class Imputer @Since("2.2.0")(override val uid: String)
@@ -127,8 +127,7 @@ class Imputer @Since("2.2.0")(override val uid: String)
   @Since("2.2.0")
   def setMissingValue(value: Double): this.type = set(missingValue, value)
 
-  import org.apache.spark.ml.feature.Imputer._
-  setDefault(strategy -> mean, missingValue -> Double.NaN)
+  setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
 
   override def fit(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)
@@ -197,7 +196,7 @@ class ImputerModel private[ml](
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     var outputDF = dataset
-    val surrogates = surrogateDF.select($(inputCols).head, $(inputCols).tail: _*).head().toSeq
+    val surrogates = surrogateDF.select($(inputCols).map(col): _*).head().toSeq
 
     $(inputCols).zip($(outputCols)).zip(surrogates).foreach {
       case ((inputCol, outputCol), surrogate) =>
