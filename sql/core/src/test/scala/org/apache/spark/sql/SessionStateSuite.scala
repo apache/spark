@@ -44,6 +44,12 @@ class SessionStateSuite extends SparkFunSuite
     createSession()
   }
 
+  override def afterAll(): Unit = {
+    if (sparkContext != null) {
+      sparkContext.stop()
+    }
+  }
+
   test("fork new session and inherit RuntimeConfig options") {
     val key = "spark-config-clone"
     activeSession.conf.set(key, "active")
