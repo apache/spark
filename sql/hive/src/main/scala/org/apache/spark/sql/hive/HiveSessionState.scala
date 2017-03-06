@@ -213,10 +213,10 @@ object HiveSessionState {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
         new ResolveHiveSerdeTable(sparkSession) ::
         new FindDataSourceTable(sparkSession) ::
-        new FindHiveSerdeTable(sparkSession) ::
         new ResolveSQLOnFile(sparkSession) :: Nil
 
       override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
+        new DetermineTableStats(sparkSession) ::
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
         PreprocessTableCreation(sparkSession) ::

@@ -75,9 +75,9 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(iris)
-#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.svmLinear(training, Species ~ ., regParam = 0.5)
+#' t <- as.data.frame(Titanic)
+#' training <- createDataFrame(t)
+#' model <- spark.svmLinear(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -207,6 +207,9 @@ function(object, path, overwrite = FALSE) {
 #'                  excepting that at most one value may be 0. The class with largest value p/t is predicted, where p
 #'                  is the original probability of that class and t is the class's threshold.
 #' @param weightCol The weight column name.
+#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
+#'                         or the number of partitions are large, this param could be adjusted to a larger size.
+#'                         This is an expert parameter. Default value should be good for most cases.
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model.
 #' @rdname spark.logit
@@ -217,9 +220,9 @@ function(object, path, overwrite = FALSE) {
 #' \dontrun{
 #' sparkR.session()
 #' # binary logistic regression
-#' df <- createDataFrame(iris)
-#' training <- df[df$Species %in% c("versicolor", "virginica"), ]
-#' model <- spark.logit(training, Species ~ ., regParam = 0.5)
+#' t <- as.data.frame(Titanic)
+#' training <- createDataFrame(t)
+#' model <- spark.logit(training, Survived ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' # fitted values on training data
@@ -236,8 +239,7 @@ function(object, path, overwrite = FALSE) {
 #'
 #' # multinomial logistic regression
 #'
-#' df <- createDataFrame(iris)
-#' model <- spark.logit(df, Species ~ ., regParam = 0.5)
+#' model <- spark.logit(training, Class ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
 #' }
@@ -245,11 +247,13 @@ function(object, path, overwrite = FALSE) {
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
-                   thresholds = 0.5, weightCol = NULL) {
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2) {
             formula <- paste(deparse(formula), collapse = "")
 
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
@@ -257,7 +261,7 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                as.character(weightCol))
+                                weightCol, as.integer(aggregationDepth))
             new("LogisticRegressionModel", jobj = jobj)
           })
 

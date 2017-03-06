@@ -22,16 +22,17 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -282,7 +283,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (statement == null) {
       null  // This is enough since ParseException will raise later.
     } else if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
+      ExplainCommand(
+        logicalPlan = statement,
+        extended = ctx.EXTENDED != null,
+        codegen = ctx.CODEGEN != null,
+        cost = ctx.COST != null)
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -1440,5 +1445,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       inSerdeProps, outSerdeProps,
       reader, writer,
       schemaLess)
+  }
+
+  /**
+   * Create a clause for DISTRIBUTE BY.
+   */
+  override protected def withRepartitionByExpression(
+      ctx: QueryOrganizationContext,
+      expressions: Seq[Expression],
+      query: LogicalPlan): LogicalPlan = {
+    RepartitionByExpression(expressions, query, conf.numShufflePartitions)
   }
 }

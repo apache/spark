@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.beans.Introspector
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
@@ -71,7 +70,7 @@ import org.apache.spark.util.Utils
  * @param sparkContext The Spark context associated with this Spark session.
  * @param existingSharedState If supplied, use the existing shared state
  *                            instead of creating a new one.
- * @param parentSessionState If supplied, inherit all session state (i.e. temporary 
+ * @param parentSessionState If supplied, inherit all session state (i.e. temporary
  *                            views, SQL config, UDFs etc) from parent.
  */
 @InterfaceStability.Stable
@@ -383,8 +382,7 @@ class SparkSession private(
     val className = beanClass.getName
     val rowRdd = rdd.mapPartitions { iter =>
     // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
-      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
+      SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
     }
     Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
   }
@@ -410,8 +408,7 @@ class SparkSession private(
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
     val attrSeq = getSchema(beanClass)
-    val beanInfo = Introspector.getBeanInfo(beanClass)
-    val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
+    val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 

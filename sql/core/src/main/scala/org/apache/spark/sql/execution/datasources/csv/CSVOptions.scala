@@ -27,11 +27,20 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
 private[csv] class CSVOptions(
-    @transient private val parameters: CaseInsensitiveMap[String], defaultTimeZoneId: String)
+    @transient private val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
 
-  def this(parameters: Map[String, String], defaultTimeZoneId: String) =
-    this(CaseInsensitiveMap(parameters), defaultTimeZoneId)
+  def this(
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+      this(
+        CaseInsensitiveMap(parameters),
+        defaultTimeZoneId,
+        defaultColumnNameOfCorruptRecord)
+  }
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -95,6 +104,9 @@ private[csv] class CSVOptions(
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
+  val columnNameOfCorruptRecord =
+    parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
+
   val nullValue = parameters.getOrElse("nullValue", "")
 
   val nanValue = parameters.getOrElse("nanValue", "NaN")
@@ -117,6 +129,8 @@ private[csv] class CSVOptions(
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)
 

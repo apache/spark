@@ -143,8 +143,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.
    *
-   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
-   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
+   * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
+   * default. For JSON (one record per file), set the `wholeFile` option to true.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -168,8 +168,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
+   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
+   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
+   *     during parsing. When inferring a schema, it implicitly adds a `columnNameOfCorruptRecord`
+   *     field in an output schema.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -245,12 +248,20 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
-   *       a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
+   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
+   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
+   *     during parsing. When a length of parsed CSV tokens is shorter than an expected length
+   *     of a schema, it sets `null` for extra fields.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
    * </li>
+   * <li>`columnNameOfCorruptRecord` (default is the value specified in
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
    *
    * @since 2.0.0

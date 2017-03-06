@@ -1793,6 +1793,33 @@ setMethod("to_date",
             column(jc)
           })
 
+#' to_json
+#'
+#' Converts a column containing a \code{structType} into a Column of JSON string.
+#' Resolving the Column can fail if an unsupported type is encountered.
+#'
+#' @param x Column containing the struct
+#' @param ... additional named properties to control how it is converted, accepts the same options
+#'            as the JSON data source.
+#'
+#' @family normal_funcs
+#' @rdname to_json
+#' @name to_json
+#' @aliases to_json,Column-method
+#' @export
+#' @examples
+#' \dontrun{
+#' to_json(df$t, dateFormat = 'dd/MM/yyyy')
+#' select(df, to_json(df$t))
+#'}
+#' @note to_json since 2.2.0
+setMethod("to_json", signature(x = "Column"),
+          function(x, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions", "to_json", x@jc, options)
+            column(jc)
+          })
+
 #' to_timestamp
 #'
 #' Converts the column into a TimestampType. You may optionally specify a format
@@ -2400,6 +2427,36 @@ setMethod("n", signature(x = "Column"),
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "date_format", y@jc, x)
+            column(jc)
+          })
+
+#' from_json
+#'
+#' Parses a column containing a JSON string into a Column of \code{structType} with the specified
+#' \code{schema}. If the string is unparseable, the Column will contains the value NA.
+#'
+#' @param x Column containing the JSON string.
+#' @param schema a structType object to use as the schema to use when parsing the JSON string.
+#' @param ... additional named properties to control how the json is parsed, accepts the same
+#'            options as the JSON data source.
+#'
+#' @family normal_funcs
+#' @rdname from_json
+#' @name from_json
+#' @aliases from_json,Column,structType-method
+#' @export
+#' @examples
+#' \dontrun{
+#' schema <- structType(structField("name", "string"),
+#' select(df, from_json(df$value, schema, dateFormat = "dd/MM/yyyy"))
+#'}
+#' @note from_json since 2.2.0
+setMethod("from_json", signature(x = "Column", schema = "structType"),
+          function(x, schema, ...) {
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "from_json",
+                              x@jc, schema$jobj, options)
             column(jc)
           })
 

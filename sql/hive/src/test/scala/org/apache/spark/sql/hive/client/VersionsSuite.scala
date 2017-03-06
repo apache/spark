@@ -88,7 +88,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2")
+  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0")
 
   private var client: HiveClient = null
 
@@ -98,7 +98,12 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       System.gc() // Hack to avoid SEGV on some JVM versions.
       val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")
-      client = buildClient(version, hadoopConf)
+      // Hive changed the default of datanucleus.schema.autoCreateAll from true to false since 2.0
+      // For details, see the JIRA HIVE-6113
+      if (version == "2.0") {
+        hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
+      }
+      client = buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
     }
 
     def table(database: String, tableName: String): CatalogTable = {
@@ -175,7 +180,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         emptyDir,
         tableName = "src",
         replace = false,
-        holdDDLTime = false,
         isSrcLocal = false)
     }
 
@@ -313,7 +317,6 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         "src_part",
         partSpec,
         replace = false,
-        holdDDLTime = false,
         inheritTableSpecs = false,
         isSrcLocal = false)
     }
@@ -329,8 +332,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
         "src_part",
         partSpec,
         replace = false,
-        numDP = 1,
-        holdDDLTime = false)
+        numDP = 1)
     }
 
     test(s"$version: renamePartitions") {

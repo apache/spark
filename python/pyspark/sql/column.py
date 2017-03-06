@@ -180,7 +180,9 @@ class Column(object):
     __ror__ = _bin_op("or")
 
     # container operators
-    __contains__ = _bin_op("contains")
+    def __contains__(self, item):
+        raise ValueError("Cannot apply 'in' operator against a column: please use 'contains' "
+                         "in a string column or 'array_contains' function for an array column.")
 
     # bitwise operators
     bitwiseOR = _bin_op("bitwiseOR")
@@ -248,6 +250,7 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
+    contains = _bin_op("contains")
     rlike = _bin_op("rlike")
     like = _bin_op("like")
     startswith = _bin_op("startsWith")

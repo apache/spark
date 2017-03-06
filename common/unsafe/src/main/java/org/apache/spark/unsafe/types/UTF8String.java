@@ -153,7 +153,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *
    * Unlike getBytes this will not create a copy the array if this is a slice.
    */
-  public @Nonnull ByteBuffer getByteBuffer() {
+  @Nonnull
+  public ByteBuffer getByteBuffer() {
     if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
       final byte[] bytes = (byte[]) base;
 

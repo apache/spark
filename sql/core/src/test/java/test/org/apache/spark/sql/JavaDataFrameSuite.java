@@ -397,4 +397,30 @@ public class JavaDataFrameSuite {
       Assert.assertTrue(filter4.mightContain(i * 3));
     }
   }
+
+  public static class BeanWithoutGetter implements Serializable {
+    private String a;
+
+    public void setA(String a) {
+      this.a = a;
+    }
+  }
+
+  @Test
+  public void testBeanWithoutGetter() {
+    BeanWithoutGetter bean = new BeanWithoutGetter();
+    List<BeanWithoutGetter> data = Arrays.asList(bean);
+    Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
+    Assert.assertEquals(df.schema().length(), 0);
+    Assert.assertEquals(df.collectAsList().size(), 1);
+  }
+
+  @Test
+  public void testJsonRDDToDataFrame() {
+    // This is a test for the deprecated API in SPARK-15615.
+    JavaRDD<String> rdd = jsc.parallelize(Arrays.asList("{\"a\": 2}"));
+    Dataset<Row> df = spark.read().json(rdd);
+    Assert.assertEquals(1L, df.count());
+    Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
+  }
 }
