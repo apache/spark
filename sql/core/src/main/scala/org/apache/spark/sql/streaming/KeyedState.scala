@@ -36,7 +36,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  * For a static batch Dataset, the function will be invoked once per group. For a streaming
  * Dataset, the function will be invoked for each group repeatedly in every trigger.
  * That is, in every batch of the `streaming.StreamingQuery`,
- * the function will be invoked once for each group that has data in the batch.
+ * the function will be invoked once for each group that has data in the batch. Furthermore,
+ * if timeout is set, then the function will invoked with no data (more detail below).
  *
  * The function is invoked with following parameters.
  *  - The key of the group.
@@ -52,8 +53,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *  - There is no guaranteed ordering of values in the iterator in the function, neither with
  *    batch, nor with streaming Datasets.
  *  - All the data will be shuffled before applying the function.
+ *  - If timeout is set, then the function will also be called with no values.
+ *    See more details on `KeyedStateTimeout` below.
  *
- * Important points to note about using KeyedState.
+ * Important points to note about using `KeyedState`.
  *  - The value of the state cannot be null. So updating state with null will throw
  *    `IllegalArgumentException`.
  *  - Operations on `KeyedState` are not thread-safe. This is to avoid memory barriers.
@@ -62,25 +65,49 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *  - After that, if `update(newState)` is called, then `exists()` will again return `true`,
  *    `get()` and `getOption()`will return the updated value.
  *
+ * Important points to note about using `KeyedStateTimeout`.
+ *  - The timeout type is a global param across all the keys (set as `timeout` param in
+ *    `[map|flatMap]GroupsWithState`, but the exact timeout duration is configurable per key
+ *    (by calling `setTimeout...()` in `KeyedState`).
+ *  - When the timeout occurs for a key, the function is called with no values, and
+ *    `KeyedState.isTimingOut()` set to true.
+ *  - The timeout is reset for key every time the function is called on the key, that is,
+ *    when the key has new data, or the key has timed out. So the user has to set the timeout
+ *    duration every time the function is called, otherwise there will not be any timeout set.
+ *  - Guarantees provided on processing-time-based timeout of key, when timeout duration is D ms:
+ *    - Timeout will never be called before real clock time has advanced by D ms
+ *    - Timeout will be called eventually when there is a trigger with any data in it
+ *      (i.e. after D ms). So there is a no strict upper bound on when the timeout would occur.
+ *      For example, if there is no data in the stream (for any key) for a while,
+ *      then the timeout will not be hit.
+ *
  * Scala example of using KeyedState in `mapGroupsWithState`:
  * {{{
  * // A mapping function that maintains an integer state for string keys and returns a string.
  * def mappingFunction(key: String, value: Iterator[Int], state: KeyedState[Int]): String = {
- *   // Check if state exists
- *   if (state.exists) {
- *     val existingState = state.get  // Get the existing state
- *     val shouldRemove = ...         // Decide whether to remove the state
+ *
+ *   if (state.isTimingOut) {                // If called when timing out, remove the state
+ *     state.remove()
+ *
+ *   } else if (state.exists) {              // If state exists, use it for processing
+ *     val existingState = state.get         // Get the existing state
+ *     val shouldRemove = ...                // Decide whether to remove the state
  *     if (shouldRemove) {
- *       state.remove()     // Remove the state
+ *       state.remove()                      // Remove the state
+ *
  *     } else {
  *       val newState = ...
- *       state.update(newState)    // Set the new state
+ *       state.update(newState)              // Set the new state
  *     }
+ *
  *   } else {
  *     val initialState = ...
- *     state.update(initialState)  // Set the initial state
+ *     state.update(initialState)            // Set the initial state
  *   }
- *   ... // return something
+ *   state.setTimeoutDuration("1 hour")      // Set the timeout
+ *
+ *   ...
+ *   // return something
  * }
  *
  * }}}
@@ -93,20 +120,26 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  *      @Override
  *      public String call(String key, Iterator<Integer> value, KeyedState<Integer> state) {
- *        if (state.exists()) {
+ *        if (state.isTimingOut) {           // If called when timing out, remove the state
+ *          state.remove();
+ *
+ *        } else if (state.exists()) {       // If state exists, use it for processing
  *          int existingState = state.get(); // Get the existing state
- *          boolean shouldRemove = ...; // Decide whether to remove the state
+ *          boolean shouldRemove = ...;      // Decide whether to remove the state
  *          if (shouldRemove) {
- *            state.remove(); // Remove the state
+ *            state.remove();                // Remove the state
+ *
  *          } else {
  *            int newState = ...;
- *            state.update(newState); // Set the new state
+ *            state.update(newState);        // Set the new state
  *          }
+ *
  *        } else {
- *          int initialState = ...; // Set the initial state
+ *          int initialState = ...;          // Set the initial state
  *          state.update(initialState);
  *        }
- *        ... // return something
+ *        ...
+*         // return something
  *      }
  *    };
  * }}}
@@ -139,9 +172,21 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   /** Remove this keyed state. */
   def remove(): Unit
 
+  /**
+   * Whether the function has been called because the key is timing out.
+   * @note This can return true only when timeouts are enabled in `[map/flatmap]GroupsWithStates`.
+   */
   def isTimingOut: Boolean
 
+  /**
+   * Set the timeout duration in ms for this key.
+   * @note Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
   def setTimeoutDuration(durationMs: Long): Unit
 
+  /**
+   * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
+   * @note, Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
   def setTimeoutDuration(duration: String): Unit
 }

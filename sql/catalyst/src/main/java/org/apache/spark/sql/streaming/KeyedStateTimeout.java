@@ -21,11 +21,18 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
 
-
+/**
+ * Represents the type of timeouts possible for the Dataset operations
+ * `mapGroupsWithState` and `flatMapGroupsWithState`. See documentation on
+ * `KeyedState` for more details.
+ *
+ * @since 2.2.0
+ */
 @Experimental
 @InterfaceStability.Evolving
 public interface KeyedStateTimeout {
 
+  /** Timeout based on processing time.  */
   static KeyedStateTimeout withProcessingTime() {
     return ProcessingTimeTimeout$.MODULE$;
   }
