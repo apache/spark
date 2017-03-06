@@ -243,8 +243,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
             // Note that we only store the timezone in the table property, so when we read the
             // data this way, we're bypassing all of the conversion logic, and reading the raw
             // values in the parquet file.
-            val onDiskLocation = """file:(.*)""".r.findFirstMatchIn(spark.sessionState.catalog
-              .getTableMetadata(TableIdentifier(s"insert_$baseTable")).location).get.group(1)
+            val onDiskLocation = spark.sessionState.catalog
+              .getTableMetadata(TableIdentifier(s"insert_$baseTable")).location.getPath
             val readFromDisk = spark.read.parquet(onDiskLocation).collect()
               .map(_.getAs[Timestamp](0))
             val expectedReadFromDisk = expectedTableTz match {
