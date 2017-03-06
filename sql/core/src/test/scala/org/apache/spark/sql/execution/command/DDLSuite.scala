@@ -26,9 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -1992,6 +1990,30 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             assert(partDir.exists())
 
             checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b", "a,b").foreach { specialCharInLoc =>
+    test(s"partition name of datasource table contains $specialCharInLoc") {
+      withTable("t") {
+        withTempDir { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string, `$specialCharInLoc` string)
+               |USING parquet
+               |PARTITIONED BY(`$specialCharInLoc`)
+               |LOCATION '$dir'
+             """.stripMargin)
+
+          assert(dir.listFiles().isEmpty)
+          spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialCharInLoc`=2) SELECT 1")
+          val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialCharInLoc)}=2"
+          spark.sql("show partitions t").show(false)
+          val partFile = new File(dir, partEscaped)
+          assert(partFile.listFiles().length >= 1)
+          checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
         }
       }
     }
