@@ -22,7 +22,7 @@ import org.apache.spark.sql.types._
 
 class TableSchemaParserSuite extends SparkFunSuite {
 
-  def parse(sql: String): DataType = CatalystSqlParser.parseTableSchema(sql)
+  def parse(sql: String): StructType = CatalystSqlParser.parseTableSchema(sql)
 
   def checkTableSchema(tableSchemaString: String, expectedDataType: DataType): Unit = {
     test(s"parse ${tableSchemaString.replace("\n", "")}") {
@@ -79,7 +79,10 @@ class TableSchemaParserSuite extends SparkFunSuite {
   }
 
   // Negative cases
+  intercept("")
+  intercept("a")
   intercept("a INT b long")
   intercept("a INT,, b long")
   intercept("a INT, b long,,")
+  intercept("a INT, b long, c int,")
 }
