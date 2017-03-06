@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
@@ -34,8 +34,27 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol
-    with HasHandleInvalid {
+private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+
+  /**
+   * Param for how to handle unseen labels. Options are 'skip' (filter out rows with
+   * unseen labels), 'error' (throw an error), or 'keep' (put unseen labels in a special additional
+   * bucket, at index numLabels.
+   * Default: "error"
+   * @group param
+   */
+  @Since("2.1.0")
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
+    "unseen labels. Options are 'skip' (filter out rows with unseen labels), " +
+    "error (throw an error), or 'keep' (put unseen labels in a special additional bucket," +
+    "at index numLabels).",
+    ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+
+  setDefault(handleInvalid, StringIndexer.ERROR_UNSEEN_LABEL)
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getHandleInvalid: String = $(handleInvalid)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -71,17 +90,16 @@ class StringIndexer @Since("1.4.0") (
   def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
-  @Since("1.6.0")
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
-
-  /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
@@ -105,7 +123,11 @@ class StringIndexer @Since("1.4.0") (
 
 @Since("1.6.0")
 object StringIndexer extends DefaultParamsReadable[StringIndexer] {
-
+  private[feature] val SKIP_UNSEEN_LABEL: String = "skip"
+  private[feature] val ERROR_UNSEEN_LABEL: String = "error"
+  private[feature] val KEEP_UNSEEN_LABEL: String = "keep"
+  private[feature] val supportedHandleInvalids: Array[String] =
+    Array(SKIP_UNSEEN_LABEL, ERROR_UNSEEN_LABEL, KEEP_UNSEEN_LABEL)
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
 }
@@ -142,17 +164,17 @@ class StringIndexerModel (
   }
 
   /** @group setParam */
-  @Since("1.6.0")
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
-
-  /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, StringIndexer.ERROR_UNSEEN_LABEL)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -163,25 +185,28 @@ class StringIndexerModel (
     }
     transformSchema(dataset.schema, logging = true)
 
+    val metadata = NominalAttribute.defaultAttr
+      .withName($(outputCol)).withValues(labels).toMetadata()
+    // If we are skipping invalid records, filter them out.
+    val (filteredDataset, keepInvalid) = getHandleInvalid match {
+      case StringIndexer.SKIP_UNSEEN_LABEL =>
+        val filterer = udf { label: String =>
+          labelToIndex.contains(label)
+        }
+        (dataset.where(filterer(dataset($(inputCol)))), false)
+      case _ => (dataset, getHandleInvalid == StringIndexer.KEEP_UNSEEN_LABEL)
+    }
+
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
+      } else if (keepInvalid) {
+        labels.length
       } else {
         throw new SparkException(s"Unseen label: $label.")
       }
     }
 
-    val metadata = NominalAttribute.defaultAttr
-      .withName($(outputCol)).withValues(labels).toMetadata()
-    // If we are skipping invalid records, filter them out.
-    val filteredDataset = getHandleInvalid match {
-      case "skip" =>
-        val filterer = udf { label: String =>
-          labelToIndex.contains(label)
-        }
-        dataset.where(filterer(dataset($(inputCol))))
-      case _ => dataset
-    }
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
