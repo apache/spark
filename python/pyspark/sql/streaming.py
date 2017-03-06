@@ -433,8 +433,8 @@ class DataStreamReader(OptionUtils):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
-        Both JSON (one record per file) and `JSON Lines <http://jsonlines.org/>`_
-        (newline-delimited JSON) are supported and can be selected with the `wholeFile` parameter.
+        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.

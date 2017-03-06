@@ -128,7 +128,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
 
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
-    val tablePath = new Path(new URI(relation.tableMeta.location))
+    val tablePath = new Path(relation.tableMeta.location)
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
       val rootPaths: Seq[Path] = if (lazyPruningEnabled) {
@@ -141,7 +141,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // locations,_omitting_ the table's base path.
         val paths = sparkSession.sharedState.externalCatalog
           .listPartitions(tableIdentifier.database, tableIdentifier.name)
-          .map(p => new Path(new URI(p.storage.locationUri.get)))
+          .map(p => new Path(p.storage.locationUri.get))
 
         if (paths.isEmpty) {
           Seq(tablePath)
