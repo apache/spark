@@ -643,7 +643,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       result: String): String = {
     s"""
       $result = ${HiveHashFunction.getClass.getName.stripSuffix("$")}.normalizeDecimal(
-       $input.toJavaBigDecimal(), true).hashCode();"""
+        $input.toJavaBigDecimal()).hashCode();"""
   }
 
   override protected def genHashCalendarInterval(input: String, result: String): String = {
