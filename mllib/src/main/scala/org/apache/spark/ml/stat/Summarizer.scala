@@ -17,11 +17,16 @@
 
 package org.apache.spark.ml.stat
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
+
+// scalastyle:off println
 
 /**
  * A builder object that provides summary statistics about a given column.
@@ -70,7 +75,7 @@ abstract class SummaryBuilder {
  * }}}
  */
 @Since("2.2.0")
-object Summarizer {
+object Summarizer extends Logging {
 
   import SummaryBuilderImpl._
 
@@ -79,6 +84,15 @@ object Summarizer {
    *
    * See the documentation of [[Summarizer]] for an example.
    *
+   * The following metrics are accepted (case sensitive):
+   *  - mean: a vector that contains the coefficient-wise mean.
+   *  - variance: a vector tha contains the coefficient-wise variance.
+   *  - count: the count of all vectors seen.
+   *  - numNonzeros: a vector with the number of non-zeros for each coefficients
+   *  - max: the maximum for each coefficient.
+   *  - min: the minimum for each coefficient.
+   *  - normL2: the Euclidian norm for each coefficient.
+   *  - normL1: the L1 norm of each coefficient (sum of the absolute values).
    * @param firstMetric the metric being provided
    * @param metrics additional metrics that can be provided.
    * @return a builder.
@@ -88,7 +102,7 @@ object Summarizer {
   def metrics(firstMetric: String, metrics: String*): SummaryBuilder = {
     val (typedMetrics, computeMetrics) = getRelevantMetrics(Seq(firstMetric) ++ metrics)
     new SummaryBuilderImpl(
-      SummaryBuilderImpl.buildUdafForMetrics(computeMetrics),
+      SummaryBuilderImpl.buildUdafForMetrics(typedMetrics, computeMetrics),
       SummaryBuilderImpl.structureForMetrics(typedMetrics))
   }
 
@@ -105,7 +119,7 @@ private[ml] class SummaryBuilderImpl(
 }
 
 private[ml]
-object SummaryBuilderImpl {
+object SummaryBuilderImpl extends Logging {
 
   def implementedMetrics: Seq[String] = allMetrics.map(_._1).sorted
 
@@ -118,9 +132,9 @@ object SummaryBuilderImpl {
       }
       metric -> deps
     }
-    // TODO: do not sort, otherwise the user has to look the schema to see the order that it
+    // Do not sort, otherwise the user has to look the schema to see the order that it
     // is going to be given in.
-    val metrics = all.map(_._1).distinct.sortBy(_.toString)
+    val metrics = all.map(_._1)
     val computeMetrics = all.flatMap(_._2).distinct.sortBy(_.toString)
     metrics -> computeMetrics
   }
@@ -136,7 +150,11 @@ object SummaryBuilderImpl {
     StructType(fields)
   }
 
-  def buildUdafForMetrics(metrics: Seq[ComputeMetrics]): UserDefinedAggregateFunction = null
+  def buildUdafForMetrics(
+      metrics: Seq[Metrics],
+      computeMetrics: Seq[ComputeMetrics]): UserDefinedAggregateFunction = {
+    new MetricsUDAF(metrics, computeMetrics)
+  }
 
   /**
    * All the metrics that can be currently computed by Spark for vectors.
@@ -145,15 +163,15 @@ object SummaryBuilderImpl {
    * metrics that need to de computed internally to get the final result.
    */
   private val allMetrics = Seq(
-    ("mean", Mean, Seq(ComputeMean, ComputeWeightSum, ComputeTotalWeightSum)),
+    ("mean", Mean, Seq(ComputeMean, ComputeWeightSum, ComputeTotalWeightSum)), // Vector
     ("variance", Variance, Seq(ComputeTotalWeightSum, ComputeWeightSquareSum, ComputeMean,
-                               ComputeM2n)),
-    ("count", Count, Seq(ComputeCount)),
-    ("numNonZeros", NumNonZeros, Seq(ComputeNNZ)),
-    ("max", Max, Seq(ComputeMax, ComputeTotalWeightSum, ComputeNNZ, ComputeCount)),
-    ("min", Min, Seq(ComputeMin, ComputeTotalWeightSum, ComputeNNZ, ComputeCount)),
-    ("normL2", NormL2, Seq(ComputeTotalWeightSum, ComputeM2)),
-    ("normL1", Min, Seq(ComputeTotalWeightSum, ComputeL1))
+                               ComputeM2n)), // Vector
+    ("count", Count, Seq(ComputeCount)), // Long
+    ("numNonZeros", NumNonZeros, Seq(ComputeNNZ)), // Vector
+    ("max", Max, Seq(ComputeMax, ComputeTotalWeightSum, ComputeNNZ, ComputeCount)), // Vector
+    ("min", Min, Seq(ComputeMin, ComputeTotalWeightSum, ComputeNNZ, ComputeCount)), // Vector
+    ("normL2", NormL2, Seq(ComputeTotalWeightSum, ComputeM2)), // Vector
+    ("normL1", Min, Seq(ComputeTotalWeightSum, ComputeL1)) // Vector
   )
 
   /**
@@ -174,13 +192,13 @@ object SummaryBuilderImpl {
    *
    * There is a bipartite graph between the metrics and the computed metrics.
    */
-  private sealed trait ComputeMetrics
+  sealed trait ComputeMetrics
   case object ComputeMean extends ComputeMetrics
   case object ComputeM2n extends ComputeMetrics
   case object ComputeM2 extends ComputeMetrics
   case object ComputeL1 extends ComputeMetrics
-  case object ComputeCount extends ComputeMetrics
-  case object ComputeTotalWeightSum extends ComputeMetrics
+  case object ComputeCount extends ComputeMetrics // Always computed
+  case object ComputeTotalWeightSum extends ComputeMetrics // Always computed
   case object ComputeWeightSquareSum extends ComputeMetrics
   case object ComputeWeightSum extends ComputeMetrics
   case object ComputeNNZ extends ComputeMetrics
@@ -206,9 +224,8 @@ object SummaryBuilderImpl {
     private[this] val computeM2n = getIndexFor(ComputeM2n)
     private[this] val computeM2 = getIndexFor(ComputeM2)
     private[this] val computeL1 = getIndexFor(ComputeL1)
-    private[this] val computeTotalCount = getIndexFor(ComputeCount)
-    // TODO: why is it not used?
-    private[this] val computeTotalWeightSum = getIndexFor(ComputeTotalWeightSum)
+    private[this] val computeTotalCount = getForcedIndexFor(ComputeCount) // Always compute it.
+    private[this] val computeTotalWeightSum = getForcedIndexFor(ComputeTotalWeightSum) // Always.
     private[this] val computeWeightSquareSum = getIndexFor(ComputeWeightSquareSum)
     private[this] val computeWeightSum = getIndexFor(ComputeWeightSum)
     private[this] val computeNNZ = getIndexFor(ComputeNNZ)
@@ -230,7 +247,7 @@ object SummaryBuilderImpl {
           case ComputeCount => LongType
           case ComputeTotalWeightSum => DoubleType
           case ComputeWeightSquareSum => DoubleType
-          case _ => SQLDataTypes.VectorType
+          case _ => ArrayType(DoubleType, containsNull = false)
         }
         StructField(m.toString, tpe, nullable = true)
       } :+ StructField("n", IntegerType, nullable = false)
@@ -246,7 +263,11 @@ object SummaryBuilderImpl {
     // The initialization does not do anything because we do not know the size of the vectors yet.
     override def initialize(buffer: MutableAggregationBuffer): Unit = {
       // Set n to -1 to indicate that we do not know the size yet.
+      println("initialize: size=" + buffer.size + " computeN = " + computeN)
+      // Thes metrics are always computed.
       buffer.update(computeN, -1)
+      buffer.update(computeTotalCount, 0L)
+      buffer.update(computeTotalWeightSum, 0.0)
     }
 
     override def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
@@ -256,10 +277,11 @@ object SummaryBuilderImpl {
     }
 
     override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
-      val thisUsed = ((computeTotalWeightSum >= 0 && buffer1.getDouble(computeTotalWeightSum) > 0)
-                    || (computeTotalCount >= 0 && buffer1.getLong(computeTotalCount) > 0))
-      val otherUsed = ((computeTotalWeightSum >= 0 && buffer2.getDouble(computeTotalWeightSum) > 0)
-        || (computeTotalCount >= 0 && buffer2.getLong(computeTotalCount) > 0))
+      // The metrics that are used to determine if the buffers are used are always computed.
+      val thisUsed = (buffer1.getDouble(computeTotalWeightSum) > 0.0
+                    || buffer1.getLong(computeTotalCount) > 0L)
+      val otherUsed = (buffer2.getDouble(computeTotalWeightSum) > 0.0
+        || buffer2.getLong(computeTotalCount) > 0L)
       if (thisUsed && otherUsed) {
         // Merge onto this one.
         val n1 = getN(buffer1)
@@ -360,6 +382,7 @@ object SummaryBuilderImpl {
       val values = requested.map {
         case Mean => evaluateMean(buffer)
         case Variance => evaluateVariance(buffer)
+        case Count => evaluateCount(buffer)
         case NumNonZeros => evaluateNNZ(buffer)
         case Max => evaluateMax(buffer)
         case Min => evaluateMin(buffer)
@@ -374,7 +397,9 @@ object SummaryBuilderImpl {
       assert(computeWeightSum >= 0)
       assert(computeTotalWeightSum >= 0)
       val n = getN(buffer)
-      assert(n >= 0)
+      if (n < 0) {
+        throw new IllegalArgumentException("No data point has been seen so far")
+      }
       val realMean = Array.ofDim[Double](n)
       val currMean = exposeDArray2(buffer, computeMean)
       val weightSum = exposeDArray2(buffer, computeWeightSum)
@@ -423,6 +448,11 @@ object SummaryBuilderImpl {
         }
       }
       Vectors.dense(realVariance)
+    }
+
+    private def evaluateCount(buffer: Row): Long = {
+      assert(computeTotalCount >= 0)
+      buffer.getLong(computeTotalCount)
     }
 
     private def evaluateNNZ(buffer: Row): Vector = {
@@ -533,7 +563,7 @@ object SummaryBuilderImpl {
       if (index == -1) {
         null
       } else {
-        buffer.getAs[Array[Double]](index)
+        buffer.getAs[mutable.WrappedArray[Double]](index).array
       }
     }
 
@@ -575,6 +605,10 @@ object SummaryBuilderImpl {
       } else {
         -1
       }
+    }
+
+    private def getForcedIndexFor(m: ComputeMetrics): Int = {
+      metricsWithOrder.find(p => p._1 == m).get._2
     }
 
   }
