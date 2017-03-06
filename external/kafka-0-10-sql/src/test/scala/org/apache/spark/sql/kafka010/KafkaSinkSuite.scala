@@ -19,6 +19,8 @@ package org.apache.spark.sql.kafka010
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
@@ -98,6 +100,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
       .save()
+    checkAnswer(createKafkaReader(topic).selectExpr("CAST(value as STRING) value"),
+      Row("1") :: Row("2") :: Row("3") :: Row("4") :: Row("5") :: Nil)
   }
 
   test("batch - null topic field value, and no topic option") {
@@ -361,18 +365,18 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     ex = intercept[IllegalArgumentException] {
       writer = createKafkaWriter(
         input.toDF(),
-        withOptions = Some(Map("kafka.key.deserializer" -> "foo")))()
+        withOptions = Some(Map("kafka.key.serializer" -> "foo")))()
     }
     assert(ex.getMessage.toLowerCase.contains(
-      "kafka option 'key.deserializer' is not supported"))
+      "kafka option 'key.serializer' is not supported"))
 
     ex = intercept[IllegalArgumentException] {
       writer = createKafkaWriter(
         input.toDF(),
-        withOptions = Some(Map("kafka.value.deserializer" -> "foo")))()
+        withOptions = Some(Map("kafka.value.serializer" -> "foo")))()
     }
     assert(ex.getMessage.toLowerCase.contains(
-      "kafka option 'value.deserializer' is not supported"))
+      "kafka option 'value.serializer' is not supported"))
   }
 
   test("generic - write big data with small producer buffer") {
@@ -388,6 +392,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     options.put("bootstrap.servers", testUtils.brokerAddress)
     options.put("buffer.memory", "16384") // min buffer size
     options.put("block.on.buffer.full", "true")
+    options.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
+    options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
     val writeTask = new KafkaWriteTask(options, inputSchema, Some(topic))

@@ -36,19 +36,15 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) {
   // used to synchronize with Kafka callbacks
-  @volatile var failedWrite: Exception = null
-  val projection = createProjection
-  var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
+  @volatile private var failedWrite: Exception = null
+  private val projection = createProjection
+  private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
 
   /**
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    producer = {
-      producerConfiguration.put("key.serializer", classOf[ByteArraySerializer].getName)
-      producerConfiguration.put("value.serializer", classOf[ByteArraySerializer].getName)
-      new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
-    }
+    producer = new KafkaProducer[Array[Byte], Array[Byte]](producerConfiguration)
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       val projectedRow = projection(currentRow)

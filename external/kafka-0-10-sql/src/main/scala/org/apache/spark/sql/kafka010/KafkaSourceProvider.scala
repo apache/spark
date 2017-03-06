@@ -23,7 +23,8 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.serialization.{ByteArrayDeserializer, BytesSerializer}
+import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
@@ -180,43 +181,47 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           s"${SaveMode.ErrorIfExists} (default).")
       case _ => // good
     }
-    val defaultTopic = parameters.get(TOPIC_OPTION_KEY).map(_.trim.toLowerCase)
+    val topic = parameters.get(TOPIC_OPTION_KEY).map(_.trim)
     val specifiedKafkaParams = kafkaParamsForProducer(parameters)
     KafkaWriter.write(outerSQLContext.sparkSession, data.queryExecution,
-      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), defaultTopic)
+      new ju.HashMap[String, Object](specifiedKafkaParams.asJava), topic)
 
     /* This method is suppose to return a relation that reads the data that was written.
      * We cannot support this for Kafka. Therefore, in order to make things consistent,
      * we return an empty base relation.
      */
     new BaseRelation {
-      override def sqlContext: SQLContext = outerSQLContext
-      override def schema: StructType = KafkaOffsetReader.kafkaSchema
+      override def sqlContext: SQLContext = unsupportedException
+      override def schema: StructType = unsupportedException
+      override def needConversion: Boolean = unsupportedException
+      override def sizeInBytes: Long = unsupportedException
+      override def unhandledFilters(filters: Array[Filter]): Array[Filter] = unsupportedException
+      private def unsupportedException =
+        throw new UnsupportedOperationException("BaseRelation from Kafka write " +
+          "operation is not usable.")
     }
   }
 
   private def kafkaParamsForProducer(parameters: Map[String, String]): Map[String, String] = {
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
-    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}")) {
+    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
-        s"Kafka option '${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}' is not supported as keys "
-          + "are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame operations "
-          + "to explicitly deserialize the keys.")
+        s"Kafka option '${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}' is not supported as keys "
+          + "are serialized with ByteArraySerializer.")
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}"))
+    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}"))
     {
       throw new IllegalArgumentException(
-        s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
-          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
-          + "operations to explicitly deserialize the values.")
+        s"Kafka option '${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}' is not supported as "
+          + "value are serialized with ByteArraySerializer.")
     }
     parameters
       .keySet
       .filter(_.toLowerCase.startsWith("kafka."))
       .map { k => k.drop(6).toString -> parameters(k) }
-      .toMap + (ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[BytesSerializer].getName,
-        ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[BytesSerializer].getName)
+      .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
+        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
   }
 
   private def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]) =
