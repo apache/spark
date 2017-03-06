@@ -39,13 +39,15 @@ private[spark] class KubernetesResourceCleaner extends Logging {
 
   def deleteAllRegisteredResourcesFromKubernetes(kubernetesClient: KubernetesClient): Unit = {
     synchronized {
-      logInfo(s"Deleting ${resources.size} registered Kubernetes resources:")
+      val resourceCount = resources.size
+      logInfo(s"Deleting ${resourceCount} registered Kubernetes resources...")
       resources.values.foreach { resource =>
         Utils.tryLogNonFatalError {
           kubernetesClient.resource(resource).delete()
         }
       }
       resources.clear()
+      logInfo(s"Deleted ${resourceCount} registered Kubernetes resources.")
     }
   }
 }
