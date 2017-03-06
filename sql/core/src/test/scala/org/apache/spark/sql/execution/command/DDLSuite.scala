@@ -2010,7 +2010,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           assert(dir.listFiles().isEmpty)
           spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialCharInLoc`=2) SELECT 1")
           val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialCharInLoc)}=2"
-          spark.sql("show partitions t").show(false)
           val partFile = new File(dir, partEscaped)
           assert(partFile.listFiles().length >= 1)
           checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
