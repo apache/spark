@@ -364,6 +364,27 @@ class CodeGenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
+    splitExpressions(expressions, "apply", ("InternalRow", row) :: Nil)
+  }
+
+  /**
+   * Splits the generated code of expressions into multiple functions, because function has
+   * 64kb code size limit in JVM
+   *
+   * @param expressions the codes to evaluate expressions.
+   * @param funcName the split function name base.
+   * @param arguments the list of (type, name) of the arguments of the split function.
+   * @param returnType the return type of the split function.
+   * @param makeSplitFunction makes split function body, e.g. add preparation or cleanup.
+   * @param foldFunctions folds the split function calls.
+   */
+  def splitExpressions(
+      expressions: Seq[String],
+      funcName: String,
+      arguments: Seq[(String, String)],
+      returnType: String = "void",
+      makeSplitFunction: String => String = identity,
+      foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -380,19 +401,20 @@ class CodeGenContext {
       // inline execution if only one block
       blocks.head
     } else {
-      val apply = freshName("apply")
+      val func = freshName(funcName)
+      val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
-        val name = s"${apply}_$i"
+        val name = s"${func}_$i"
         val code = s"""
-           |private void $name(InternalRow $row) {
-           |  $body
+           |private $returnType $name($argString) {
+           |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
         addNewFunction(name, code)
         name
       }
 
-      functions.map(name => s"$name($row);").mkString("\n")
+      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
     }
   }
 
