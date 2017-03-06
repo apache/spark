@@ -23,7 +23,7 @@ context("Structured Streaming")
 
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
-jsonSubDir <- file.path("sparkr-test", "json")
+jsonSubDir <- file.path("sparkr-test", "json", "")
 jsonDir <- file.path(tempdir(), jsonSubDir)
 dir.create(jsonDir, recursive = TRUE)
 
