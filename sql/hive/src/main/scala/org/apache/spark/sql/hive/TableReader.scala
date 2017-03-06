@@ -159,36 +159,32 @@ class HadoopTableReader(
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!sparkSession.sessionState.conf.verifyPartitionPath) {
-        partitionToDeserializer
-      } else {
-        var existPathSet = collection.mutable.Set[String]()
-        var pathPatternSet = collection.mutable.Set[String]()
-        partitionToDeserializer.filter {
-          case (partition, partDeserializer) =>
-            def updateExistPathSetByPathPattern(pathPatternStr: String) {
-              val pathPattern = new Path(pathPatternStr)
-              val fs = pathPattern.getFileSystem(hadoopConf)
-              val matches = fs.globStatus(pathPattern)
-              matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
-            }
-            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
-            def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
-              var path = tempPath
-              for (i <- (1 to parNum)) path = path.getParent
-              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
-              path.toString + tails
-            }
+      var existPathSet = collection.mutable.Set[String]()
+      var pathPatternSet = collection.mutable.Set[String]()
+      partitionToDeserializer.filter {
+        case (partition, partDeserializer) =>
+          def updateExistPathSetByPathPattern(pathPatternStr: String) {
+            val pathPattern = new Path(pathPatternStr)
+            val fs = pathPattern.getFileSystem(hadoopConf)
+            val matches = fs.globStatus(pathPattern)
+            matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
+          }
+          // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
+          def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
+            var path = tempPath
+            for (i <- (1 to parNum)) path = path.getParent
+            val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
+            path.toString + tails
+          }
 
-            val partPath = partition.getDataLocation
-            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
-            var pathPatternStr = getPathPatternByPath(partNum, partPath)
-            if (!pathPatternSet.contains(pathPatternStr)) {
-              pathPatternSet += pathPatternStr
-              updateExistPathSetByPathPattern(pathPatternStr)
-            }
-            existPathSet.contains(partPath.toString)
-        }
+          val partPath = partition.getDataLocation
+          val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
+          var pathPatternStr = getPathPatternByPath(partNum, partPath)
+          if (!pathPatternSet.contains(pathPatternStr)) {
+            pathPatternSet += pathPatternStr
+            updateExistPathSetByPathPattern(pathPatternStr)
+          }
+          existPathSet.contains(partPath.toString)
       }
     }
 

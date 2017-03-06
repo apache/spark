@@ -264,12 +264,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
-    .doc("When true, check all the partition paths under the table\'s root directory " +
-         "when reading data stored in HDFS.")
-    .booleanConf
-    .createWithDefault(false)
-
   val HIVE_METASTORE_PARTITION_PRUNING =
     buildConf("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
@@ -767,8 +761,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
-
-  def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
