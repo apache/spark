@@ -117,6 +117,8 @@ class Analyzer(
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveBroadcastHints(conf),
       ResolveHints.RemoveAllHints),
+    Batch("Simple Sanity Check", Once,
+      LookupFunctions),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -1035,6 +1037,25 @@ class Analyzer(
           case other => resolved
         }
       }
+    }
+  }
+
+  /**
+   * Checks whether a function identifier referenced by an [[UnresolvedFunction]] is defined in the
+   * function registry. Note that this rule doesn't try to resolve the [[UnresolvedFunction]]. It
+   * only performs simple existence check according to the function identifier to quickly identify
+   * undefined functions without triggering relation resolution, which may incur potentially
+   * expensive partition/schema discovery process in some cases.
+   *
+   * @see [[ResolveFunctions]]
+   * @see https://issues.apache.org/jira/browse/SPARK-19737
+   */
+  object LookupFunctions extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+      case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
+        withPosition(f) {
+          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
+        }
     }
   }
 

@@ -199,6 +199,11 @@ private[sql] class HiveSessionCatalog(
     }
   }
 
+  // TODO Removes this method after implementing Spark native "histogram_numeric".
+  override def functionExists(name: FunctionIdentifier): Boolean = {
+    super.functionExists(name) || hiveFunctions.contains(name.funcName)
+  }
+
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
   // We have a list of Hive built-in functions that we do not support. So, we will check
   // Hive's function registry and lazily load needed functions into our own function registry.

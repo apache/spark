@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1194,6 +1194,27 @@ class SessionCatalogSuite extends PlanTest {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[NoSuchDatabaseException] {
       catalog.listFunctions("unknown_db", "func*")
+    }
+  }
+
+  test("SPARK-19737: detect undefined functions without triggering relation resolution") {
+    import org.apache.spark.sql.catalyst.dsl.plans._
+
+    Seq(true, false) foreach { caseSensitive =>
+      val conf = SimpleCatalystConf(caseSensitive)
+      val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
+      val analyzer = new Analyzer(catalog, conf)
+
+      // The analyzer should report the undefined function rather than the undefined table first.
+      val cause = intercept[AnalysisException] {
+        analyzer.execute(
+          UnresolvedRelation(TableIdentifier("undefined_table")).select(
+            UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+          )
+        )
+      }
+
+      assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
     }
   }
 }
