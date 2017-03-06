@@ -569,15 +569,11 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
     // we can collapse it with the child based on the type of shuffle and the specified number
     // of partitions.
-    case r @ Repartition(_, _, child: Repartition) =>
-      collapseRepartition(r, child)
-    case r @ Repartition(_, _, child: RepartitionByExpression) =>
+    case r @ Repartition(_, _, child: RepartitionOperation) =>
       collapseRepartition(r, child)
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
     // we can remove the child.
-    case r @ RepartitionByExpression(_, child: RepartitionByExpression, _) =>
-      r.copy(child = child.child)
-    case r @ RepartitionByExpression(_, child: Repartition, _) =>
+    case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
   }
 
@@ -590,10 +586,8 @@ object CollapseRepartition extends Rule[LogicalPlan] {
    */
   private def collapseRepartition(r: Repartition, child: RepartitionOperation): LogicalPlan = {
     (r.shuffle, child.shuffle) match {
-      case (false, true) => child match {
-        case c: Repartition => if (r.numPartitions >= c.numPartitions) c else r
-        case c: RepartitionByExpression => if (r.numPartitions >= c.numPartitions) c else r
-      }
+      case (false, true) =>
+        if (r.numPartitions >= child.numPartitions) child else r
       case _ => child match {
         case child: Repartition => child.copy(numPartitions = r.numPartitions, shuffle = r.shuffle)
         case child: RepartitionByExpression => child.copy(numPartitions = r.numPartitions)
