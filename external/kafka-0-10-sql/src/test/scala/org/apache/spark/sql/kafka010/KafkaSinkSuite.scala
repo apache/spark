@@ -53,44 +53,6 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  private val topicId = new AtomicInteger(0)
-
-  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
-
-  private def createKafkaReader(topic: String): DataFrame = {
-     spark.read
-      .format("kafka")
-      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-      .option("startingOffsets", "earliest")
-      .option("endingOffsets", "latest")
-      .option("subscribe", topic)
-      .load()
-  }
-
-  private def createKafkaWriter(
-      input: DataFrame,
-      withTopic: Option[String] = None,
-      withOutputMode: Option[OutputMode] = None,
-      withOptions: Option[Map[String, String]] = None)
-      (withSelectExpr: String*): StreamingQuery = {
-    var stream: DataStreamWriter[Row] = null
-    withTempDir { checkpointDir =>
-      var df = input.toDF()
-      if (withSelectExpr.length > 0) {
-        df = df.selectExpr(withSelectExpr: _*)
-      }
-      stream = df.writeStream
-        .format("kafka")
-        .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
-        .queryName("kafkaStream")
-      withTopic.foreach(stream.option("topic", _))
-      withOutputMode.foreach(stream.outputMode(_))
-      withOptions.map(_.foreach(opt => stream.option(opt._1, opt._2)))
-    }
-    stream.start()
-  }
-
   test("batch - write to kafka") {
     val topic = newTopic()
     testUtils.createTopic(topic)
@@ -100,7 +62,8 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
       .save()
-    checkAnswer(createKafkaReader(topic).selectExpr("CAST(value as STRING) value"),
+    checkAnswer(
+      createKafkaReader(topic).selectExpr("CAST(value as STRING) value"),
       Row("1") :: Row("2") :: Row("3") :: Row("4") :: Row("5") :: Nil)
   }
 
@@ -365,7 +328,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     ex = intercept[IllegalArgumentException] {
       writer = createKafkaWriter(
         input.toDF(),
-        withOptions = Some(Map("kafka.key.serializer" -> "foo")))()
+        withOptions = Map("kafka.key.serializer" -> "foo"))()
     }
     assert(ex.getMessage.toLowerCase.contains(
       "kafka option 'key.serializer' is not supported"))
@@ -373,7 +336,7 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     ex = intercept[IllegalArgumentException] {
       writer = createKafkaWriter(
         input.toDF(),
-        withOptions = Some(Map("kafka.value.serializer" -> "foo")))()
+        withOptions = Map("kafka.value.serializer" -> "foo"))()
     }
     assert(ex.getMessage.toLowerCase.contains(
       "kafka option 'value.serializer' is not supported"))
@@ -407,5 +370,43 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writeTask.close()
     }
+  }
+
+  private val topicId = new AtomicInteger(0)
+
+  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
+
+  private def createKafkaReader(topic: String): DataFrame = {
+    spark.read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("startingOffsets", "earliest")
+      .option("endingOffsets", "latest")
+      .option("subscribe", topic)
+      .load()
+  }
+
+  private def createKafkaWriter(
+      input: DataFrame,
+      withTopic: Option[String] = None,
+      withOutputMode: Option[OutputMode] = None,
+      withOptions: Map[String, String] = Map[String, String]())
+      (withSelectExpr: String*): StreamingQuery = {
+    var stream: DataStreamWriter[Row] = null
+    withTempDir { checkpointDir =>
+      var df = input.toDF()
+      if (withSelectExpr.length > 0) {
+        df = df.selectExpr(withSelectExpr: _*)
+      }
+      stream = df.writeStream
+        .format("kafka")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .queryName("kafkaStream")
+      withTopic.foreach(stream.option("topic", _))
+      withOutputMode.foreach(stream.outputMode(_))
+      withOptions.foreach(opt => stream.option(opt._1, opt._2))
+    }
+    stream.start()
   }
 }
