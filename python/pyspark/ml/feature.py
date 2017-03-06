@@ -357,7 +357,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               typeConverter=TypeConverters.toListFloat)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid",
-                          "how to handle invalid entries containing either NaN or null values. " +
+                          "how to handle invalid entries containing NaN values. " +
                           "Values outside the splits will always be treated as errors. " +
                           "Options are 'skip' (filter out rows with invalid values), " +
                           "'error' (throw an error), or 'keep' (keep invalid values in a special " +
