@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
@@ -42,10 +42,34 @@ case class InMemoryTableScanExec(
   override def output: Seq[Attribute] = attributes
 
   // The cached version does not change the outputPartitioning of the original SparkPlan.
-  override def outputPartitioning: Partitioning = relation.child.outputPartitioning
+  // But the cached version could alias output, so we need to replace output.
+  override def outputPartitioning: Partitioning = {
+    val attrMap = AttributeMap(
+      relation.child.output.zip(output)
+    )
+    relation.child.outputPartitioning match {
+      case HashPartitioning(expressions, numPartitions) =>
+        val newExprs = expressions.map(_.transform {
+          case attr: Attribute if attrMap.contains(attr) => attrMap.get(attr).get
+        })
+        HashPartitioning(newExprs, numPartitions)
+      case _ => relation.child.outputPartitioning
+    }
+  }
 
   // The cached version does not change the outputOrdering of the original SparkPlan.
-  override def outputOrdering: Seq[SortOrder] = relation.child.outputOrdering
+  // But the cached version could alias output, so we need to replace output.
+  override def outputOrdering: Seq[SortOrder] = {
+    val attrMap = AttributeMap(
+      relation.child.output.zip(output)
+    )
+    relation.child.outputOrdering.map { sortOrder =>
+      val newSortExpr = sortOrder.child.transform {
+        case attr: Attribute if attrMap.contains(attr) => attrMap.get(attr).get
+      }
+      SortOrder(newSortExpr, sortOrder.direction, sortOrder.nullOrdering)
+    }
+  }
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
 

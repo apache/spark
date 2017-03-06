@@ -23,11 +23,13 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
@@ -1135,6 +1137,45 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
+  }
+
+  test("No unnecessary shuffles and sort when datasets are well partitioned and sorted") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      val ds1 = Seq((0, 0), (1, 1)).toDS
+        .repartition(col("_1")).sortWithinPartitions(col("_1")).persist(StorageLevel.DISK_ONLY)
+      val ds2 = Seq((0, 0), (1, 1)).toDS
+        .repartition(col("_1")).sortWithinPartitions(col("_1")).persist(StorageLevel.DISK_ONLY)
+      val joined = ds1.joinWith(ds2, ds1("_1") === ds2("_1"))
+
+      checkAnswer(
+        joined.toDF(),
+        Row(Row(0, 0), Row(0, 0)) :: Row(Row(1, 1), Row(1, 1)) :: Nil)
+
+      val shuffles = joined.queryExecution.executedPlan.collect {
+        case s: ShuffleExchange => s
+      }
+      val sorts = joined.queryExecution.executedPlan.collect {
+        case s: SortExec => s
+      }
+      assert(shuffles.length == 0)
+      assert(sorts.length == 0)
+
+      val memoryRelations = joined.queryExecution.executedPlan.collect {
+        case mem: InMemoryTableScanExec => mem.relation.child
+      }
+      val shufflesInCached = memoryRelations.flatMap { plan =>
+        plan.collect {
+          case s: ShuffleExchange => s
+        }
+      }
+      val sortsInCached = memoryRelations.flatMap { plan =>
+        plan.collect {
+          case s: SortExec => s
+        }
+      }
+      assert(shufflesInCached.length == 2)
+      assert(sortsInCached.length == 2)
+    }
   }
 }
 

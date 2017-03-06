@@ -33,13 +33,19 @@ package org.apache.spark.sql.catalyst.expressions
  */
 object Canonicalize extends {
   def execute(e: Expression): Expression = {
-    expressionReorder(ignoreNamesTypes(e))
+    expressionReorder(ignoreParameters(ignoreNamesTypes(e)))
   }
 
   /** Remove names and nullability from types. */
   private[expressions] def ignoreNamesTypes(e: Expression): Expression = e match {
     case a: AttributeReference =>
       AttributeReference("none", a.dataType.asNullable)(exprId = a.exprId)
+    case _ => e
+  }
+
+  /** Remove some unnecessary parameters. */
+  private[expressions] def ignoreParameters(e: Expression): Expression = e match {
+    case GetStructField(child, ordinal, _) => GetStructField(child, ordinal, None)
     case _ => e
   }
 
