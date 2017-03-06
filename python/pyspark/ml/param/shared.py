@@ -696,3 +696,55 @@ class DecisionTreeParams(Params):
         """
         return self.getOrDefault(self.cacheNodeIds)
 
+
+class HasSupport(Params):
+    """
+    Mixin for param support: [0.0, 1.0].
+    """
+
+    minSupport = Param(
+        Params._dummy(),
+        "minSupport",
+        "Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears more "
+        "than (minSupport * size-of-the-dataset) times will be output",
+        typeConverter=TypeConverters.toFloat)
+
+    def setMinSupport(self, value):
+        """
+        Sets the value of :py:attr:`minSupport`.
+        """
+        if not 0 <= value <= 1:
+            ValueError("Support must be in range [0, 1]")
+        return self._set(minSupport=value)
+
+    def getMinSupport(self):
+        """
+        Gets the value of minSupport or its default value.
+        """
+        return self.getOrDefault(self.minSupport)
+
+
+class HasConfidence(Params):
+    """
+    Mixin for param confidence: [0.0, 1.0].
+    """
+
+    minConfidence = Param(
+        Params._dummy(),
+        "minConfidence",
+        "Minimal confidence for generating Association Rule. [0.0, 1.0]",
+        typeConverter=TypeConverters.toFloat)
+
+    def setMinConfidence(self, value):
+        """
+        Sets the value of :py:attr:`minConfidence`.
+        """
+        if not 0 <= value <= 1:
+            ValueError("Confidence must be in range [0, 1]")
+        return self._set(minConfidence=value)
+
+    def getMinConfidence(self):
+        """
+        Gets the value of minConfidence or its default value.
+        """
+        return self.getOrDefault(self.minConfidence)

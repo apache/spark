@@ -60,6 +60,7 @@ from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
 from pyspark.ml.tuning import *
+from pyspark.ml.fpm import FPGrowth, FPGrowthModel
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.serializers import PickleSerializer
@@ -1241,6 +1242,45 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         model2 = glr.setLinkPower(-1.0).fit(df)
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
+
+
+class FPGrowthTests(SparkSessionTestCase):
+    def setUp(self):
+        self.shuffle_partitions = self.spark.conf.get("spark.sql.shuffle.partitions")
+        self.spark.conf.set("spark.sql.shuffle.partitions", "1")
+        self.data = self.spark.createDataFrame(
+            [([1, 2], ), ([1, 2], ), ([1, 2, 3], ), ([1, 3], )],
+            ["features"])
+
+    def test_association_rules(self):
+        fp = FPGrowth()
+        fpm = fp.fit(self.data)
+
+        expected_association_rules = self.spark.createDataFrame(
+            [([3], [1], 1.0), ([2], [1], 1.0)],
+            ["antecedent", "consequent", "confidence"]
+        )
+        actual_association_rules = fpm.associationRules
+
+        self.assertEqual(actual_association_rules.subtract(expected_association_rules).count(), 0)
+        self.assertEqual(expected_association_rules.subtract(actual_association_rules).count(), 0)
+
+    def test_freq_itemsets(self):
+        fp = FPGrowth()
+        fpm = fp.fit(self.data)
+
+        expected_freq_itemsets = self.spark.createDataFrame(
+            [([1], 4), ([2], 3), ([2, 1], 3), ([3], 2), ([3, 1], 2)],
+            ["items", "freq"]
+        )
+        actual_freq_itemsets = fpm.freqItemsets
+
+        self.assertEqual(actual_freq_itemsets.subtract(expected_freq_itemsets).count(), 0)
+        self.assertEqual(expected_freq_itemsets.subtract(actual_freq_itemsets).count(), 0)
+
+    def tearDown(self):
+        self.spark.conf.set("spark.sql.shuffle.partitions", self.shuffle_partitions)
+        del self.data
 
 
 class ALSTest(SparkSessionTestCase):
