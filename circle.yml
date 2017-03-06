@@ -56,10 +56,7 @@ test:
             dist_version="${version}-${dist_name}"
             file_name="spark-dist-${dist_version}.tgz"
             ./dev/make-distribution.sh --name $dist_name --tgz $build_flags
-            md5sum assembly/pom.xml | cut -d' ' -f 1 > assembly/pom.xml.md5
             curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/spark-dist/${dist_version}/${file_name}"
-            curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T assembly/pom.xml "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/spark-dist/${dist_version}/spark-dist-${dist_version}.pom"
-            curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T assembly/pom.xml.md5 "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/spark-dist/${dist_version}/spark-dist-${dist_version}.pom.md5"
           }
 
           case $CIRCLE_NODE_INDEX in
