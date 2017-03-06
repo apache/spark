@@ -35,6 +35,9 @@ trait ParserInterface {
   /** Creates TableIdentifier for a given SQL string. */
   def parseTableIdentifier(sqlText: String): TableIdentifier
 
-  /** Creates StructType for a given SQL string. */
+  /**
+   * Creates StructType for a given SQL string, which is a comma separated list of field
+   * definitions which will preserve the correct Hive metadata.
+   */
   def parseTableSchema(sqlText: String): StructType
 }

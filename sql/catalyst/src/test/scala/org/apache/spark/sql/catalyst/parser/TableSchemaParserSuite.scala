@@ -30,20 +30,22 @@ class TableSchemaParserSuite extends SparkFunSuite {
     }
   }
 
-  checkTableSchema("a int", (new StructType).add("a", "int"))
-  checkTableSchema("A int", (new StructType).add("A", "int"))
-  checkTableSchema("a INT", (new StructType).add("a", "int"))
-  checkTableSchema("`!@#$%.^&*()` string", (new StructType).add("!@#$%.^&*()", "string"))
-  checkTableSchema("a int, b long", (new StructType).add("a", "int").add("b", "long"))
+  def intercept(sql: String): Unit =
+    intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
+
+  checkTableSchema("a int", new StructType().add("a", "int"))
+  checkTableSchema("A int", new StructType().add("A", "int"))
+  checkTableSchema("a INT", new StructType().add("a", "int"))
+  checkTableSchema("`!@#$%.^&*()` string", new StructType().add("!@#$%.^&*()", "string"))
+  checkTableSchema("a int, b long", new StructType().add("a", "int").add("b", "long"))
   checkTableSchema("a STRUCT<intType: int, ts:timestamp>",
     StructType(
       StructField("a", StructType(
         StructField("intType", IntegerType) ::
         StructField("ts", TimestampType) :: Nil)) :: Nil))
-
   checkTableSchema(
     "a int comment 'test'",
-    (new StructType).add("a", "int", nullable = true, "test"))
+    new StructType().add("a", "int", nullable = true, "test"))
 
   test("complex hive type") {
     val tableSchemaString =
@@ -76,10 +78,8 @@ class TableSchemaParserSuite extends SparkFunSuite {
     assert(parse(tableSchemaString) === expectedDataType)
   }
 
-  test("illegal col types") {
-    val e = intercept[ParseException] {
-      CatalystSqlParser.parseTableSchema("a INT b long")
-    }.getMessage
-    assert(e.contains("mismatched input 'b' expecting {<EOF>, '(', ',', 'COMMENT'}"))
-  }
+  // Negative cases
+  intercept("a INT b long")
+  intercept("a INT,, b long")
+  intercept("a INT, b long,,")
 }

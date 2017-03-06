@@ -49,7 +49,10 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
   }
 
-  /** Creates StructType for a given SQL string. */
+  /**
+   * Creates StructType for a given SQL string, which is a comma separated list of field
+   * definitions which will preserve the correct Hive metadata.
+   */
   override def parseTableSchema(sqlText: String): StructType = parse(sqlText) { parser =>
     astBuilder.createSchema(parser.colTypeList())
   }
