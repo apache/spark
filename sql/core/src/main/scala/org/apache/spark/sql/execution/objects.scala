@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import com.sun.org.apache.xalan.internal.xsltc.compiler.util.VoidType
-
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
