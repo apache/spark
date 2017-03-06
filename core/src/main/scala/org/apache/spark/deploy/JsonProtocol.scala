@@ -44,7 +44,7 @@ private[deploy] object JsonProtocol {
     ("starttime" -> obj.startTime) ~
     ("id" -> obj.id) ~
     ("name" -> obj.desc.name) ~
-    ("cores" -> obj.desc.maxCores) ~
+    ("cores" -> obj.coresGranted) ~
     ("user" -> obj.desc.user) ~
     ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
     ("submitdate" -> obj.submitDate.toString) ~
