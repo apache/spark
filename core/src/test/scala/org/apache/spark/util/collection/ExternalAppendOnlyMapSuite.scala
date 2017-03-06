@@ -283,6 +283,17 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
   }
 
+  test("ExternalAppendOnlyMap shouldn't fail when forced to spill before calling its iterator") {
+    val size = 1000
+    val conf = createSparkConf(loadDefaults = true)
+    conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    val map = createExternalMap[String]
+    val consumer = createExternalMap[String]
+    map.insertAll((1 to size).iterator.map(_.toString).map(i => (i, i)))
+    assert(map.spill(10000, consumer) == 0L)
+  }
+
   test("spilling with hash collisions") {
     val size = 1000
     val conf = createSparkConf(loadDefaults = true)

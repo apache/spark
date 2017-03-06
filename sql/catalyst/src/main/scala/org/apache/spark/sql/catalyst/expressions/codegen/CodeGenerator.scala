@@ -23,14 +23,15 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
-import scala.language.existentials
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -555,7 +556,6 @@ class CodegenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
-      INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -566,7 +566,6 @@ class CodegenContext {
             if (a instanceof UnsafeRow && b instanceof UnsafeRow && a.equals(b)) {
               return 0;
             }
-            InternalRow i = null;
             $comparisons
             return 0;
           }
@@ -726,7 +725,7 @@ class CodegenContext {
     val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
-    expressions.foreach(equivalentExpressions.addExprTree(_, true, false))
+    expressions.foreach(equivalentExpressions.addExprTree)
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
@@ -734,10 +733,10 @@ class CodegenContext {
     val codes = commonExprs.map { e =>
       val expr = e.head
       // Generate the code for this expression tree.
-      val code = expr.genCode(this)
-      val state = SubExprEliminationState(code.isNull, code.value)
+      val eval = expr.genCode(this)
+      val state = SubExprEliminationState(eval.isNull, eval.value)
       e.foreach(subExprEliminationExprs.put(_, state))
-      code.code.trim
+      eval.code.trim
     }
     SubExprCodes(codes, subExprEliminationExprs.toMap)
   }
@@ -747,7 +746,7 @@ class CodegenContext {
    * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]) = {
+  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
@@ -761,13 +760,13 @@ class CodegenContext {
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
-      val code = expr.genCode(this)
+      val eval = expr.genCode(this)
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
-           |  ${code.code.trim}
-           |  $isNull = ${code.isNull};
-           |  $value = ${code.value};
+           |  ${eval.code.trim}
+           |  $isNull = ${eval.isNull};
+           |  $value = ${eval.value};
            |}
            """.stripMargin
 
@@ -780,9 +779,6 @@ class CodegenContext {
       // The cost of doing subexpression elimination is:
       //   1. Extra function call, although this is probably *good* as the JIT can decide to
       //      inline or not.
-      //   2. Extra branch to check isLoaded. This branch is likely to be predicted correctly
-      //      very often. The reason it is not loaded is because of a prior branch.
-      //   3. Extra store into isLoaded.
       // The benefit doing subexpression elimination is:
       //   1. Running the expression logic. Even for a simple expression, it is likely more than 3
       //      above.
@@ -936,7 +932,10 @@ object CodeGenerator extends Logging {
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
       classOf[UnsafeMapData].getName,
-      classOf[Expression].getName
+      classOf[Expression].getName,
+      classOf[TaskContext].getName,
+      classOf[TaskKilledException].getName,
+      classOf[InputMetrics].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 

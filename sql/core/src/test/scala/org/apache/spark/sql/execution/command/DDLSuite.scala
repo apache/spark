@@ -71,7 +71,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
-      provider = Some("hive"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
       tracksPartitionsInCatalog = true)
@@ -86,67 +86,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
         sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
         Row("a", "int", "test")
       )
-    }
-  }
-
-  test("select/insert into the managed table") {
-    val tabName = "tbl"
-    withTable(tabName) {
-      sql(s"CREATE TABLE $tabName (i INT, j STRING)")
-      val catalogTable =
-        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-      assert(catalogTable.tableType == CatalogTableType.MANAGED)
-
-      var message = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
-      }.getMessage
-      assert(message.contains("Hive support is required to insert into the following tables"))
-      message = intercept[AnalysisException] {
-        sql(s"SELECT * FROM $tabName")
-      }.getMessage
-      assert(message.contains("Hive support is required to select over the following tables"))
-    }
-  }
-
-  test("select/insert into external table") {
-    withTempDir { tempDir =>
-      val tabName = "tbl"
-      withTable(tabName) {
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
-             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-             |LOCATION '$tempDir'
-           """.stripMargin)
-        val catalogTable =
-          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-        assert(catalogTable.tableType == CatalogTableType.EXTERNAL)
-
-        var message = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
-        }.getMessage
-        assert(message.contains("Hive support is required to insert into the following tables"))
-        message = intercept[AnalysisException] {
-          sql(s"SELECT * FROM $tabName")
-        }.getMessage
-        assert(message.contains("Hive support is required to select over the following tables"))
-      }
-    }
-  }
-
-  test("Create Hive Table As Select") {
-    import testImplicits._
-    withTable("t", "t1") {
-      var e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
-      }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
-
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
-      e = intercept[AnalysisException] {
-        sql("CREATE TABLE t SELECT a, b from t1")
-      }.getMessage
-      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
     }
   }
 
@@ -189,6 +128,52 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
   test("drop table - data source table") {
     testDropTable(isDatasourceTable = true)
   }
+
+  test("create a managed Hive source table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    val tabName = "tbl"
+    withTable(tabName) {
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $tabName (i INT, j STRING)")
+      }.getMessage
+      assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+    }
+  }
+
+  test("create an external Hive source table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    withTempDir { tempDir =>
+      val tabName = "tbl"
+      withTable(tabName) {
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+               |LOCATION '${tempDir.toURI}'
+             """.stripMargin)
+        }.getMessage
+        assert(e.contains("Hive support is required to CREATE Hive TABLE"))
+      }
+    }
+  }
+
+  test("Create Hive Table As Select") {
+    import testImplicits._
+    withTable("t", "t1") {
+      var e = intercept[AnalysisException] {
+        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
+      }.getMessage
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
+
+      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      e = intercept[AnalysisException] {
+        sql("CREATE TABLE t SELECT a, b from t1")
+      }.getMessage
+      assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
+    }
+  }
+
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -883,11 +868,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testUnsetProperties(isDatasourceTable = false)
   }
 
-  test("alter table: set serde") {
+  // TODO: move this test to HiveDDLSuite.scala
+  ignore("alter table: set serde") {
     testSetSerde(isDatasourceTable = false)
   }
 
-  test("alter table: set serde partition") {
+  // TODO: move this test to HiveDDLSuite.scala
+  ignore("alter table: set serde partition") {
     testSetSerdePartition(isDatasourceTable = false)
   }
 
@@ -1003,24 +990,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTempView("show1a", "show2b") {
       sql(
         """
-          |CREATE TEMPORARY TABLE show1a
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |
-          |)
+         |CREATE TEMPORARY VIEW show1a
+         |USING org.apache.spark.sql.sources.DDLScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10',
+         |  Table 'test1'
+         |
+         |)
         """.stripMargin)
       sql(
         """
-          |CREATE TEMPORARY TABLE show2b
-          |USING org.apache.spark.sql.sources.DDLScanSource
-          |OPTIONS (
-          |  From '1',
-          |  To '10',
-          |  Table 'test1'
-          |)
+         |CREATE TEMPORARY VIEW show2b
+         |USING org.apache.spark.sql.sources.DDLScanSource
+         |OPTIONS (
+         |  From '1',
+         |  To '10',
+         |  Table 'test1'
+         |)
         """.stripMargin)
       assert(
         sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
@@ -1058,20 +1045,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       Nil)
   }
 
-  test("drop table - temporary table") {
+  test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
       """
-        |CREATE TEMPORARY TABLE tab1
-        |USING org.apache.spark.sql.sources.DDLScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10',
-        |  Table 'test1'
-        |)
+       |CREATE TEMPORARY VIEW tab1
+       |USING org.apache.spark.sql.sources.DDLScanSource
+       |OPTIONS (
+       |  From '1',
+       |  To '10',
+       |  Table 'test1'
+       |)
       """.stripMargin)
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
-    sql("DROP TABLE tab1")
+    sql("DROP VIEW tab1")
     assert(catalog.listTables("default") == Nil)
   }
 
@@ -1614,6 +1601,21 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     )
   }
 
+  test("create a data source table without schema") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withTable("tab1", "tab2") {
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
+
+        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
+        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
+
+        sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
+        checkAnswer(spark.table("tab2"), Row("a", "b"))
+      }
+    }
+  }
+
   test("create table using CLUSTERED BY without schema specification") {
     import testImplicits._
     withTempPath { tempDir =>
@@ -1654,7 +1656,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     sql("USE temp")
     sql("DROP DATABASE temp")
     val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t (a INT, b INT)")
+        sql("CREATE TABLE t (a INT, b INT) USING parquet")
       }.getMessage
     assert(e.contains("Database 'temp' not found"))
   }
@@ -1763,22 +1765,39 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("block creating duplicate temp table") {
+    withView("t_temp") {
+      sql("CREATE TEMPORARY VIEW t_temp AS SELECT 1, 2")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CREATE TEMPORARY TABLE t_temp (c3 int, c4 string) USING JSON")
+      }.getMessage
+      assert(e.contains("Temporary table 't_temp' already exists"))
+    }
+  }
+
   test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
-    val path = Utils.createTempDir().getAbsolutePath
-    (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-    sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
-    sql(s"CREATE VIEW my_view AS SELECT 1")
-    intercept[NoSuchTableException] {
-      sql("TRUNCATE TABLE my_temp_tab")
+    withTempPath { tempDir =>
+      withTable("my_ext_tab") {
+        (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
+        (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
+        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
+        sql(s"CREATE VIEW my_view AS SELECT 1")
+        intercept[NoSuchTableException] {
+          sql("TRUNCATE TABLE my_temp_tab")
+        }
+        assertUnsupported("TRUNCATE TABLE my_ext_tab")
+        assertUnsupported("TRUNCATE TABLE my_view")
+      }
     }
-    assertUnsupported("TRUNCATE TABLE my_ext_tab")
-    assertUnsupported("TRUNCATE TABLE my_view")
   }
 
   test("truncate table - non-partitioned table (not allowed)") {
-    sql("CREATE TABLE my_tab (age INT, name STRING)")
-    assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+    withTable("my_tab") {
+      sql("CREATE TABLE my_tab (age INT, name STRING) using parquet")
+      sql("INSERT INTO my_tab values (10, 'a')")
+      assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+    }
   }
 
   test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
@@ -1870,7 +1889,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val defaultTablePath = spark.sessionState.catalog
           .getTableMetadata(TableIdentifier("tbl")).storage.locationUri.get
 
-        sql(s"ALTER TABLE tbl SET LOCATION '${dir.getCanonicalPath}'")
+        sql(s"ALTER TABLE tbl SET LOCATION '${dir.toURI}'")
         spark.catalog.refreshTable("tbl")
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
@@ -1885,6 +1904,170 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("DROP TABLE tbl")
         // the new table path will be removed after DROP TABLE.
         assert(!dir.exists())
+      }
+    }
+  }
+
+  test("insert data to a data source table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        dir.delete
+        val tableLocFile = new File(table.location)
+        assert(!tableLocFile.exists)
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        Utils.deleteRecursively(dir)
+        assert(!tableLocFile.exists)
+        spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
+        assert(tableLocFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI.toString
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+        spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists)
+
+        spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
+        assert(newDirFile.exists)
+        checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
+      }
+    }
+  }
+
+  test("insert into a data source table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        val partLoc = new File(s"${dir.getAbsolutePath}/a=1")
+        Utils.deleteRecursively(partLoc)
+        assert(!partLoc.exists())
+        // insert overwrite into a partition which location has been deleted.
+        spark.sql("INSERT OVERWRITE TABLE t PARTITION(a=1, b=2) SELECT 7, 8")
+        assert(partLoc.exists())
+        checkAnswer(spark.table("t"), Row(7, 8, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table which has a not existed location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string, b int)
+             |USING parquet
+             |OPTIONS(path "$dir")
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == dir.getAbsolutePath)
+
+        dir.delete()
+        checkAnswer(spark.table("t"), Nil)
+
+        val newDirFile = new File(dir, "x")
+        val newDir = newDirFile.toURI.toString
+        spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
+
+        val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table1.location == newDir)
+        assert(!newDirFile.exists())
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("read data from a data source table with no existed partition location should succeed") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a int, b int, c int, d int)
+             |USING parquet
+             |PARTITIONED BY(a, b)
+             |LOCATION "$dir"
+           """.stripMargin)
+        spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
+        checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
+
+        // select from a partition which location has been deleted.
+        Utils.deleteRecursively(dir)
+        assert(!dir.exists())
+        spark.sql("REFRESH TABLE t")
+        checkAnswer(spark.sql("select * from t where a=1 and b=2"), Nil)
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existent" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == dir.getAbsolutePath)
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location == dir.getAbsolutePath)
+
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
       }
     }
   }

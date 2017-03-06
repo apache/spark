@@ -411,4 +411,15 @@ class PartitionedTablePerfStatsSuite
       }
     }
   }
+
+  test("resolveRelation for a FileFormat DataSource without userSchema scan filesystem only once") {
+    withTempDir { dir =>
+      import spark.implicits._
+      Seq(1).toDF("a").write.mode("overwrite").save(dir.getAbsolutePath)
+      HiveCatalogMetrics.reset()
+      spark.read.parquet(dir.getAbsolutePath)
+      assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
+      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 1)
+    }
+  }
 }

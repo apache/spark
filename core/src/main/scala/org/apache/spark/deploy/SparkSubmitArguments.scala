@@ -84,9 +84,15 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     // scalastyle:off println
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
     Option(propertiesFile).foreach { filename =>
-      Utils.getPropertiesFromFile(filename).foreach { case (k, v) =>
+      val properties = Utils.getPropertiesFromFile(filename)
+      properties.foreach { case (k, v) =>
         defaultProperties(k) = v
-        if (verbose) SparkSubmit.printStream.println(s"Adding default property: $k=$v")
+      }
+      // Property files may contain sensitive information, so redact before printing
+      if (verbose) {
+        Utils.redact(properties).foreach { case (k, v) =>
+          SparkSubmit.printStream.println(s"Adding default property: $k=$v")
+        }
       }
     }
     // scalastyle:on println
@@ -318,7 +324,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |
     |Spark properties used, including those specified through
     | --conf and those from the properties file $propertiesFile:
-    |${sparkProperties.mkString("  ", "\n  ", "\n")}
+    |${Utils.redact(sparkProperties).mkString("  ", "\n  ", "\n")}
     """.stripMargin
   }
 
@@ -506,7 +512,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
-        |                              directory of each executor.
+        |                              directory of each executor. File paths of these files
+        |                              in executors can be accessed via SparkFiles.get(fileName).
         |
         |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not

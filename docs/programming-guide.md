@@ -54,12 +54,12 @@ import org.apache.spark.SparkConf
 
 <div data-lang="java"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Java 7 and higher. If you are using Java 8, Spark supports
+Spark {{site.SPARK_VERSION}} supports
 [lambda expressions](http://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html)
 for concisely writing functions, otherwise you can use the classes in the
 [org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
 
-Note that support for Java 7 is deprecated as of Spark 2.0.0 and may be removed in Spark 2.2.0.
+Note that support for Java 7 was removed in Spark 2.2.0.
 
 To write a Spark application in Java, you need to add a dependency on Spark. Spark is available through Maven Central at:
 
@@ -185,7 +185,7 @@ In the Spark shell, a special interpreter-aware SparkContext is already created 
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add JARs to the classpath
 by passing a comma-separated list to the `--jars` argument. You can also add dependencies
-(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. For example, to run `bin/spark-shell` on exactly
 four cores, use:
@@ -200,7 +200,7 @@ Or, to also add `code.jar` to its classpath, use:
 $ ./bin/spark-shell --master local[4] --jars code.jar
 {% endhighlight %}
 
-To include a dependency using maven coordinates:
+To include a dependency using Maven coordinates:
 
 {% highlight bash %}
 $ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
@@ -217,7 +217,7 @@ In the PySpark shell, a special interpreter-aware SparkContext is already create
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
 to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
-(e.g. Spark Packages) to your shell session by supplying a comma-separated list of maven coordinates
+(e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
 can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
 the requirements.txt of that package) must be manually installed using `pip` when necessary.
@@ -294,11 +294,6 @@ JavaRDD<Integer> distData = sc.parallelize(data);
 
 Once created, the distributed dataset (`distData`) can be operated on in parallel. For example, we might call `distData.reduce((a, b) -> a + b)` to add up the elements of the list.
 We describe operations on distributed datasets later on.
-
-**Note:** *In this guide, we'll often use the concise Java 8 lambda syntax to specify Java functions, but
-in older versions of Java you can implement the interfaces in the
-[org.apache.spark.api.java.function](api/java/index.html?org/apache/spark/api/java/function/package-summary.html) package.
-We describe [passing functions to Spark](#passing-functions-to-spark) in more detail below.*
 
 </div>
 
@@ -658,7 +653,7 @@ There are two ways to create such functions:
 
 * Implement the Function interfaces in your own class, either as an anonymous inner class or a named one,
   and pass an instance of it to Spark.
-* In Java 8, use [lambda expressions](http://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html)
+* Use [lambda expressions](http://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html)
   to concisely define an implementation.
 
 While much of this guide uses lambda syntax for conciseness, it is easy to use all the same APIs

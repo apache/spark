@@ -47,8 +47,8 @@ object LocalTempView extends ViewType
 /**
  * GlobalTempView means cross-session global temporary views. Its lifetime is the lifetime of the
  * Spark application, i.e. it will be automatically dropped when the application terminates. It's
- * tied to a system preserved database `_global_temp`, and we must use the qualified name to refer a
- * global temp view, e.g. SELECT * FROM _global_temp.view1.
+ * tied to a system preserved database `global_temp`, and we must use the qualified name to refer a
+ * global temp view, e.g. SELECT * FROM global_temp.view1.
  */
 object GlobalTempView extends ViewType
 
@@ -235,7 +235,6 @@ case class CreateViewCommand(
       storage = CatalogStorageFormat.empty,
       schema = aliasPlan(session, analyzedPlan).schema,
       properties = newProperties,
-      viewOriginalText = originalText,
       viewText = originalText,
       comment = comment
     )
@@ -289,7 +288,6 @@ case class AlterViewAsCommand(
     val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
       properties = newProperties,
-      viewOriginalText = Some(originalText),
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)

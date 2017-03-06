@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.stat._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
@@ -57,12 +58,13 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @param probabilities a list of quantile probabilities
    *   Each number must belong to [0, 1].
    *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError The relative target precision to achieve (greater or equal to 0).
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities
    *
-   * @note NaN values will be removed from the numerical column before calculation
+   * @note null and NaN values will be removed from the numerical column before calculation. If
+   *   the dataframe is empty or all rows contain null or NaN, null is returned.
    *
    * @since 2.0.0
    */
@@ -70,18 +72,51 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       col: String,
       probabilities: Array[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df.select(col).na.drop(),
-      Seq(col), probabilities, relativeError).head.toArray
+    val res = approxQuantile(Array(col), probabilities, relativeError)
+    Option(res).map(_.head).orNull
   }
+
+  /**
+   * Calculates the approximate quantiles of numerical columns of a DataFrame.
+   * @see `approxQuantile(col:Str* approxQuantile)` for detailed description.
+   *
+   * @param cols the names of the numerical columns
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (greater than or equal to 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities of each column
+   *
+   * @note Rows containing any null or NaN values will be removed before calculation. If
+   *   the dataframe is empty or all rows contain null or NaN, null is returned.
+   *
+   * @since 2.2.0
+   */
+  def approxQuantile(
+      cols: Array[String],
+      probabilities: Array[Double],
+      relativeError: Double): Array[Array[Double]] = {
+    // TODO: Update NaN/null handling to keep consistent with the single-column version
+    try {
+      StatFunctions.multipleApproxQuantiles(df.select(cols.map(col): _*).na.drop(), cols,
+        probabilities, relativeError).map(_.toArray).toArray
+    } catch {
+      case e: NoSuchElementException => null
+    }
+  }
+
 
   /**
    * Python-friendly version of [[approxQuantile()]]
    */
   private[spark] def approxQuantile(
-      col: String,
+      cols: List[String],
       probabilities: List[Double],
-      relativeError: Double): java.util.List[Double] = {
-    approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+      relativeError: Double): java.util.List[java.util.List[Double]] = {
+    approxQuantile(cols.toArray, probabilities.toArray, relativeError)
+      .map(_.toList.asJava).toList.asJava
   }
 
   /**
@@ -152,7 +187,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The number of distinct values for each column should be less than 1e4. At most 1e6 non-zero
    * pair frequencies will be returned.
    * The first column of each row will be the distinct values of `col1` and the column names will
-   * be the distinct values of `col2`. The name of the first column will be `$col1_$col2`. Counts
+   * be the distinct values of `col2`. The name of the first column will be `col1_col2`. Counts
    * will be returned as `Long`s. Pairs that have no occurrences will have zero as their counts.
    * Null elements will be replaced by "null", and back ticks will be dropped from elements if they
    * exist.

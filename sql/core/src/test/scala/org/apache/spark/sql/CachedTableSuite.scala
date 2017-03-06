@@ -39,6 +39,8 @@ private case class BigData(s: String)
 class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
   import testImplicits._
 
+  setupTestData()
+
   override def afterEach(): Unit = {
     try {
       spark.catalog.clearCache()
@@ -185,9 +187,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"))
 
     assertResult(1, "InMemoryRelation not found, testData should have been cached") {
-      spark.table("testData").queryExecution.withCachedData.collect {
-        case r: InMemoryRelation => r
-      }.size
+      getNumInMemoryRelations(spark.table("testData").queryExecution.withCachedData)
     }
 
     spark.catalog.cacheTable("testData")
@@ -580,10 +580,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     localRelation.createOrReplaceTempView("localRelation")
 
     spark.catalog.cacheTable("localRelation")
-    assert(
-      localRelation.queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i
-      }.size == 1)
+    assert(getNumInMemoryRelations(localRelation.queryExecution.withCachedData) == 1)
   }
 
   test("SPARK-19093 Caching in side subquery") {
@@ -635,6 +632,22 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
             |c1 IN (SELECT c1 FROM t4)
           """.stripMargin).queryExecution.optimizedPlan
       assert(getNumInMemoryRelations(cachedPlan2) == 4)
+    }
+  }
+
+  test("refreshByPath should refresh all cached plans with the specified path") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath()
+
+      spark.range(10).write.mode("overwrite").parquet(path)
+      spark.read.parquet(path).cache()
+      spark.read.parquet(path).filter($"id" > 4).cache()
+      assert(spark.read.parquet(path).filter($"id" > 4).count() == 5)
+
+      spark.range(20).write.mode("overwrite").parquet(path)
+      spark.catalog.refreshByPath(path)
+      assert(spark.read.parquet(path).count() == 20)
+      assert(spark.read.parquet(path).filter($"id" > 4).count() == 15)
     }
   }
 }
