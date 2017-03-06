@@ -350,9 +350,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private def warnDeprecatedVersions(): Unit = {
     val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
-    if (javaVersion.length >= 2 && javaVersion(1).toInt == 7) {
-      logWarning("Support for Java 7 is deprecated as of Spark 2.0.0")
-    }
     if (scala.util.Properties.releaseVersion.exists(_.startsWith("2.10"))) {
       logWarning("Support for Scala 2.10 is deprecated as of Spark 2.1.0")
     }
@@ -608,7 +605,7 @@ class SparkContext(config: SparkConf) extends Logging {
         Some(Utils.getThreadDump())
       } else {
         val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
-        Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
+        Some(endpointRef.askSync[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -964,12 +961,11 @@ class SparkContext(config: SparkConf) extends Logging {
       classOf[LongWritable],
       classOf[BytesWritable],
       conf = conf)
-    val data = br.map { case (k, v) =>
-      val bytes = v.getBytes
+    br.map { case (k, v) =>
+      val bytes = v.copyBytes()
       assert(bytes.length == recordLength, "Byte array does not have correct length")
       bytes
     }
-    data
   }
 
   /**
@@ -1819,10 +1815,18 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null | "file" =>
             try {
+              val file = new File(uri.getPath)
+              if (!file.exists()) {
+                throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
+              }
+              if (file.isDirectory) {
+                throw new IllegalArgumentException(
+                  s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
+              }
               env.rpcEnv.fileServer.addJar(new File(uri.getPath))
             } catch {
-              case exc: FileNotFoundException =>
-                logError(s"Jar not found at $path")
+              case NonFatal(e) =>
+                logError(s"Failed to add $path to Spark environment", e)
                 null
             }
           // A JAR file which exists locally on every worker node
@@ -2207,10 +2211,32 @@ class SparkContext(config: SparkConf) extends Logging {
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
+   * @param reason optional reason for cancellation
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
-  def cancelJob(jobId: Int) {
-    dagScheduler.cancelJob(jobId)
+  def cancelJob(jobId: Int, reason: String): Unit = {
+    dagScheduler.cancelJob(jobId, Option(reason))
+  }
+
+  /**
+   * Cancel a given job if it's scheduled or running.
+   *
+   * @param jobId the job ID to cancel
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   */
+  def cancelJob(jobId: Int): Unit = {
+    dagScheduler.cancelJob(jobId, None)
+  }
+
+  /**
+   * Cancel a given stage and all jobs associated with it.
+   *
+   * @param stageId the stage ID to cancel
+   * @param reason reason for cancellation
+   * @note Throws `InterruptedException` if the cancel message cannot be sent
+   */
+  def cancelStage(stageId: Int, reason: String): Unit = {
+    dagScheduler.cancelStage(stageId, Option(reason))
   }
 
   /**
@@ -2219,8 +2245,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param stageId the stage ID to cancel
    * @note Throws `InterruptedException` if the cancel message cannot be sent
    */
-  def cancelStage(stageId: Int) {
-    dagScheduler.cancelStage(stageId)
+  def cancelStage(stageId: Int): Unit = {
+    dagScheduler.cancelStage(stageId, None)
   }
 
   /**
@@ -2489,6 +2515,13 @@ object SparkContext extends Logging {
     }
   }
 
+  /** Return the current active [[SparkContext]] if any. */
+  private[spark] def getActive: Option[SparkContext] = {
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      Option(activeContext.get())
+    }
+  }
+
   /**
    * Called at the beginning of the SparkContext constructor to ensure that no SparkContext is
    * running.  Throws an exception if a running context is detected and logs a warning if another
@@ -2745,11 +2778,12 @@ private object SparkMasterRegex {
 }
 
 /**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The getter for the writable class takes a ClassTag[T] in case this is a generic object
- * that doesn't know the type of T when it is created. This sounds strange but is necessary to
- * support converting subclasses of Writable to themselves (writableWritableConverter).
+ * A class encapsulating how to convert some type `T` from `Writable`. It stores both the `Writable`
+ * class corresponding to `T` (e.g. `IntWritable` for `Int`) and a function for doing the
+ * conversion.
+ * The getter for the writable class takes a `ClassTag[T]` in case this is a generic object
+ * that doesn't know the type of `T` when it is created. This sounds strange but is necessary to
+ * support converting subclasses of `Writable` to themselves (`writableWritableConverter()`).
  */
 private[spark] class WritableConverter[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],
@@ -2800,9 +2834,10 @@ object WritableConverter {
 }
 
 /**
- * A class encapsulating how to convert some type T to Writable. It stores both the Writable class
- * corresponding to T (e.g. IntWritable for Int) and a function for doing the conversion.
- * The Writable class will be used in `SequenceFileRDDFunctions`.
+ * A class encapsulating how to convert some type `T` to `Writable`. It stores both the `Writable`
+ * class corresponding to `T` (e.g. `IntWritable` for `Int`) and a function for doing the
+ * conversion.
+ * The `Writable` class will be used in `SequenceFileRDDFunctions`.
  */
 private[spark] class WritableFactory[T](
     val writableClass: ClassTag[T] => Class[_ <: Writable],

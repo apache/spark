@@ -58,7 +58,7 @@ tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
 
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame.
+#' Fits generalized linear model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
@@ -88,14 +88,14 @@ tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family = "gaussian")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = "gaussian")
 #' summary(model)
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Freq", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -126,8 +126,10 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             }
 
             formula <- paste(deparse(formula), collapse = "")
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
             }
 
             # set variancePower and linkPower
@@ -141,7 +143,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
-                                tol, as.integer(maxIter), as.character(weightCol), regParam,
+                                tol, as.integer(maxIter), weightCol, regParam,
                                 variancePower, linkPower)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
@@ -168,9 +170,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df, family = "gaussian")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- glm(Freq ~ Sex + Age, df, family = "gaussian")
 #' summary(model)
 #' }
 #' @note glm since 1.5.0
@@ -216,11 +218,11 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             # coefficients, standard error of coefficients, t value and p value. Otherwise,
             # it will be fitted by local "l-bfgs", we can only provide coefficients.
             if (length(features) == length(coefficients)) {
-              coefficients <- matrix(coefficients, ncol = 1)
+              coefficients <- matrix(unlist(coefficients), ncol = 1)
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
             } else {
-              coefficients <- matrix(coefficients, ncol = 4)
+              coefficients <- matrix(unlist(coefficients), ncol = 4)
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
             }
@@ -293,7 +295,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 
 #' Isotonic Regression Model
 #'
-#' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
+#' Fits an Isotonic Regression model against a SparkDataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
@@ -339,13 +341,15 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
           function(data, formula, isotonic = TRUE, featureIndex = 0, weightCol = NULL) {
             formula <- paste(deparse(formula), collapse = "")
 
-            if (is.null(weightCol)) {
-              weightCol <- ""
+            if (!is.null(weightCol) && weightCol == "") {
+              weightCol <- NULL
+            } else if (!is.null(weightCol)) {
+              weightCol <- as.character(weightCol)
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
                                 data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
-                                as.character(weightCol))
+                                weightCol)
             new("IsotonicRegressionModel", jobj = jobj)
           })
 
@@ -406,6 +410,10 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
 #'                Note that operator '.' is not supported currently.
+#' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
+#'                         or the number of partitions are large, this param could be adjusted to a larger size.
+#'                         This is an expert parameter. Default value should be good for most cases.
+#' @param ... additional arguments passed to the method.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
 #' @seealso survival: \url{https://cran.r-project.org/package=survival}
@@ -430,10 +438,10 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula) {
+          function(data, formula, aggregationDepth = 2) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
-                                "fit", formula, data@sdf)
+                                "fit", formula, data@sdf, as.integer(aggregationDepth))
             new("AFTSurvivalRegressionModel", jobj = jobj)
           })
 

@@ -280,7 +280,7 @@ setMethod("dtypes",
 
 #' Column Names of SparkDataFrame
 #'
-#' Return all column names as a list.
+#' Return a vector of column names.
 #'
 #' @param x a SparkDataFrame.
 #'
@@ -323,10 +323,8 @@ setMethod("names",
 setMethod("names<-",
           signature(x = "SparkDataFrame"),
           function(x, value) {
-            if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
-              dataFrame(sdf)
-            }
+            colnames(x) <- value
+            x
           })
 
 #' @rdname columns
@@ -340,7 +338,7 @@ setMethod("colnames",
           })
 
 #' @param value a character vector. Must have the same length as the number
-#'              of columns in the SparkDataFrame.
+#'              of columns to be renamed.
 #' @rdname columns
 #' @aliases colnames<-,SparkDataFrame-method
 #' @name colnames<-
@@ -417,7 +415,7 @@ setMethod("coltypes",
                   type <- PRIMITIVE_TYPES[[specialtype]]
                 }
               }
-              type
+              type[[1]]
             })
 
             # Find which types don't have mapping to R
@@ -680,14 +678,53 @@ setMethod("storageLevel",
             storageLevelToString(callJMethod(x@sdf, "storageLevel"))
           })
 
+#' Coalesce
+#'
+#' Returns a new SparkDataFrame that has exactly \code{numPartitions} partitions.
+#' This operation results in a narrow dependency, e.g. if you go from 1000 partitions to 100
+#' partitions, there will not be a shuffle, instead each of the 100 new partitions will claim 10 of
+#' the current partitions. If a larger number of partitions is requested, it will stay at the
+#' current number of partitions.
+#'
+#' However, if you're doing a drastic coalesce on a SparkDataFrame, e.g. to numPartitions = 1,
+#' this may result in your computation taking place on fewer nodes than
+#' you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+#' call \code{repartition}. This will add a shuffle step, but means the
+#' current upstream partitions will be executed in parallel (per whatever
+#' the current partitioning is).
+#'
+#' @param numPartitions the number of partitions to use.
+#'
+#' @family SparkDataFrame functions
+#' @rdname coalesce
+#' @name coalesce
+#' @aliases coalesce,SparkDataFrame-method
+#' @seealso \link{repartition}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' newDF <- coalesce(df, 1L)
+#'}
+#' @note coalesce(SparkDataFrame) since 2.1.1
+setMethod("coalesce",
+          signature(x = "SparkDataFrame"),
+          function(x, numPartitions) {
+            stopifnot(is.numeric(numPartitions))
+            sdf <- callJMethod(x@sdf, "coalesce", numToInt(numPartitions))
+            dataFrame(sdf)
+          })
+
 #' Repartition
 #'
 #' The following options for repartition are possible:
 #' \itemize{
-#'  \item{1.} {Return a new SparkDataFrame partitioned by
+#'  \item{1.} {Return a new SparkDataFrame that has exactly \code{numPartitions}.}
+#'  \item{2.} {Return a new SparkDataFrame hash partitioned by
 #'                      the given columns into \code{numPartitions}.}
-#'  \item{2.} {Return a new SparkDataFrame that has exactly \code{numPartitions}.}
-#'  \item{3.} {Return a new SparkDataFrame partitioned by the given column(s),
+#'  \item{3.} {Return a new SparkDataFrame hash partitioned by the given column(s),
 #'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
 #'}
 #' @param x a SparkDataFrame.
@@ -699,6 +736,7 @@ setMethod("storageLevel",
 #' @rdname repartition
 #' @name repartition
 #' @aliases repartition,SparkDataFrame-method
+#' @seealso \link{coalesce}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1138,6 +1176,7 @@ setMethod("collect",
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
+                    class(vec) <- PRIMITIVE_TYPES[[colType]]
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
@@ -1765,6 +1804,10 @@ setClassUnion("numericOrcharacter", c("numeric", "character"))
 #' @note [[ since 1.4.0
 setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i) {
+            if (length(i) > 1) {
+              warning("Subset index has length > 1. Only the first index is used.")
+              i <- i[1]
+            }
             if (is.numeric(i)) {
               cols <- columns(x)
               i <- cols[[i]]
@@ -1778,6 +1821,10 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 #' @note [[<- since 2.1.1
 setMethod("[[<-", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i, value) {
+            if (length(i) > 1) {
+              warning("Subset index has length > 1. Only the first index is used.")
+              i <- i[1]
+            }
             if (is.numeric(i)) {
               cols <- columns(x)
               i <- cols[[i]]
@@ -1831,6 +1878,8 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' Return subsets of SparkDataFrame according to given conditions
 #' @param x a SparkDataFrame.
 #' @param i,subset (Optional) a logical expression to filter on rows.
+#'                 For extract operator [[ and replacement operator [[<-, the indexing parameter for
+#'                 a single Column.
 #' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
@@ -1841,6 +1890,7 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
+#' @seealso \link{withColumn}
 #' @rdname subset
 #' @name subset
 #' @family subsetting functions
@@ -1858,6 +1908,10 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #'   subset(df, df$age %in% c(19, 30), 1:2)
 #'   subset(df, df$age %in% c(19), select = c(1,2))
 #'   subset(df, select = c(1,2))
+#'   # Columns can be selected and set
+#'   df[["age"]] <- 23
+#'   df[[1]] <- df$age
+#'   df[[2]] <- NULL # drop column
 #' }
 #' @note subset since 1.5.0
 setMethod("subset", signature(x = "SparkDataFrame"),
@@ -1982,7 +2036,7 @@ setMethod("selectExpr",
 #' @aliases withColumn,SparkDataFrame,character-method
 #' @rdname withColumn
 #' @name withColumn
-#' @seealso \link{rename} \link{mutate}
+#' @seealso \link{rename} \link{mutate} \link{subset}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1993,6 +2047,10 @@ setMethod("selectExpr",
 #' # Replace an existing column
 #' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
 #' newDF3 <- withColumn(newDF, "newCol", 42)
+#' # Use extract operator to set an existing or new column
+#' df[["age"]] <- 23
+#' df[[2]] <- df$col1
+#' df[[2]] <- NULL # drop column
 #' }
 #' @note withColumn since 1.4.0
 setMethod("withColumn",

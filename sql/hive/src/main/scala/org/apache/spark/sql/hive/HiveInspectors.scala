@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.lang.reflect.{ParameterizedType, Type, WildcardType}
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.{io => hadoopIo}
@@ -178,7 +180,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 private[hive] trait HiveInspectors {
 
-  def javaClassToDataType(clz: Class[_]): DataType = clz match {
+  def javaTypeToDataType(clz: Type): DataType = clz match {
     // writable
     case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[hiveIo.DoubleWritable] => DoubleType
@@ -218,24 +220,40 @@ private[hive] trait HiveInspectors {
     case c: Class[_] if c == java.lang.Float.TYPE => FloatType
     case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
 
-    case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
+    case c: Class[_] if c.isArray => ArrayType(javaTypeToDataType(c.getComponentType))
 
     // Hive seems to return this for struct types?
     case c: Class[_] if c == classOf[java.lang.Object] => NullType
 
-    // java list type unsupported
-    case c: Class[_] if c == classOf[java.util.List[_]] =>
-      throw new AnalysisException(
-        "List type in java is unsupported because " +
-        "JVM type erasure makes spark fail to catch a component type in List<>")
+    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.List[_]]) =>
+      val Array(elementType) = p.getActualTypeArguments
+      ArrayType(javaTypeToDataType(elementType))
 
-    // java map type unsupported
-    case c: Class[_] if c == classOf[java.util.Map[_, _]] =>
+    case p: ParameterizedType if isSubClassOf(p.getRawType, classOf[java.util.Map[_, _]]) =>
+      val Array(keyType, valueType) = p.getActualTypeArguments
+      MapType(javaTypeToDataType(keyType), javaTypeToDataType(valueType))
+
+    // raw java list type unsupported
+    case c: Class[_] if isSubClassOf(c, classOf[java.util.List[_]]) =>
       throw new AnalysisException(
-        "Map type in java is unsupported because " +
-        "JVM type erasure makes spark fail to catch key and value types in Map<>")
+        "Raw list type in java is unsupported because Spark cannot infer the element type.")
+
+    // raw java map type unsupported
+    case c: Class[_] if isSubClassOf(c, classOf[java.util.Map[_, _]]) =>
+      throw new AnalysisException(
+        "Raw map type in java is unsupported because Spark cannot infer key and value types.")
+
+    case _: WildcardType =>
+      throw new AnalysisException(
+        "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because " +
+          "Spark cannot infer the data type for these type parameters.")
 
     case c => throw new AnalysisException(s"Unsupported java type $c")
+  }
+
+  private def isSubClassOf(t: Type, parent: Class[_]): Boolean = t match {
+    case cls: Class[_] => parent.isAssignableFrom(cls)
+    case _ => false
   }
 
   private def withNullSafe(f: Any => Any): Any => Any = {
@@ -772,7 +790,7 @@ private[hive] trait HiveInspectors {
 
   /**
    * Map the catalyst expression to ObjectInspector, however,
-   * if the expression is [[Literal]] or foldable, a constant writable object inspector returns;
+   * if the expression is `Literal` or foldable, a constant writable object inspector returns;
    * Otherwise, we always get the object inspector according to its data type(in catalyst)
    * @param expr Catalyst expression to be mapped
    * @return Hive java objectinspector (recursively).

@@ -32,11 +32,13 @@ import java.util.Objects
 import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -153,6 +155,14 @@ object Literal {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }
 
+  def create[T : TypeTag](v: T): Literal = Try {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+    Literal(convert(v), dataType)
+  }.getOrElse {
+    Literal(v)
+  }
+
   /**
    * Create a literal with default value for given DataType
    */
@@ -175,6 +185,7 @@ object Literal {
     case map: MapType => create(Map(), map)
     case struct: StructType =>
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+    case udt: UserDefinedType[_] => default(udt.sqlType)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
   }

@@ -88,7 +88,6 @@ private[r] object GeneralizedLinearRegressionWrapper
       .setFitIntercept(rFormula.hasIntercept)
       .setTol(tol)
       .setMaxIter(maxIter)
-      .setWeightCol(weightCol)
       .setRegParam(regParam)
       .setFeaturesCol(rFormula.getFeaturesCol)
     // set variancePower and linkPower if family is tweedie; otherwise, set link function
@@ -97,6 +96,8 @@ private[r] object GeneralizedLinearRegressionWrapper
     } else {
       glr.setLink(link)
     }
+    if (weightCol != null) glr.setWeightCol(weightCol)
+
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
       .fit(data)
