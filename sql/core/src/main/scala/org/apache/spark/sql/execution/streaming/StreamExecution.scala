@@ -199,6 +199,12 @@ class StreamExecution(
    */
   val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
 
+  /**
+   * A log that records the committed batch ids. This is used to check if a batch was committed
+   * on restart, instead of (possibly) re-running the previous batch.
+   */
+  val commitLog = new OffsetCommitLog(sparkSession, checkpointFile("commits"))
+
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING
 
@@ -277,6 +283,7 @@ class StreamExecution(
               finishTrigger(dataAvailable)
               if (dataAvailable) {
                 // We'll increase currentBatchId after we complete processing current batch's data
+                commitLog.add(currentBatchId, None)
                 currentBatchId += 1
               } else {
                 currentStatus = currentStatus.copy(isDataAvailable = false)
@@ -363,17 +370,25 @@ class StreamExecution(
   private def populateStartOffsets(): Unit = {
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
+        currentBatchId = commitLog.getLatest() match {
+          case Some((committedBatchId, metadata)) => committedBatchId + 1
+          case None => batchId // can only happen if batchId is 0
+        }
+        if (currentBatchId > 0) {
+          offsetLog.get(currentBatchId - 1).foreach {
+            case lastOffsets =>
+              committedOffsets = lastOffsets.toStreamProgress(sources)
+              logDebug(s"Resuming with committed offsets: $committedOffsets")
+          }
+        }
         logInfo(s"Resuming streaming query, starting with batch $batchId")
-        currentBatchId = batchId
-        availableOffsets = nextOffsets.toStreamProgress(sources)
-        offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
-        logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
-          s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
-
-        offsetLog.get(batchId - 1).foreach {
-          case lastOffsets =>
-            committedOffsets = lastOffsets.toStreamProgress(sources)
-            logDebug(s"Resuming with committed offsets: $committedOffsets")
+        if (currentBatchId == batchId) {
+          availableOffsets = nextOffsets.toStreamProgress(sources)
+          offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
+          logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
+            s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
+        } else {
+          constructNextBatch()
         }
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
