@@ -83,7 +83,8 @@ case class CreateTableLikeCommand(
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        storage = sourceTableDesc.storage.copy(locationUri = location),
+        storage = sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_))),
         schema = sourceTableDesc.schema,
         provider = newProvider,
         properties = properties,
@@ -500,7 +501,8 @@ case class DescribeTableCommand(
     append(buffer, "Owner:", table.owner, "")
     append(buffer, "Create Time:", new Date(table.createTime).toString, "")
     append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Location:", table.storage.locationUri.map(CatalogUtils.URIToString(_))
+      .getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
     table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
 
@@ -592,7 +594,8 @@ case class DescribeTableCommand(
     append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
     append(buffer, "Database:", table.database, "")
     append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Location:", partition.storage.locationUri.map(CatalogUtils.URIToString(_))
+      .getOrElse(""), "")
     append(buffer, "Partition Parameters:", "", "")
     partition.parameters.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
@@ -958,7 +961,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         // when the table creation DDL contains the PATH option.
         None
       } else {
-        Some(s"path '${escapeSingleQuotedString(location)}'")
+        Some(s"path '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'")
       }
     }
 

@@ -712,4 +712,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.select($"a".bitwiseXOR($"b").bitwiseXOR(39)),
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
   }
+
+  test("typedLit") {
+    val df = Seq(Tuple1(0)).toDF("a")
+    // Only check the types `lit` cannot handle
+    checkAnswer(
+      df.select(typedLit(Seq(1, 2, 3))),
+      Row(Seq(1, 2, 3)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(Map("a" -> 1, "b" -> 2))),
+      Row(Map("a" -> 1, "b" -> 2)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(("a", 2, 1.0))),
+      Row(Row("a", 2, 1.0)) :: Nil)
+  }
 }
