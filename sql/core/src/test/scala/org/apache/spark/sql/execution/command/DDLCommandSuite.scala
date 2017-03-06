@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -317,7 +319,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create hive table - property values must be set") {
@@ -334,7 +336,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create table - with partitioned by") {
@@ -409,7 +411,7 @@ class DDLCommandSuite extends PlanTest {
     val expectedTableDesc = CatalogTable(
       identifier = TableIdentifier("my_tab"),
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(locationUri = Some("/tmp/file")),
+      storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
       schema = new StructType().add("a", IntegerType).add("b", StringType),
       provider = Some("parquet"))
 

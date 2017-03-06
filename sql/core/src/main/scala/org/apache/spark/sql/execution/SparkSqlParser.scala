@@ -386,7 +386,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(location)
+    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI(_)))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -1080,8 +1080,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
     }
+
+    val locUri = location.map(CatalogUtils.stringToURI(_))
     val storage = CatalogStorageFormat(
-      locationUri = location,
+      locationUri = locUri,
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
@@ -1132,7 +1134,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
           val newTableDesc = tableDesc.copy(
-            storage = CatalogStorageFormat.empty.copy(locationUri = location),
+            storage = CatalogStorageFormat.empty.copy(locationUri = locUri),
             provider = Some(conf.defaultDataSourceName))
           CreateTable(newTableDesc, mode, Some(q))
         } else {

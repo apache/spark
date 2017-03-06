@@ -19,6 +19,8 @@ package org.apache.spark.sql.internal
 
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
@@ -77,7 +79,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     new Database(
       name = metadata.name,
       description = metadata.description,
-      locationUri = metadata.locationUri)
+      locationUri = CatalogUtils.URIToString(metadata.locationUri))
   }
 
   /**

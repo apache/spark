@@ -459,7 +459,7 @@ class CatalogSuite
           options = Map("path" -> dir.getAbsolutePath))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
-        assert(table.storage.locationUri.get == dir.getAbsolutePath)
+        assert(table.storage.locationUri.get == new URI(dir.getAbsolutePath))
 
         Seq((1)).toDF("i").write.insertInto("t")
         assert(dir.exists() && dir.listFiles().nonEmpty)
@@ -481,7 +481,7 @@ class CatalogSuite
         options = Map.empty[String, String])
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(table.tableType == CatalogTableType.MANAGED)
-      val tablePath = new File(new URI(table.storage.locationUri.get))
+      val tablePath = new File(table.storage.locationUri.get)
       assert(tablePath.exists() && tablePath.listFiles().isEmpty)
 
       Seq((1)).toDF("i").write.insertInto("t")
