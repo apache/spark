@@ -1605,7 +1605,10 @@ class HiveDDLSuite
       // partition table
       withTempPath {
         dir =>
-          spark.sql(s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'")
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'
+             """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location == dir.getAbsolutePath)
