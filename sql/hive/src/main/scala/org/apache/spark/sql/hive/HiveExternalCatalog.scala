@@ -619,9 +619,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       //       want to alter the table location to a file path, we will fail. This should be fixed
       //       in the future.
 
-      val newLocation = newTableDefinition.storage.map(CatalogUtils.URIToString(_))
-      val storageWithPathOption = newTableDefinition.storage.copy(
-        properties = newTableDefinition.storage.properties ++ newLocation.map("path" -> _))
+      val newLocation = newTableDef.storage.locationUri.map(CatalogUtils.URIToString(_))
+      val storageWithPathOption = newTableDef.storage.copy(
+        properties = newTableDef.storage.properties ++ newLocation.map("path" -> _))
 
       val oldLocation = getLocationFromStorageProps(oldRawTableDef)
       if (oldLocation == newLocation) {
