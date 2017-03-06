@@ -1361,7 +1361,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
                           "for the Tweedie family. Supported values: 0 and [1, Inf).",
                           typeConverter=TypeConverters.toFloat)
     linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
-                      "Only applicable for the Tweedie family.",
+                      "Only applicable to the Tweedie family.",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
