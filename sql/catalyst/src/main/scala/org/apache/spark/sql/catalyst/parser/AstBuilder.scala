@@ -1476,7 +1476,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   /**
    * Create top level table schema.
    */
-  protected def createSchema(ctx: ColTypeListContext): StructType = {
+  def createSchema(ctx: ColTypeListContext): StructType = {
     StructType(Option(ctx).toSeq.flatMap(visitColTypeList))
   }
 
