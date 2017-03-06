@@ -137,7 +137,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("Disallow creating permanent functions with invalid class names") {
+  test("SPARK-19840: Disallow creating permanent functions with invalid class names") {
     val e = intercept[ClassNotFoundException] {
       sql("CREATE FUNCTION function_with_invalid_classname AS 'org.invalid'")
     }
