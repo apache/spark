@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -393,14 +392,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "more than one generators in SELECT",
     listRelation.select(Explode('list), Explode('list)),
     "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
-  )
-
-  errorTest(
-    "SPARK-19737: detect undefined functions without triggering relation resolution",
-    UnresolvedRelation(TableIdentifier("unknown")).select(
-      UnresolvedFunction("foo", Nil, isDistinct = false)
-    ),
-    "undefined function foo" :: Nil
   )
 
   test("SPARK-6452 regression test") {

@@ -1209,12 +1209,12 @@ class SessionCatalogSuite extends PlanTest {
       val cause = intercept[AnalysisException] {
         analyzer.execute(
           UnresolvedRelation(TableIdentifier("undefined_table")).select(
-            UnresolvedFunction("undefine_fn", Nil, isDistinct = false)
+            UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
           )
         )
       }
 
-      assert(cause.getMessage.contains("undefined function undefined_fn"))
+      assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
     }
   }
 }

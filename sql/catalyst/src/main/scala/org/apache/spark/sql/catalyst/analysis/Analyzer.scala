@@ -1052,13 +1052,10 @@ class Analyzer(
    */
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-      case f: UnresolvedFunction =>
+      case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
         withPosition(f) {
-          if (!catalog.functionExists(f.name)) {
-            throw new AnalysisException(s"undefined function ${f.name}")
-          }
+          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
         }
-        f
     }
   }
 
