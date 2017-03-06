@@ -206,7 +206,9 @@ object WholeFileCSVDataSource extends CSVDataSource {
         val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
         val tokenRDD = csv.flatMap { lines =>
           UnivocityParser.tokenizeStream(
-            CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, lines.getPath()),
+            CodecStreams.createInputStreamWithCloseResource(
+              lines.getConfiguration,
+              lines.getPath()),
             parsedOptions.headerFlag,
             new CsvParser(parsedOptions.asParserSettings))
         }
