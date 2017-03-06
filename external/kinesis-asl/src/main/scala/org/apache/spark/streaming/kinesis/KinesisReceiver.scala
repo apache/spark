@@ -210,7 +210,8 @@ private[kinesis] class KinesisReceiver[T](
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,
-        records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
+        records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber(),
+        records.size())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
     }
   }
