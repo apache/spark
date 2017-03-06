@@ -429,7 +429,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val ndv = BigDecimal(colStat.distinctCount)
 
     // determine the overlapping degree between predicate range and column's range
-    val numericLiteral = if (literal.dataType.isInstanceOf[BooleanType]) {
+    val numericLiteral = if (literal.dataType == BooleanType) {
       if (literal.value.asInstanceOf[Boolean]) BigDecimal(1) else BigDecimal(0)
     } else {
       BigDecimal(literal.value.toString)
