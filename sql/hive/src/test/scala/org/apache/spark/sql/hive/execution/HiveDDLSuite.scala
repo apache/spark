@@ -1690,11 +1690,11 @@ class HiveDDLSuite
     }
   }
 
-  Seq("a b", "a:b", "a%b").foreach { specialCharInLoc =>
-    test(s"location uri contains $specialCharInLoc for datasource table") {
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"datasource table: location uri contains $specialChars") {
       withTable("t", "t1") {
         withTempDir { dir =>
-          val loc = new File(dir, specialCharInLoc)
+          val loc = new File(dir, specialChars)
           loc.mkdir()
           spark.sql(
             s"""
@@ -1705,7 +1705,7 @@ class HiveDDLSuite
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.location == new Path(loc.getAbsolutePath).toUri)
-          assert(new Path(table.location).toString.contains(specialCharInLoc))
+          assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t SELECT 1")
@@ -1714,7 +1714,7 @@ class HiveDDLSuite
         }
 
         withTempDir { dir =>
-          val loc = new File(dir, specialCharInLoc)
+          val loc = new File(dir, specialChars)
           loc.mkdir()
           spark.sql(
             s"""
@@ -1726,7 +1726,7 @@ class HiveDDLSuite
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location == new Path(loc.getAbsolutePath).toUri)
-          assert(new Path(table.location).toString.contains(specialCharInLoc))
+          assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
@@ -1746,7 +1746,7 @@ class HiveDDLSuite
   }
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
-    test(s"location uri contains $specialChars for hive table") {
+    test(s"hive table: location uri contains $specialChars") {
       withTable("t") {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
@@ -1762,10 +1762,10 @@ class HiveDDLSuite
           val path = new Path(loc.getAbsolutePath)
           val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
           assert(table.location == fs.makeQualified(path).toUri)
-          assert(new Path(table.location).toString.contains(specialCharInLoc))
+          assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
-          if (specialCharInLoc != "a:b") {
+          if (specialChars != "a:b") {
             spark.sql("INSERT INTO TABLE t SELECT 1")
             assert(loc.listFiles().length >= 1)
             checkAnswer(spark.table("t"), Row("1") :: Nil)
@@ -1792,10 +1792,10 @@ class HiveDDLSuite
           val path = new Path(loc.getAbsolutePath)
           val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
           assert(table.location == fs.makeQualified(path).toUri)
-          assert(new Path(table.location).toString.contains(specialCharInLoc))
+          assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
-          if (specialCharInLoc != "a:b") {
+          if (specialChars != "a:b") {
             spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
             val partFile = new File(loc, "b=2")
             assert(partFile.listFiles().length >= 1)

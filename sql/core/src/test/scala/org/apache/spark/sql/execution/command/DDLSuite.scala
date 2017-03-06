@@ -448,7 +448,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
-            Row("Location", location) ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "") :: Nil)
 
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
@@ -457,7 +457,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
-            Row("Location", location) ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
@@ -466,7 +466,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
-            Row("Location", location) ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
       } finally {
         catalog.reset()
