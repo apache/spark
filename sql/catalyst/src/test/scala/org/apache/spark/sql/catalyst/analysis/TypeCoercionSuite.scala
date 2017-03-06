@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
+import java.util.TimeZone
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+
 
 class TypeCoercionSuite extends PlanTest {
 
@@ -927,6 +929,49 @@ class TypeCoercionSuite extends PlanTest {
     // interval operations should not be effected
     ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
     ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
+  }
+
+  test("rule for PromoteStrings date/timestamp operations") {
+    val promoteStringsOperations = TypeCoercion.PromoteStrings
+    val date = Literal(new java.sql.Date(0L))
+    val timestamp = Literal(new Timestamp(0L))
+    val interval = Literal(new CalendarInterval(0, 0))
+    val str = Literal("2015-01-01")
+    val perfectTimestampStr = Literal("2015-01-01 00:00:00")
+    val perfectDateStr = Literal("2015-01-01")
+    val yearOnlyStr = Literal("2015")
+    val attrRef = AttributeReference("a", StringType)()
+
+    // test the behavior which ensure that
+    // cast("2015-01-01 00:00:00" as timestamp) == cast("2015" as timestamp )
+
+    assert( Cast(perfectTimestampStr, TimestampType, Some("UTC") ).eval(EmptyRow) ==
+      Cast( yearOnlyStr, TimestampType, Some("UTC") ).eval(EmptyRow))
+    assert( Cast(perfectDateStr, DateType, Some(TimeZone.getDefault().toString)).eval(EmptyRow) ==
+      Cast( yearOnlyStr, DateType, Some(TimeZone.getDefault().toString)).eval(EmptyRow))
+
+    type binaryExprConstructor = (Expression, Expression ) => Expression
+    val exprConstructors: Seq[binaryExprConstructor] = Seq(
+      LessThan,
+      LessThanOrEqual,
+      GreaterThan,
+      GreaterThanOrEqual)
+
+    // Test for foldable operations
+    for ( expr <- exprConstructors) {
+      ruleTest(promoteStringsOperations, expr(timestamp, perfectTimestampStr),
+        expr(timestamp, Cast(perfectTimestampStr, TimestampType)))
+      ruleTest(promoteStringsOperations, expr( perfectDateStr, date),
+        expr( Cast(perfectDateStr, DateType), date))
+    }
+
+    // Test for non foldable operations
+    for ( expr <- exprConstructors) {
+      ruleTest(promoteStringsOperations, expr(timestamp, attrRef),
+        expr(Cast(timestamp, StringType), attrRef ))
+      ruleTest(promoteStringsOperations, expr( attrRef, date),
+        expr(attrRef, Cast(date, StringType)))
+    }
   }
 
   /**

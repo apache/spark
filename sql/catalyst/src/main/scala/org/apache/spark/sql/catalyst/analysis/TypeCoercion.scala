@@ -324,14 +324,22 @@ object TypeCoercion {
       // We should cast all relative timestamp/date/string comparison into string comparisons
       // This behaves as a user would expect because timestamp strings sort lexicographically.
       // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
-      case p @ BinaryComparison(left @ StringType(), right @ DateType()) =>
-        p.makeCopy(Array(left, Cast(right, StringType)))
-      case p @ BinaryComparison(left @ DateType(), right @ StringType()) =>
-        p.makeCopy(Array(Cast(left, StringType), right))
-      case p @ BinaryComparison(left @ StringType(), right @ TimestampType()) =>
-        p.makeCopy(Array(left, Cast(right, StringType)))
-      case p @ BinaryComparison(left @ TimestampType(), right @ StringType()) =>
-        p.makeCopy(Array(Cast(left, StringType), right))
+      // If StringType is foldable then we need to cast String to Date or Timestamp type
+      // which would give order of magnitude performance gain as well as preserve the behavior
+      // achieved by expressed above
+      // TimeStamp(2013-01-01 00:00 ...) < Cast( "2014" as timestamp) = true
+      case p @ BinaryComparison(left @ StringType(), right) if dateOrTimestampType(right) =>
+        if (left.foldable) {
+          p.makeCopy(Array(Cast(left, right.dataType), right))
+        } else {
+          p.makeCopy(Array(left, Cast(right, StringType)))
+        }
+      case p @ BinaryComparison(left, right @ StringType()) if dateOrTimestampType(left) =>
+        if (right.foldable) {
+          p.makeCopy(Array(left, Cast(right, left.dataType)))
+        } else {
+          p.makeCopy(Array(Cast(left, StringType), right))
+        }
 
       // Comparisons between dates and timestamps.
       case p @ BinaryComparison(left @ TimestampType(), right @ DateType()) =>
@@ -361,6 +369,10 @@ object TypeCoercion {
       case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
       case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
       case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
+    }
+
+    def dateOrTimestampType( expression : Expression ) : Boolean = {
+      expression.dataType == DateType || expression.dataType == TimestampType
     }
   }
 
