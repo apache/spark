@@ -20,6 +20,9 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
+import org.apache.commons.lang3.exception.ExceptionUtils
+import org.codehaus.janino.JaninoRuntimeException
+
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,6 +34,7 @@ import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
+
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
@@ -222,7 +226,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           r
         }
       } catch {
-        case e: Exception =>
+        // JaninoRuntimeException is in a nested exception if Java compilation error occurs
+        case e: Exception if ExceptionUtils.getRootCause(e).isInstanceOf[JaninoRuntimeException] =>
           iter.filter { row =>
             val str = condition.toString
             val logMessage = if (str.length > 256) {
