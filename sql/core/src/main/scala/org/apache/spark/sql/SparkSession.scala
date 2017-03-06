@@ -67,6 +67,12 @@ import org.apache.spark.util.Utils
  *     .config("spark.some.config.option", "some-value")
  *     .getOrCreate()
  * }}}
+ *
+ * @param sparkContext The Spark context associated with this Spark session.
+ * @param existingSharedState If supplied, use the existing shared state
+ *                            instead of creating a new one.
+ * @param parentSessionState If supplied, inherit all session state (i.e. temporary 
+ *                            views, SQL config, UDFs etc) from parent.
  */
 @InterfaceStability.Stable
 class SparkSession private(

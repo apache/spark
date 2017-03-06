@@ -17,18 +17,27 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkContext
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
-class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
+class SessionStateSuite extends SparkFunSuite
+    with BeforeAndAfterEach with BeforeAndAfterAll {
 
   protected var activeSession: SparkSession = _
+  protected var sparkContext: SparkContext = null
+
+  override def beforeAll(): Unit = {
+    sparkContext = SparkSession.builder().master("local").getOrCreate().sparkContext
+  }
 
   protected def createSession(): Unit = {
-    activeSession = SparkSession.builder().master("local").getOrCreate()
+    activeSession =
+      SparkSession.builder().master("local").sparkContext(sparkContext).getOrCreate()
   }
 
   override def beforeEach(): Unit = {
@@ -117,5 +126,10 @@ class SessionStateSuite extends SparkFunSuite with BeforeAndAfterEach {
     checkTableExists(forkedSession)
     checkTableExists(activeSession.cloneSession()) // ability to clone multiple times
     checkTableExists(forkedSession.cloneSession()) // clone of clone
+  }
+
+  test("fork new session and inherit reference to SharedState") {
+    val forkedSession = activeSession.cloneSession()
+    assert(activeSession.sharedState eq forkedSession.sharedState)
   }
 }

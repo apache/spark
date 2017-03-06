@@ -34,6 +34,8 @@ class HiveSessionStateSuite extends SessionStateSuite
 
   override def afterEach(): Unit = {}
 
+  override def beforeAll(): Unit = {}
+
   override def afterAll(): Unit = {
     try {
       hiveContext.reset()
