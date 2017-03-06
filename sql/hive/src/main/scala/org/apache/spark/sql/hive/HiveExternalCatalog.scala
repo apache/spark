@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.net.URI
 import java.util
+import java.util.TimeZone
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -211,7 +212,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
     val extraTzProp =
       if (conf.get(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE) && tableTz.isEmpty) {
-        Map(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY -> "UTC")
+        Map(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY -> TimeZone.getDefault().getID())
       } else {
         Map()
       }
