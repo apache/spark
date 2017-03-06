@@ -462,7 +462,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
     parts.zipWithIndex.foreach { case (s, i) =>
       addPartitionDesc.addPartition(
-        s.spec.asJava, CatalogUtils.URIToString(s.storage.locationUri).orNull)
+        s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString(_)).orNull)
       if (s.parameters.nonEmpty) {
         addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
       }

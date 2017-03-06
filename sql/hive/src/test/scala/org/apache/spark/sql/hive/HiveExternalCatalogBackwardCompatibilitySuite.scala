@@ -60,9 +60,7 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
   }
 
   private def defaultTableURI(tableName: String): URI = {
-    val defaultPath =
-      spark.sessionState.catalog.defaultTablePath(TableIdentifier(tableName, Some("test_db")))
-    new Path(defaultPath).toUri
+    spark.sessionState.catalog.defaultTablePath(TableIdentifier(tableName, Some("test_db")))
   }
 
   // Raw table metadata that are dumped from tables created by Spark 2.0. Note that, all spark

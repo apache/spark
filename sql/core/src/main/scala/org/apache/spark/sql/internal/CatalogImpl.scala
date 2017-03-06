@@ -79,7 +79,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     new Database(
       name = metadata.name,
       description = metadata.description,
-      locationUri = new Path(metadata.locationUri).toString)
+      locationUri = CatalogUtils.URIToString(metadata.locationUri))
   }
 
   /**

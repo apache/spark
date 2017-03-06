@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -387,7 +386,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(CatalogUtils.stringToURI(location))
+    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI(_)))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -1082,7 +1081,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
     }
 
-    val locUri = CatalogUtils.stringToURI(location)
+    val locUri = location.map(CatalogUtils.stringToURI(_))
     val storage = CatalogStorageFormat(
       locationUri = locUri,
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),

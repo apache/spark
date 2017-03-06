@@ -79,7 +79,8 @@ case class CreateTableLikeCommand(
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
-        storage = sourceTableDesc.storage.copy(locationUri = CatalogUtils.stringToURI(location)),
+        storage = sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_))),
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
@@ -495,7 +496,7 @@ case class DescribeTableCommand(
     append(buffer, "Owner:", table.owner, "")
     append(buffer, "Create Time:", new Date(table.createTime).toString, "")
     append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", CatalogUtils.URIToString(table.storage.locationUri)
+    append(buffer, "Location:", table.storage.locationUri.map(CatalogUtils.URIToString(_))
       .getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
     table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
@@ -588,7 +589,7 @@ case class DescribeTableCommand(
     append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
     append(buffer, "Database:", table.database, "")
     append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Location:", CatalogUtils.URIToString(partition.storage.locationUri)
+    append(buffer, "Location:", partition.storage.locationUri.map(CatalogUtils.URIToString(_))
       .getOrElse(""), "")
     append(buffer, "Partition Parameters:", "", "")
     partition.parameters.foreach { case (key, value) =>
@@ -955,7 +956,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         // when the table creation DDL contains the PATH option.
         None
       } else {
-        Some(s"path '${escapeSingleQuotedString(new Path(location).toString)}'")
+        Some(s"path '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'")
       }
     }
 

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -27,9 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -73,14 +70,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", new Path(spark.sessionState.conf.warehousePath).toUri, Map()),
+      CatalogDatabase(
+        name, "", CatalogUtils.stringToURI(spark.sessionState.conf.warehousePath), Map()),
       ignoreIfExists = false)
   }
 
   private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
     val storage =
       CatalogStorageFormat(
-        locationUri = Some(new Path(catalog.defaultTablePath(name)).toUri),
+        locationUri = Some(catalog.defaultTablePath(name)),
         inputFormat = None,
         outputFormat = None,
         serde = None,
@@ -134,11 +132,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def makeQualifiedPath(path: String): String = {
+  private def makeQualifiedPath(path: String): URI = {
     // copy-paste from SessionCatalog
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toString
+    fs.makeQualified(hadoopPath).toUri
   }
 
   test("Create Database using Default Warehouse Path") {
@@ -147,7 +145,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val expectedLocation = new Path(makeQualifiedPath(s"spark-warehouse/$dbName.db")).toUri
+      val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbName.db")
       assert(db1 == CatalogDatabase(
         dbName,
         "",
@@ -170,7 +168,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-          val expPath = new Path(makeQualifiedPath(tmpDir.toString)).toUri
+          val expPath = makeQualifiedPath(tmpDir.toString)
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
@@ -194,8 +192,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        val expectedLocation = new Path(
-          makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")).toUri
+        val expectedLocation = makeQualifiedPath(s"spark-warehouse/$dbNameWithoutBackTicks.db")
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
@@ -1096,35 +1093,34 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isDefined)
     assert(catalog.getPartition(tableIdent, partSpec).storage.properties.isEmpty)
     // Verify that the location is set to the expected string
-    def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
-      val expectedUri = new Path(expected).toUri
+    def verifyLocation(expected: URI, spec: Option[TablePartitionSpec] = None): Unit = {
       val storageFormat = spec
         .map { s => catalog.getPartition(tableIdent, s).storage }
         .getOrElse { catalog.getTableMetadata(tableIdent).storage }
       if (isDatasourceTable) {
         if (spec.isDefined) {
           assert(storageFormat.properties.isEmpty)
-          assert(storageFormat.locationUri === Some(expectedUri))
+          assert(storageFormat.locationUri === Some(expected))
         } else {
-          assert(storageFormat.locationUri === Some(expectedUri))
+          assert(storageFormat.locationUri === Some(expected))
         }
       } else {
-        assert(storageFormat.locationUri === Some(expectedUri))
+        assert(storageFormat.locationUri === Some(expected))
       }
     }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
-    verifyLocation("/path/to/your/lovely/heart")
+    verifyLocation(new URI("/path/to/your/lovely/heart"))
     // set table partition location
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
-    verifyLocation("/path/to/part/ways", Some(partSpec))
+    verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
-    verifyLocation("/swanky/steak/place")
+    verifyLocation(new URI("/swanky/steak/place"))
     // set table partition location without explicitly specifying database
     sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
-    verifyLocation("vienna", Some(partSpec))
+    verifyLocation(new URI("vienna"), Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")

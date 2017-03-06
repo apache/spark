@@ -66,7 +66,7 @@ case class CreateDatabaseCommand(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        new Path(path.getOrElse(catalog.getDefaultDBPath(databaseName))).toUri,
+        path.map(CatalogUtils.stringToURI(_)).getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]
@@ -427,7 +427,7 @@ case class AlterTableAddPartitionCommand(
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(normalizedSpec, table.storage.copy(
-        locationUri = CatalogUtils.stringToURI(location)))
+        locationUri = location.map(CatalogUtils.stringToURI(_))))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
@@ -742,7 +742,7 @@ case class AlterTableSetLocationCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    val locUri = new Path(location).toUri
+    val locUri = CatalogUtils.stringToURI(location)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     partitionSpec match {
       case Some(spec) =>

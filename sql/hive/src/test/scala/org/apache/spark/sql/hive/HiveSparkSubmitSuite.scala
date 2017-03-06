@@ -485,7 +485,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        new Path(s"file:${expectedWarehouseLocation.toString}/testlocation").toUri
+        CatalogUtils.stringToURI(s"file:${expectedWarehouseLocation.toString}/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -500,8 +500,8 @@ object SetWarehouseLocationTest extends Logging {
       sparkSession.sql("create table testLocation (a int)")
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
-      val expectedLocation = new Path(
-        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation").toUri
+      val expectedLocation = CatalogUtils.stringToURI(
+        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -868,14 +868,15 @@ object SPARK_18360 {
       val rawTable = hiveClient.getTable("default", "test_tbl")
       // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
       // location for tables in default database.
-      assert(CatalogUtils.URIToString(rawTable.storage.locationUri).get.contains(newWarehousePath))
+      assert(rawTable.storage.locationUri.map(
+        CatalogUtils.URIToString(_)).get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
       // Spark SQL will use the location of default database to generate default table
       // location for tables in default database.
-      assert(CatalogUtils.URIToString(readBack.storage.locationUri)
+      assert(readBack.storage.locationUri.map(CatalogUtils.URIToString(_))
         .get.contains(defaultDbLocation))
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)

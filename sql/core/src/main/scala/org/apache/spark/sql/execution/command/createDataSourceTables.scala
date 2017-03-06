@@ -58,7 +58,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = CatalogUtils.URIToString(table.storage.locationUri).map("path" -> _)
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
@@ -184,7 +184,7 @@ case class CreateDataSourceTableAsSelectCommand(
       mode: SaveMode,
       tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
-    val pathOption = CatalogUtils.URIToString(tableLocation).map("path" -> _)
+    val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
       session,
       className = table.provider.get,

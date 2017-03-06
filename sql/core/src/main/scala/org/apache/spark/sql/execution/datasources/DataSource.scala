@@ -598,6 +598,6 @@ object DataSource {
     val path = CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
     CatalogStorageFormat.empty.copy(
-      locationUri = CatalogUtils.stringToURI(path), properties = optionsWithoutPath)
+      locationUri = path.map(CatalogUtils.stringToURI(_)), properties = optionsWithoutPath)
   }
 }

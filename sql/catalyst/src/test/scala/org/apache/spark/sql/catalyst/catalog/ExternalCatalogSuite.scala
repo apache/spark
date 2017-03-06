@@ -555,7 +555,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("alter partitions") {
     val catalog = newBasicCatalog()
     try {
-      val newLocation = new Path(newUriForDatabase()).toUri
+      val newLocation = newUriForDatabase()
       val newSerde = "com.sparkbricks.text.EasySerde"
       val newSerdeProps = Map("spark" -> "bricks", "compressed" -> "false")
       // alter but keep spec the same
