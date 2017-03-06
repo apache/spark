@@ -47,8 +47,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @return a list for internal use in spark.glm
 tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
   list(family = "tweedie",
-       variance = function (mu) mu^var.power,
-       linkfun = function (mu) mu^link.power,
+       variance = function(mu) mu ^ var.power,
+       linkfun = function(mu) mu ^ link.power,
        link = paste("mu^", as.character(link.power), sep = ""))
 }
 
