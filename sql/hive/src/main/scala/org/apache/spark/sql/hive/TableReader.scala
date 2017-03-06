@@ -117,22 +117,34 @@ class HadoopTableReader(
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
-    // logDebug("Table input: %s".format(tablePath))
-    val ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
+    val locationPath = new Path(inputPathStr)
+    val fs = locationPath.getFileSystem(broadcastedHadoopConf.value.value)
 
-    val attrsWithIndex = attributes.zipWithIndex
-    val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
+    // if the location of the table which is not created by 'stored by' does not exist,
+    // return an empty RDD
+    // TODO: after SparkSQL supports 'stored by', we should check if this condition
+    // is still proper.
+    val storageHandler = hiveTable.getParameters.getOrDefault(META_TABLE_STORAGE, null)
+    if (storageHandler == null && !fs.exists(locationPath)) {
+      new EmptyRDD[InternalRow](sparkSession.sparkContext)
+    } else {
+      // logDebug("Table input: %s".format(tablePath))
+      val ifc = hiveTable.getInputFormatClass
+        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+      val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
 
-    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHadoopConf.value.value
-      val deserializer = deserializerClass.newInstance()
-      deserializer.initialize(hconf, localTableDesc.getProperties)
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      val attrsWithIndex = attributes.zipWithIndex
+      val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
+
+      val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
+        val hconf = broadcastedHadoopConf.value.value
+        val deserializer = deserializerClass.newInstance()
+        deserializer.initialize(hconf, localTableDesc.getProperties)
+        HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      }
+
+      deserializedHadoopRDD
     }
-
-    deserializedHadoopRDD
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
