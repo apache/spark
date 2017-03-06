@@ -170,16 +170,21 @@ class HadoopTableReader(
             matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
           }
           // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
-          def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
-            var path = tempPath
-            for (i <- (1 to parNum)) path = path.getParent
-            val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
-            path.toString + tails
+          def getPathPatternByPath(parNum: Int, tempPath: Path, partitionName: String): String = {
+            // if the partition path does not end with partition name, we should not
+            // generate the pattern, return the partition path directly
+            if (tempPath.toString.endsWith(partitionName)) {
+              var path = tempPath
+              for (i <- (1 to parNum)) path = path.getParent
+              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
+              path.toString + tails
+            } else tempPath.toString
           }
 
           val partPath = partition.getDataLocation
+          val partitionName = partition.getName
           val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
-          var pathPatternStr = getPathPatternByPath(partNum, partPath)
+          var pathPatternStr = getPathPatternByPath(partNum, partPath, partitionName)
           if (!pathPatternSet.contains(pathPatternStr)) {
             pathPatternSet += pathPatternStr
             updateExistPathSetByPathPattern(pathPatternStr)
