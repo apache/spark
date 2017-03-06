@@ -261,7 +261,7 @@ object LBFGS extends Logging {
       val (gradientSum, lossSum) = data.treeAggregate((zeroSparseVector, 0.0))(seqOp, combOp)
 
       // broadcasted model is not needed anymore
-      bcW.destroy()
+      bcW.destroy(blocking = false)
 
       // broadcasted model is not needed anymore
       bcW.destroy()

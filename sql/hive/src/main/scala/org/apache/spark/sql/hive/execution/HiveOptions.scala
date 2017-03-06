@@ -23,10 +23,11 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
  * Options for the Hive data source. Note that rule `DetermineHiveSerde` will extract Hive
  * serde/format information from these options.
  */
-class HiveOptions(@transient private val parameters: CaseInsensitiveMap) extends Serializable {
+class HiveOptions(@transient private val parameters: CaseInsensitiveMap[String])
+  extends Serializable {
   import HiveOptions._
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   val fileFormat = parameters.get(FILE_FORMAT).map(_.toLowerCase)
   val inputFormat = parameters.get(INPUT_FORMAT)

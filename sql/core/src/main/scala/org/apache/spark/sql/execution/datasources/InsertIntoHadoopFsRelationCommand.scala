@@ -147,7 +147,10 @@ case class InsertIntoHadoopFsRelationCommand(
         refreshFunction = refreshPartitionsCallback,
         options = options)
 
+      // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())
+      // refresh data cache if table is cached
+      sparkSession.catalog.refreshByPath(outputPath.toString)
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }

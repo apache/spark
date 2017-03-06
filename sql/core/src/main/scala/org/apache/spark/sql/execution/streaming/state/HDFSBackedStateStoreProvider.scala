@@ -147,6 +147,25 @@ private[state] class HDFSBackedStateStoreProvider(
       }
     }
 
+    /** Remove a single key. */
+    override def remove(key: UnsafeRow): Unit = {
+      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      if (mapToUpdate.containsKey(key)) {
+        val value = mapToUpdate.remove(key)
+        Option(allUpdates.get(key)) match {
+          case Some(ValueUpdated(_, _)) | None =>
+            // Value existed in previous version and maybe was updated, mark removed
+            allUpdates.put(key, ValueRemoved(key, value))
+          case Some(ValueAdded(_, _)) =>
+            // Value did not exist in previous version and was added, should not appear in updates
+            allUpdates.remove(key)
+          case Some(ValueRemoved(_, _)) =>
+          // Remove already in update map, no need to change
+        }
+        writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
+      }
+    }
+
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
       verify(state == UPDATING, "Cannot commit after already committed or aborted")
@@ -255,7 +274,18 @@ private[state] class HDFSBackedStateStoreProvider(
   private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
     synchronized {
       val finalDeltaFile = deltaFile(newVersion)
-      if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
+
+      // scalastyle:off
+      // Renaming a file atop an existing one fails on HDFS
+      // (http://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html).
+      // Hence we should either skip the rename step or delete the target file. Because deleting the
+      // target file will break speculation, skipping the rename step is the only choice. It's still
+      // semantically correct because Structured Streaming requires rerunning a batch should
+      // generate the same output. (SPARK-19677)
+      // scalastyle:on
+      if (fs.exists(finalDeltaFile)) {
+        fs.delete(tempDeltaFile, true)
+      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
         throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
       }
       loadedMaps.put(newVersion, map)

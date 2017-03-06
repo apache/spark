@@ -56,7 +56,6 @@ notifications:
 install:
   - export MAVEN_SKIP_RC=1
   - build/mvn ${PHASE} ${PROFILES} ${MODULES} ${ARGS}
-
 # 6. Run lints.
 script:
   - dev/lint-java

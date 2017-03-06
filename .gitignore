@@ -42,6 +42,7 @@ dependency-reduced-pom.xml
 derby.log
 dev/create-release/*final
 dev/create-release/*txt
+dev/pr-deps/
 dist/
 docs/_site
 docs/api

@@ -26,6 +26,20 @@ import org.apache.spark.sql.test.SQLTestUtils
  * A set of tests that validates support for Hive Explain command.
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
+
+  test("show cost in explain command") {
+    // Only has sizeInBytes before ANALYZE command
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
+    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
+
+    // Has both sizeInBytes and rowCount after ANALYZE command
+    sql("ANALYZE TABLE src COMPUTE STATISTICS")
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes", "rowCount")
+
+    // No cost information
+    checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
+  }
 
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
@@ -79,8 +93,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("SPARK-17409: The EXPLAIN output of CTAS only shows the analyzed plan") {
     withTempView("jt") {
-      val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-      spark.read.json(rdd).createOrReplaceTempView("jt")
+      val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str$i"}""").toDS()
+      spark.read.json(ds).createOrReplaceTempView("jt")
       val outputs = sql(
         s"""
            |EXPLAIN EXTENDED
