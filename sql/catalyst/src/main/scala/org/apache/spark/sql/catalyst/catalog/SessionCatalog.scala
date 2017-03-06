@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -131,10 +132,10 @@ class SessionCatalog(
    * does not contain a scheme, this path will not be changed after the default
    * FileSystem is changed.
    */
-  private def makeQualifiedPath(path: String): Path = {
+  private def makeQualifiedPath(path: URI): URI = {
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(hadoopConf)
-    fs.makeQualified(hadoopPath)
+    fs.makeQualified(hadoopPath).toUri
   }
 
   private def requireDbExists(db: String): Unit = {
@@ -170,7 +171,7 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri)
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
       ignoreIfExists)
@@ -228,9 +229,9 @@ class SessionCatalog(
    * Get the path for creating a non-default database when database location is not provided
    * by users.
    */
-  def getDefaultDBPath(db: String): String = {
+  def getDefaultDBPath(db: String): URI = {
     val database = formatDatabaseName(db)
-    new Path(new Path(conf.warehousePath), database + ".db").toString
+    new Path(new Path(conf.warehousePath), database + ".db").toUri
   }
 
   // ----------------------------------------------------------------------------
@@ -351,11 +352,11 @@ class SessionCatalog(
       db, table, loadPath, spec, isOverwrite, inheritTableSpecs, isSrcLocal)
   }
 
-  def defaultTablePath(tableIdent: TableIdentifier): String = {
+  def defaultTablePath(tableIdent: TableIdentifier): URI = {
     val dbName = formatDatabaseName(tableIdent.database.getOrElse(getCurrentDatabase))
     val dbLocation = getDatabaseMetadata(dbName).locationUri
 
-    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
+    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toUri
   }
 
   // ----------------------------------------------

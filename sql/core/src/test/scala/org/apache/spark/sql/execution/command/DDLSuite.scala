@@ -26,9 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -208,7 +206,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   private def assertUnsupported(query: String): Unit = {
     val e = intercept[AnalysisException] {
-      spark.sql(query)
+      sql(query)
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
@@ -219,7 +217,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", spark.sessionState.conf.warehousePath, Map()),
+      CatalogDatabase(
+        name, "", CatalogUtils.stringToURI(spark.sessionState.conf.warehousePath), Map()),
       ignoreIfExists = false)
   }
 
@@ -234,12 +233,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val part = CatalogTablePartition(
       spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
-  }
-
-  private def getDatabaseLocation(dbName: String): String = {
-    val dbPath = new Path(spark.sessionState.conf.warehousePath)
-    val expectedLocation = s"${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
-    makeQualifiedPath(expectedLocation)
   }
 
   test("the qualified path of a database is stored in the catalog") {
@@ -259,11 +252,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  private def makeQualifiedPath(path: String): String = {
+  private def makeQualifiedPath(path: String): URI = {
     // copy-paste from SessionCatalog
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toString
+    fs.makeQualified(hadoopPath).toUri
   }
 
   test("Create Database using Default Warehouse Path") {
@@ -272,10 +265,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
+      val dbPath = new Path(spark.sessionState.conf.warehousePath)
+      val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
+      val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
       assert(db1 == CatalogDatabase(
         dbName,
         "",
-        getDatabaseLocation(dbName),
+        expectedDBUri, // expectedLocation,
         Map.empty))
       sql(s"DROP DATABASE $dbName CASCADE")
       assert(!catalog.databaseExists(dbName))
@@ -318,10 +314,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+        val dbPath = new Path(spark.sessionState.conf.warehousePath)
+        val expectedDBLocation =
+          s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbNameWithoutBackTicks.db"
+        val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
+
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          getDatabaseLocation(dbNameWithoutBackTicks),
+          expectedDBUri,
           Map.empty))
 
         // TODO: HiveExternalCatalog should throw DatabaseAlreadyExistsException
@@ -554,7 +555,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     databaseNames.foreach { dbName =>
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        val location = getDatabaseLocation(dbNameWithoutBackTicks)
+        val dbPath = new Path(spark.sessionState.conf.warehousePath)
+        val expectedDBLocation =
+          s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbNameWithoutBackTicks.db"
+        val location = CatalogUtils.stringToURI(expectedDBLocation)
 
         sql(s"CREATE DATABASE $dbName")
 
@@ -562,7 +566,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
-            Row("Location", location) ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "") :: Nil)
 
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
@@ -571,7 +575,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
-            Row("Location", location) ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
@@ -580,7 +584,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
-            Row("Location", location) ::
+            Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
       } finally {
         catalog.reset()
@@ -1188,7 +1192,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       normalizeSerdeProp(catalog.getPartition(tableIdent, partSpec).storage.properties).isEmpty)
 
     // Verify that the location is set to the expected string
-    def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
+    def verifyLocation(expected: URI, spec: Option[TablePartitionSpec] = None): Unit = {
       val storageFormat = spec
         .map { s => catalog.getPartition(tableIdent, s).storage }
         .getOrElse { catalog.getTableMetadata(tableIdent).storage }
@@ -1200,17 +1204,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
-    verifyLocation("/path/to/your/lovely/heart")
+    verifyLocation(new URI("/path/to/your/lovely/heart"))
     // set table partition location
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
-    verifyLocation("/path/to/part/ways", Some(partSpec))
+    verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
-    verifyLocation("/swanky/steak/place")
+    verifyLocation(new URI("/swanky/steak/place"))
     // set table partition location without explicitly specifying database
     sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
-    verifyLocation("vienna", Some(partSpec))
+    verifyLocation(new URI("vienna"), Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
@@ -1371,7 +1375,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(tableLocation.isDefined)
       makeQualifiedPath(tableLocation.get + "/paris")
     } else {
-      "paris"
+      new URI("paris")
     }
 
     assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option(partitionLocation))
@@ -1894,7 +1898,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         // SET LOCATION won't move data from previous table path to new table path.
         assert(spark.table("tbl").count() == 0)
         // the previous table path should be still there.
-        assert(new File(new URI(defaultTablePath)).exists())
+        assert(new File(defaultTablePath).exists())
 
         sql("INSERT INTO tbl SELECT 2")
         checkAnswer(spark.table("tbl"), Row(2))
@@ -1918,28 +1922,27 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        assert(table.location == new URI(dir.getAbsolutePath))
 
         dir.delete
-        val tableLocFile = new File(table.location)
-        assert(!tableLocFile.exists)
+        assert(!dir.exists)
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
-        assert(tableLocFile.exists)
+        assert(dir.exists)
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         Utils.deleteRecursively(dir)
-        assert(!tableLocFile.exists)
+        assert(!dir.exists)
         spark.sql("INSERT OVERWRITE TABLE t SELECT 'c', 1")
-        assert(tableLocFile.exists)
+        assert(dir.exists)
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDir = newDirFile.toURI.toString
+        val newDir = newDirFile.getAbsolutePath
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == newDir)
+        assert(table1.location == new URI(newDir))
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1960,7 +1963,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        assert(table.location == new URI(dir.getAbsolutePath))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1986,13 +1989,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == dir.getAbsolutePath)
+        assert(table.location == new URI(dir.getAbsolutePath))
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDir = newDirFile.toURI.toString
+        val newDir = newDirFile.toURI
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -2042,7 +2045,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location == dir.getAbsolutePath)
+            assert(table.location == new URI(dir.getAbsolutePath))
 
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
@@ -2061,13 +2064,93 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location == dir.getAbsolutePath)
+            assert(table.location == new URI(dir.getAbsolutePath))
 
             val partDir = new File(dir, "a=3")
             assert(partDir.exists())
 
             checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
         }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for datasource table") {
+      withTable("t", "t1") {
+        withTempDir { dir =>
+          val loc = new File(dir, specialChars)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string)
+               |USING parquet
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(new Path(table.location).toString.contains(specialChars))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t SELECT 1")
+          assert(loc.listFiles().length >= 1)
+          checkAnswer(spark.table("t"), Row("1") :: Nil)
+        }
+
+        withTempDir { dir =>
+          val loc = new File(dir, specialChars)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a string, b string)
+               |USING parquet
+               |PARTITIONED BY(b)
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(new Path(table.location).toString.contains(specialChars))
+
+          assert(loc.listFiles().isEmpty)
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+          val partFile = new File(loc, "b=2")
+          assert(partFile.listFiles().length >= 1)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
+
+          spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+          val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
+          assert(!partFile1.exists())
+          val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+          assert(partFile2.listFiles().length >= 1)
+          checkAnswer(spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"location uri contains $specialChars for database") {
+      try {
+        withTable("t") {
+          withTempDir { dir =>
+            val loc = new File(dir, specialChars)
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
+            spark.sql("USE tmpdb")
+
+            import testImplicits._
+            Seq(1).toDF("a").write.saveAsTable("t")
+            val tblloc = new File(loc, "t")
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            val tblPath = new Path(tblloc.getAbsolutePath)
+            val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
+            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(tblloc.listFiles().nonEmpty)
+          }
+        }
+      } finally {
+        spark.sql("DROP DATABASE IF EXISTS tmpdb")
       }
     }
   }
