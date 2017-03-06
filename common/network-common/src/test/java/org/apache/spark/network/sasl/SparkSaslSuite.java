@@ -23,6 +23,7 @@ import static org.mockito.Mockito.*;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -35,7 +36,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.security.sasl.SaslException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import io.netty.buffer.ByteBuf;
@@ -45,8 +45,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -56,7 +54,6 @@ import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.sasl.aes.AesCipher;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
@@ -138,22 +135,19 @@ public class SparkSaslSuite {
     testBasicSasl(true);
   }
 
-  private void testBasicSasl(boolean encrypt) throws Throwable {
+  private static void testBasicSasl(boolean encrypt) throws Throwable {
     RpcHandler rpcHandler = mock(RpcHandler.class);
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) {
-          ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
-          RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
-          assertEquals("Ping", JavaUtils.bytesToString(message));
-          cb.onSuccess(JavaUtils.stringToBytes("Pong"));
-          return null;
-        }
-      })
+    doAnswer(invocation -> {
+      ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
+      RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
+      assertEquals("Ping", JavaUtils.bytesToString(message));
+      cb.onSuccess(JavaUtils.stringToBytes("Pong"));
+      return null;
+    })
       .when(rpcHandler)
       .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
 
-    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false, false);
+    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {
       ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
         TimeUnit.SECONDS.toMillis(10));
@@ -256,21 +250,17 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    final Map<String, String> testConf = ImmutableMap.of(
+    Map<String, String> testConf = ImmutableMap.of(
       "spark.network.sasl.maxEncryptedBlockSize", "1k");
 
-    final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
-    final File file = File.createTempFile("sasltest", ".txt");
+    AtomicReference<ManagedBuffer> response = new AtomicReference<>();
+    File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
-      final TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(testConf));
+      TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(testConf));
       StreamManager sm = mock(StreamManager.class);
-      when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
-          @Override
-          public ManagedBuffer answer(InvocationOnMock invocation) {
-            return new FileSegmentManagedBuffer(conf, file, 0, file.length());
-          }
-        });
+      when(sm.getChunk(anyLong(), anyInt())).thenAnswer(invocation ->
+          new FileSegmentManagedBuffer(conf, file, 0, file.length()));
 
       RpcHandler rpcHandler = mock(RpcHandler.class);
       when(rpcHandler.getStreamManager()).thenReturn(sm);
@@ -279,20 +269,17 @@ public class SparkSaslSuite {
       new Random().nextBytes(data);
       Files.write(data, file);
 
-      ctx = new SaslTestCtx(rpcHandler, true, false, false, testConf);
+      ctx = new SaslTestCtx(rpcHandler, true, false, testConf);
 
-      final CountDownLatch lock = new CountDownLatch(1);
+      CountDownLatch lock = new CountDownLatch(1);
 
       ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
-      doAnswer(new Answer<Void>() {
-          @Override
-          public Void answer(InvocationOnMock invocation) {
-            response.set((ManagedBuffer) invocation.getArguments()[1]);
-            response.get().retain();
-            lock.countDown();
-            return null;
-          }
-        }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
+      doAnswer(invocation -> {
+        response.set((ManagedBuffer) invocation.getArguments()[1]);
+        response.get().retain();
+        lock.countDown();
+        return null;
+      }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
 
       ctx.client.fetchChunk(0, 0, callback);
       lock.await(10, TimeUnit.SECONDS);
@@ -317,7 +304,7 @@ public class SparkSaslSuite {
   public void testServerAlwaysEncrypt() throws Exception {
     SaslTestCtx ctx = null;
     try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), false, false, false,
+      ctx = new SaslTestCtx(mock(RpcHandler.class), false, false,
         ImmutableMap.of("spark.network.sasl.serverAlwaysEncrypt", "true"));
       fail("Should have failed to connect without encryption.");
     } catch (Exception e) {
@@ -336,7 +323,7 @@ public class SparkSaslSuite {
     // able to understand RPCs sent to it and thus close the connection.
     SaslTestCtx ctx = null;
     try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), true, true, false);
+      ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
       ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
         TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
@@ -374,69 +361,6 @@ public class SparkSaslSuite {
     }
   }
 
-  @Test
-  public void testAesEncryption() throws Exception {
-    final AtomicReference<ManagedBuffer> response = new AtomicReference<>();
-    final File file = File.createTempFile("sasltest", ".txt");
-    SaslTestCtx ctx = null;
-    try {
-      final TransportConf conf = new TransportConf("rpc", MapConfigProvider.EMPTY);
-      final TransportConf spyConf = spy(conf);
-      doReturn(true).when(spyConf).aesEncryptionEnabled();
-
-      StreamManager sm = mock(StreamManager.class);
-      when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
-        @Override
-        public ManagedBuffer answer(InvocationOnMock invocation) {
-          return new FileSegmentManagedBuffer(spyConf, file, 0, file.length());
-        }
-      });
-
-      RpcHandler rpcHandler = mock(RpcHandler.class);
-      when(rpcHandler.getStreamManager()).thenReturn(sm);
-
-      byte[] data = new byte[256 * 1024 * 1024];
-      new Random().nextBytes(data);
-      Files.write(data, file);
-
-      ctx = new SaslTestCtx(rpcHandler, true, false, true);
-
-      final Object lock = new Object();
-
-      ChunkReceivedCallback callback = mock(ChunkReceivedCallback.class);
-      doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) {
-          response.set((ManagedBuffer) invocation.getArguments()[1]);
-          response.get().retain();
-          synchronized (lock) {
-            lock.notifyAll();
-          }
-          return null;
-        }
-      }).when(callback).onSuccess(anyInt(), any(ManagedBuffer.class));
-
-      synchronized (lock) {
-        ctx.client.fetchChunk(0, 0, callback);
-        lock.wait(10 * 1000);
-      }
-
-      verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
-      verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
-
-      byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
-      assertTrue(Arrays.equals(data, received));
-    } finally {
-      file.delete();
-      if (ctx != null) {
-        ctx.close();
-      }
-      if (response.get() != null) {
-        response.get().release();
-      }
-    }
-  }
-
   private static class SaslTestCtx {
 
     final TransportClient client;
@@ -449,28 +373,24 @@ public class SparkSaslSuite {
     SaslTestCtx(
         RpcHandler rpcHandler,
         boolean encrypt,
-        boolean disableClientEncryption,
-        boolean aesEnable)
+        boolean disableClientEncryption)
       throws Exception {
 
-      this(rpcHandler, encrypt, disableClientEncryption, aesEnable,
-        Collections.<String, String>emptyMap());
+      this(rpcHandler, encrypt, disableClientEncryption, Collections.emptyMap());
     }
 
     SaslTestCtx(
         RpcHandler rpcHandler,
         boolean encrypt,
         boolean disableClientEncryption,
-        boolean aesEnable,
-        Map<String, String> testConf)
+        Map<String, String> extraConf)
       throws Exception {
 
+      Map<String, String> testConf = ImmutableMap.<String, String>builder()
+        .putAll(extraConf)
+        .put("spark.authenticate.enableSaslEncryption", String.valueOf(encrypt))
+        .build();
       TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(testConf));
-
-      if (aesEnable) {
-        conf = spy(conf);
-        doReturn(true).when(conf).aesEncryptionEnabled();
-      }
 
       SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
       when(keyHolder.getSaslUser(anyString())).thenReturn("user");
@@ -478,17 +398,14 @@ public class SparkSaslSuite {
 
       TransportContext ctx = new TransportContext(conf, rpcHandler);
 
-      String encryptHandlerName = aesEnable ? AesCipher.ENCRYPTION_HANDLER_NAME :
-        SaslEncryption.ENCRYPTION_HANDLER_NAME;
-
-      this.checker = new EncryptionCheckerBootstrap(encryptHandlerName);
+      this.checker = new EncryptionCheckerBootstrap(SaslEncryption.ENCRYPTION_HANDLER_NAME);
 
       this.server = ctx.createServer(Arrays.asList(new SaslServerBootstrap(conf, keyHolder),
         checker));
 
       try {
-        List<TransportClientBootstrap> clientBootstraps = Lists.newArrayList();
-        clientBootstraps.add(new SaslClientBootstrap(conf, "user", keyHolder, encrypt));
+        List<TransportClientBootstrap> clientBootstraps = new ArrayList<>();
+        clientBootstraps.add(new SaslClientBootstrap(conf, "user", keyHolder));
         if (disableClientEncryption) {
           clientBootstraps.add(new EncryptionDisablerBootstrap());
         }
@@ -536,11 +453,6 @@ public class SparkSaslSuite {
           ctx.channel().pipeline().get(encryptHandlerName) != null;
       }
       ctx.write(msg, promise);
-    }
-
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      super.handlerRemoved(ctx);
     }
 
     @Override

@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, IOException}
 import java.net.URI
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -210,13 +212,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(store1.commit() === 2)
     assert(rowsToSet(store1.iterator()) === Set("a" -> 1, "b" -> 1))
     assert(getDataFromFiles(provider) === Set("a" -> 1, "b" -> 1))
-
-    // Overwrite the version with other data
-    val store2 = provider.getStore(1)
-    put(store2, "c", 1)
-    assert(store2.commit() === 2)
-    assert(rowsToSet(store2.iterator()) === Set("a" -> 1, "c" -> 1))
-    assert(getDataFromFiles(provider) === Set("a" -> 1, "c" -> 1))
   }
 
   test("snapshotting") {
@@ -292,6 +287,20 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, 19) === Set("a" -> 19))
   }
 
+  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+    val conf = new Configuration()
+    conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
+    conf.set("fs.default.name", "fake:///")
+
+    val provider = newStoreProvider(hadoopConf = conf)
+    provider.getStore(0).commit()
+    provider.getStore(0).commit()
+
+    // Verify we don't leak temp files
+    val tempFiles = FileUtils.listFiles(new File(provider.id.checkpointLocation),
+      null, true).asScala.filter(_.getName.startsWith("temp-"))
+    assert(tempFiles.isEmpty)
+  }
 
   test("corrupted file handling") {
     val provider = newStoreProvider(minDeltasForSnapshot = 5)
@@ -395,6 +404,8 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
     }
 
+    val timeoutDuration = 60 seconds
+
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
@@ -403,7 +414,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           // Generate sufficient versions of store for snapshots
           generateStoreVersions()
 
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             // Store should have been reported to the coordinator
             assert(coordinatorRef.getLocation(storeId).nonEmpty, "active instance was not reported")
 
@@ -422,14 +433,14 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
           generateStoreVersions()
 
           // Earliest delta file should get cleaned up
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!fileExists(provider, 1, isSnapshot = false), "earliest file not deleted")
           }
 
           // If driver decides to deactivate all instances of the store, then this instance
           // should be unloaded
           coordinatorRef.deactivateInstances(dir)
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -439,7 +450,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
           // If some other executor loads the store, then this instance should be unloaded
           coordinatorRef.reportActiveInstance(storeId, "other-host", "other-exec")
-          eventually(timeout(10 seconds)) {
+          eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeId))
           }
 
@@ -450,7 +461,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(timeoutDuration)) {
         require(SparkEnv.get === null)
         assert(!StateStore.isLoaded(storeId))
         assert(!StateStore.isMaintenanceRunning)
@@ -460,7 +471,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
   test("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
-    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toString
+    val dir = scheme + "://" + Utils.createDirectory(tempDir, Random.nextString(5)).toURI.getPath
     val conf = new Configuration()
     conf.set(s"fs.$scheme.impl", classOf[RenameReturnsFalseFileSystem].getName)
     val provider = newStoreProvider(dir = dir, hadoopConf = conf)
@@ -676,6 +687,21 @@ private[state] object StateStoreSuite {
       case ValueUpdated(key, value) => Updated(rowToString(key), rowToInt(value))
       case ValueRemoved(key, _) => Removed(rowToString(key))
     }.toSet
+  }
+}
+
+/**
+ * Fake FileSystem that simulates HDFS rename semantic, i.e. renaming a file atop an existing
+ * one should return false.
+ * See hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html
+ */
+class RenameLikeHDFSFileSystem extends RawLocalFileSystem {
+  override def rename(src: Path, dst: Path): Boolean = {
+    if (exists(dst)) {
+      return false
+    } else {
+      return super.rename(src, dst)
+    }
   }
 }
 

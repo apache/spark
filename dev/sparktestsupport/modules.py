@@ -245,7 +245,8 @@ streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming],
     source_file_regexes=[
-        "external/kafka-0-10",
+        # The ending "/" is necessary otherwise it will include "sql-kafka" codes
+        "external/kafka-0-10/",
         "external/kafka-0-10-assembly",
     ],
     sbt_test_goals=[

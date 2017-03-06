@@ -302,22 +302,19 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    fit(dataset, handlePersistence)
-  }
-
-  @Since("2.2.0")
-  protected def fit(dataset: Dataset[_], handlePersistence: Boolean): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
+
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
+
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
     val instr = Instrumentation.create(this, instances)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
-
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -329,6 +326,7 @@ class KMeans @Since("1.5.0") (
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     if (handlePersistence) {

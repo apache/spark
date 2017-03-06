@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
@@ -30,6 +30,7 @@ import org.apache.spark.scheduler.SparkListenerEvent
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 abstract class StreamingQueryListener {
 
   import StreamingQueryListener._
@@ -51,7 +52,7 @@ abstract class StreamingQueryListener {
    * @note This method is asynchronous. The status in [[StreamingQuery]] will always be
    *       latest no matter when this method is called. Therefore, the status of [[StreamingQuery]]
    *       may be changed before/when you process the event. E.g., you may find [[StreamingQuery]]
-   *       is terminated when you are processing [[QueryProgressEvent]].
+   *       is terminated when you are processing `QueryProgressEvent`.
    * @since 2.0.0
    */
   def onQueryProgress(event: QueryProgressEvent): Unit
@@ -70,6 +71,7 @@ abstract class StreamingQueryListener {
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 object StreamingQueryListener {
 
   /**
@@ -78,6 +80,7 @@ object StreamingQueryListener {
    * @since 2.0.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   trait Event extends SparkListenerEvent
 
   /**
@@ -89,6 +92,7 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   class QueryStartedEvent private[sql](
       val id: UUID,
       val runId: UUID,
@@ -101,6 +105,7 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   class QueryProgressEvent private[sql](val progress: StreamingQueryProgress) extends Event
 
   /**
@@ -114,6 +119,7 @@ object StreamingQueryListener {
    * @since 2.1.0
    */
   @Experimental
+  @InterfaceStability.Evolving
   class QueryTerminatedEvent private[sql](
       val id: UUID,
       val runId: UUID,

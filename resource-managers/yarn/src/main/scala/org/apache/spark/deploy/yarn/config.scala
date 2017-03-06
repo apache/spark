@@ -82,6 +82,13 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val ALLOW_HISTORY_SERVER_TRACKING_URL =
+    ConfigBuilder("spark.yarn.historyServer.allowTracking")
+      .doc("Allow using the History Server URL for the application as the tracking URL for the " +
+        "application when the Web UI is not enabled.")
+      .booleanConf
+      .createWithDefault(false)
+
   /* File distribution. */
 
   private[spark] val SPARK_ARCHIVE = ConfigBuilder("spark.yarn.archive")
@@ -247,6 +254,11 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
+    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
+      "that hosts fs.defaultFS does not need to be listed here.")
+    .fallbackConf(NAMENODES_TO_ACCESS)
 
   /* Rolled log aggregation configuration. */
 

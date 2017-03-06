@@ -18,7 +18,7 @@
 package org.apache.spark.network.server;
 
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportResponseHandler;
-import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.ResponseMessage;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -48,7 +47,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * on the channel for at least `requestTimeoutMs`. Note that this is duplex traffic; we will not
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
-public class TransportChannelHandler extends SimpleChannelInboundHandler<Message> {
+public class TransportChannelHandler extends ChannelInboundHandlerAdapter {
   private static final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
 
   private final TransportClient client;
@@ -88,14 +87,14 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while registering channel", e);
+      logger.error("Exception from request handler while channel is active", e);
     }
     try {
       responseHandler.channelActive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while registering channel", e);
+      logger.error("Exception from response handler while channel is active", e);
     }
-    super.channelRegistered(ctx);
+    super.channelActive(ctx);
   }
 
   @Override
@@ -103,22 +102,24 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     try {
       requestHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from request handler while unregistering channel", e);
+      logger.error("Exception from request handler while channel is inactive", e);
     }
     try {
       responseHandler.channelInactive();
     } catch (RuntimeException e) {
-      logger.error("Exception from response handler while unregistering channel", e);
+      logger.error("Exception from response handler while channel is inactive", e);
     }
-    super.channelUnregistered(ctx);
+    super.channelInactive(ctx);
   }
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object request) throws Exception {
     if (request instanceof RequestMessage) {
       requestHandler.handle((RequestMessage) request);
-    } else {
+    } else if (request instanceof ResponseMessage) {
       responseHandler.handle((ResponseMessage) request);
+    } else {
+      ctx.fireChannelRead(request);
     }
   }
 

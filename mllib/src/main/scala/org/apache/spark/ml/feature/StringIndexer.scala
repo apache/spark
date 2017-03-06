@@ -255,7 +255,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
  * @see `StringIndexer` for converting strings into indices
  */
 @Since("1.5.0")
-class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
+class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   @Since("1.5.0")

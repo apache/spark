@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Matchers._
 import org.mockito.Matchers.{eq => meq}
@@ -62,9 +62,26 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     checkpointerMock = mock[IRecordProcessorCheckpointer]
   }
 
-  test("check serializability of SerializableAWSCredentials") {
-    Utils.deserialize[SerializableAWSCredentials](
-      Utils.serialize(new SerializableAWSCredentials("x", "y")))
+  test("check serializability of credential provider classes") {
+    Utils.deserialize[BasicCredentialsProvider](
+      Utils.serialize(BasicCredentialsProvider(
+        awsAccessKeyId = "x",
+        awsSecretKey = "y")))
+
+    Utils.deserialize[STSCredentialsProvider](
+      Utils.serialize(STSCredentialsProvider(
+        stsRoleArn = "fakeArn",
+        stsSessionName = "fakeSessionName",
+        stsExternalId = Some("fakeExternalId"))))
+
+    Utils.deserialize[STSCredentialsProvider](
+      Utils.serialize(STSCredentialsProvider(
+        stsRoleArn = "fakeArn",
+        stsSessionName = "fakeSessionName",
+        stsExternalId = Some("fakeExternalId"),
+        longLivedCredsProvider = BasicCredentialsProvider(
+          awsAccessKeyId = "x",
+          awsSecretKey = "y"))))
   }
 
   test("process records including store and set checkpointer") {

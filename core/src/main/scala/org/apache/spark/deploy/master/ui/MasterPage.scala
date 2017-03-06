@@ -33,7 +33,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private val master = parent.masterEndpointRef
 
   def getMasterState: MasterStateResponse = {
-    master.askWithRetry[MasterStateResponse](RequestMasterState)
+    master.askSync[MasterStateResponse](RequestMasterState)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
@@ -76,7 +76,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Node", "Submitted Time",
+    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor", "Submitted Time",
       "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
@@ -176,8 +176,15 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def workerRow(worker: WorkerInfo): Seq[Node] = {
     <tr>
       <td>
-          <a href={UIUtils.makeHref(parent.master.reverseProxy,
-            worker.id, worker.webUiAddress)}>{worker.id}</a>
+        {
+          if (worker.isAlive()) {
+            <a href={UIUtils.makeHref(parent.master.reverseProxy, worker.id, worker.webUiAddress)}>
+              {worker.id}
+            </a>
+          } else {
+            worker.id
+          }
+        }
       </td>
       <td>{worker.host}:{worker.port}</td>
       <td>{worker.state}</td>
@@ -247,10 +254,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
       <td>{driver.worker.map(w =>
-        <a href=
-          {UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
-          {w.id.toString}</a>
-        ).getOrElse("None")}
+        if (w.isAlive()) {
+          <a href={UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
+            {w.id.toString}
+          </a>
+        } else {
+          w.id.toString
+        }).getOrElse("None")}
       </td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>

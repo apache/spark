@@ -22,6 +22,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -131,11 +132,15 @@ class CacheManager extends Logging {
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
-    plan transformDown {
+    val newPlan = plan transformDown {
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))
           .getOrElse(currentFragment)
+    }
+
+    newPlan transformAllExpressions {
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
     }
   }
 
@@ -163,15 +168,16 @@ class CacheManager extends Logging {
       (fs, path.makeQualified(fs.getUri, fs.getWorkingDirectory))
     }
 
-    cachedData.foreach {
-      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
-        val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
-        if (dataIndex >= 0) {
-          data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
-          cachedData.remove(dataIndex)
-        }
-        sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
-      case _ => // Do Nothing
+    cachedData.filter {
+      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined => true
+      case _ => false
+    }.foreach { data =>
+      val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
+      if (dataIndex >= 0) {
+        data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
+        cachedData.remove(dataIndex)
+      }
+      sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
     }
   }
 

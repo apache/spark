@@ -166,7 +166,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
-   * This method differs from [[sampleByKey]] in that we make additional passes over the RDD to
+   * This method differs from `sampleByKey` in that we make additional passes over the RDD to
    * create a sample size that's exactly equal to the sum of math.ceil(numItems * samplingRate)
    * over all key values with a 99.99% confidence. When sampling without replacement, we need one
    * additional pass over the RDD to guarantee sample size; when sampling with replacement, we need
@@ -184,7 +184,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
-   * This method differs from [[sampleByKey]] in that we make additional passes over the RDD to
+   * This method differs from `sampleByKey` in that we make additional passes over the RDD to
    * create a sample size that's exactly equal to the sum of math.ceil(numItems * samplingRate)
    * over all key values with a 99.99% confidence. When sampling without replacement, we need one
    * additional pass over the RDD to guarantee sample size; when sampling with replacement, we need

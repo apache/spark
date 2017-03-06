@@ -291,7 +291,7 @@ object HistoryServer extends Logging {
 
   /**
    * Create a security manager.
-   * This turns off security in the SecurityManager, so that the the History Server can start
+   * This turns off security in the SecurityManager, so that the History Server can start
    * in a Spark cluster where security is enabled.
    * @param config configuration for the SecurityManager constructor
    * @return the security manager for use in constructing the History Server.

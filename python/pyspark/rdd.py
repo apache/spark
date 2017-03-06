@@ -68,7 +68,8 @@ def portable_hash(x):
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
-    if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
+
+    if sys.version_info >= (3, 2, 3) and 'PYTHONHASHSEED' not in os.environ:
         raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
@@ -135,12 +136,11 @@ def _load_from_socket(port, serializer):
         break
     if not sock:
         raise Exception("could not open socket")
-    try:
-        rf = sock.makefile("rb", 65536)
-        for item in serializer.load_stream(rf):
-            yield item
-    finally:
-        sock.close()
+    # The RDD materialization time is unpredicable, if we set a timeout for socket reading
+    # operation, it will very possibly fail. See SPARK-18281.
+    sock.settimeout(None)
+    # The socket will be automatically closed when garbage-collected.
+    return serializer.load_stream(sock.makefile("rb", 65536))
 
 
 def ignore_unicode_prefix(f):

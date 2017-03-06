@@ -50,7 +50,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       functionResourceLoader,
       functionRegistry,
       conf,
-      newHadoopConf())
+      newHadoopConf(),
+      sqlParser)
   }
 
   /**
@@ -59,14 +60,20 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
+        new ResolveHiveSerdeTable(sparkSession) ::
+        new FindDataSourceTable(sparkSession) ::
+        new ResolveSQLOnFile(sparkSession) :: Nil
+
+      override val postHocResolutionRules =
+        new DetermineTableStats(sparkSession) ::
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
-        AnalyzeCreateTable(sparkSession) ::
+        PreprocessTableCreation(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
-        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
+        HiveAnalysis :: Nil
 
-      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck)
     }
   }
 
@@ -82,11 +89,9 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          DDLStrategy,
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
-          DataSinks,
           Scripts,
           Aggregation,
           JoinSelection,
@@ -139,12 +144,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   def hiveThriftServerAsync: Boolean = {
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
-  }
-
-  // TODO: why do we get this from SparkConf but not SQLConf?
-  def hiveThriftServerSingleSession: Boolean = {
-    sparkSession.sparkContext.conf.getBoolean(
-      "spark.sql.hive.thriftServer.singleSession", defaultValue = false)
   }
 
 }

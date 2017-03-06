@@ -50,7 +50,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new SimpleTextOutputWriter(path, context)
+        new SimpleTextOutputWriter(path, dataSchema, context)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = ""
@@ -117,13 +117,13 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   }
 }
 
-class SimpleTextOutputWriter(path: String, context: TaskAttemptContext)
+class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
   extends OutputWriter {
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
-  override def write(row: Row): Unit = {
-    val serialized = row.toSeq.map { v =>
+  override def write(row: InternalRow): Unit = {
+    val serialized = row.toSeq(dataSchema).map { v =>
       if (v == null) "" else v.toString
     }.mkString(",")
 

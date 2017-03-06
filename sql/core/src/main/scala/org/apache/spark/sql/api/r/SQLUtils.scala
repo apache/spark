@@ -47,12 +47,14 @@ private[sql] object SQLUtils extends Logging {
       jsc: JavaSparkContext,
       sparkConfigMap: JMap[Object, Object],
       enableHiveSupport: Boolean): SparkSession = {
-    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
+    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport
+        && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
       SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
     } else {
       if (enableHiveSupport) {
         logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
-          "Spark is not built with Hive; falling back to without Hive support.")
+          s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to 'hive', " +
+          "falling back to without Hive support.")
       }
       SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
     }
@@ -276,11 +278,12 @@ private[sql] object SQLUtils extends Logging {
   }
 
   def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
-    databaseName match {
-      case n: String if n != null && n.trim.nonEmpty =>
-        sparkSession.catalog.listTables(n).collect().map(_.name)
+    val db = databaseName match {
+      case _ if databaseName != null && databaseName.trim.nonEmpty =>
+        databaseName
       case _ =>
-        sparkSession.catalog.listTables().collect().map(_.name)
+        sparkSession.catalog.currentDatabase
     }
+    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
   }
 }

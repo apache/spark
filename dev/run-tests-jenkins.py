@@ -80,7 +80,7 @@ def pr_message(build_display_name,
                 short_commit_hash,
                 commit_url,
                 str(' ' + post_msg + '.') if post_msg else '.')
-    return '**[Test build %s %s](%sconsoleFull)** for PR %s at commit [`%s`](%s)%s' % str_args
+    return '**[Test build %s %s](%stestReport)** for PR %s at commit [`%s`](%s)%s' % str_args
 
 
 def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
@@ -165,12 +165,6 @@ def main():
     if "test-maven" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_TOOL"] = "maven"
     # Switch the Hadoop profile based on the PR title:
-    if "test-hadoop2.2" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.2"
-    if "test-hadoop2.3" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.3"
-    if "test-hadoop2.4" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.4"
     if "test-hadoop2.6" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.6"
     if "test-hadoop2.7" in ghprb_pull_title:

@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -29,6 +29,7 @@ import org.apache.spark.sql.SparkSession
  * @since 2.0.0
  */
 @Experimental
+@InterfaceStability.Evolving
 trait StreamingQuery {
 
   /**
@@ -136,7 +137,7 @@ trait StreamingQuery {
    * Blocks until all available data in the source has been processed and committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
    * method may block forever. Additionally, this method is only guaranteed to block until data that
-   * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]
+   * has been synchronously appended data to a `org.apache.spark.sql.execution.streaming.Source`
    * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
    * @since 2.0.0
    */

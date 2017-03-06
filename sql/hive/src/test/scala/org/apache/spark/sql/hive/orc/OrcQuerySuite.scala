@@ -26,8 +26,9 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
-import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -350,7 +351,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           spark.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
@@ -451,7 +452,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 s"""
                    |CREATE TABLE dummy_orc(key INT, value STRING)
                    |STORED AS ORC
-                   |LOCATION '$path'
+                   |LOCATION '${dir.toURI}'
                  """.stripMargin)
 
               spark.sql(
@@ -473,7 +474,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
-                  case _: MetastoreRelation => ()
+                  case _: CatalogRelation => ()
                 }.getOrElse {
                   fail(s"Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")
@@ -500,7 +501,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             |create external table dummy_orc (id long, valueField long)
             |partitioned by (partitionValue int)
             |stored as orc
-            |location "${dir.getAbsolutePath}"""".stripMargin)
+            |location "${dir.toURI}"""".stripMargin)
           spark.sql(s"msck repair table dummy_orc")
           checkAnswer(spark.sql("select * from dummy_orc"), df)
         }

@@ -54,6 +54,24 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     t.createOrReplaceTempView("t")
   }
 
+  test("SPARK-18854 numberedTreeString for subquery") {
+    val df = sql("select * from range(10) where id not in " +
+      "(select id from range(2) union all select id from range(2))")
+
+    // The depth first traversal of the plan tree
+    val dfs = Seq("Project", "Filter", "Union", "Project", "Range", "Project", "Range", "Range")
+    val numbered = df.queryExecution.analyzed.numberedTreeString.split("\n")
+
+    // There should be 8 plan nodes in total
+    assert(numbered.size == dfs.size)
+
+    for (i <- dfs.indices) {
+      val node = df.queryExecution.analyzed(i)
+      assert(node.nodeName == dfs(i))
+      assert(numbered(i).contains(node.nodeName))
+    }
+  }
+
   test("rdd deserialization does not crash [SPARK-15791]") {
     sql("select (select 1 as b) as b").rdd.count()
   }
@@ -245,12 +263,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in (select c from t where b < d)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
+      sql("select * from l where (a, b) not in (select c, d from t) and a < 4"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
 
     // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in (select c from r where c > 10 and b < d)"),
+      sql("select * from l where (a, b) not in (select c, d from r where c > 10)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
@@ -491,7 +509,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
       }
       assert(errMsg.getMessage.contains(
-        "a GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
+        "A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated columns:"))
     }
   }
 
