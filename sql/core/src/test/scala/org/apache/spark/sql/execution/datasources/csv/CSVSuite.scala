@@ -465,6 +465,47 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save csv with quote escaping enabled, avoiding double backslash") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val df1 = spark.sqlContext.createDataFrame(List(
+        (1, "aa\\\"bb,cc"),         // aa\"bb,cc
+        (2, "aa\\\\\"bb,cc"),       // aa\\\"bb,cc
+        (3, "aa\\\"\\\"bb,cc"),     // aa\"\"bb,cc
+        (4, "aa\\\\\"\\\\\"bb,cc")  // aa\\\"\\\"bb,cc
+      ))
+
+      df1.coalesce(1).write
+              .format("csv")
+              .option("quote", "\"")
+              .option("escape", "\\")
+              .save(csvDir)
+
+      val df2 = spark.read.csv(csvDir).orderBy($"_c0")
+
+      val df1Str = df1.collect().map(_.getString(1)).mkString(" ")
+
+      val df2Str = df2.select("_c1").collect().map(_.getString(0)).mkString(" ")
+
+      val text = spark.read
+              .format("text")
+              .option("quote", "\"")
+              .option("escape", "\\")
+              .load(csvDir)
+              .collect()
+              .map(_.getString(0))
+              .sortBy(_(0)).map(_.drop(3).init).mkString(" ")
+
+      val textExpected =
+        "aa\\\\\"bb,cc aa\\\\\\\"bb,cc aa\\\\\"\"\\\\\"bb,cc aa\\\\\\\"\"\\\"\\\\\"bb,cc"
+
+      assert(text == textExpected)
+      assert(df1Str == df2Str)
+    }
+  }
+
+
   test("commented lines in CSV data") {
     val results = spark.read
       .format("csv")
