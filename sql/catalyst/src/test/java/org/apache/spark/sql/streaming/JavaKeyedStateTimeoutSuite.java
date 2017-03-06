@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.streaming;
 
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
+import org.junit.Test;
 
+public class JavaKeyedStateTimeoutSuite {
 
-@Experimental
-@InterfaceStability.Evolving
-public interface KeyedStateTimeout {
-
-  static KeyedStateTimeout withProcessingTime() {
-    return ProcessingTimeTimeout$.MODULE$;
+  @Test
+  public void testTimeouts() {
+    assert(KeyedStateTimeout.withProcessingTime() == ProcessingTimeTimeout$.MODULE$);
   }
 }
