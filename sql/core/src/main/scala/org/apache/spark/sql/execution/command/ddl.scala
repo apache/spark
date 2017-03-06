@@ -146,7 +146,7 @@ case class DescribeDatabaseCommand(
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
-        Row("Location", new Path(dbMetadata.locationUri).toString) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) :: Nil
 
     if (extended) {
       val properties =

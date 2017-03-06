@@ -150,7 +150,7 @@ case class CreateDataSourceTableAsSelectCommand(
       assert(table.schema.isEmpty)
 
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
-        Some(new Path(sessionState.catalog.defaultTablePath(table.identifier)).toUri)
+        Some(sessionState.catalog.defaultTablePath(table.identifier))
       } else {
         table.storage.locationUri
       }
