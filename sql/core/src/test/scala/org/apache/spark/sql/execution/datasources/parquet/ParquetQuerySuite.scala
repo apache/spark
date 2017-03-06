@@ -80,8 +80,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val df = spark.read.parquet(path).cache()
       assert(df.count() == 1000)
       spark.range(10).write.mode("overwrite").parquet(path)
-      assert(df.count() == 1000)
-      spark.catalog.refreshByPath(path)
       assert(df.count() == 10)
       assert(spark.read.parquet(path).count() == 10)
     }
@@ -94,8 +92,6 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val df = spark.read.parquet(path).cache()
       assert(df.count() == 1000)
       spark.range(10).write.mode("append").parquet(path)
-      assert(df.count() == 1000)
-      spark.catalog.refreshByPath(path)
       assert(df.count() == 1010)
       assert(spark.read.parquet(path).count() == 1010)
     }

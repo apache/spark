@@ -79,7 +79,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
     @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
     val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
-    val awsCredentialsOption: Option[SerializableAWSCredentials] = None
+    val kinesisCredsProvider: SerializableCredentialsProvider = DefaultCredentialsProvider
   ) extends BlockRDD[T](sc, _blockIds) {
 
   require(_blockIds.length == arrayOfseqNumberRanges.length,
@@ -105,9 +105,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
     }
 
     def getBlockFromKinesis(): Iterator[T] = {
-      val credentials = awsCredentialsOption.getOrElse {
-        new DefaultAWSCredentialsProviderChain().getCredentials()
-      }
+      val credentials = kinesisCredsProvider.provider.getCredentials
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
         new KinesisSequenceRangeIterator(credentials, endpointUrl, regionName,
           range, retryTimeoutMs).map(messageHandler)
@@ -143,7 +141,7 @@ class KinesisSequenceRangeIterator(
   private var lastSeqNumber: String = null
   private var internalIterator: Iterator[Record] = null
 
-  client.setEndpoint(endpointUrl, "kinesis", regionId)
+  client.setEndpoint(endpointUrl)
 
   override protected def getNext(): Record = {
     var nextRecord: Record = null

@@ -108,3 +108,4 @@ circle.yml
 .credentials
 publish.sh
 structured-streaming/*
+kafka-source-initial-offset-version-2.1.0.bin

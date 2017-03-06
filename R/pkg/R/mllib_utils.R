@@ -32,11 +32,12 @@
 #' @rdname write.ml
 #' @name write.ml
 #' @export
-#' @seealso \link{spark.glm}, \link{glm},
-#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.gbt}, \link{spark.isoreg},
+#' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
+#' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
-#' @seealso \link{spark.lda}, \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
-#' @seealso \link{spark.randomForest}, \link{spark.survreg},
+#' @seealso \link{spark.lda}, \link{spark.logit},
+#' @seealso \link{spark.mlp}, \link{spark.naiveBayes},
+#' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear},
 #' @seealso \link{read.ml}
 NULL
 
@@ -47,11 +48,11 @@ NULL
 #' @rdname predict
 #' @name predict
 #' @export
-#' @seealso \link{spark.glm}, \link{glm},
-#' @seealso \link{spark.als}, \link{spark.gaussianMixture}, \link{spark.gbt}, \link{spark.isoreg},
+#' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
+#' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
 #' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
-#' @seealso \link{spark.randomForest}, \link{spark.survreg}
+#' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear}
 NULL
 
 write_internal <- function(object, path, overwrite = FALSE) {
@@ -113,6 +114,10 @@ read.ml <- function(path) {
     new("GBTRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTClassifierWrapper")) {
     new("GBTClassificationModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.BisectingKMeansWrapper")) {
+    new("BisectingKMeansModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LinearSVCWrapper")) {
+    new("LinearSVCModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }

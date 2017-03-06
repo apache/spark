@@ -24,11 +24,8 @@ import io.netty.channel.local.LocalChannel;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.*;
 
-import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -54,7 +51,7 @@ public class TransportResponseHandlerSuite {
     assertEquals(1, handler.numOutstandingRequests());
 
     handler.handle(new ChunkFetchSuccess(streamChunkId, new TestManagedBuffer(123)));
-    verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
+    verify(callback, times(1)).onSuccess(eq(0), any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -67,7 +64,7 @@ public class TransportResponseHandlerSuite {
     assertEquals(1, handler.numOutstandingRequests());
 
     handler.handle(new ChunkFetchFailure(streamChunkId, "some error msg"));
-    verify(callback, times(1)).onFailure(eq(0), (Throwable) any());
+    verify(callback, times(1)).onFailure(eq(0), any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -84,9 +81,9 @@ public class TransportResponseHandlerSuite {
     handler.exceptionCaught(new Exception("duh duh duhhhh"));
 
     // should fail both b2 and b3
-    verify(callback, times(1)).onSuccess(eq(0), (ManagedBuffer) any());
-    verify(callback, times(1)).onFailure(eq(1), (Throwable) any());
-    verify(callback, times(1)).onFailure(eq(2), (Throwable) any());
+    verify(callback, times(1)).onSuccess(eq(0), any());
+    verify(callback, times(1)).onFailure(eq(1), any());
+    verify(callback, times(1)).onFailure(eq(2), any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
@@ -118,7 +115,7 @@ public class TransportResponseHandlerSuite {
     assertEquals(1, handler.numOutstandingRequests());
 
     handler.handle(new RpcFailure(12345, "oh no"));
-    verify(callback, times(1)).onFailure((Throwable) any());
+    verify(callback, times(1)).onFailure(any());
     assertEquals(0, handler.numOutstandingRequests());
   }
 
