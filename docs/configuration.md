@@ -1000,6 +1000,15 @@ Apart from these, the following properties are also available, and may be useful
     storage space to unroll the new block in its entirety.
   </td>
 </tr>
+<tr>
+  <td><code>spark.storage.replication.proactive<code></td>
+  <td>false</td>
+  <td>
+    Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
+    executor failures are replenished if there are any existing available replicas. This tries
+    to get the replication level of the block to the initial number.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
@@ -1402,6 +1411,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.killBlacklistedExecutors</code></td>
+  <td>false</td>
+  <td>
+    (Experimental) If set to "true", allow Spark to automatically kill, and attempt to re-create,
+    executors when they are blacklisted.  Note that, when an entire node is added to the blacklist,
+    all of the executors on that node will be killed.
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
@@ -1794,6 +1812,20 @@ Apart from these, the following properties are also available, and may be useful
             include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
             <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
             Configuration</a> for details on hierarchical SSL configuration for services.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.[namespace].port</code></td>
+        <td>None</td>
+        <td>
+            The port where the SSL service will listen on.
+
+            <br />The port must be defined within a namespace configuration; see
+            <a href="security.html#ssl-configuration">SSL Configuration</a> for the available
+            namespaces.
+
+            <br />When not set, the SSL port will be derived from the non-SSL port for the
+            same service. A value of "0" will make the service bind to an ephemeral port.
         </td>
     </tr>
     <tr>

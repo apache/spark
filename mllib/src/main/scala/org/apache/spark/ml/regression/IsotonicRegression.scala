@@ -49,7 +49,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
    */
   final val isotonic: BooleanParam =
     new BooleanParam(this, "isotonic",
-      "whether the output sequence should be isotonic/increasing (true) or" +
+      "whether the output sequence should be isotonic/increasing (true) or " +
         "antitonic/decreasing (false)")
 
   /** @group getParam */
@@ -174,6 +174,8 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)
+
+    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
     instr.logSuccess(model)

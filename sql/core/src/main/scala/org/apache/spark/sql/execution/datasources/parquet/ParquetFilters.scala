@@ -88,6 +88,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.eq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // Binary.fromString and Binary.fromByteArray don't accept null values
     case StringType =>
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
@@ -246,13 +248,7 @@ private[parquet] object ParquetFilters {
   }
 
   /**
-   * Returns a map from name of the column to the data type, if predicate push down applies
-   * (i.e. not an optional field).
-   *
-   * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
-   * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
-   * using such fields, otherwise Parquet library will throw exception (PARQUET-389).
-   * Here we filter out such fields.
+   * Returns a map from name of the column to the data type, if predicate push down applies.
    */
   private def getFieldMap(dataType: DataType, int96AsTimestamp: Boolean): Map[String, DataType] =
     dataType match {
@@ -262,12 +258,7 @@ private[parquet] object ParquetFilters {
         // and it does not support to create filters for them.
         // scalastyle:off println
         fields.filterNot { f =>
-          val isTs = DataTypes.TimestampType.acceptsType(f.dataType)
-
-          val isOptionalField = f.metadata.contains(StructType.metadataKeyForOptionalField) &&
-            f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
-
-          (isTs && int96AsTimestamp) || isOptionalField
+          DataTypes.TimestampType.acceptsType(f.dataType) && int96AsTimestamp
         }.map(f => f.name -> f.dataType).toMap
       case _ => Map.empty[String, DataType]
     }

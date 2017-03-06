@@ -19,14 +19,15 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.util.Date
 
-import scala.collection.mutable
+import com.google.common.base.Objects
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
 
 
@@ -112,11 +113,11 @@ case class CatalogTablePartition(
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
-  def toRow(partitionSchema: StructType): InternalRow = {
+  def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
+    val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
+    val timeZoneId = caseInsensitiveProperties.getOrElse("timeZone", defaultTimeZondId)
     InternalRow.fromSeq(partitionSchema.map { field =>
-      // TODO: use correct timezone for partition values.
-      Cast(Literal(spec(field.name)), field.dataType,
-        Option(DateTimeUtils.defaultTimeZone().getID)).eval()
+      Cast(Literal(spec(field.name)), field.dataType, Option(timeZoneId)).eval()
     })
   }
 }
@@ -135,8 +136,9 @@ case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String]) {
-  if (numBuckets <= 0) {
-    throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
+  if (numBuckets <= 0 || numBuckets >= 100000) {
+    throw new AnalysisException(
+      s"Number of buckets should be greater than 0 but less than 100000. Got `$numBuckets`")
   }
 
   override def toString: String = {
@@ -192,6 +194,14 @@ case class CatalogTable(
     assert(partitionFields.map(_.name) == partitionColumnNames)
 
     StructType(partitionFields)
+  }
+
+  /**
+   * schema of this table's data columns
+   */
+  def dataSchema: StructType = {
+    val dataFields = schema.dropRight(partitionColumnNames.length)
+    StructType(dataFields)
   }
 
   /** Return the database this table was specified to belong to, assuming it exists. */
@@ -340,36 +350,43 @@ object CatalogTypes {
 
 
 /**
- * An interface that is implemented by logical plans to return the underlying catalog table.
- * If we can in the future consolidate SimpleCatalogRelation and MetastoreRelation, we should
- * probably remove this interface.
+ * A [[LogicalPlan]] that represents a table.
  */
-trait CatalogRelation {
-  def catalogTable: CatalogTable
-  def output: Seq[Attribute]
-}
+case class CatalogRelation(
+    tableMeta: CatalogTable,
+    dataCols: Seq[Attribute],
+    partitionCols: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
+  assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
 
+  // The partition column should always appear after data columns.
+  override def output: Seq[Attribute] = dataCols ++ partitionCols
 
-/**
- * A [[LogicalPlan]] that wraps [[CatalogTable]].
- *
- * Note that in the future we should consolidate this and HiveCatalogRelation.
- */
-case class SimpleCatalogRelation(
-    metadata: CatalogTable)
-  extends LeafNode with CatalogRelation {
+  def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def catalogTable: CatalogTable = metadata
-
-  override lazy val resolved: Boolean = false
-
-  override val output: Seq[Attribute] = {
-    val (partCols, dataCols) = metadata.schema.toAttributes
-      // Since data can be dumped in randomly with no validation, everything is nullable.
-      .map(_.withNullability(true).withQualifier(Some(metadata.identifier.table)))
-      .partition { a =>
-        metadata.partitionColumnNames.contains(a.name)
-      }
-    dataCols ++ partCols
+  override def equals(relation: Any): Boolean = relation match {
+    case other: CatalogRelation => tableMeta == other.tableMeta && output == other.output
+    case _ => false
   }
+
+  override def hashCode(): Int = {
+    Objects.hashCode(tableMeta.identifier, output)
+  }
+
+  /** Only compare table identifier. */
+  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    // For data source tables, we will create a `LogicalRelation` and won't call this method, for
+    // hive serde tables, we will always generate a statistics.
+    // TODO: unify the table stats generation.
+    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+      throw new IllegalStateException("table stats must be specified.")
+    }
+  }
+
+  override def newInstance(): LogicalPlan = copy(
+    dataCols = dataCols.map(_.newInstance()),
+    partitionCols = partitionCols.map(_.newInstance()))
 }

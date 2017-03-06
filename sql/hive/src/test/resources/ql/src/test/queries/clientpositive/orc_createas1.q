@@ -1,5 +1,5 @@
-set mapred.max.split.size=100;
-set mapred.min.split.size=1;
+set mapreduce.input.fileinputformat.split.maxsize=100;
+set mapreduce.input.fileinputformat.split.minsize=1;
 
 DROP TABLE orc_createas1a;
 DROP TABLE orc_createas1b;

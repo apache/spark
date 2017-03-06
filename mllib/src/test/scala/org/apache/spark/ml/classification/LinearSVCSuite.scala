@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -121,6 +121,21 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(5)
     val model2 = lsvc2.fit(smallBinaryDataset)
     assert(model2.intercept !== 0.0)
+  }
+
+  test("sparse coefficients in SVCAggregator") {
+    val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
+    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
+    val agg = new LinearSVCAggregator(bcCoefficients, bcFeaturesStd, true)
+    val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
+      intercept[IllegalArgumentException] {
+        agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
+      }
+    }
+    assert(thrown.getMessage.contains("coefficients only supports dense"))
+
+    bcCoefficients.destroy(blocking = false)
+    bcFeaturesStd.destroy(blocking = false)
   }
 
   test("linearSVC with sample weights") {

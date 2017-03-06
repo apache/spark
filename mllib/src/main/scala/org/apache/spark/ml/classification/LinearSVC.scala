@@ -47,7 +47,8 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
 /**
  * :: Experimental ::
  *
- * Linear SVM Classifier (https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
+ * <a href = "https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM">
+ *   Linear SVM Classifier</a>
  *
  * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
  *
@@ -114,7 +115,7 @@ class LinearSVC @Since("2.2.0") (
   setDefault(standardization -> true)
 
   /**
-   * Sets the value of param [[weightCol]].
+   * Set the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is not set, so all instances have weight one.
    *
@@ -421,7 +422,7 @@ private class LinearSVCCostFun(
 
 /**
  * LinearSVCAggregator computes the gradient and loss for hinge loss function, as used
- * in binary classification for instances in sparse or dense vector in a online fashion.
+ * in binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
@@ -439,19 +440,14 @@ private class LinearSVCAggregator(
 
   private val numFeatures: Int = bcFeaturesStd.value.length
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
-  private val coefficients: Vector = bcCoefficients.value
   private var weightSum: Double = 0.0
   private var lossSum: Double = 0.0
-  require(numFeaturesPlusIntercept == coefficients.size, s"Dimension mismatch. Coefficients " +
-    s"length ${coefficients.size}, FeaturesStd length ${numFeatures}, fitIntercept: $fitIntercept")
-
-  private val coefficientsArray = coefficients match {
-    case dv: DenseVector => dv.values
-    case _ =>
-      throw new IllegalArgumentException(
-        s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
+      s" but got type ${bcCoefficients.value.getClass}.")
   }
-  private val gradientSumArray = Array.fill[Double](coefficientsArray.length)(0)
+  private lazy val gradientSumArray = new Array[Double](numFeaturesPlusIntercept)
 
   /**
    * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
@@ -462,6 +458,9 @@ private class LinearSVCAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value
       val localCoefficients = coefficientsArray
@@ -529,18 +528,15 @@ private class LinearSVCAggregator(
     this
   }
 
-  def loss: Double = {
-    if (weightSum != 0) {
-      lossSum / weightSum
-    } else 0.0
-  }
+  def loss: Double = if (weightSum != 0) lossSum / weightSum else 0.0
 
   def gradient: Vector = {
     if (weightSum != 0) {
       val result = Vectors.dense(gradientSumArray.clone())
       scal(1.0 / weightSum, result)
       result
-    } else Vectors.dense(Array.fill[Double](coefficientsArray.length)(0))
+    } else {
+      Vectors.dense(new Array[Double](numFeaturesPlusIntercept))
+    }
   }
-
 }

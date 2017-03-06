@@ -325,7 +325,6 @@ class InMemoryCatalog(
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
     throw new UnsupportedOperationException("loadTable is not implemented")
   }
@@ -336,7 +335,6 @@ class InMemoryCatalog(
       loadPath: String,
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
     throw new UnsupportedOperationException("loadPartition is not implemented.")
@@ -348,8 +346,7 @@ class InMemoryCatalog(
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit = {
+      numDP: Int): Unit = {
     throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
   }
 
@@ -547,7 +544,8 @@ class InMemoryCatalog(
   override def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
     // TODO: Provide an implementation
     throw new UnsupportedOperationException(
       "listPartitionsByFilter is not implemented for InMemoryCatalog")

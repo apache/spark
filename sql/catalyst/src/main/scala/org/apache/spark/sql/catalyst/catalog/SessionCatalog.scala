@@ -118,11 +118,11 @@ class SessionCatalog(
   }
 
   /**
-   * A cache of qualified table name to table relation plan.
+   * A cache of qualified table names to table relation plans.
    */
   val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    // TODO: create a config instead of hardcode 1000 here.
-    CacheBuilder.newBuilder().maximumSize(1000).build[QualifiedTableName, LogicalPlan]()
+    val cacheSize = conf.tableRelationCacheSize
+    CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
   }
 
   /**
@@ -322,13 +322,12 @@ class SessionCatalog(
       name: TableIdentifier,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime, isSrcLocal)
+    externalCatalog.loadTable(db, table, loadPath, isOverwrite, isSrcLocal)
   }
 
   /**
@@ -341,7 +340,6 @@ class SessionCatalog(
       loadPath: String,
       spec: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -350,7 +348,7 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Some(db)))
     requireNonEmptyValueInPartitionSpec(Seq(spec))
     externalCatalog.loadPartition(
-      db, table, loadPath, spec, isOverwrite, holdDDLTime, inheritTableSpecs, isSrcLocal)
+      db, table, loadPath, spec, isOverwrite, inheritTableSpecs, isSrcLocal)
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
@@ -572,16 +570,14 @@ class SessionCatalog(
    * wrap the logical plan in a [[SubqueryAlias]] which will track the name of the view.
    *
    * @param name The name of the table/view that we look up.
-   * @param alias The alias name of the table/view that we look up.
    */
-  def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
+  def lookupRelation(name: TableIdentifier): LogicalPlan = {
     synchronized {
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
-      val relationAlias = alias.getOrElse(table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(relationAlias, viewDef, None)
+          SubqueryAlias(table, viewDef, None)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -594,12 +590,17 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(relationAlias, child, Some(name.copy(table = table, database = Some(db))))
+          SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
         } else {
-          SubqueryAlias(relationAlias, SimpleCatalogRelation(metadata), None)
+          val tableRelation = CatalogRelation(
+            metadata,
+            // we assume all the columns are nullable.
+            metadata.dataSchema.asNullable.toAttributes,
+            metadata.partitionSchema.asNullable.toAttributes)
+          SubqueryAlias(table, tableRelation, None)
         }
       } else {
-        SubqueryAlias(relationAlias, tempTables(table), None)
+        SubqueryAlias(table, tempTables(table), None)
       }
     }
   }
@@ -840,7 +841,7 @@ class SessionCatalog(
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.listPartitionsByFilter(db, table, predicates)
+    externalCatalog.listPartitionsByFilter(db, table, predicates, conf.sessionLocalTimeZone)
   }
 
   /**

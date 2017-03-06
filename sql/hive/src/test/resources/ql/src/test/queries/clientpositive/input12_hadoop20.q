@@ -1,4 +1,4 @@
-set mapred.job.tracker=localhost:58;
+set mapreduce.jobtracker.address=localhost:58;
 set hive.exec.mode.local.auto=true;
 
 -- INCLUDE_HADOOP_MAJOR_VERSIONS(0.20, 0.20S)
