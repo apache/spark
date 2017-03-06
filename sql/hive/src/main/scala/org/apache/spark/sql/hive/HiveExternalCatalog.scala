@@ -260,7 +260,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // However, in older version of Spark we already store table location in storage properties
     // with key "path". Here we keep this behaviour for backward compatibility.
     val storagePropsWithLocation = table.storage.properties ++
-      table.storage.locationUri.map("path" -> new Path(_).toString)
+      CatalogUtils.URIToString(table.storage.locationUri).map("path" -> _)
 
     // converts the table metadata to Spark SQL specific format, i.e. set data schema, names and
     // bucket specification to empty. Note that partition columns are retained, so that we can
@@ -432,8 +432,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       //
       // Please refer to https://issues.apache.org/jira/browse/SPARK-15269 for more details.
       val tempPath = {
-        val dbLocationPath = new Path(getDatabase(tableDefinition.database).locationUri)
-        new Path(dbLocationPath, tableDefinition.identifier.table + "-__PLACEHOLDER__")
+        val dbLocation = new Path(getDatabase(tableDefinition.database).locationUri)
+        new Path(dbLocation, tableDefinition.identifier.table + "-__PLACEHOLDER__")
       }
 
       try {
@@ -563,10 +563,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         //       want to alter the table location to a file path, we will fail. This should be fixed
         //       in the future.
 
-        val newLocation = tableDefinition.storage.locationUri
+        val newLocation = CatalogUtils.URIToString(tableDefinition.storage.locationUri)
         val storageWithPathOption = tableDefinition.storage.copy(
-          properties =
-            tableDefinition.storage.properties ++newLocation.map("path" -> new Path(_).toString))
+          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
 
         val oldLocation = getLocationFromStorageProps(oldTableDef)
         if (oldLocation == newLocation) {
@@ -706,7 +705,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val tableLocation = getLocationFromStorageProps(table)
       // We pass None as `newPath` here, to remove the path option in storage properties.
       updateLocationInStorageProps(table, newPath = None).copy(
-        locationUri = tableLocation.map(new Path(_).toUri))
+        locationUri = CatalogUtils.stringToURI(tableLocation))
     }
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
