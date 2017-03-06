@@ -271,7 +271,8 @@ case class CatalogTable(
       Seq(s"Table: ${identifier.quotedString}",
         if (owner.nonEmpty) s"Owner: $owner" else "",
         s"Created: ${new Date(createTime).toString}",
-        s"Last Access: ${new Date(lastAccessTime).toString}",
+        "Last Access: " +
+          (if (lastAccessTime == -1) "UNKNOWN" else new Date(lastAccessTime).toString),
         s"Type: ${tableType.name}",
         if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
         if (provider.isDefined) s"Provider: ${provider.get}" else "",

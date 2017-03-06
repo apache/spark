@@ -494,7 +494,8 @@ case class DescribeTableCommand(
     append(buffer, "Database:", table.database, "")
     append(buffer, "Owner:", table.owner, "")
     append(buffer, "Create Time:", new Date(table.createTime).toString, "")
-    append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
+    append(buffer, "Last Access Time:",
+      if (table.lastAccessTime == -1) "UNKNOWN" else new Date(table.lastAccessTime).toString, "")
     append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
     table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
