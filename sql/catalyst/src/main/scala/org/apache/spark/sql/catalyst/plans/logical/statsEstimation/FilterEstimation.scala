@@ -53,17 +53,19 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   def estimate: Option[Statistics] = {
     if (childStats.rowCount.isEmpty) return None
 
-    // save a mutable copy of colStats so that we can later change it recursively
+    // Save a mutable copy of colStats so that we can later change it recursively.
     colStatsMap.setInitValues(childStats.attributeStats)
 
-    // estimate selectivity of this filter predicate
-    val filterSelectivity: Double = calculateFilterSelectivity(plan.condition) match {
-      case Some(percent) => percent
-      // for not-supported condition, set filter selectivity to a conservative estimate 100%
-      case None => 1.0
-    }
+    // Estimate selectivity of this filter predicate, and update column stats if needed.
+    // For not-supported condition, set filter selectivity to a conservative estimate 100%
+    val filterSelectivity: Double = calculateFilterSelectivity(plan.condition).getOrElse(1.0)
 
-    val newColStats = colStatsMap.toColumnStats
+    val newColStats = if (filterSelectivity == 0) {
+      // The output is empty, we don't need to keep column stats.
+      AttributeMap[ColumnStat](Nil)
+    } else {
+      colStatsMap.toColumnStats
+    }
 
     val filteredRowCount: BigInt =
       EstimationUtils.ceil(BigDecimal(childStats.rowCount.get) * filterSelectivity)
@@ -75,12 +77,14 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   }
 
   /**
-   * Returns a percentage of rows meeting a compound condition in Filter node.
-   * A compound condition is decomposed into multiple single conditions linked with AND, OR, NOT.
+   * Returns a percentage of rows meeting a condition in Filter node.
+   * If it's a single condition, we calculate the percentage directly.
+   * If it's a compound condition, it is decomposed into multiple single conditions linked with
+   * AND, OR, NOT.
    * For logical AND conditions, we need to update stats after a condition estimation
    * so that the stats will be more accurate for subsequent estimation.  This is needed for
    * range condition such as (c > 40 AND c <= 50)
-   * For logical OR conditions, we do not update stats after a condition estimation.
+   * For logical OR and NOT conditions, we do not update stats after a condition estimation.
    *
    * @param condition the compound logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -91,32 +95,42 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   def calculateFilterSelectivity(condition: Expression, update: Boolean = true): Option[Double] = {
     condition match {
       case And(cond1, cond2) =>
-        val percent1 = calculateFilterSelectivity(cond1, update)
-        val percent2 = calculateFilterSelectivity(cond2, update)
-        (percent1, percent2) match {
-          case (Some(p1), Some(p2)) => Some(p1 * p2)
-          case (Some(p1), None) => Some(p1)
-          case (None, Some(p2)) => Some(p2)
-          case (None, None) => None
-        }
+        val percent1 = calculateFilterSelectivity(cond1, update).getOrElse(1.0)
+        val percent2 = calculateFilterSelectivity(cond2, update).getOrElse(1.0)
+        Some(percent1 * percent2)
 
       case Or(cond1, cond2) =>
-        val percent1 = calculateFilterSelectivity(cond1, update = false)
-        val percent2 = calculateFilterSelectivity(cond2, update = false)
-        (percent1, percent2) match {
-          case (Some(p1), Some(p2)) => Some(math.min(1.0, p1 + p2 - (p1 * p2)))
-          case _ => None
+        val percent1 = calculateFilterSelectivity(cond1, update = false).getOrElse(1.0)
+        val percent2 = calculateFilterSelectivity(cond2, update = false).getOrElse(1.0)
+        Some(percent1 + percent2 - (percent1 * percent2))
+
+      // For AND and OR conditions, we will estimate conservatively if one of two
+      // components is not supported, e.g. suppose c1 is not supported,
+      // then p(And(c1, c2)) = p(c2), and p(Or(c1, c2)) = 1.0.
+      // But once they are wrapped in NOT condition, then after 1 - p, it becomes
+      // under-estimation. So in these cases, we consider them as unsupported.
+      case Not(And(cond1, cond2)) =>
+        val p1 = calculateFilterSelectivity(cond1, update = false)
+        val p2 = calculateFilterSelectivity(cond2, update = false)
+        if (p1.isDefined && p2.isDefined) {
+          Some(1 - p1.get * p2.get)
+        } else {
+          None
+        }
+
+      case Not(Or(cond1, cond2)) =>
+        val p1 = calculateFilterSelectivity(cond1, update = false)
+        val p2 = calculateFilterSelectivity(cond2, update = false)
+        if (p1.isDefined && p2.isDefined) {
+          Some(1 - (p1.get + p2.get - (p1.get * p2.get)))
+        } else {
+          None
         }
 
       case Not(cond) =>
-        if (cond.isInstanceOf[And] || cond.isInstanceOf[Or]) {
-          // Don't support compound Not expression.
-          None
-        } else {
-          calculateSingleCondition(cond, update = false) match {
-            case Some(percent) => Some(1.0 - percent)
-            case None => None
-          }
+        calculateFilterSelectivity(cond, update = false) match {
+          case Some(percent) => Some(1.0 - percent)
+          case None => None
         }
 
       case _ => calculateSingleCondition(condition, update)
