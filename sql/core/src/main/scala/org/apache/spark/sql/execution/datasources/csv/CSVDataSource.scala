@@ -142,6 +142,9 @@ object TextInputCSVDataSource extends CSVDataSource {
     }
   }
 
+  /**
+   * Infers the schema from `Dataset` that stores CSV string records.
+   */
   def inferFromDataset(
       sparkSession: SparkSession,
       csv: Dataset[String],
