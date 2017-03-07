@@ -71,8 +71,12 @@ case class NGrams(child: Expression,
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(ArrayType(StringType), IntegerType, IntegerType, IntegerType)
+    Seq(TypeCollection(ArrayType(StringType), ArrayType(ArrayType(StringType))),
+      IntegerType, IntegerType, IntegerType)
   }
+
+  val isArrayOfString = child.dataType == ArrayType(StringType, false) ||
+    child.dataType == ArrayType(StringType, true)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -93,14 +97,23 @@ case class NGrams(child: Expression,
     new NGramBuffer(n, k, accuracy, new HashMap[Vector[UTF8String], Double]())
   }
 
-  override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
-    val genericArrayData: GenericArrayData = child.eval(inputRow).asInstanceOf[GenericArrayData]
+  def updateArray(genericArrayData: GenericArrayData, buffer: NGramBuffer, inputRow: InternalRow): Unit = {
     val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toVector
     if (values != null) {
       val nGrams = getNGrams(values, n)
       nGrams.foreach(buffer.add(_))
     }
     buffer.trim()
+  }
+  override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
+    if (isArrayOfString)
+      updateArray(child.eval(inputRow).asInstanceOf[GenericArrayData], buffer, inputRow)
+    else {
+      val arrayOfArray = child.eval(inputRow).asInstanceOf[GenericArrayData]
+      for (i<- 0 until arrayOfArray.numElements()) {
+        updateArray(arrayOfArray.getArray(i).asInstanceOf[GenericArrayData], buffer, inputRow)
+      }
+    }
     buffer
   }
 
@@ -120,7 +133,10 @@ case class NGrams(child: Expression,
   }
 
   private def getNGrams(values: Vector[UTF8String], n: Int): Vector[Vector[UTF8String]] = {
-    values.sliding(n).toVector
+    if(values.length >= n)
+      values.sliding(n).toVector
+    else
+      Vector()
   }
 
   override def withNewMutableAggBufferOffset(newOffset: Int): NGrams =
@@ -184,17 +200,33 @@ object NGrams {
       })
     }
 
+    def sortWithTwoFields(frequencyDescend: Boolean)(keyWithFrequency: Tuple2[Vector[UTF8String], Double],
+                                                     keyWithFrequency2: Tuple2[Vector[UTF8String], Double]): Boolean = {
+      if (keyWithFrequency._2 != keyWithFrequency2._2)
+        (keyWithFrequency._2 < keyWithFrequency2._2) ^ frequencyDescend
+      else {
+        val keyVector = keyWithFrequency._1
+        val keyVector2 = keyWithFrequency2._1
+        for (i <- 0 until keyVector.length) {
+          if (keyVector(i) != keyVector2(i))
+            return (keyVector(i).compare(keyVector2(i))) < 0
+        }
+        true
+      }
+    }
+
     def trim(): Unit = {
       if (frequencyMap.size() > 2 * k * precisionFactor) {
-        val orderedWithIndex = frequencyMap.asScala.iterator.toVector.sortWith(_._2 < _._2).zipWithIndex
+        val orderedWithIndex = frequencyMap.asScala.iterator.toVector.
+          sortWith(sortWithTwoFields(frequencyDescend = false)).zipWithIndex
         orderedWithIndex.takeWhile(_._2 < frequencyMap.size() - k * precisionFactor).map(_._1).
           foreach(keyValuePair => frequencyMap.remove(keyValuePair._1))
       }
     }
 
     def getTopKNGrams(): Seq[(Vector[UTF8String], Double)] = {
-      frequencyMap.asScala.iterator.toVector.sortWith(_._2 > _._2).zipWithIndex.takeWhile(_._2 < k).
-        map(_._1)
+      frequencyMap.asScala.iterator.toVector.sortWith(sortWithTwoFields(frequencyDescend = true)).
+        zipWithIndex.takeWhile(_._2 < k).map(_._1)
     }
 
   }
