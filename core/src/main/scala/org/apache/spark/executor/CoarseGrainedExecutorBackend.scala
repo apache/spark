@@ -97,11 +97,11 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.launchTask(this, taskDesc)
       }
 
-    case KillTask(taskId, _, interruptThread, reason, retryTask) =>
+    case KillTask(taskId, _, interruptThread, reason, shouldRetry) =>
       if (executor == null) {
         exitExecutor(1, "Received KillTask command but executor was null")
       } else {
-        executor.killTask(taskId, interruptThread, reason, retryTask)
+        executor.killTask(taskId, interruptThread, reason, shouldRetry)
       }
 
     case StopExecutor =>

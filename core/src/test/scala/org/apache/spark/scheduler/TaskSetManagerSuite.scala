@@ -672,7 +672,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
     sched.initialize(new FakeSchedulerBackend() {
       override def killTask(
-        taskId: Long, executorId: String, interruptThread: Boolean, reason: String,
+        taskId: Long,
+        executorId: String,
+        interruptThread: Boolean,
+        reason: String,
         shouldRetry: Boolean): Unit = {}
     })
 

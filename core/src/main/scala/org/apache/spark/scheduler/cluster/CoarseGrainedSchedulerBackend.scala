@@ -416,7 +416,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def killTask(
-      taskId: Long, executorId: String, interruptThread: Boolean, reason: String,
+      taskId: Long,
+      executorId: String,
+      interruptThread: Boolean,
+      reason: String,
       shouldRetry: Boolean) {
     driverEndpoint.send(KillTask(taskId, executorId, interruptThread, reason, shouldRetry))
   }

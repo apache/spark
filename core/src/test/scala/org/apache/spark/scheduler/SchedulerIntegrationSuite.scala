@@ -411,7 +411,10 @@ private[spark] abstract class MockBackend(
   }
 
   override def killTask(
-      taskId: Long, executorId: String, interruptThread: Boolean, reason: String,
+      taskId: Long,
+      executorId: String,
+      interruptThread: Boolean,
+      reason: String,
       shouldRetry: Boolean): Unit = {
     // We have to implement this b/c of SPARK-15385.
     // Its OK for this to be a no-op, because even if a backend does implement killTask,

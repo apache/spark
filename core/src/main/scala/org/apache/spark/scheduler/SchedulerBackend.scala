@@ -40,7 +40,10 @@ private[spark] trait SchedulerBackend {
    * @param shouldRetry Whether the scheduler should retry the task.
    */
   def killTask(
-      taskId: Long, executorId: String, interruptThread: Boolean, reason: String,
+      taskId: Long,
+      executorId: String,
+      interruptThread: Boolean,
+      reason: String,
       shouldRetry: Boolean): Unit =
     throw new UnsupportedOperationException
 
