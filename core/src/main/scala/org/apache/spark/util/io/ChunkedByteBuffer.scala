@@ -86,7 +86,11 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-   * Copy this buffer into a new ByteBuffer.
+   * Convert this buffer to a ByteBuffer. If this buffer is backed by a single chunk, its underlying
+   * data will not be copied. Instead, it will be duplicated. If this buffer is backed by multiple
+   * chunks, the data underlying this buffer will be copied into a new byte buffer. As a result, it
+   * is suggested to use this method only if the caller does not need to manage the memory
+   * underlying this buffer.
    *
    * @throws UnsupportedOperationException if this buffer's size exceeds the max ByteBuffer size.
    */
