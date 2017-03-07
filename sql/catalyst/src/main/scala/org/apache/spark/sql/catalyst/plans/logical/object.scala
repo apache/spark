@@ -355,8 +355,8 @@ object MapGroupsWithState {
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
  * @param outputObjAttr used to define the output object
- * @param stateDeserializer used to deserialize state before calling `func`
- * @param stateSerializer used to serialize updated state after calling `func`
+ * @param stateEncoder used to serialize/deserialize state before calling `func`
+ * @param timeout used to timeout a groups that has not received data in a while
  */
 case class MapGroupsWithState(
     func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],

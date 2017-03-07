@@ -20,9 +20,14 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical.MapGroupsWithState
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.{KeyedStateImpl, MemoryStream}
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.RDDScanExec
+import org.apache.spark.sql.execution.streaming.{KeyedStateImpl, MapGroupsWithStateExec, MemoryStream}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StoreUpdate}
+import org.apache.spark.sql.streaming.MapGroupsWithStateSuite.SingleKeyStateStore
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
 case class RunningCount(count: Long)
@@ -83,22 +88,23 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
   }
 
   test("KeyedState - isTimingOut, setTimeoutDuration") {
+    import KeyedStateImpl._
     var state: KeyedStateImpl[String] = null
     state = new KeyedStateImpl[String](None)
 
     assert(state.isTimingOut === false)
-    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
     intercept[UnsupportedOperationException] {
       state.setTimeoutDuration(1000)
     }
     intercept[UnsupportedOperationException] {
       state.setTimeoutDuration("1 day")
     }
-    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
 
     state = new KeyedStateImpl[String](None, 1000, isTimeoutEnabled = true, isTimingOut = false)
     assert(state.isTimingOut === false)
-    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
     state.setTimeoutDuration(1000)
     assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration("2 second")
@@ -124,6 +130,29 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
     intercept[NoSuchElementException] {
       intState.get
     }
+  }
+
+  test("StateStoreUpdater - state and timeout timestamp update logic") {
+    // tests with no initial state
+    testStateUpdate(
+      func = state => { /* do nothing */ },
+      expectedState = None,
+      expectedTimeoutTimestamp = KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET
+    )
+
+    testStateUpdate(
+      func = state => { state.update(5) },
+      expectedState = Some(5),
+      expectedTimeoutTimestamp = KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET
+    )
+
+    testStateUpdate(
+      func = state => { state.setTimeoutDuration(1000) },
+      expectedState = None,
+      expectedTimeoutTimestamp = 1000
+    )
+
+    // te
   }
 
   test("flatMapGroupsWithState - streaming") {
@@ -256,7 +285,8 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
     )
   }
 
-  test("mapGroupsWithState - streaming with processing time timeout") {
+  test("mapGroupsWithState - streaming + processing time timeout") {
+    spark.conf.set("spark.sql.shuffle.partitions", "1")
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
@@ -286,17 +316,23 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
       CheckLastBatch(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
 
+      // "a" should not timeout after 1 sec
       AddData(inputData, "b"),
       AdvanceManualClock(1 * 1000),
       CheckLastBatch(("b", "1")),
       assertNumStateRows(total = 2, updated = 1),
 
+      // "a" should timeout after 10 sec
       AddData(inputData, "b"),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch(("a", "-1"), ("b", "2")),
       assertNumStateRows(total = 1, updated = 2),
 
       StopStream,
+      AssertOnQuery { q =>
+        StateStore.stop()   // dropping in-mem stores to make sure it gets recovered from checkpoint
+        true
+      },
       StartStream(ProcessingTime("1 second"), triggerClock = clock),
 
       AddData(inputData, "c"),
@@ -402,8 +438,75 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
       CheckLastBatch(("a", 3L))     // task should not fail, and should show correct count
     )
   }
+
+  def testStateUpdate(
+      func: KeyedState[Int] => Unit,
+      store: SingleKeyStateStore = newStore(),
+      timeout: KeyedStateTimeout = KeyedStateTimeout.withProcessingTime,
+      expectedState: Option[Int] = None,
+      expectedTimeoutTimestamp: Long = KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET): Unit = {
+    val stateUpdateFunc = (key: Int, values: Iterator[Int], state: KeyedState[Int]) => {
+      func(state)
+      Iterator(1, 2, 3)
+    }
+    val result = MemoryStream[Int]
+      .toDS
+      .groupByKey(x => x)
+      .flatMapGroupsWithState[Int, Int](stateUpdateFunc, timeout = timeout)
+    val mapGroupsSparkPlan = result.logicalPlan.collectFirst {
+      case MapGroupsWithState(f, k, v, g, d, o, s, t, _) =>
+        MapGroupsWithStateExec(f, k, v, g, d, o, None, s, t, 0,
+          RDDScanExec(g, null, "rdd"))
+    }.get
+
+    val updater = new mapGroupsSparkPlan.StateStoreUpdater(store, Iterator(intToRow(1)))
+    val returnedIter = updater.processPartition()
+    returnedIter.size // consumer the iterator
+
+    val stateRow = store.get
+    assert(updater.getStateObj(stateRow).map(_.toString.toInt) === expectedState)
+
+    val timeoutTimestamp = stateRow
+      .map(updater.getTimeoutTimestamp)
+      .getOrElse(KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(timeoutTimestamp === expectedTimeoutTimestamp)
+  }
+
+  val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
+  val singleKeyForStore = intToRow(0)
+
+  def intToRow(i: Int): UnsafeRow = {
+    intProj.apply(new GenericInternalRow(Array[Any](i))).copy()
+  }
+
+  def rowToInt(row: UnsafeRow): Int = row.getInt(0)
+
+  def newStore(): SingleKeyStateStore = new SingleKeyStateStore(singleKeyForStore)
 }
 
 object MapGroupsWithStateSuite {
+
+  class SingleKeyStateStore(singleKey: UnsafeRow) extends StateStore() {
+    private var value: UnsafeRow = null
+    def get: Option[UnsafeRow] = Option(value)
+    override def filter(
+        condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
+      iterator().filter { case (k, v) => condition(k, v) }
+    }
+    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = { value = newValue }
+    override def remove(key: UnsafeRow): Unit = { value = null}
+    override def remove(condition: (UnsafeRow) => Boolean): Unit = {}
+    override def commit(): Long = version + 1
+    override def abort(): Unit = { }
+    override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
+      Option(value).map { v => (singleKey, value) }.iterator
+    }
+    override def id: StateStoreId = null
+    override def version: Long = 0
+    override def get(key: UnsafeRow): Option[UnsafeRow] = Option(value)
+    override def updates(): Iterator[StoreUpdate] = Iterator.empty
+    override def numKeys(): Long = Option(value).size
+    override def hasCommitted: Boolean = true
+  }
   var failInTask = true
 }
