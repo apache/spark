@@ -472,6 +472,12 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  val FILES_PARTITION_STRATEGY = buildConf("spark.sql.files.partitionStrategy")
+    .internal()
+    .stringConf
+    .createWithDefault(
+    classOf[org.apache.spark.sql.execution.datasources.DefaultFilePartitionStrategy].getName)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -733,6 +739,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def streamingMetricsEnabled: Boolean = getConf(STREAMING_METRICS_ENABLED)
 
   def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
+
+  def filesPartitionStrategy: String = getConf(FILES_PARTITION_STRATEGY)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
