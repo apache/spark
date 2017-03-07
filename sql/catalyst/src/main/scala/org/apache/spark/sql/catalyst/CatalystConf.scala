@@ -42,6 +42,8 @@ trait CatalystConf {
 
   def sessionLocalTimeZone: String
 
+  def constraintPropagationEnabled: Boolean
+
   /** If true, cartesian products between relations will be allowed for all
    * join types(inner, (left|right|full) outer).
    * If false, cartesian products will require explicit CROSS JOIN syntax.
@@ -76,5 +78,6 @@ case class SimpleCatalystConf(
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,
     warehousePath: String = "/user/hive/warehouse",
-    sessionLocalTimeZone: String = TimeZone.getDefault().getID)
+    sessionLocalTimeZone: String = TimeZone.getDefault().getID,
+    constraintPropagationEnabled: Boolean = true)
   extends CatalystConf

@@ -190,6 +190,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
+    .internal()
+    .doc("When true, the query optimizer will use constraint propagation in query plans to " +
+         "perform optimization. Constraint propagation can be computation expensive for long " +
+         "query plans. For such queries, disable this flag to get around this issue. Default " +
+         "is enabled")
+    .booleanConf
+    .createWithDefault(true)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -794,6 +803,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+
+  def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)

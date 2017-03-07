@@ -81,12 +81,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       // Operator push down
       PushProjectionThroughUnion,
       ReorderJoin,
-      EliminateOuterJoin,
+      EliminateOuterJoin(conf),
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown(conf),
       ColumnPruning,
-      InferFiltersFromConstraints,
+      InferFiltersFromConstraints(conf),
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -105,7 +105,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
-      PruneFilters,
+      PruneFilters(conf),
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -606,9 +606,10 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
+case class InferFiltersFromConstraints(conf: CatalystConf)
+    extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, child) =>
+    case filter @ Filter(condition, child) if conf.constraintPropagationEnabled =>
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
@@ -617,7 +618,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
-    case join @ Join(left, right, joinType, conditionOpt) =>
+    case join @ Join(left, right, joinType, conditionOpt) if conf.constraintPropagationEnabled =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
       val constraints = join.constraints.filter { c =>
@@ -696,7 +697,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
-object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
+case class PruneFilters(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
@@ -706,7 +707,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
-    case f @ Filter(fc, p: LogicalPlan) =>
+    case f @ Filter(fc, p: LogicalPlan) if conf.constraintPropagationEnabled =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
           cond.deterministic && p.constraints.contains(cond)
