@@ -1795,10 +1795,10 @@ setMethod("to_date",
 
 #' to_json
 #'
-#' Converts a column containing a \code{structType} into a Column of JSON string.
-#' Resolving the Column can fail if an unsupported type is encountered.
+#' Converts a column containing a \code{structType} or array of \code{structType} into a Column
+#' of JSON string. Resolving the Column can fail if an unsupported type is encountered.
 #'
-#' @param x Column containing the struct
+#' @param x Column containing the struct or array of the structs
 #' @param ... additional named properties to control how it is converted, accepts the same options
 #'            as the JSON data source.
 #'
@@ -1809,8 +1809,13 @@ setMethod("to_date",
 #' @export
 #' @examples
 #' \dontrun{
-#' to_json(df$t, dateFormat = 'dd/MM/yyyy')
-#' select(df, to_json(df$t))
+#' # Converts a struct into a JSON object
+#' df <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df, to_json(df$d, dateFormat = 'dd/MM/yyyy'))
+#'
+#' # Converts an array of structs into a JSON array
+#' df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' select(df, to_json(df$people))
 #'}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
