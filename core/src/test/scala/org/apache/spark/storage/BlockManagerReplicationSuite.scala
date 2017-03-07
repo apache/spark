@@ -460,7 +460,8 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
   conf.set("spark.storage.exceptionOnPinLeak", "true")
 
   (2 to 5).foreach{ i =>
-    test(s"proactive block replication - $i replicas - ${i - 1} block manager deletions") {
+    // flakes in palantir/spark
+    ignore(s"proactive block replication - $i replicas - ${i - 1} block manager deletions") {
       testProactiveReplication(i)
     }
   }
