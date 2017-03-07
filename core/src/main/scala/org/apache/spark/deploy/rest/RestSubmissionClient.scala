@@ -17,26 +17,29 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.{DataOutputStream, File, FileNotFoundException}
+import java.io.{DataOutputStream, File, FileInputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
-import scala.collection.mutable
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
-import scala.io.Source
-import scala.util.control.NonFatal
 import com.fasterxml.jackson.core.JsonProcessingException
 import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.commons.io
+import org.apache.hadoop.io.{DataInputBuffer, DataOutputBuffer, IOUtils}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.spark.{SparkConf, SparkException, SPARK_VERSION => sparkVersion}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkException, SPARK_VERSION => sparkVersion}
+
+import scala.collection.mutable
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.io.Source
+import scala.util.control.NonFatal
 
 /**
  * A client that submits applications to a [[RestSubmissionServer]].
@@ -74,41 +77,6 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   // Set of masters that lost contact with us, used to keep track of
   // whether there are masters still alive for us to communicate with
   private val lostMasters = new mutable.HashSet[String]
-
-
-  //////////////
-  /////////////
-  private var loginFromKeytab = false
-  private var principal: String = null
-  private var keytab: String = null
-  private var credentials: Credentials = null
-
-
-  // TODO - doesn't actually login from keytab!  That's done in SparkSubmit!
-  def setupCredentials(sparkConf: SparkConf): Unit = {
-    loginFromKeytab = sparkConf.contains(PRINCIPAL.key)
-    if (loginFromKeytab) {
-      principal = sparkConf.get(PRINCIPAL).get
-      keytab = sparkConf.get(KEYTAB).orNull
-
-      require(keytab != null, "Keytab must be specified when principal is specified.")
-      logInfo("Attempting to login to the Kerberos" +
-        s" using principal: $principal and keytab: $keytab")
-      val f = new File(keytab)
-      // Generate a file name that can be used for the keytab file, that does not conflict
-      // with any user file.
-      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      sparkConf.set(KEYTAB.key, keytabFileName)
-      sparkConf.set(PRINCIPAL.key, principal)
-    }
-    // Defensive copy of the credentials
-    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
-  }
-  ///////////////
-  //////////////
-
-
-
 
   /**
    * Submit an application specified by the parameters in the provided request.
@@ -212,13 +180,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       mainClass: String,
       appArgs: Array[String],
       sparkProperties: Map[String, String],
-      environmentVariables: Map[String, String],
-      conf: SparkConf): CreateSubmissionRequest = {
-
-
-    setupCredentials(conf)
-
-
+      environmentVariables: Map[String, String]): CreateSubmissionRequest = {
     val message = new CreateSubmissionRequest
     message.clientSparkVersion = sparkVersion
     message.appResource = appResource
@@ -227,12 +189,50 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     message.sparkProperties = sparkProperties
     message.environmentVariables = environmentVariables
 
-    //////////
-    val dob = new DataOutputBuffer
-    credentials.writeTokenStorageToStream(dob)
-    dob.close()
+    def base64EncodedValue(fn: DataOutputBuffer => Unit): String = {
+      val dob = new DataOutputBuffer
+      fn(dob)
+      dob.close()
+      new String(Base64.encodeBase64(dob.getData))
+    }
 
-    message.tokens = new String(Base64.encodeBase64(dob.getData))
+    //////////
+    // Security propogation
+
+    if (sparkProperties.contains(PRINCIPAL.key)) {
+      val principal = sparkProperties.get(PRINCIPAL.key).get
+      val keytab = sparkProperties.get(KEYTAB.key).orNull
+      require(keytab != null, "Keytab must be specified when principal is specified.")
+      logInfo("Attempting to login to the Kerberos" +
+        s" using principal: $principal and keytab: $keytab")
+      val f = new File(keytab)
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
+
+      logInfo("To enable the driver to login from keytab, credentials are are being copied" +
+        " to the Master inside the CreateSubmissionRequest")
+
+      val keytabContent = base64EncodedValue { dob =>
+        io.IOUtils.copy(new FileInputStream(f), dob)
+      }
+
+      message.sparkProperties ++= Map(
+        KEYTAB.key -> keytabFileName,
+        KEYTAB.key + ".content" -> keytabContent,
+        PRINCIPAL.key -> principal
+      )
+    }
+
+    // Add credentials - works in the case of a user submitting a job
+    // that completes < YARN max token renewal
+    val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+    val bootstrapCredentails = base64EncodedValue { dob =>
+      credentials.writeTokenStorageToStream(dob)
+    }
+
+    message.sparkProperties ++= Map(
+      "spark.yarn.credentials.bootstrap" -> bootstrapCredentails)
     //////////
 
 
@@ -467,7 +467,7 @@ private[spark] object RestSubmissionClient {
     val sparkProperties = conf.getAll.toMap
     val client = new RestSubmissionClient(master)
     val submitRequest = client.constructSubmitRequest(
-      appResource, mainClass, appArgs, sparkProperties, env, conf)
+      appResource, mainClass, appArgs, sparkProperties, env)
     client.createSubmission(submitRequest)
   }
 

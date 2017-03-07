@@ -264,9 +264,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-
-  ////// TODO
-
   private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
     .internal()
     .timeConf(TimeUnit.MILLISECONDS)
