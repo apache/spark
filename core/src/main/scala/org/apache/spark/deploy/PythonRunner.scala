@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.File
+import java.lang.ProcessBuilder.Redirect
 import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
@@ -27,8 +28,9 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.conda.CondaEnvironment
 import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * A main class used to launch Python applications. It executes python as a
@@ -99,12 +101,12 @@ object PythonRunner extends CondaRunner with Logging {
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
+    builder.redirectOutput(Redirect.INHERIT)
+    builder.redirectError(Redirect.INHERIT)
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
-    builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
+      logInfo(s"About to start python process: ${builder.command()}")
       val process = builder.start()
-
-      new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
       val exitCode = process.waitFor()
       if (exitCode != 0) {
