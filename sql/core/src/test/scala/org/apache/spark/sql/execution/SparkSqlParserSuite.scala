@@ -210,6 +210,17 @@ class SparkSqlParserSuite extends PlanTest {
       "no viable alternative at input")
   }
 
+  test("create view as insert into table") {
+    // Single insert query
+    intercept("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)",
+      "Operation not allowed: CREATE VIEW ... AS INSERT INTO")
+
+    // Multi insert query
+    intercept("CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
+      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
+      "Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+")
+  }
+
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     assertEqual("describe table t",
       DescribeTableCommand(
