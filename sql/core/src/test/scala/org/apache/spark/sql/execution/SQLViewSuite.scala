@@ -172,7 +172,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       var e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $viewName SELECT 1")
       }.getMessage
-      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+      assert(e.contains("Inserting into a view is not allowed. View: `default`.`testview`"))
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")

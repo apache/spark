@@ -1764,6 +1764,39 @@ class HiveDDLSuite
     }
   }
 
+  Seq("parquet", "hive").foreach { datasource =>
+    Seq("a b", "a:b", "a%b", "a,b").foreach { specialChars =>
+      test(s"partition column name of $datasource table containing $specialChars") {
+        withTable("t") {
+          withTempDir { dir =>
+            spark.sql(
+              s"""
+                 |CREATE TABLE t(a string, `$specialChars` string)
+                 |USING $datasource
+                 |PARTITIONED BY(`$specialChars`)
+                 |LOCATION '$dir'
+               """.stripMargin)
+
+            assert(dir.listFiles().isEmpty)
+            spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
+            val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
+            val partFile = new File(dir, partEscaped)
+            assert(partFile.listFiles().length >= 1)
+            checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
+
+            withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+              spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`) SELECT 3, 4")
+              val partEscaped1 = s"${ExternalCatalogUtils.escapePathName(specialChars)}=4"
+              val partFile1 = new File(dir, partEscaped1)
+              assert(partFile1.listFiles().length >= 1)
+              checkAnswer(spark.table("t"), Row("1", "2") :: Row("3", "4") :: Nil)
+            }
+          }
+        }
+      }
+    }
+  }
+
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"hive table: location uri contains $specialChars") {
       withTable("t") {
