@@ -608,8 +608,14 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 case class InferFiltersFromConstraints(conf: CatalystConf)
     extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, child) if conf.constraintPropagationEnabled =>
+  def apply(plan: LogicalPlan): LogicalPlan = if (conf.constraintPropagationEnabled) {
+    doInferFilters(plan)
+  } else {
+    plan
+  }
+
+  private def doInferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
@@ -618,7 +624,7 @@ case class InferFiltersFromConstraints(conf: CatalystConf)
         filter
       }
 
-    case join @ Join(left, right, joinType, conditionOpt) if conf.constraintPropagationEnabled =>
+    case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
       val constraints = join.constraints.filter { c =>

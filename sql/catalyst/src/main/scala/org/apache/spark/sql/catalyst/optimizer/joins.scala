@@ -118,7 +118,11 @@ case class EliminateOuterJoin(conf: CatalystConf) extends Rule[LogicalPlan] with
   }
 
   private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
-    val conditions = splitConjunctivePredicates(filter.condition) ++ filter.constraints
+    val conditions = if (conf.constraintPropagationEnabled) {
+      splitConjunctivePredicates(filter.condition) ++ filter.constraints
+    } else {
+      splitConjunctivePredicates(filter.condition)
+    }
     val leftConditions = conditions.filter(_.references.subsetOf(join.left.outputSet))
     val rightConditions = conditions.filter(_.references.subsetOf(join.right.outputSet))
 
@@ -136,8 +140,7 @@ case class EliminateOuterJoin(conf: CatalystConf) extends Rule[LogicalPlan] with
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _))
-        if conf.constraintPropagationEnabled =>
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
   }
