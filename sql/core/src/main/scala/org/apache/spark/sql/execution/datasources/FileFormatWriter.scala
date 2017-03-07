@@ -341,7 +341,7 @@ object FileFormatWriter extends Logging {
           Seq(Cast(c, StringType, Option(desc.timeZoneId))),
           Seq(StringType))
         val str = If(IsNull(c), Literal(ExternalCatalogUtils.DEFAULT_PARTITION_NAME), escaped)
-        val partitionName = Literal(c.name + "=") :: str :: Nil
+        val partitionName = Literal(ExternalCatalogUtils.escapePathName(c.name) + "=") :: str :: Nil
         if (i == 0) partitionName else Literal(Path.SEPARATOR) :: partitionName
       }
     }
