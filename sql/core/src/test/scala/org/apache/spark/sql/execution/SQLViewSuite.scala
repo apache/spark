@@ -628,6 +628,20 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e2.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
         "-> `default`.`view3` -> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect cyclic view reference on CREATE OR REPLACE VIEW.
+      val e3 = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
+      }.getMessage
+      assert(e3.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect cyclic view reference from subqueries.
+      val e4 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
+      }.getMessage
+      assert(e4.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
     }
   }
 }
