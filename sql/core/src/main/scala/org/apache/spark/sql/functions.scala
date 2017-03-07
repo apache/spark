@@ -767,59 +767,59 @@ object functions {
   def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
 
   /**
-    * Aggregate function: returns the population variance of the values in a group.
-    *
-    * @group agg_funcs
-    * @since 1.6.0
-    */
+   * Aggregate function: returns the population variance of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
   /**
-    * Aggregate function: returns true if all values in the expression are true.
-    *
-    * @group agg_funcs
-    * @since 2.3.0
-    */
+   * Aggregate function: returns true if all values in the expression are true.
+   *
+   * @group agg_funcs
+   * @since 2.3.0
+   */
   def every(e: Column): Column = withAggregateFunction { Every(e.expr) }
 
   /**
-    * Aggregate function: returns true if all values in the expression are true.
-    *
-    * @group agg_funcs
-    * @since 2.2.0
-    */
+   * Aggregate function: returns true if all values in the expression are true.
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
   def every(columnName: String): Column = every(Column(columnName))
 
   /**
-    * Aggregate function: returns true if at least one value in the expression is true.
-    *
-    * @group agg_funcs
-    * @since 2.2.0
-    */
+   * Aggregate function: returns true if at least one value in the expression is true.
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
   def any(e: Column): Column = withAggregateFunction { AnyAgg(e.expr) }
 
   /**
-    * Aggregate function: returns true if at least one value in the expression is true.
-    *
-    * @group agg_funcs
-    * @since 2.2.0
-    */
+   * Aggregate function: returns true if at least one value in the expression is true.
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
   def any(columnName: String): Column = any(Column(columnName))
 
   /**
-    * Aggregate function: returns true if at least one value in the expression is true.
-    *
-    * @group agg_funcs
-    * @since 2.2.0
-    */
+   * Aggregate function: returns true if at least one value in the expression is true.
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
   def some(e: Column): Column = any(e)
 
   /**
-    * Aggregate function: returns true if at least one value in the expression is true.
-    *
-    * @group agg_funcs
-    * @since 2.2.0
-    */
+   * Aggregate function: returns true if at least one value in the expression is true.
+   *
+   * @group agg_funcs
+   * @since 2.2.0
+   */
   def some(columnName: String): Column = any(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////

@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
@@ -305,48 +306,48 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-    * Compute the sum for each numeric columns for each group.
-    * The resulting `DataFrame` will also contain the grouping columns.
-    * When specified columns are given, only compute the sum for them.
-    *
-    * @since 1.3.0
-    */
+   * Compute the sum for each numeric columns for each group.
+   * The resulting `DataFrame` will also contain the grouping columns.
+   * When specified columns are given, only compute the sum for them.
+   *
+   * @since 1.3.0
+   */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Sum)
   }
 
   /**
-    * Compute the logical and of all boolean columns for each group.
-    * The resulting `DataFrame` will also contain the grouping columns.
-    * When specified columns are given, only compute the sum for them.
-    *
-    * @since 2.2.0
-    */
+   * Compute the logical and of all boolean columns for each group.
+   * The resulting `DataFrame` will also contain the grouping columns.
+   * When specified columns are given, only compute the sum for them.
+   *
+   * @since 2.2.0
+   */
   @scala.annotation.varargs
   def every(colNames: String*): DataFrame = {
     aggregateBooleanColumns(colNames : _*)(Every)
   }
 
   /**
-    * Compute the logical or of all boolean columns for each group.
-    * The resulting `DataFrame` will also contain the grouping columns.
-    * When specified columns are given, only compute the sum for them.
-    *
-    * @since 2.2.0
-    */
+   * Compute the logical or of all boolean columns for each group.
+   * The resulting `DataFrame` will also contain the grouping columns.
+   * When specified columns are given, only compute the sum for them.
+   *
+   * @since 2.2.0
+   */
   @scala.annotation.varargs
   def any(colNames: String*): DataFrame = {
     aggregateBooleanColumns(colNames : _*)(AnyAgg)
   }
 
   /**
-    * Compute the logical or of all boolean columns for each group.
-    * The resulting `DataFrame` will also contain the grouping columns.
-    * When specified columns are given, only compute the sum for them.
-    *
-    * @since 2.2.0
-    */
+   * Compute the logical or of all boolean columns for each group.
+   * The resulting `DataFrame` will also contain the grouping columns.
+   * When specified columns are given, only compute the sum for them.
+   *
+   * @since 2.2.0
+   */
   @scala.annotation.varargs
   def some(colNames: String*): DataFrame = {
     aggregateBooleanColumns(colNames : _*)(AnyAgg)
