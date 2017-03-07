@@ -1289,4 +1289,23 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(df.schema().length(), 0);
     Assert.assertEquals(df.collectAsList().size(), 1);
   }
+
+  public class SelfClassInFieldBean implements Serializable {
+    private SelfClassInFieldBean child;
+
+    public SelfClassInFieldBean getChild() {
+      return child;
+    }
+
+    public void setChild(SelfClassInFieldBean child) {
+      this.child = child;
+    }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testSelfClassInFieldBean() {
+    SelfClassInFieldBean bean = new SelfClassInFieldBean();
+    bean.setChild(new SelfClassInFieldBean());
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(SelfClassInFieldBean.class));
+  }
 }

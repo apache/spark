@@ -123,6 +123,10 @@ object JavaTypeInference {
         val properties = getJavaBeanReadableProperties(other)
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
+          if (other == returnType.getRawType) {
+            throw new UnsupportedOperationException(
+              s"Cannot use one's own class in the fields of class ${other.getName}")
+          }
           val (dataType, nullable) = inferDataType(returnType)
           new StructField(property.getName, dataType, nullable)
         }

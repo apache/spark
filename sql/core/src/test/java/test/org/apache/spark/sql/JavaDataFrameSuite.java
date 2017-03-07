@@ -423,4 +423,23 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1L, df.count());
     Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
   }
+
+  public class SelfClassInFieldBean implements Serializable {
+    private SelfClassInFieldBean child;
+
+    public SelfClassInFieldBean getChild() {
+      return child;
+    }
+
+    public void setChild(SelfClassInFieldBean child) {
+      this.child = child;
+    }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testSelfClassInFieldBean() {
+    SelfClassInFieldBean bean = new SelfClassInFieldBean();
+    bean.setChild(new SelfClassInFieldBean());
+    spark.createDataFrame(Arrays.asList(bean), SelfClassInFieldBean.class);
+  }
 }
