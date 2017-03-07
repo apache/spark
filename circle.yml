@@ -4,9 +4,16 @@ machine:
   post:
     - sudo apt-get --assume-yes install r-base r-base-dev
     - pyenv global 2.7.11 3.4.4 #pypy-4.0.1
+    - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+    - bash miniconda.sh -b -p $HOME/miniconda
+    - $CONDA_BIN config --set always_yes yes --set changeps1 no
+    - $CONDA_BIN update -q conda
+      # Useful for debugging any issues with conda
+    - $CONDA_BIN info -a
   environment:
     TERM: dumb
     R_HOME: /usr/lib/R
+    CONDA_BIN: $HOME/miniconda/bin/conda
 
 checkout:
   post:
