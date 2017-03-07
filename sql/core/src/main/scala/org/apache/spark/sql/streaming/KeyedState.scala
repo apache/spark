@@ -182,11 +182,17 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
    * Set the timeout duration in ms for this key.
    * @note Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
    */
+  @throws[IllegalArgumentException]("if 'durationMs' is not positive")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutDuration(durationMs: Long): Unit
 
   /**
    * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
    * @note, Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
    */
+  @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState")
   def setTimeoutDuration(duration: String): Unit
 }

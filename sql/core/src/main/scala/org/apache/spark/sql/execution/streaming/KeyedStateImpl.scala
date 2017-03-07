@@ -26,15 +26,19 @@ import org.apache.spark.unsafe.types.CalendarInterval
 private[sql] class KeyedStateImpl[S](
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
+    isTimeoutEnabled: Boolean,
     override val isTimingOut: Boolean) extends KeyedState[S] {
 
-  def this(optionalValue: Option[S]) = this(optionalValue, -1, isTimingOut = false)
+  import KeyedStateImpl._
 
+  // Constructor to create dummy state when using mapGroupsWithState in a batch query
+  def this(optionalValue: Option[S]) = this(
+    optionalValue, -1, isTimeoutEnabled = false, isTimingOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
   private var updated: Boolean = false // whether value has been updated (but not removed)
   private var removed: Boolean = false // whether value has been removed
-  private var timeoutTimestamp: Long = KeyedStateImpl.TIMEOUT_NOT_SET
+  private var timeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET
 
   // ========= Public API =========
   override def exists: Boolean = defined
@@ -72,14 +76,19 @@ private[sql] class KeyedStateImpl[S](
   }
 
   override def setTimeoutDuration(durationMs: Long): Unit = {
-    if (batchProcessingTimeMs < 0) {
+    if (!isTimeoutEnabled) {
       throw new UnsupportedOperationException(
         "Cannot set timeout duration without enabling timeout in map/flatMapGroupsWithState")
     }
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
     }
-    timeoutTimestamp = durationMs + batchProcessingTimeMs
+    if (batchProcessingTimeMs != NO_BATCH_PROCESSING_TIMESTAMP) {
+      timeoutTimestamp = durationMs + batchProcessingTimeMs
+    } else {
+      // This is being called in a batch query, hence no processing timestamp.
+      // Just ignore any attempts to set timeout.
+    }
   }
 
   override def setTimeoutDuration(duration: String): Unit = {
@@ -126,5 +135,6 @@ private[sql] class KeyedStateImpl[S](
 
 
 private[sql] object KeyedStateImpl {
-  val TIMEOUT_NOT_SET = -1
+  val TIMEOUT_TIMESTAMP_NOT_SET = -1
+  val NO_BATCH_PROCESSING_TIMESTAMP = -1
 }

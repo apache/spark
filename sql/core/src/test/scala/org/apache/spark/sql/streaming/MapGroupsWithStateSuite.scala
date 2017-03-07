@@ -87,25 +87,25 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
     state = new KeyedStateImpl[String](None)
 
     assert(state.isTimingOut === false)
-    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_NOT_SET)
+    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
     intercept[UnsupportedOperationException] {
       state.setTimeoutDuration(1000)
     }
     intercept[UnsupportedOperationException] {
       state.setTimeoutDuration("1 day")
     }
-    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_NOT_SET)
+    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
 
-    state = new KeyedStateImpl[String](None, 1000, isTimingOut = false)
+    state = new KeyedStateImpl[String](None, 1000, isTimeoutEnabled = true, isTimingOut = false)
     assert(state.isTimingOut === false)
-    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_NOT_SET)
+    assert(state.getTimeoutTimestamp === KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
     state.setTimeoutDuration(1000)
     assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration("2 second")
     assert(state.getTimeoutTimestamp === 3000)
     assert(state.isTimingOut === false)
 
-    state = new KeyedStateImpl[String](None, 1000, isTimingOut = true)
+    state = new KeyedStateImpl[String](None, 1000, isTimeoutEnabled = true, isTimingOut = true)
     assert(state.isTimingOut === true)
   }
 
