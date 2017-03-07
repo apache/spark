@@ -172,11 +172,6 @@ class HadoopTableReader(
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
-
-        // scalastyle:off println
-        println(s"=1==${inputPathStr}, ${partPath.toString}, " +
-          s"${if (filterOpt.isDefined) filterOpt.get.toString}===")
-
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
       // Get partition field info
