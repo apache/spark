@@ -56,5 +56,6 @@ class SQLUtilsSuite extends SparkFunSuite {
       jsc, new HashMap[Object, Object], false, warehouseDir)
     assert(session.sessionState.conf.warehousePath == warehouseDir)
     session.stop()
+    SparkSession.clearDefaultSession()
   }
 }
