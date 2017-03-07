@@ -197,4 +197,27 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       .select(to_json($"struct").as("json"))
     checkAnswer(dfTwo, readBackTwo)
   }
+
+  test("SPARK-19637 Support to_json in SQL") {
+    val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
+    checkAnswer(
+      df1.selectExpr("to_json(a)"),
+      Row("""{"_1":1}""") :: Nil)
+
+    val df2 = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
+    checkAnswer(
+      df2.selectExpr("to_json(a, map('timestampFormat', 'dd/MM/yyyy HH:mm'))"),
+      Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+
+    val errMsg1 = intercept[AnalysisException] {
+      df2.selectExpr("to_json(a, named_struct('a', 1))")
+    }
+    assert(errMsg1.getMessage.startsWith("Must use a map() function for options"))
+
+    val errMsg2 = intercept[AnalysisException] {
+      df2.selectExpr("to_json(a, map('a', 1))")
+    }
+    assert(errMsg2.getMessage.startsWith(
+      "A type of keys and values in map() must be string, but got"))
+  }
 }
