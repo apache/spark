@@ -331,35 +331,38 @@ object SummaryBuilderImpl extends Logging {
           // instead of failing silently?
           // Using exceptions is not great for performance in this loop.
           val thisNnz = if (weightSum == null) { 0.0 } else { weightSum(i) }
-          val otherNnz = if (otherWeightSum == null) { 0.0 } else { otherWeightSum(i) }
+          val otherNnz = if (otherWeightSum == null) { 0.0 } else { otherWeightSum.getDouble(i) }
           val totalNnz = thisNnz + otherNnz
           val totalCnnz = if (numNonzeros == null || numNonzeros == null) { 0.0 } else {
-            numNonzeros(i) + otherNumNonzeros(i)
+            numNonzeros(i) + otherNumNonzeros.getDouble(i)
           }
           if (totalNnz != 0.0) {
-            val deltaMean = if (computeMean >= 0) { otherMean(i) - currMean(i) } else { 0.0 }
+            val deltaMean = if (computeMean >= 0) {
+              otherMean.getDouble(i) - currMean(i)
+            } else { 0.0 }
             // merge mean together
             if (computeMean >= 0) {
               currMean(i) += deltaMean * otherNnz / totalNnz
             }
             // merge m2n together
             if (computeM2n >= 0) {
-              currM2n(i) += otherM2n(i) + deltaMean * deltaMean * thisNnz * otherNnz / totalNnz
+              val incr = deltaMean * deltaMean * thisNnz * otherNnz / totalNnz
+              currM2n(i) += otherM2n.getDouble(i) + incr
             }
             // merge m2 together
             if (computeM2 >= 0) {
-              currM2(i) += otherM2(i)
+              currM2(i) += otherM2.getDouble(i)
             }
             // merge l1 together
             if (computeL1 >= 0) {
-              currL1(i) += otherL1(i)
+              currL1(i) += otherL1.getDouble(i)
             }
             // merge max and min
             if (computeCurrMax >= 0) {
-              currMax(i) = math.max(currMax(i), otherMax(i))
+              currMax(i) = math.max(currMax(i), otherMax.getDouble(i))
             }
             if (computeCurrMin >= 0) {
-              currMin(i) = math.min(currMin(i), otherMin(i))
+              currMin(i) = math.min(currMin(i), otherMin.getDouble(i))
             }
           }
           if (computeWeightSum >= 0) {
@@ -409,7 +412,7 @@ object SummaryBuilderImpl extends Logging {
       require(totalWeightSum > 0, "Data has zero weight")
       var i = 0
       while (i < n) {
-        realMean(i) = currMean(i) * (weightSum(i) / totalWeightSum)
+        realMean(i) = currMean.getDouble(i) * (weightSum.getDouble(i) / totalWeightSum)
         i += 1
       }
       Vectors.dense(realMean)
@@ -442,8 +445,10 @@ object SummaryBuilderImpl extends Logging {
         var i = 0
         val len = currM2n.length
         while (i < len) {
-          realVariance(i) = (currM2n(i) + deltaMean(i) * deltaMean(i) * weightSum(i) *
-            (totalWeightSum - weightSum(i)) / totalWeightSum) / denominator
+          val m = deltaMean.getDouble(i)
+          val num = currM2n.getDouble(i) +  m * m * weightSum.getDouble(i)
+          realVariance(i) = (num *
+            (totalWeightSum - weightSum.getDouble(i)) / totalWeightSum) / denominator
           i += 1
         }
       }
@@ -499,7 +504,7 @@ object SummaryBuilderImpl extends Logging {
       }
 
       // All these may be null pointers.
-      val localCurrMean = exposeDArray(buffer, computeMean)
+      val localCurrMean = exposeDArray3(buffer, computeMean)
       val localCurrM2n = exposeDArray(buffer, computeM2n)
       val localCurrM2 = exposeDArray(buffer, computeM2)
       val localCurrL1 = exposeDArray(buffer, computeL1)
@@ -520,12 +525,13 @@ object SummaryBuilderImpl extends Logging {
           }
 
           if (localCurrMean != null) {
-            val prevMean = localCurrMean(index)
+            val prevMean = localCurrMean.getDouble(index)
             val diff = value - prevMean
-            localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
+            localCurrMean.update(index, prevMean + weight * diff / (localWeightSum(index) + weight))
+//            localCurrMean(index) = prevMean + weight * diff / (localWeightSum(index) + weight)
             if (localCurrM2n != null) {
               // require: localCurrMean != null.
-              localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
+              localCurrM2n(index) += weight * (value - localCurrMean.getDouble(index)) * diff
             }
           }
 
@@ -550,12 +556,11 @@ object SummaryBuilderImpl extends Logging {
       buffer.getInt(computeN)
     }
 
-
-    private[this] def exposeDArray2(buffer: Row, index: Int): Array[Double] = {
+    private[this] def exposeDArray2(buffer: Row, index: Int): Row = {
       if (index == -1) {
         null
       } else {
-        buffer.getAs[Array[Double]](index)
+        buffer.getStruct(index)
       }
     }
 
@@ -563,7 +568,17 @@ object SummaryBuilderImpl extends Logging {
       if (index == -1) {
         null
       } else {
+        buffer.getAs[MutableAggregationBuffer](index)
         buffer.getAs[mutable.WrappedArray[Double]](index).array
+      }
+    }
+
+    private[this] def exposeDArray3(
+        buffer: MutableAggregationBuffer, index: Int): MutableAggregationBuffer = {
+      if (index == -1) {
+        null
+      } else {
+        buffer.getAs[MutableAggregationBuffer](index)
       }
     }
 
