@@ -67,6 +67,11 @@ private[deploy] class Worker(
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
+  // A separated thread to clean up for the finished application. Because cleaning up
+  // may cost much time, and it may block other rpc messages.
+  private val cleanupApplicationThreadExecutor = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-application-thread"))
+
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
@@ -577,13 +582,17 @@ private[deploy] class Worker(
     val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
     if (shouldCleanup) {
       finishedApps -= id
-      appDirectories.remove(id).foreach { dirList =>
-        logInfo(s"Cleaning up local directories for application $id")
-        dirList.foreach { dir =>
-          Utils.deleteRecursively(new File(dir))
+      cleanupApplicationThreadExecutor.submit(new Runnable {
+        override def run(): Unit = {
+          appDirectories.remove(id).foreach { dirList =>
+            logInfo(s"Cleaning up local directories for application $id")
+            dirList.foreach { dir =>
+              Utils.deleteRecursively(new File(dir))
+            }
+          }
+          shuffleService.applicationRemoved(id)
         }
-      }
-      shuffleService.applicationRemoved(id)
+      })
     }
   }
 
@@ -606,6 +615,7 @@ private[deploy] class Worker(
 
   override def onStop() {
     cleanupThreadExecutor.shutdownNow()
+    cleanupApplicationThreadExecutor.shutdown()
     metricsSystem.report()
     cancelLastRegistrationRetry()
     forwordMessageScheduler.shutdownNow()
