@@ -2606,4 +2606,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
   }
+
+  test("SPARK-14471 Aliases in SELECT could be used in GROUP BY") {
+    Seq(("a", "a", 0), ("b", "a", 1), ("a", "a", 2)).toDF("k1", "k2", "v")
+      .createOrReplaceTempView("t")
+    checkAnswer(
+      sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY k2, k1"),
+      Row("a", "a", 2) :: Row("b", "a", 1) :: Nil)
+  }
 }

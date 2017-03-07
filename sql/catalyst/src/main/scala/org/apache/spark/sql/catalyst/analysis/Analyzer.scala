@@ -148,6 +148,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      ResolveGroupByAlias ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveTimeZone(conf) ::
@@ -1633,6 +1634,24 @@ class Analyzer(
 
     def containsAggregate(condition: Expression): Boolean = {
       condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+    }
+  }
+
+  /**
+   * Resolve aliases in a GROUP BY clause.
+   */
+  object ResolveGroupByAlias extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case agg @ Aggregate(groups, aggs, child)
+          if child.resolved && aggs.forall(_.resolved) && groups.exists(!_.resolved) =>
+        agg.copy(groupingExpressions = groups.map {
+          case u: UnresolvedAttribute =>
+            aggs.find(ne => resolver(ne.name, u.name)).map {
+              case alias @ Alias(e, _) => e
+              case e => e
+            }.getOrElse(u)
+          case e => e
+        })
     }
   }
 
