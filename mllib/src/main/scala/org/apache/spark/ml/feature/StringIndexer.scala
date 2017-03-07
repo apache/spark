@@ -45,7 +45,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * Default: "error"
    * @group param
    */
-  @Since("2.1.0")
+  @Since("1.6.0")
   val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
     "unseen labels. Options are 'skip' (filter out rows with unseen labels), " +
     "error (throw an error), or 'keep' (put unseen labels in a special additional bucket, " +
@@ -55,7 +55,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   setDefault(handleInvalid, StringIndexer.ERROR_UNSEEN_LABEL)
 
   /** @group getParam */
-  @Since("2.2.0")
+  @Since("1.6.0")
   def getHandleInvalid: String = $(handleInvalid)
 
   /** Validates and transforms the input schema. */
@@ -92,7 +92,7 @@ class StringIndexer @Since("1.4.0") (
   def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("1.6.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   /** @group setParam */
@@ -167,16 +167,16 @@ class StringIndexerModel (
   }
 
   /** @group setParam */
+  @Since("1.6.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
+  /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /** @group setParam */
-  @Since("2.2.0")
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
