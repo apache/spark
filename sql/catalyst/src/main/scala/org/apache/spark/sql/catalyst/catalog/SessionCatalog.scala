@@ -50,7 +50,6 @@ object SessionCatalog {
 class SessionCatalog(
     externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf,
     hadoopConf: Configuration,
@@ -66,11 +65,11 @@ class SessionCatalog(
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
-      DummyFunctionResourceLoader,
       functionRegistry,
       conf,
       new Configuration(),
       CatalystSqlParser)
+    functionResourceLoader = DummyFunctionResourceLoader
   }
 
   // For testing only.
@@ -91,6 +90,8 @@ class SessionCatalog(
   // the corresponding item in the current database.
   @GuardedBy("this")
   protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
+
+  @volatile var functionResourceLoader: FunctionResourceLoader = _
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -990,6 +991,9 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    if (functionResourceLoader == null) {
+      throw new IllegalStateException("functionResourceLoader has not yet been initialized")
+    }
     resources.foreach(functionResourceLoader.loadResource)
   }
 
@@ -1186,14 +1190,10 @@ class SessionCatalog(
   }
 
   /**
-   * Get an identical copy of the `SessionCatalog`.
-   * The temporary views and function registry are retained.
-   * The table relation cache will not be populated.
-   * @note `externalCatalog` and `globalTempViewManager` are from shared state, do not need deep
-   * copy. `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
-   * All arguments passed in should be associated with a particular `SparkSession`.
+   * Create a new [[SessionCatalog]] with the provided parameters. `externalCatalog` and
+   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
    */
-  def clone(
+  def newSessionCatalogWith(
       conf: CatalystConf,
       hadoopConf: Configuration,
       functionRegistry: FunctionRegistry,
@@ -1201,7 +1201,6 @@ class SessionCatalog(
     val catalog = new SessionCatalog(
       externalCatalog,
       globalTempViewManager,
-      functionResourceLoader,
       functionRegistry,
       conf,
       hadoopConf,

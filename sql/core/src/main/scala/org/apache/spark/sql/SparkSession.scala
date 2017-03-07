@@ -80,10 +80,6 @@ class SparkSession private(
     @transient private val parentSessionState: Option[SessionState])
   extends Serializable with Closeable with Logging { self =>
 
-  private[sql] def this(sc: SparkContext, existingSharedState: Option[SharedState]) {
-    this(sc, existingSharedState, None)
-  }
-
   private[sql] def this(sc: SparkContext) {
     this(sc, None, None)
   }
@@ -129,9 +125,11 @@ class SparkSession private(
   lazy val sessionState: SessionState = {
     parentSessionState
       .map(_.clone(this))
-      .getOrElse(SparkSession.instantiateSessionState(
-        SparkSession.sessionStateClassName(sparkContext.conf),
-        self))
+      .getOrElse {
+        SparkSession.instantiateSessionState(
+          SparkSession.sessionStateClassName(sparkContext.conf),
+          self)
+      }
   }
 
   /**
@@ -221,13 +219,12 @@ class SparkSession private(
    * @since 2.0.0
    */
   def newSession(): SparkSession = {
-    new SparkSession(sparkContext, Some(sharedState))
+    new SparkSession(sparkContext, Some(sharedState), parentSessionState = None)
   }
 
   /**
-   * :: Experimental ::
    * Create an identical copy of this `SparkSession`, sharing the underlying `SparkContext`
-   * and cached data. All the state of this session (i.e. SQL configurations, temporary tables,
+   * and shared state. All the state of this session (i.e. SQL configurations, temporary tables,
    * registered functions) is copied over, and the cloned session is set up with the same shared
    * state as this session. The cloned session is independent of this session, that is, any
    * non-global change in either session is not reflected in the other.
@@ -236,12 +233,8 @@ class SparkSession private(
    * This method will force the initialization of the shared state to ensure that parent
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
-   *
-   * @since 2.2.0
    */
-  @Experimental
-  @InterfaceStability.Evolving
-  def cloneSession(): SparkSession = {
+  private[sql] def cloneSession(): SparkSession = {
     val result = new SparkSession(sparkContext, Some(sharedState), Some(sessionState))
     result.sessionState // force copy of SessionState
     result
@@ -919,6 +912,7 @@ object SparkSession {
           }
         })
       }
+
       return session
     }
   }

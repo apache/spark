@@ -32,10 +32,19 @@ import org.apache.spark.sql.streaming.StreamingQueryManager
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
- * @param catalog A Hive client used for interacting with the metastore.
- * @param analyzer An analyzer that uses the Hive metastore.
- * @param plannerCreator Lambda to create a [[SparkPlanner]] that converts optimized logical
- *                       plans to physical plans.
+ * @param sparkContext The [[SparkContext]].
+ * @param sharedState The shared state.
+ * @param conf SQL-specific key-value configurations.
+ * @param experimentalMethods The experimental methods.
+ * @param functionRegistry Internal catalog for managing functions registered by the user.
+ * @param catalog Internal catalog for managing table and database states.
+ * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
+ * @param metadataHive The Hive metadata client.
+ * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
+ * @param streamingQueryManager Interface to start and stop
+ *                              [[org.apache.spark.sql.streaming.StreamingQuery]]s.
+ * @param queryExecutionCreator Lambda to create a [[QueryExecution]] from a [[LogicalPlan]]
+ * @param plannerCreator Lambda to create a planner that takes into account Hive-specific strategies
  */
 private[hive] class HiveSessionState(
     sparkContext: SparkContext,
@@ -123,7 +132,7 @@ private[hive] class HiveSessionState(
     val functionRegistryCopy = functionRegistry.clone()
     val experimentalMethodsCopy = experimentalMethods.clone()
     val sqlParser: ParserInterface = new SparkSqlParser(confCopy)
-    val catalogCopy = catalog.clone(
+    val catalogCopy = catalog.newSessionCatalogWith(
       newSparkSession,
       confCopy,
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, confCopy),
@@ -170,7 +179,6 @@ object HiveSessionState {
 
     val catalog = HiveSessionCatalog(
       sparkSession,
-      SessionState.createFunctionResourceLoader(sparkContext, sparkSession.sharedState),
       initHelper.functionRegistry,
       initHelper.conf,
       SessionState.newHadoopConf(sparkContext.hadoopConfiguration, initHelper.conf),
@@ -187,7 +195,7 @@ object HiveSessionState {
       initHelper.conf,
       initHelper.experimentalMethods)
 
-    new HiveSessionState(
+    val hiveSessionState = new HiveSessionState(
       sparkContext,
       sparkSession.sharedState,
       initHelper.conf,
@@ -200,6 +208,8 @@ object HiveSessionState {
       initHelper.streamingQueryManager,
       initHelper.queryExecutionCreator,
       plannerCreator)
+    catalog.functionResourceLoader = hiveSessionState.functionResourceLoader
+    hiveSessionState
   }
 
   /**

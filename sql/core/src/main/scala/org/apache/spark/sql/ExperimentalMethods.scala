@@ -48,10 +48,8 @@ class ExperimentalMethods private[sql]() {
 
   override def clone(): ExperimentalMethods = {
     val result = new ExperimentalMethods
-    synchronized {
-      result.extraStrategies = extraStrategies
-      result.extraOptimizations = extraOptimizations
-    }
+    result.extraStrategies = extraStrategies
+    result.extraOptimizations = extraOptimizations
     result
   }
 }

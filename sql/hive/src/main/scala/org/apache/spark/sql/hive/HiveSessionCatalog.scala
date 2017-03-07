@@ -44,7 +44,6 @@ private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
     private val metastoreCatalog: HiveMetastoreCatalog,
-    functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
@@ -52,7 +51,6 @@ private[sql] class HiveSessionCatalog(
   extends SessionCatalog(
       externalCatalog,
       globalTempViewManager,
-      functionResourceLoader,
       functionRegistry,
       conf,
       hadoopConf,
@@ -72,16 +70,10 @@ private[sql] class HiveSessionCatalog(
   }
 
   /**
-   * Get an identical copy of the `HiveSessionCatalog`.
-   * The temporary tables and function registry are retained.
-   * The table relation cache will not be populated.
-   * @note `externalCatalog` and `globalTempViewManager` are from shared state, don't need
-   * deep copy. `FunctionResourceLoader` is effectively stateless, also does not need deep copy.
-   * All arguments passed in should be associated with `newSparkSession`.
-   * This should ideally override `SessionCatalog.clone()` but does not at present, since
-   * `HiveMetastoreCatalog` is dependent on `SparkSession`.
+   * Create a new [[HiveSessionCatalog]] with the provided parameters. `externalCatalog` and
+   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
    */
-  def clone(
+  def newSessionCatalogWith(
       newSparkSession: SparkSession,
       conf: SQLConf,
       hadoopConf: Configuration,
@@ -89,7 +81,6 @@ private[sql] class HiveSessionCatalog(
       parser: ParserInterface): HiveSessionCatalog = {
     val catalog = HiveSessionCatalog(
       newSparkSession,
-      functionResourceLoader,
       functionRegistry,
       conf,
       hadoopConf,
@@ -104,11 +95,19 @@ private[sql] class HiveSessionCatalog(
     catalog
   }
 
-  override def clone(
-    conf: CatalystConf,
-    hadoopConf: Configuration,
-    functionRegistry: FunctionRegistry,
-    parser: ParserInterface): HiveSessionCatalog = throw new UnsupportedOperationException(
+  /**
+   * The parent class [[SessionCatalog]] cannot access the [[SparkSession]] class, so we cannot add
+   * a [[SparkSession]] parameter to [[SessionCatalog.newSessionCatalogWith]]. However,
+   * [[HiveSessionCatalog]] requires a [[SparkSession]] parameter, so we can a new version of
+   * `newSessionCatalogWith` and disable this one.
+   *
+   * TODO Refactor HiveSessionCatalog to not use [[SparkSession]] directly.
+   */
+  override def newSessionCatalogWith(
+      conf: CatalystConf,
+      hadoopConf: Configuration,
+      functionRegistry: FunctionRegistry,
+      parser: ParserInterface): HiveSessionCatalog = throw new UnsupportedOperationException(
     "to clone HiveSessionCatalog, use the other clone method that also accepts a SparkSession")
 
   // For testing only
@@ -256,7 +255,6 @@ private[sql] object HiveSessionCatalog {
 
   def apply(
       sparkSession: SparkSession,
-      functionResourceLoader: FunctionResourceLoader,
       functionRegistry: FunctionRegistry,
       conf: SQLConf,
       hadoopConf: Configuration,
@@ -271,7 +269,6 @@ private[sql] object HiveSessionCatalog {
       sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
       sparkSession.sharedState.globalTempViewManager,
       metastoreCatalog,
-      functionResourceLoader,
       functionRegistry,
       conf,
       hadoopConf,

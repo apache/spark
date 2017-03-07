@@ -38,7 +38,7 @@ class HiveSessionCatalogSuite extends SparkFunSuite {
     original.createTempView("copytest1", tempTable1, overrideIfExists = false)
 
     // check if tables copied over
-    val clone = original.clone(
+    val clone = original.newSessionCatalogWith(
       hiveSession,
       new SQLConf,
       new Configuration(),
