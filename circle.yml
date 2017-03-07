@@ -22,7 +22,7 @@ dependencies:
     - PYENV_VERSION=3.4.4 pip install numpy
     #- PYENV_VERSION=pypy-4.0.1 pip install numpy
   override:
-    - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr dependency:go-offline
+    - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
 
 general:
   artifacts:
@@ -47,7 +47,7 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-palantir -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
           }
 
           make_dist() {
@@ -64,10 +64,10 @@ test:
             publish_artifacts
             ;;
           1)
-            make_dist hadoop-2.8.0-palantir2 "-Phadoop-palantir -Pkinesis-asl -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
+            make_dist hadoop-2.8.0-palantir2 "-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
             ;;
           2)
-            make_dist without-hadoop "-Phadoop-provided -Pmesos -Pyarn -Psparkr"
+            make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr"
             ;;
           esac
       :
@@ -76,7 +76,7 @@ test:
 
 deployment:
   release:
-    tag: /[0-9]+(?:\.[0-9]+)+-palantir[0-9]+/
+    tag: /[0-9]+(?:\.[0-9]+)+-palantir[0-9]+(?:-kubernetes[0-9]+)/
     commands:
       - curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
   snapshot:
