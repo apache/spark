@@ -538,10 +538,37 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("Killing tasks") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    SparkContextSuite.isTaskStarted = false
+    SparkContextSuite.taskKilled = false
+
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        eventually(timeout(10.seconds)) {
+          assert(SparkContextSuite.isTaskStarted)
+        }
+        if (!SparkContextSuite.taskKilled) {
+          SparkContextSuite.taskKilled = true
+          sc.killTask(taskStart.taskInfo.taskId, "first attempt will hang")
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    sc.parallelize(1 to 1).foreach { x =>
+      if (!SparkContextSuite.isTaskStarted) {
+        SparkContextSuite.isTaskStarted = true
+        Thread.sleep(9999999)
+      }
+      // second try succeeds immediately
+    }
+  }
 }
 
 object SparkContextSuite {
   @volatile var cancelJob = false
   @volatile var cancelStage = false
   @volatile var isTaskStarted = false
+  @volatile var taskKilled = false
 }

@@ -248,6 +248,14 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
   }
 
+  override def killTask(
+      taskId: Long, interruptThread: Boolean, reason: String, shouldRetry: Boolean): Unit = {
+    logInfo(s"Killing task ($reason): $taskId")
+    val execId = taskIdToExecutorId.getOrElse(
+      taskId, throw new IllegalArgumentException("Task not found: " + taskId))
+    backend.killTask(taskId, execId, interruptThread, reason, shouldRetry)
+  }
+
   /**
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be

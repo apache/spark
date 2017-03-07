@@ -732,6 +732,13 @@ class DAGScheduler(
   }
 
   /**
+   * Kill a given task. It will be retried.
+   */
+  def killTask(taskId: Long, reason: String): Unit = {
+    taskScheduler.killTask(taskId, interruptThread = true, reason, shouldRetry = true)
+  }
+
+  /**
    * Resubmit any failed stages. Ordinarily called after a small amount of time has passed since
    * the last fetch failure.
    */

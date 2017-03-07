@@ -2250,6 +2250,25 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Kill a given task. It will be retried.
+   *
+   * @param taskId the task ID to kill
+   */
+  def killTask(taskId: Long): Unit = {
+    killTask(taskId, "cancelled")
+  }
+
+  /**
+   * Kill a given task. It will be retried.
+   *
+   * @param taskId the task ID to kill
+   * @param reason the reason for killing the task, which should be a short string
+   */
+  def killTask(taskId: Long, reason: String): Unit = {
+    dagScheduler.killTask(taskId, reason)
+  }
+
+  /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
    * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively
