@@ -40,7 +40,8 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -80,14 +81,24 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /**
    * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
-   * out of integer range.
+   * out of integer range or contains a fractional part.
    */
-  protected val checkedCast = udf { (n: Double) =>
-    if (n > Int.MaxValue || n < Int.MinValue) {
-      throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
-        s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
-    } else {
-      n.toInt
+  protected[recommendation] val checkedCast = udf { (n: Any) =>
+    n match {
+      case v: Int => v // Avoid unnecessary casting
+      case v: Number =>
+        val intV = v.intValue
+        // Checks if number within Int range and has no fractional part.
+        if (v.doubleValue == intV) {
+          intV
+        } else {
+          throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+            s"and without fractional part for columns ${$(userCol)} and ${$(itemCol)}. " +
+            s"Value $n was either out of Integer range or contained a fractional part that " +
+            s"could not be converted.")
+        }
+      case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+        s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was not numeric.")
     }
   }
 
@@ -274,23 +285,25 @@ class ALSModel private[ml] (
   @Since("2.2.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
+  private val predict = udf { (featuresA: Seq[Float], featuresB: Seq[Float]) =>
+    if (featuresA != null && featuresB != null) {
+      // TODO(SPARK-19759): try dot-producting on Seqs or another non-converted type for
+      // potential optimization.
+      blas.sdot(rank, featuresA.toArray, 1, featuresB.toArray, 1)
+    } else {
+      Float.NaN
+    }
+  }
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
-    // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
-    val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
-      if (userFeatures != null && itemFeatures != null) {
-        blas.sdot(rank, userFeatures.toArray, 1, itemFeatures.toArray, 1)
-      } else {
-        Float.NaN
-      }
-    }
     val predictions = dataset
       .join(userFactors,
-        checkedCast(dataset($(userCol)).cast(DoubleType)) === userFactors("id"), "left")
+        checkedCast(dataset($(userCol))) === userFactors("id"), "left")
       .join(itemFactors,
-        checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
+        checkedCast(dataset($(itemCol))) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
     getColdStartStrategy match {
@@ -317,6 +330,64 @@ class ALSModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new ALSModel.ALSModelWriter(this)
+
+  /**
+   * Returns top `numItems` items recommended for each user, for all users.
+   * @param numItems max number of recommendations for each user
+   * @return a DataFrame of (userCol: Int, recommendations), where recommendations are
+   *         stored as an array of (itemCol: Int, rating: Float) Rows.
+   */
+  @Since("2.2.0")
+  def recommendForAllUsers(numItems: Int): DataFrame = {
+    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems)
+  }
+
+  /**
+   * Returns top `numUsers` users recommended for each item, for all items.
+   * @param numUsers max number of recommendations for each item
+   * @return a DataFrame of (itemCol: Int, recommendations), where recommendations are
+   *         stored as an array of (userCol: Int, rating: Float) Rows.
+   */
+  @Since("2.2.0")
+  def recommendForAllItems(numUsers: Int): DataFrame = {
+    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
+  }
+
+  /**
+   * Makes recommendations for all users (or items).
+   * @param srcFactors src factors for which to generate recommendations
+   * @param dstFactors dst factors used to make recommendations
+   * @param srcOutputColumn name of the column for the source ID in the output DataFrame
+   * @param dstOutputColumn name of the column for the destination ID in the output DataFrame
+   * @param num max number of recommendations for each record
+   * @return a DataFrame of (srcOutputColumn: Int, recommendations), where recommendations are
+   *         stored as an array of (dstOutputColumn: Int, rating: Float) Rows.
+   */
+  private def recommendForAll(
+      srcFactors: DataFrame,
+      dstFactors: DataFrame,
+      srcOutputColumn: String,
+      dstOutputColumn: String,
+      num: Int): DataFrame = {
+    import srcFactors.sparkSession.implicits._
+
+    val ratings = srcFactors.crossJoin(dstFactors)
+      .select(
+        srcFactors("id"),
+        dstFactors("id"),
+        predict(srcFactors("features"), dstFactors("features")))
+    // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
+    val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
+    val recs = ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
+      .toDF("id", "recommendations")
+
+    val arrayType = ArrayType(
+      new StructType()
+        .add(dstOutputColumn, IntegerType)
+        .add("rating", FloatType)
+    )
+    recs.select($"id" as srcOutputColumn, $"recommendations" cast arrayType)
+  }
 }
 
 @Since("1.6.0")
@@ -491,8 +562,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(checkedCast(col($(userCol)).cast(DoubleType)),
-        checkedCast(col($(itemCol)).cast(DoubleType)), r)
+      .select(checkedCast(col($(userCol))), checkedCast(col($(itemCol))), r)
       .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
@@ -711,7 +781,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       numUserBlocks: Int = 10,
       numItemBlocks: Int = 10,
       maxIter: Int = 10,
-      regParam: Double = 1.0,
+      regParam: Double = 0.1,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0,
       nonnegative: Boolean = false,
