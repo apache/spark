@@ -1212,11 +1212,11 @@ class SessionCatalogSuite extends PlanTest {
       new SimpleFunctionRegistry,
       CatalystSqlParser)
     assert(original ne clone)
-    assert(clone.getTempView("copytest1") == Option(tempTable1))
+    assert(clone.getTempView("copytest1") == Some(tempTable1))
 
     // check if clone and original independent
     clone.dropTable(TableIdentifier("copytest1"), ignoreIfNotExists = false, purge = false)
-    assert(original.getTempView("copytest1") == Option(tempTable1))
+    assert(original.getTempView("copytest1") == Some(tempTable1))
 
     val tempTable2 = Range(1, 20, 2, 10)
     original.createTempView("copytest2", tempTable2, overrideIfExists = false)
@@ -1225,14 +1225,15 @@ class SessionCatalogSuite extends PlanTest {
 
   test("clone SessionCatalog - current db") {
     val externalCatalog = newEmptyCatalog()
-    externalCatalog.createDatabase(newDb("copytest1"), true)
-    externalCatalog.createDatabase(newDb("copytest2"), true)
-    externalCatalog.createDatabase(newDb("copytest3"), true)
+    val db1 = "db1"
+    val db2 = "db2"
+    val db3 = "db3"
+
+    externalCatalog.createDatabase(newDb(db1), ignoreIfExists = true)
+    externalCatalog.createDatabase(newDb(db2), ignoreIfExists = true)
+    externalCatalog.createDatabase(newDb(db3), ignoreIfExists = true)
 
     val original = new SessionCatalog(externalCatalog)
-    val tempTable1 = Range(1, 10, 1, 10)
-    val db1 = "copytest1"
-    original.createTempView(db1, tempTable1, overrideIfExists = false)
     original.setCurrentDatabase(db1)
 
     // check if current db copied over
@@ -1245,15 +1246,8 @@ class SessionCatalogSuite extends PlanTest {
     assert(clone.getCurrentDatabase == db1)
 
     // check if clone and original independent
-    val db2 = "copytest2"
-    val tempTable2 = Range(1, 20, 2, 20)
-    clone.createTempView(db2, tempTable2, overrideIfExists = false)
     clone.setCurrentDatabase(db2)
     assert(original.getCurrentDatabase == db1)
-
-    val db3 = "copytest3"
-    val tempTable3 = Range(1, 30, 2, 30)
-    original.createTempView(db3, tempTable3, overrideIfExists = false)
     original.setCurrentDatabase(db3)
     assert(clone.getCurrentDatabase == db2)
   }
