@@ -552,17 +552,14 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       override protected def getShuffleClient(): MesosExternalShuffleClient = shuffleClient
 
       // override to avoid race condition with the driver thread on `mesosDriver`
-      override def startScheduler(newDriver: SchedulerDriver): Unit = {
-        mesosDriver = newDriver
-      }
+      override def startScheduler(newDriver: SchedulerDriver): Unit = {}
 
       override def stopExecutors(): Unit = {
         stopCalled = true
       }
-
-      markRegistered()
     }
     backend.start()
+    backend.registered(driver, Utils.TEST_FRAMEWORK_ID, Utils.TEST_MASTER_INFO)
     backend
   }
 
