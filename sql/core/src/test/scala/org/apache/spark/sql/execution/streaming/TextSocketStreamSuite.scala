@@ -22,10 +22,13 @@ import java.net.ServerSocket
 import java.sql.Timestamp
 import java.util.concurrent.LinkedBlockingQueue
 
+import scala.collection.mutable
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
@@ -60,29 +63,31 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
     source = provider.createSource(sqlContext, "", None, "", parameters)
 
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      while (source.getOffset.isEmpty) {
-        Thread.sleep(10)
+    withAdditionalConf(Map(UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false")) {() =>
+      failAfter(streamingTimeout) {
+        serverThread.enqueue("hello")
+        while (source.getOffset.isEmpty) {
+          Thread.sleep(10)
+        }
+        val offset1 = source.getOffset.get
+        val batch1 = source.getBatch(None, offset1)
+        assert(batch1.as[String].collect().toSeq === Seq("hello"))
+
+        serverThread.enqueue("world")
+        while (source.getOffset.get === offset1) {
+          Thread.sleep(10)
+        }
+        val offset2 = source.getOffset.get
+        val batch2 = source.getBatch(Some(offset1), offset2)
+        assert(batch2.as[String].collect().toSeq === Seq("world"))
+
+        val both = source.getBatch(None, offset2)
+        assert(both.as[String].collect().sorted.toSeq === Seq("hello", "world"))
+
+        // Try stopping the source to make sure this does not block forever.
+        source.stop()
+        source = null
       }
-      val offset1 = source.getOffset.get
-      val batch1 = source.getBatch(None, offset1)
-      assert(batch1.as[String].collect().toSeq === Seq("hello"))
-
-      serverThread.enqueue("world")
-      while (source.getOffset.get === offset1) {
-        Thread.sleep(10)
-      }
-      val offset2 = source.getOffset.get
-      val batch2 = source.getBatch(Some(offset1), offset2)
-      assert(batch2.as[String].collect().toSeq === Seq("world"))
-
-      val both = source.getBatch(None, offset2)
-      assert(both.as[String].collect().sorted.toSeq === Seq("hello", "world"))
-
-      // Try stopping the source to make sure this does not block forever.
-      source.stop()
-      source = null
     }
   }
 
@@ -99,31 +104,33 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
     source = provider.createSource(sqlContext, "", None, "", parameters)
 
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      while (source.getOffset.isEmpty) {
-        Thread.sleep(10)
-      }
-      val offset1 = source.getOffset.get
-      val batch1 = source.getBatch(None, offset1)
-      val batch1Seq = batch1.as[(String, Timestamp)].collect().toSeq
-      assert(batch1Seq.map(_._1) === Seq("hello"))
-      val batch1Stamp = batch1Seq(0)._2
+    withAdditionalConf(Map(UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false")) { () =>
+      failAfter(streamingTimeout) {
+        serverThread.enqueue("hello")
+        while (source.getOffset.isEmpty) {
+          Thread.sleep(10)
+        }
+        val offset1 = source.getOffset.get
+        val batch1 = source.getBatch(None, offset1)
+        val batch1Seq = batch1.as[(String, Timestamp)].collect().toSeq
+        assert(batch1Seq.map(_._1) === Seq("hello"))
+        val batch1Stamp = batch1Seq(0)._2
 
-      serverThread.enqueue("world")
-      while (source.getOffset.get === offset1) {
-        Thread.sleep(10)
-      }
-      val offset2 = source.getOffset.get
-      val batch2 = source.getBatch(Some(offset1), offset2)
-      val batch2Seq = batch2.as[(String, Timestamp)].collect().toSeq
-      assert(batch2Seq.map(_._1) === Seq("world"))
-      val batch2Stamp = batch2Seq(0)._2
-      assert(!batch2Stamp.before(batch1Stamp))
+        serverThread.enqueue("world")
+        while (source.getOffset.get === offset1) {
+          Thread.sleep(10)
+        }
+        val offset2 = source.getOffset.get
+        val batch2 = source.getBatch(Some(offset1), offset2)
+        val batch2Seq = batch2.as[(String, Timestamp)].collect().toSeq
+        assert(batch2Seq.map(_._1) === Seq("world"))
+        val batch2Stamp = batch2Seq(0)._2
+        assert(!batch2Stamp.before(batch1Stamp))
 
-      // Try stopping the source to make sure this does not block forever.
-      source.stop()
-      source = null
+        // Try stopping the source to make sure this does not block forever.
+        source.stop()
+        source = null
+      }
     }
   }
 
@@ -164,19 +171,42 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString)
     source = provider.createSource(sqlContext, "", None, "", parameters)
 
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      while (source.getOffset.isEmpty) {
-        Thread.sleep(10)
+    withAdditionalConf(Map(UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false")) { () =>
+      failAfter(streamingTimeout) {
+        serverThread.enqueue("hello")
+        while (source.getOffset.isEmpty) {
+          Thread.sleep(10)
+        }
+        val batch = source.getBatch(None, source.getOffset.get).as[String]
+        batch.collect()
+        val numRowsMetric =
+          batch.queryExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
+        assert(numRowsMetric.nonEmpty)
+        assert(numRowsMetric.get.value === 1)
+        source.stop()
+        source = null
       }
-      val batch = source.getBatch(None, source.getOffset.get).as[String]
-      batch.collect()
-      val numRowsMetric =
-        batch.queryExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
-      assert(numRowsMetric.nonEmpty)
-      assert(numRowsMetric.get.value === 1)
-      source.stop()
-      source = null
+    }
+  }
+
+  def withAdditionalConf(additionalConf: Map[String, String] = Map.empty)(f: () => Unit): Unit = {
+    val resetConfValues = mutable.Map[String, Option[String]]()
+    val conf = sqlContext.sparkSession.conf
+    additionalConf.foreach(pair => {
+      val value = if (conf.contains(pair._1)) {
+        Some(conf.get(pair._1))
+      } else {
+        None
+      }
+      resetConfValues(pair._1) = value
+      conf.set(pair._1, pair._2)
+    })
+
+    f()
+
+    resetConfValues.foreach {
+      case (key, Some(value)) => conf.set(key, value)
+      case (key, None) => conf.unset(key)
     }
   }
 
