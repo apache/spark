@@ -180,7 +180,7 @@ class CrossValidator(Estimator, ValidatorParams):
         """
         super(CrossValidator, self).__init__()
         self._setDefault(numFolds=3)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
@@ -192,7 +192,7 @@ class CrossValidator(Estimator, ValidatorParams):
                   seed=None):
         Sets params for cross validator.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     @since("1.4.0")
@@ -337,7 +337,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         """
         super(TrainValidationSplit, self).__init__()
         self._setDefault(trainRatio=0.75)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @since("2.0.0")
@@ -349,7 +349,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
                   seed=None):
         Sets params for the train validation split.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     @since("2.0.0")
