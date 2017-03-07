@@ -159,43 +159,11 @@ class HadoopTableReader(
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
-      var existPathSet = collection.mutable.Set[String]()
-      var pathPatternSet = collection.mutable.Set[String]()
       partitionToDeserializer.filter {
         case (partition, partDeserializer) =>
-          def updateExistPathSetByPathPattern(pathPatternStr: String) {
-            val pathPattern = new Path(pathPatternStr)
-            val fs = pathPattern.getFileSystem(hadoopConf)
-            val matches = fs.globStatus(pathPattern)
-            matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
-          }
-          // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
-          def getPathPatternByPath(parNum: Int, tempPath: Path, partitionName: String): String = {
-            // if the partition path does not end with partition name, we should not
-            // generate the pattern, return the partition path directly
-            if (tempPath.toString.endsWith(partitionName)) {
-              var path = tempPath
-              for (i <- (1 to parNum)) path = path.getParent
-              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
-              path.toString + tails
-            } else tempPath.toString
-          }
-
           val partPath = partition.getDataLocation
-          val partitionName = partition.getName
-          val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
-          var pathPatternStr = getPathPatternByPath(partNum, partPath, partitionName)
-          // scalastyle:off println
-          println(s"===$partPath, $partitionName, $partNum, $pathPatternStr===")
-          if (!pathPatternSet.contains(pathPatternStr)) {
-            pathPatternSet += pathPatternStr
-            updateExistPathSetByPathPattern(pathPatternStr)
-          }
-          // scalastyle:off println
-          println(s"=1==${existPathSet.size}, ${partPath.toString}, " +
-            s"${existPathSet.contains(partPath.toString)}===")
-
-          existPathSet.contains(partPath.toString)
+          val fs = partPath.getFileSystem(hadoopConf)
+          fs.exists(partPath)
       }
     }
 
