@@ -185,10 +185,16 @@ class HadoopTableReader(
           val partitionName = partition.getName
           val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
           var pathPatternStr = getPathPatternByPath(partNum, partPath, partitionName)
+          // scalastyle:off println
+          println(s"===$partPath, $partitionName, $partNum, $pathPatternStr===")
           if (!pathPatternSet.contains(pathPatternStr)) {
             pathPatternSet += pathPatternStr
             updateExistPathSetByPathPattern(pathPatternStr)
           }
+          // scalastyle:off println
+          println(s"=1==${existPathSet.size}, ${partPath.toString}, " +
+            s"${existPathSet.contains(partPath.toString)}===")
+
           existPathSet.contains(partPath.toString)
       }
     }
@@ -198,6 +204,11 @@ class HadoopTableReader(
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
+
+        // scalastyle:off println
+        println(s"=1==${inputPathStr}, ${partPath.toString}, " +
+          s"${if (filterOpt.isDefined) filterOpt.get.toString}===")
+
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
       // Get partition field info
