@@ -188,28 +188,28 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 6)
   }
 
-  test("Not(cint = 3 OR cint = 6)") {
-    val condition = Not(Or(EqualTo(attrInt, Literal(3)), EqualTo(attrInt, Literal(6))))
+  test("Not(cint <= 3 OR cint > 6)") {
+    val condition = Not(Or(LessThanOrEqual(attrInt, Literal(3)), GreaterThan(attrInt, Literal(6))))
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
       Seq(attrInt -> colStatInt),
-      expectedRowCount = 9)
+      expectedRowCount = 5)
   }
 
-  test("Not(cint > 3 AND cstring < 'A8') - unsupported") {
-    val condition = Not(And(GreaterThan(attrInt, Literal(3)), LessThan(attrString, Literal("A8"))))
+  test("Not(cint = 3 AND cstring < 'A8')") {
+    val condition = Not(And(EqualTo(attrInt, Literal(3)), LessThan(attrString, Literal("A8"))))
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrInt, attrString), 10L)),
       Seq(attrInt -> colStatInt, attrString -> colStatString),
       expectedRowCount = 10)
   }
 
-  test("Not(cint = 3 OR cstring < 'A8') - unsupported") {
+  test("Not(cint = 3 OR cstring < 'A8')") {
     val condition = Not(Or(EqualTo(attrInt, Literal(3)), LessThan(attrString, Literal("A8"))))
     validateEstimatedStats(
       Filter(condition, childStatsTestPlan(Seq(attrInt, attrString), 10L)),
       Seq(attrInt -> colStatInt, attrString -> colStatString),
-      expectedRowCount = 10)
+      expectedRowCount = 9)
   }
 
   test("cint IN (3, 4, 5)") {

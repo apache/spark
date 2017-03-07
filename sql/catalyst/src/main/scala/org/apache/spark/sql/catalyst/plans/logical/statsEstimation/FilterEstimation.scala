@@ -104,28 +104,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         val percent2 = calculateFilterSelectivity(cond2, update = false).getOrElse(1.0)
         Some(percent1 + percent2 - (percent1 * percent2))
 
-      // For AND and OR conditions, we will estimate conservatively if one of two
-      // components is not supported, e.g. suppose c1 is not supported,
-      // then p(And(c1, c2)) = p(c2), and p(Or(c1, c2)) = 1.0.
-      // But once they are wrapped in NOT condition, then after 1 - p, it becomes
-      // under-estimation. So in these cases, we consider them as unsupported.
       case Not(And(cond1, cond2)) =>
-        val p1 = calculateFilterSelectivity(cond1, update = false)
-        val p2 = calculateFilterSelectivity(cond2, update = false)
-        if (p1.isDefined && p2.isDefined) {
-          Some(1 - p1.get * p2.get)
-        } else {
-          None
-        }
+        calculateFilterSelectivity(Or(Not(cond1), Not(cond2)), update = false)
 
       case Not(Or(cond1, cond2)) =>
-        val p1 = calculateFilterSelectivity(cond1, update = false)
-        val p2 = calculateFilterSelectivity(cond2, update = false)
-        if (p1.isDefined && p2.isDefined) {
-          Some(1 - (p1.get + p2.get - (p1.get * p2.get)))
-        } else {
-          None
-        }
+        calculateFilterSelectivity(And(Not(cond1), Not(cond2)), update = false)
 
       case Not(cond) =>
         calculateFilterSelectivity(cond, update = false) match {
@@ -133,7 +116,8 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
           case None => None
         }
 
-      case _ => calculateSingleCondition(condition, update)
+      case _ =>
+        calculateSingleCondition(condition, update)
     }
   }
 
@@ -472,12 +456,15 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       percent = op match {
         case _: LessThan =>
           if (numericLiteral == max) {
+            // If the literal value is right on the boundary, we can minus the part of the
+            // boundary value (1/ndv).
             1.0 - 1.0 / ndv
           } else {
             (numericLiteral - min) / (max - min)
           }
         case _: LessThanOrEqual =>
           if (numericLiteral == min) {
+            // The boundary value is the only satisfying value.
             1.0 / ndv
           } else {
             (numericLiteral - min) / (max - min)
@@ -505,14 +492,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         if (newNdv < 1) newNdv = 1
 
         op match {
-          case _: GreaterThan =>
-            if (newNdv == 1) newMin = newMax else newMin = newValue
-          case _: GreaterThanOrEqual =>
-            newMin = newValue
-          case _: LessThan =>
-            if (newNdv == 1) newMax = newMin else newMax = newValue
-          case _: LessThanOrEqual =>
-            newMax = newValue
+          case _: GreaterThan | _: GreaterThanOrEqual =>
+            // If new ndv is 1, then new max must be equal to new min.
+            newMin = if (newNdv == 1) newMax else newValue
+          case _: LessThan | _: LessThanOrEqual =>
+            newMax = if (newNdv == 1) newMin else newValue
         }
 
         val newStats =
