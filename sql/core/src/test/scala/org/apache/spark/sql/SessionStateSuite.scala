@@ -48,8 +48,9 @@ class SessionStateSuite extends SparkFunSuite
 
   test("fork new session and inherit RuntimeConfig options") {
     val key = "spark-config-clone"
-    activeSession.conf.set(key, "active")
     try {
+      activeSession.conf.set(key, "active")
+
       // inheritance
       val forkedSession = activeSession.cloneSession()
       assert(forkedSession ne activeSession)
@@ -136,11 +137,11 @@ class SessionStateSuite extends SparkFunSuite
     // Cannot use `import activeSession.implicits._` due to the compiler limitation.
     import spark.implicits._
 
-    activeSession
-      .createDataset[(Int, String)](Seq(1, 2, 3).map(i => (i, i.toString)))
-      .toDF("int", "str")
-      .createOrReplaceTempView("df")
     try {
+      activeSession
+        .createDataset[(Int, String)](Seq(1, 2, 3).map(i => (i, i.toString)))
+        .toDF("int", "str")
+        .createOrReplaceTempView("df")
       checkTableExists(activeSession)
 
       val forkedSession = activeSession.cloneSession()

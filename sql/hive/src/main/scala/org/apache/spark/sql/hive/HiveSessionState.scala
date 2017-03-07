@@ -37,7 +37,8 @@ import org.apache.spark.sql.streaming.StreamingQueryManager
  * @param conf SQL-specific key-value configurations.
  * @param experimentalMethods The experimental methods.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
- * @param catalog Internal catalog for managing table and database states.
+ * @param catalog Internal catalog for managing table and database states that uses Hive client for
+ *                interacting with the metastore.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
  * @param metadataHive The Hive metadata client.
  * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
