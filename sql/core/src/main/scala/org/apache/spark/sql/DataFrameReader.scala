@@ -409,26 +409,25 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
-    val filteredLines = CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
-    val maybeFirstLine = filteredLines.take(1).headOption
-    if (maybeFirstLine.isEmpty) {
-      return sparkSession.emptyDataFrame
-    }
-    val firstLine = maybeFirstLine.get
+    val filteredLines: Dataset[String] = CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
+    val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
 
     val schema = userSpecifiedSchema.getOrElse {
       TextInputCSVDataSource.inferFromDataset(
         sparkSession,
         csvDataset,
-        firstLine,
+        maybeFirstLine,
         parsedOptions)
     }
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
 
-    val linesWithoutHeader: RDD[String] = filteredLines.rdd.mapPartitions { iter =>
-      CSVUtils.filterHeaderLine(iter, firstLine, parsedOptions)
-    }
+    val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
+      filteredLines.rdd.mapPartitions { iter =>
+        CSVUtils.filterHeaderLine(iter, firstLine, parsedOptions)
+      }
+    }.getOrElse(filteredLines.rdd)
+
     val parsed = linesWithoutHeader.mapPartitions { iter =>
       val parser = new UnivocityParser(schema, parsedOptions)
       iter.flatMap(line => parser.parse(line))

@@ -133,13 +133,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): Option[StructType] = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
-    CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption match {
-      case Some(firstLine) =>
-        Some(inferFromDataset(sparkSession, csv, firstLine, parsedOptions))
-      case None =>
-        // If the first line could not be read, just return the empty schema.
-        Some(StructType(Nil))
-    }
+    val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
+    Some(inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions))
   }
 
   /**
@@ -148,20 +143,23 @@ object TextInputCSVDataSource extends CSVDataSource {
   def inferFromDataset(
       sparkSession: SparkSession,
       csv: Dataset[String],
-      firstLine: String,
-      parsedOptions: CSVOptions): StructType = {
-    val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-    val tokenRDD = csv.rdd.mapPartitions { iter =>
-      val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
-      val linesWithoutHeader =
-        CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
-      val parser = new CsvParser(parsedOptions.asParserSettings)
-      linesWithoutHeader.map(parser.parseLine)
-    }
-
-    CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+      maybeFirstLine: Option[String],
+      parsedOptions: CSVOptions): StructType = maybeFirstLine match {
+    case Some(firstLine) =>
+      val firstRow = new CsvParser(parsedOptions.asParserSettings).parseLine(firstLine)
+      val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
+      val tokenRDD = csv.rdd.mapPartitions { iter =>
+        val filteredLines = CSVUtils.filterCommentAndEmpty(iter, parsedOptions)
+        val linesWithoutHeader =
+          CSVUtils.filterHeaderLine(filteredLines, firstLine, parsedOptions)
+        val parser = new CsvParser(parsedOptions.asParserSettings)
+        linesWithoutHeader.map(parser.parseLine)
+      }
+      CSVInferSchema.infer(tokenRDD, header, parsedOptions)
+    case None =>
+      // If the first line could not be read, just return the empty schema.
+      StructType(Nil)
   }
 
   private def createBaseDataset(
