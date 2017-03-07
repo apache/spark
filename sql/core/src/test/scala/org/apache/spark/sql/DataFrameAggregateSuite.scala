@@ -557,4 +557,43 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
   }
+
+  test("every") {
+    val df = Seq((1, true), (1, true), (1, false), (2, true), (2, true), (3, false), (3, false))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(every('b)),
+      Seq(Row(1, false), Row(2, true), Row(3, false)))
+  }
+
+  test("every empty table") {
+    val df = Seq.empty[(Int, Boolean)].toDF("a", "b")
+    checkAnswer(
+      df.agg(every('b)),
+      Seq(Row(false)))
+  }
+
+  test("any") {
+    val df = Seq((1, true), (1, true), (1, false), (2, true), (2, true), (3, false), (3, false))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(any('b)),
+      Seq(Row(1, true), Row(2, true), Row(3, false)))
+  }
+
+  test("any empty table") {
+    val df = Seq.empty[(Int, Boolean)].toDF("a", "b")
+    checkAnswer(
+      df.agg(any('b)),
+      Seq(Row(false)))
+  }
+
+  test("some") {
+    val df = Seq((1, true), (1, true), (1, false), (2, true), (2, true), (3, false), (3, false))
+      .toDF("a", "b")
+    checkAnswer(
+      df.groupBy("a").agg(some('b)),
+      Seq(Row(1, true), Row(2, true), Row(3, false)))
+  }
+
 }

@@ -33,6 +33,14 @@ object TypeUtils {
     }
   }
 
+  def checkForBooleanExpr(dt: DataType, caller: String): TypeCheckResult = {
+    if (dt.isInstanceOf[BooleanType] || dt == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"$caller requires boolean types, not $dt")
+    }
+  }
+
   def checkForOrderingExpr(dt: DataType, caller: String): TypeCheckResult = {
     if (RowOrdering.isOrderable(dt)) {
       TypeCheckResult.TypeCheckSuccess

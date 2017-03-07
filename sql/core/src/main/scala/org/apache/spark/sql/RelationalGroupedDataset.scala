@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
@@ -31,8 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, FlatMapGroupsInR,
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.NumericType
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BooleanType, NumericType, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -89,7 +87,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
-    : DataFrame = {
+  : DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
       // No columns specified. Use all numeric columns.
@@ -101,7 +99,28 @@ class RelationalGroupedDataset protected[sql](
         if (!namedExpr.dataType.isInstanceOf[NumericType]) {
           throw new AnalysisException(
             s""""$colName" is not a numeric column. """ +
-            "Aggregation function can only be applied on a numeric column.")
+              "Aggregation function can only be applied on a numeric column.")
+        }
+        namedExpr
+      }
+    }
+    toDF(columnExprs.map(expr => f(expr).toAggregateExpression()))
+  }
+
+  private[this] def aggregateBooleanColumns(colNames: String*)(f: Expression => AggregateFunction)
+  : DataFrame = {
+
+    val columnExprs = if (colNames.isEmpty) {
+      // No columns specified. Use all numeric columns.
+      df.booleanColumns
+    } else {
+      // Make sure all specified columns are numeric.
+      colNames.map { colName =>
+        val namedExpr = df.resolve(colName)
+        if (!namedExpr.dataType.isInstanceOf[BooleanType]) {
+          throw new AnalysisException(
+            s""""$colName" is not a boolean column. """ +
+              "Aggregation function can only be applied on a boolean column.")
         }
         namedExpr
       }
@@ -286,21 +305,57 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Compute the sum for each numeric columns for each group.
-   * The resulting `DataFrame` will also contain the grouping columns.
-   * When specified columns are given, only compute the sum for them.
-   *
-   * @since 1.3.0
-   */
+    * Compute the sum for each numeric columns for each group.
+    * The resulting `DataFrame` will also contain the grouping columns.
+    * When specified columns are given, only compute the sum for them.
+    *
+    * @since 1.3.0
+    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Sum)
   }
 
   /**
-   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
-   *
-   * There are two versions of `pivot` function: one that requires the caller to specify the list
+    * Compute the logical and of all boolean columns for each group.
+    * The resulting `DataFrame` will also contain the grouping columns.
+    * When specified columns are given, only compute the sum for them.
+    *
+    * @since 2.2.0
+    */
+  @scala.annotation.varargs
+  def every(colNames: String*): DataFrame = {
+    aggregateBooleanColumns(colNames : _*)(Every)
+  }
+
+  /**
+    * Compute the logical or of all boolean columns for each group.
+    * The resulting `DataFrame` will also contain the grouping columns.
+    * When specified columns are given, only compute the sum for them.
+    *
+    * @since 2.2.0
+    */
+  @scala.annotation.varargs
+  def any(colNames: String*): DataFrame = {
+    aggregateBooleanColumns(colNames : _*)(AnyAgg)
+  }
+
+  /**
+    * Compute the logical or of all boolean columns for each group.
+    * The resulting `DataFrame` will also contain the grouping columns.
+    * When specified columns are given, only compute the sum for them.
+    *
+    * @since 2.2.0
+    */
+  @scala.annotation.varargs
+  def some(colNames: String*): DataFrame = {
+    aggregateBooleanColumns(colNames : _*)(AnyAgg)
+  }
+
+  /**
+   * Pivots a column of the current `DataFrame` and perform the specified aggregation.
+   * There are two versions of pivot function: one that requires the caller to specify the list
+>>>>>>> Add new aggregates EVERY and ANY (SOME).
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
    *

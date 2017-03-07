@@ -468,4 +468,36 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
     }
   }
+
+  test("every") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        first($"value").over(window),
+        first($"value", ignoreNulls = false).over(window),
+        first($"value", ignoreNulls = true).over(window),
+        last($"value").over(window),
+        last($"value", ignoreNulls = false).over(window),
+        last($"value", ignoreNulls = true).over(window)),
+      Seq(
+        Row("a", 0, null, null, null, null, null, null),
+        Row("a", 1, null, null, "x", "x", "x", "x"),
+        Row("a", 2, null, null, "x", "y", "y", "y"),
+        Row("a", 3, null, null, "x", "z", "z", "z"),
+        Row("a", 4, null, null, "x", null, null, "z"),
+        Row("b", 1, null, null, null, null, null, null),
+        Row("b", 2, null, null, null, null, null, null)))
+  }
 }

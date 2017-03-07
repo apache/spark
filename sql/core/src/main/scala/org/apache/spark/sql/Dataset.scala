@@ -226,6 +226,21 @@ class Dataset[T] private[sql](
     }
   }
 
+  private[sql] def booleanColumns: Seq[Expression] = {
+    schema.fields.filter(_.dataType.isInstanceOf[BooleanType]).map { n =>
+      queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
+    }
+  }
+
+  private def aggregatableColumns: Seq[Expression] = {
+    schema.fields
+      .filter(f => f.dataType.isInstanceOf[NumericType] || f.dataType.isInstanceOf[StringType])
+      .map { n =>
+        queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver)
+          .get
+      }
+  }
+
   /**
    * Compose the string representing rows for output
    *

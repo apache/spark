@@ -299,6 +299,9 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
     expression[CountMinSketchAgg]("count_min_sketch"),
+    expression[Every]("every"),
+    expression[AnyAgg]("any"),
+    expression[AnyAgg]("some"),
 
     // string functions
     expression[Ascii]("ascii"),

@@ -169,6 +169,15 @@ _functions_2_1 = {
                'measured in radians.',
 }
 
+_functions_2_2 = {
+    'to_date': 'Converts a string date into a DateType using the (optionally) specified format.',
+    'to_timestamp': 'Converts a string timestamp into a timestamp type using the ' +
+                    '(optionally) specified format.',
+    'every': 'Aggregate function: returns true if all values in the expression are true.',
+    'any': 'Aggregate function: returns true if at least one value in the expression is true.',
+    'some': 'Aggregate function: returns true if at least one value in the expression is true.',
+}
+
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -218,6 +227,8 @@ for _name, _doc in _window_functions.items():
 for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
+    globals()[_name] = since(2.1)(_create_function(_name, _doc))
+for _name, _doc in _functions_2_2.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
 
