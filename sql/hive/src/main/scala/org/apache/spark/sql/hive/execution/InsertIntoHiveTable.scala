@@ -393,6 +393,10 @@ case class InsertIntoHiveTable(
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
+    // delete temporary folder after insert
+    val fileSystem = outputPath.getFileSystem(jobConf)
+    fileSystem.delete(outputPath.getParent, true)
+
     // Invalidate the cache.
     sparkSession.catalog.uncacheTable(table.qualifiedName)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
