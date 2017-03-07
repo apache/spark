@@ -212,7 +212,7 @@ trait CodegenSupport extends SparkPlan {
    * Returning true means we need to insert shouldStop() into the loop producing rows, if any.
    */
   def isShouldStopRequired: Boolean = {
-    return shouldStopRequired && !(this.parent != null && !this.parent.isShouldStopRequired)
+    return shouldStopRequired && (this.parent == null || this.parent.isShouldStopRequired)
   }
 
   /**
