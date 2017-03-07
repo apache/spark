@@ -21,8 +21,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
