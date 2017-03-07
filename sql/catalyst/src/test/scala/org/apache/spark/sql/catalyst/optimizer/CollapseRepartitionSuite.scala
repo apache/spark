@@ -44,7 +44,6 @@ class CollapseRepartitionSuite extends PlanTest {
 
     val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-
     val correctAnswer = testRelation.coalesce(20).analyze
 
     comparePlans(optimized1, correctAnswer)
