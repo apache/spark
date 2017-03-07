@@ -465,42 +465,37 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("save csv with quote escaping enabled, avoiding double backslash") {
+  test("save csv with quote escaping enabled, using char to escape quote-escape") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
 
+      // escapeQuotes should be true by default
       val df1 = spark.sqlContext.createDataFrame(List(
-        (1, "aa\\\"bb,cc"),         // aa\"bb,cc
-        (2, "aa\\\\\"bb,cc"),       // aa\\\"bb,cc
-        (3, "aa\\\"\\\"bb,cc"),     // aa\"\"bb,cc
-        (4, "aa\\\\\"\\\\\"bb,cc")  // aa\\\"\\\"bb,cc
+        (1, """AA\"BB"""),              // 1 escape char anc 1 quote char
+        (2, """AA\\"BB"""),             // 2 escape char and 1 quote char
+        (3, """AA\"\"\"\"\"BB"""),      // (1 escape char anc 1 quote char) * 5
+        (4, """AA\\"\\"\\"\\"\\"BB"""), // (2 escape char and 1 quote char) * 5
+        (5, """You are "beautiful"""),
+        (6, """Yes, \"inside"\""")
       ))
 
       df1.coalesce(1).write
-              .format("csv")
-              .option("quote", "\"")
-              .option("escape", "\\")
-              .save(csvDir)
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\\")
+        .option("escapeEscape", "\"")
+        .save(csvDir)
 
-      val df2 = spark.read.csv(csvDir).orderBy($"_c0")
+      val df2 = spark.read
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\\")
+        .option("escapeEscape", "\"")
+        .load(csvDir).orderBy($"_c0")
 
-      val df1Str = df1.collect().map(_.getString(1)).mkString(" ")
+      val df1Str = df1.collect().map(_.getString(1)).mkString("")
+      val df2Str = df2.collect().map(_.getString(1)).mkString("")
 
-      val df2Str = df2.select("_c1").collect().map(_.getString(0)).mkString(" ")
-
-      val text = spark.read
-              .format("text")
-              .option("quote", "\"")
-              .option("escape", "\\")
-              .load(csvDir)
-              .collect()
-              .map(_.getString(0))
-              .sortBy(_(0)).map(_.drop(3).init).mkString(" ")
-
-      val textExpected =
-        "aa\\\\\"bb,cc aa\\\\\\\"bb,cc aa\\\\\"\"\\\\\"bb,cc aa\\\\\\\"\"\\\"\\\\\"bb,cc"
-
-      assert(text == textExpected)
       assert(df1Str == df2Str)
     }
   }

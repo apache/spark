@@ -88,6 +88,7 @@ private[csv] class CSVOptions(
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
+  val escapeEscape = getChar("escapeEscape", quote)
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -152,7 +153,7 @@ private[csv] class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    format.setCharToEscapeQuoteEscaping(quote)
+    format.setCharToEscapeQuoteEscaping(escapeEscape)
     format.setComment(comment)
     writerSettings.setNullValue(nullValue)
     writerSettings.setEmptyValue(nullValue)
@@ -168,7 +169,7 @@ private[csv] class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
-    format.setCharToEscapeQuoteEscaping(quote)
+    format.setCharToEscapeQuoteEscaping(escapeEscape)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
