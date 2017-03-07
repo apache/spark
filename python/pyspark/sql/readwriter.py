@@ -282,9 +282,26 @@ class DataFrameReader(OptionUtils):
         """
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
+    @since(2.2)
+    def parquet(self, path):
+        """Loads Parquet files, returning the result as a :class:`DataFrame`.
+
+        You can set the following Parquet-specific option(s) for reading Parquet files:
+            * ``mergeSchema``: sets whether we should merge schemas collected from all \
+                Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
+                The default value is specified in ``spark.sql.parquet.mergeSchema``.
+
+        >>> df = spark.read.parquet(path='python/test_support/sql/parquet_partitioned')
+        >>> df.dtypes
+        [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+        """
+        if isinstance(path, basestring):
+            path = [path]
+        return self._df(self._jreader.parquet(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, path):
+    def text(self, paths):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -292,15 +309,15 @@ class DataFrameReader(OptionUtils):
 
         Each line in the text file is a new row in the resulting DataFrame.
 
-        :param path: string, or list of strings, for input path(s).
+        :param paths: string, or list of strings, for input path(s).
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        if isinstance(path, basestring):
-            path = [path]
-        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
@@ -406,7 +423,7 @@ class DataFrameReader(OptionUtils):
         return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(1.5)
-    def orc(self, paths):
+    def orc(self, path):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         .. note:: Currently ORC support is only available together with Hive support.
@@ -415,9 +432,9 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
-        if isinstance(paths, basestring):
-            paths = [paths]
-        return self._df(self._jreader.orc(_to_seq(self._spark._sc, paths)))
+        if isinstance(path, basestring):
+            path = [path]
+        return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
