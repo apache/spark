@@ -1311,9 +1311,8 @@ class DataFrame(object):
         """
         # Helper functions
         def all_of(types):
-            """Given a type or tuple of types
-            and sequence of xs check if each x
-            is instance of type(s)
+            """Given a type or tuple of types and a sequence of xs
+            check if each x is instance of type(s)
 
             >>> all_of(bool)([True, False])
             True
@@ -1335,8 +1334,7 @@ class DataFrame(object):
                 "to_replace should be a float, int, long, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
-        if (not isinstance(value, valid_types) and
-                not isinstance(to_replace, dict)):
+        if not isinstance(value, valid_types) and not isinstance(to_replace, dict):
             raise ValueError("If to_replace is not a dict, value should be "
                              "a float, int, long, string, list, or tuple. "
                              "Got {0}".format(type(value)))
@@ -1360,8 +1358,7 @@ class DataFrame(object):
         if isinstance(to_replace, dict):
             rep_dict = to_replace
             if value is not None:
-                warnings.warn("to_replace is a dict, but value is not None. "
-                              "value will be ignored.")
+                warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
         else:
             rep_dict = dict(zip(to_replace, value))
 
