@@ -567,32 +567,24 @@ object CollapseProject extends Rule[LogicalPlan] {
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
-    // we can collapse it with the child based on the type of shuffle and the specified number
-    // of partitions.
-    case r @ Repartition(_, _, child: RepartitionOperation) =>
-      collapseRepartition(r, child)
+    // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
+    //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
+    //   otherwise, keep unchanged.
+    // 2) In the other cases, returns the child node with the last numPartitions.
+    case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
+      case (false, true) =>
+        if (r.numPartitions >= child.numPartitions) child else r
+      case _ => child match {
+        case child: Repartition =>
+          child.copy(numPartitions = r.numPartitions, shuffle = r.shuffle)
+        case child: RepartitionByExpression =>
+          child.copy(numPartitions = r.numPartitions)
+      }
+    }
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
-  }
-
-  /**
-   * Collapses the [[Repartition]] with its child [[RepartitionOperation]], if possible.
-   * - Case 1 the top [[Repartition]] does not enable shuffle (i.e., coalesce API):
-   *   If the last numPartitions is bigger, returns the child node; otherwise, keep unchanged.
-   * - Case 2 the top [[Repartition]] enables shuffle (i.e., repartition API):
-   *   returns the child node with the last numPartitions.
-   */
-  private def collapseRepartition(r: Repartition, child: RepartitionOperation): LogicalPlan = {
-    (r.shuffle, child.shuffle) match {
-      case (false, true) =>
-        if (r.numPartitions >= child.numPartitions) child else r
-      case _ => child match {
-        case child: Repartition => child.copy(numPartitions = r.numPartitions, shuffle = r.shuffle)
-        case child: RepartitionByExpression => child.copy(numPartitions = r.numPartitions)
-      }
-    }
   }
 }
 
