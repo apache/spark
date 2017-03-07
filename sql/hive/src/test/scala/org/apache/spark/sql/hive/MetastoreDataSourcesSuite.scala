@@ -1011,7 +1011,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("not_skip_hive_metadata"),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          locationUri = Some(tempPath.getCanonicalPath),
+          locationUri = Some(tempPath.toURI),
           properties = Map("skipHiveMetadata" -> "false")
         ),
         schema = schema,
