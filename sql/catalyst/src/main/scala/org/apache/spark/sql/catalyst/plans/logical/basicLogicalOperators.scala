@@ -753,8 +753,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   override def computeStats(conf: CatalystConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val childStats = child.stats(conf)
-    val rowCount: BigInt =
-      if (childStats.rowCount.isDefined) childStats.rowCount.get.min(limit) else limit
+    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
     // Don't propagate column stats, because we don't know the distribution after a limit operation
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
@@ -782,10 +781,11 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
         rowCount = Some(0),
         isBroadcastable = childStats.isBroadcastable)
     } else {
-      // The output row count of LocalLimit should be the sum of row count from each partition, but
-      // since the partition number is not available here, we just use statistics of the child
-      // except column stats, because we don't know the distribution after a limit operation
-      child.stats(conf).copy(attributeStats = AttributeMap(Nil))
+      // The output row count of LocalLimit should be the sum of row counts from each partition.
+      // However, since the number of partitions is not available here, we just use statistics of
+      // the child. Because the distribution after a limit operation is unknown, we do not propagate
+      // the column stats.
+      childStats.copy(attributeStats = AttributeMap(Nil))
     }
   }
 }

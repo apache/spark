@@ -24,12 +24,13 @@ import org.apache.spark.sql.types.IntegerType
 
 
 class BasicStatsEstimationSuite extends StatsEstimationTestBase {
-  val (ar, colStat) = (attr("key"), ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-    nullCount = 0, avgLen = 4, maxLen = 4))
+  val attribute = attr("key")
+  val colStat = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+    nullCount = 0, avgLen = 4, maxLen = 4)
 
   val plan = StatsTestPlan(
-    outputList = Seq(ar),
-    attributeStats = AttributeMap(Seq(ar -> colStat)),
+    outputList = Seq(attribute),
+    attributeStats = AttributeMap(Seq(attribute -> colStat)),
     rowCount = 10,
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
