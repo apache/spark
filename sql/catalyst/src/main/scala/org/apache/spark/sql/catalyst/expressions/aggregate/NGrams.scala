@@ -20,35 +20,41 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.nio.ByteBuffer
 import java.util.HashMap
 
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NGrams.NGramBuffer
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.unsafe.types.UTF8String
 
-
+/**
+ * Return the top-k n-grams in rows that consist of sequences of strings.
+ */
 @ExpressionDescription(
   usage = """
-      _FUNC_(expr, n, k, pf) - Estimates the top-k n-grams in rows that consist of sequences of
-      strings, represented as arrays of strings, or arrays of arrays of strings. 'pf' is an
+      _FUNC_(expr, n, k, accuracy) - Estimates the top-k n-grams in rows that consist of sequences
+      of strings, represented as arrays of strings, or arrays of arrays of strings. 'accuracy' is an
       optional precision factor that controls memory usage.
-      The parameter 'n' specifies what type of n-grams are being estimated. Unigrams are n = 1,
-      and bigrams are n = 2. Generally, n will not be greater than about 5. The 'k' parameter
-      specifies how many of the highest-frequency n-grams will be returned by the UDAF. The optional
-      precision factor 'pf' specifies how much memory to use for estimation; more memory will give
-      more accurate frequency counts, but could crash the JVM. The default value is 20, which
-      internally maintains 20*k n-grams, but only returns the k highest frequency ones. The output
-      is an array of structs with the top-k n-grams. It might be convenient to explode() the output
-      of this UDAF.
-          """,
+      The parameter 'n' specifies what type of n-grams are being estimated. Unigrams are n = 1, and
+      bigrams are n = 2. Generally, n will not be greater than about 5. The 'k' parameter specifies
+      how many of the highest-frequency n-grams will be returned by the UDAF. The optional precision
+      factor 'accuracy' specifies how much memory to use for estimation; more memory will give
+      more accurate frequency counts, but could crash the JVM. The value will be the max between
+      'accuracy'(0 if it's not specified) and 1000/k, which indicates the max number of n-grams
+      which're kept in the internal HashMap.
+      The output is an array of maps with the top-k n-grams.
+  """,
   extended = """
     Examples:
-             """)
+      > SELECT ngrams(array('abc', 'abc', 'bcd', 'abc', 'bcd'), 2, 4);
+       [{"ngram":["abc","bcd"], "estfrequency":2.0},
+       {"ngram":["abc","abc"], "estfrequency":1.0},
+       {"ngram":["bcd","abc"], "estfrequency":1.0}]
+  """)
 case class NGrams(child: Expression,
                   nExpression: Expression,
                   kExpression: Expression,
@@ -97,8 +103,9 @@ case class NGrams(child: Expression,
     new NGramBuffer(n, k, accuracy, new HashMap[Vector[UTF8String], Double]())
   }
 
-  def updateArray(genericArrayData: GenericArrayData, buffer: NGramBuffer, inputRow: InternalRow): Unit = {
-    val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).asInstanceOf[UTF8String]).toVector
+  def updateArray(genericArrayData: GenericArrayData, buffer: NGramBuffer, inputRow: InternalRow) {
+    val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).
+      asInstanceOf[UTF8String]).toVector
     if (values != null) {
       val nGrams = getNGrams(values, n)
       nGrams.foreach(buffer.add(_))
@@ -106,11 +113,12 @@ case class NGrams(child: Expression,
     buffer.trim()
   }
   override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
-    if (isArrayOfString)
+    if (isArrayOfString) {
       updateArray(child.eval(inputRow).asInstanceOf[GenericArrayData], buffer, inputRow)
+    }
     else {
       val arrayOfArray = child.eval(inputRow).asInstanceOf[GenericArrayData]
-      for (i<- 0 until arrayOfArray.numElements()) {
+      for (i <- 0 until arrayOfArray.numElements()) {
         updateArray(arrayOfArray.getArray(i).asInstanceOf[GenericArrayData], buffer, inputRow)
       }
     }
@@ -133,10 +141,12 @@ case class NGrams(child: Expression,
   }
 
   private def getNGrams(values: Vector[UTF8String], n: Int): Vector[Vector[UTF8String]] = {
-    if(values.length >= n)
+    if (values.length >= n) {
       values.sliding(n).toVector
-    else
+    }
+    else {
       Vector()
+    }
   }
 
   override def withNewMutableAggBufferOffset(newOffset: Int): NGrams =
@@ -200,16 +210,19 @@ object NGrams {
       })
     }
 
-    def sortWithTwoFields(frequencyDescend: Boolean)(keyWithFrequency: Tuple2[Vector[UTF8String], Double],
-                                                     keyWithFrequency2: Tuple2[Vector[UTF8String], Double]): Boolean = {
-      if (keyWithFrequency._2 != keyWithFrequency2._2)
-        (keyWithFrequency._2 < keyWithFrequency2._2) ^ frequencyDescend
+    def sortWithTwoFields(frequencyDescend: Boolean)
+                         (keyWithFrequency: Tuple2[Vector[UTF8String], Double],
+                          keyWithFrequency2: Tuple2[Vector[UTF8String], Double]): Boolean = {
+      if (keyWithFrequency._2 != keyWithFrequency2._2) {
+      (keyWithFrequency._2 < keyWithFrequency2._2) ^ frequencyDescend
+      }
       else {
         val keyVector = keyWithFrequency._1
         val keyVector2 = keyWithFrequency2._1
         for (i <- 0 until keyVector.length) {
-          if (keyVector(i) != keyVector2(i))
+          if (keyVector(i) != keyVector2(i)) {
             return (keyVector(i).compare(keyVector2(i))) < 0
+          }
         }
         true
       }
