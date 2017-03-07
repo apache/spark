@@ -102,7 +102,6 @@ class CollapseRepartitionSuite extends PlanTest {
 
     val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-
     val correctAnswer = testRelation.repartition(20).analyze
 
     comparePlans(optimized1, correctAnswer)
@@ -113,20 +112,16 @@ class CollapseRepartitionSuite extends PlanTest {
     val query1 = testRelation
       .repartition(10)
       .distribute('a)(20)
-
-    val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.distribute('a)(20).analyze
-
-    comparePlans(optimized1, correctAnswer1)
-
     val query2 = testRelation
       .repartition(30)
       .distribute('a)(20)
 
+    val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.distribute('a)(20).analyze
+    val correctAnswer = testRelation.distribute('a)(20).analyze
 
-    comparePlans(optimized2, correctAnswer2)
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
   }
 
   test("repartitionBy above coalesce") {
@@ -155,7 +150,7 @@ class CollapseRepartitionSuite extends PlanTest {
       .repartition(10)
 
     val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.distribute('a)(10).analyze
+    val correctAnswer1 = testRelation.repartition(10).analyze
 
     comparePlans(optimized1, correctAnswer1)
 
@@ -164,7 +159,7 @@ class CollapseRepartitionSuite extends PlanTest {
       .repartition(30)
 
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.distribute('a)(30).analyze
+    val correctAnswer2 = testRelation.repartition(30).analyze
 
     comparePlans(optimized2, correctAnswer2)
   }

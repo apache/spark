@@ -570,16 +570,10 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
     //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
     //   otherwise, keep unchanged.
-    // 2) In the other cases, returns the child node with the last numPartitions.
+    // 2) In the other cases, returns the top node with the child's child
     case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
-      case (false, true) =>
-        if (r.numPartitions >= child.numPartitions) child else r
-      case _ => child match {
-        case child: Repartition =>
-          child.copy(numPartitions = r.numPartitions, shuffle = r.shuffle)
-        case child: RepartitionByExpression =>
-          child.copy(numPartitions = r.numPartitions)
-      }
+      case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
+      case _ => r.copy(child = child.child)
     }
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
     // we can remove the child.
