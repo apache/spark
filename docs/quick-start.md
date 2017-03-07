@@ -47,7 +47,7 @@ scala> textFile.first() // First item in this Dataset
 res1: String = # Apache Spark
 {% endhighlight %}
 
-Now let's transform this Dataset to a new one. We just call the `filter` to return a new Dataset with a subset of the items in the file.
+Now let's transform this Dataset to a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
@@ -82,7 +82,7 @@ You can get values from DataFrame directly, by calling some actions, or transfor
 Row(value=u'# Apache Spark')
 {% endhighlight %}
 
-Now let's transform this DataFrame to a new one. We will call the `filter` to return a new DataFrame with a subset of the lines in the file.
+Now let's transform this DataFrame to a new one. We call `filter` to return a new DataFrame with a subset of the lines in the file.
 
 {% highlight python %}
 >>> linesWithSpark = textFile.filter(textFile.value.contains("Spark"))
