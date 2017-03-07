@@ -409,7 +409,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
-    val filteredLines: Dataset[String] = CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
+    val filteredLines: Dataset[String] =
+      CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
     val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
 
     val schema = userSpecifiedSchema.getOrElse {
@@ -423,9 +424,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
-      filteredLines.rdd.mapPartitions { iter =>
-        CSVUtils.filterHeaderLine(iter, firstLine, parsedOptions)
-      }
+      filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 
     val parsed = linesWithoutHeader.mapPartitions { iter =>
