@@ -60,7 +60,7 @@ trait Source  {
   def getBatch(start: Option[Offset], end: Offset): DataFrame
 
   /**
-   * In a streaming query, stream relation will be cut into a couple of batch relations.
+   * In a streaming query, stream relation will be cut into a series of batch relations.
    * We need to mark the batch relation as streaming, i.e. data coming from a stream source,
    * so we can apply those streaming strategies to it.
    */

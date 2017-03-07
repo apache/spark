@@ -131,7 +131,7 @@ case class ExternalRDDScanExec[T](
  *
  * @param dataFromStreaming indicate if this relation comes from a streaming source.
  *                          In a streaming query, stream relation will be cut into a
- *                          couple of batch relations.
+ *                          series of batch relations.
  */
 case class LogicalRDD(
     output: Seq[Attribute],
