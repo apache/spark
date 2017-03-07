@@ -1225,6 +1225,10 @@ class SessionCatalogSuite extends PlanTest {
 
   test("clone SessionCatalog - current db") {
     val externalCatalog = newEmptyCatalog()
+    externalCatalog.createDatabase(newDb("copytest1"), true)
+    externalCatalog.createDatabase(newDb("copytest2"), true)
+    externalCatalog.createDatabase(newDb("copytest3"), true)
+
     val original = new SessionCatalog(externalCatalog)
     val tempTable1 = Range(1, 10, 1, 10)
     val db1 = "copytest1"
