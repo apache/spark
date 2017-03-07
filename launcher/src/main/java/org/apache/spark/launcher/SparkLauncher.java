@@ -80,8 +80,6 @@ public class SparkLauncher {
 
   public static final String LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN = "spark.launcher.internal.stop.on.shutdown";
 
-  public static final String LAUNCHER_INTERNAL_USE_THREAD = "spark.launcher.internal.use.thread";
-
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
    * file. This is useful when the class being executed is added to the application using other
@@ -601,7 +599,6 @@ public class SparkLauncher {
     setConf(LAUNCHER_INTERNAL_PORT, String.valueOf(LauncherServer.getServerInstance().getPort()));
     setConf(LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, handle.getSecret());
     setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(stopOnShutdown));
-    setConf(LAUNCHER_INTERNAL_USE_THREAD, "true");
     try {
       // It is important that SparkSubmit class is available in the classpath.
       // Trying to see if method is available in the classpath else throws Exception.

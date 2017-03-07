@@ -721,9 +721,6 @@ object SparkSubmit extends CommandLineUtils {
 
     val childSparkConf = sysProps.filter( p => p._1.startsWith("spark.")).toMap
 
-    val threadEnabled = sysProps.getOrElse(SparkLauncher.LAUNCHER_INTERNAL_USE_THREAD,
-      "false").toBoolean
-
     // If running sparkApp or in thread mode, the System properties should not be cluttered.
     // This helps keep clean isolation between multiple Spark Apps launched in different threads.
     if (!isSparkApp) {
@@ -753,7 +750,8 @@ object SparkSubmit extends CommandLineUtils {
 
     try {
       if (isSparkApp) {
-        mainMethod.invoke(null, childArgs.toArray, childSparkConf, sys.env)
+        val envvars = Map[String, String]() ++ sys.env
+        mainMethod.invoke(null, childArgs.toArray, childSparkConf, envvars.toMap)
       } else {
         mainMethod.invoke(null, childArgs.toArray)
       }

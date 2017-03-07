@@ -48,7 +48,8 @@ private[spark] abstract class LauncherBackend extends Logging {
     }
   }
 
-  def connect(port: Int, secret: String): Unit = {
+  def connect(port: Int, secret: String, stopFlag: Boolean): Unit = {
+    this.stopOnShutdown = stopFlag
     val s = new Socket(InetAddress.getLoopbackAddress(), port)
     connection = new BackendConnection(s)
     connection.send(new Hello(secret, SPARK_VERSION))
@@ -73,11 +74,6 @@ private[spark] abstract class LauncherBackend extends Logging {
     }
   }
 
-  def connect(port: Int, secret: String, stopFlag: Boolean): Unit = {
-    this.stopOnShutdown = stopFlag
-    connect(port, secret)
-  }
-
   def close(): Unit = {
     if (connection != null) {
       try {
@@ -100,9 +96,6 @@ private[spark] abstract class LauncherBackend extends Logging {
     if (connection != null && lastState != state) {
       connection.send(new SetState(state))
       lastState = state
-      if (!_isConnected && stopOnShutdown) {
-        fireStopRequest()
-      }
     }
   }
 

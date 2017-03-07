@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public abstract class AbstractSparkAppHandle implements SparkAppHandle {
+abstract class AbstractSparkAppHandle implements SparkAppHandle {
   private static final Logger LOG = Logger.getLogger(AbstractSparkAppHandle.class.getName());
 
   protected final String secret;
