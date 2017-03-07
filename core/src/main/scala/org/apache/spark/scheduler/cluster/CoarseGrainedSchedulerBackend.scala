@@ -132,11 +132,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case ReviveOffers =>
         makeOffers()
 
-      case KillTask(taskId, executorId, interruptThread, reason, shouldRetry) =>
+      case KillTask(taskId, executorId, interruptThread, reason) =>
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
             executorInfo.executorEndpoint.send(
-              KillTask(taskId, executorId, interruptThread, reason, shouldRetry))
+              KillTask(taskId, executorId, interruptThread, reason))
           case None =>
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
@@ -416,12 +416,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def killTask(
-      taskId: Long,
-      executorId: String,
-      interruptThread: Boolean,
-      reason: String,
-      shouldRetry: Boolean) {
-    driverEndpoint.send(KillTask(taskId, executorId, interruptThread, reason, shouldRetry))
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String) {
+    driverEndpoint.send(KillTask(taskId, executorId, interruptThread, reason))
   }
 
   override def defaultParallelism(): Int = {

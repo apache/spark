@@ -117,7 +117,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       }
 
       // `testFailedReason` should be `TaskKilled`; `taskState` should be `KILLED`
-      assert(executorSuiteHelper.testFailedReason === TaskKilled)
+      assert(executorSuiteHelper.testFailedReason === TaskKilled("test"))
       assert(executorSuiteHelper.taskState === TaskState.KILLED)
     }
     finally {

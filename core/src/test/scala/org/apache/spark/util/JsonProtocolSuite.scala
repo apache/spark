@@ -164,8 +164,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(fetchMetadataFailed)
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
-    testTaskEndReason(TaskKilled("test", false))
-    testTaskEndReason(TaskKilled("test", true))
+    testTaskEndReason(TaskKilled("test"))
     testTaskEndReason(TaskCommitDenied(2, 3, 4))
     testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
     testTaskEndReason(UnknownReason)
@@ -679,7 +678,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (TaskResultLost, TaskResultLost) =>
       case (r1: TaskKilled, r2: TaskKilled) =>
         assert(r1.reason == r2.reason)
-        assert(r1.shouldRetry == r2.shouldRetry)
       case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
           TaskCommitDenied(jobId2, partitionId2, attemptNumber2)) =>
         assert(jobId1 === jobId2)

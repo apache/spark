@@ -714,8 +714,7 @@ private[spark] class TaskSetManager(
         attemptInfo.taskId,
         attemptInfo.executorId,
         interruptThread = true,
-        reason = "another attempt succeeded",
-        shouldRetry = false)
+        reason = "another attempt succeeded")
     }
     if (!successful(index)) {
       tasksSuccessful += 1

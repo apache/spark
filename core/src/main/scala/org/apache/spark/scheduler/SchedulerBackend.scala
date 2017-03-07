@@ -37,14 +37,12 @@ private[spark] trait SchedulerBackend {
    * @param executorId Id of the executor the task is running on.
    * @param interruptThread Whether the executor should interrupt the task thread.
    * @param reason The reason for the task kill.
-   * @param shouldRetry Whether the scheduler should retry the task.
    */
   def killTask(
       taskId: Long,
       executorId: String,
       interruptThread: Boolean,
-      reason: String,
-      shouldRetry: Boolean): Unit =
+      reason: String): Unit =
     throw new UnsupportedOperationException
 
   def isReady(): Boolean = true

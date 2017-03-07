@@ -675,8 +675,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
         taskId: Long,
         executorId: String,
         interruptThread: Boolean,
-        reason: String,
-        shouldRetry: Boolean): Unit = {}
+        reason: String): Unit = {}
     })
 
     // Keep track of the number of tasks that are resubmitted,
@@ -932,7 +931,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Complete the speculative attempt for the running task
     manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
     // Verify that it kills other running attempt
-    verify(sched.backend).killTask(3, "exec2", true, "another attempt succeeded", false)
+    verify(sched.backend).killTask(3, "exec2", true, "another attempt succeeded")
     // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
@@ -1018,15 +1017,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.handleSuccessfulTask(speculativeTask.taskId, createTaskResult(3, accumUpdatesByTask(3)))
     // Verify that it kills other running attempt
     val origTask = originalTasks(speculativeTask.index)
-    verify(sched.backend).killTask(
-      origTask.taskId, "exec2", true, "another attempt succeeded", false)
+    verify(sched.backend).killTask(origTask.taskId, "exec2", true, "another attempt succeeded")
     // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
     assert(sched.endedTasks(3) === Success)
     // also because the scheduler is a mock, our manager isn't notified about the task killed event,
     // so we do that manually
-    manager.handleFailedTask(origTask.taskId, TaskState.KILLED, TaskKilled("test", false))
+    manager.handleFailedTask(origTask.taskId, TaskState.KILLED, TaskKilled("test"))
     // this task has "failed" 4 times, but one of them doesn't count, so keep running the stage
     assert(manager.tasksSuccessful === 4)
     assert(!manager.isZombie)
@@ -1043,8 +1041,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       createTaskResult(3, accumUpdatesByTask(3)))
     // Verify that it kills other running attempt
     val origTask2 = originalTasks(speculativeTask2.index)
-    verify(sched.backend).killTask(
-      origTask2.taskId, "exec2", true, "another attempt succeeded", false)
+    verify(sched.backend).killTask(origTask2.taskId, "exec2", true, "another attempt succeeded")
     assert(manager.tasksSuccessful === 5)
     assert(manager.isZombie)
   }
@@ -1099,8 +1096,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
     tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
       TaskCommitDenied(0, 2, 0))
-    tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED,
-      TaskKilled("test", false))
+    tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED, TaskKilled("test"))
 
     // Make sure that the blacklist ignored all of the task failures above, since they aren't
     // the fault of the executor where the task was running.

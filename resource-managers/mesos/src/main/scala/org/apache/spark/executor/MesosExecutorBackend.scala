@@ -105,8 +105,7 @@ private[spark] class MesosExecutorBackend
     } else {
       // TODO: Determine the 'interruptOnCancel' property set for the given job.
       executor.killTask(
-        t.getValue.toLong, interruptThread = false, reason = "killed intentionally",
-        shouldRetry = false)
+        t.getValue.toLong, interruptThread = false, reason = "killed intentionally")
     }
   }
 

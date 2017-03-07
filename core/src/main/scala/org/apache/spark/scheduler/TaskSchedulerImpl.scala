@@ -239,8 +239,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         //    simply abort the stage.
         tsm.runningTasksSet.foreach { tid =>
           val execId = taskIdToExecutorId(tid)
-          backend.killTask(
-            tid, execId, interruptThread, reason = "stage cancelled", shouldRetry = false)
+          backend.killTask(tid, execId, interruptThread, reason = "stage cancelled")
         }
         tsm.abort("Stage %s cancelled".format(stageId))
         logInfo("Stage %d was cancelled".format(stageId))
@@ -248,12 +247,11 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
   }
 
-  override def killTask(
-      taskId: Long, interruptThread: Boolean, reason: String, shouldRetry: Boolean): Unit = {
+  override def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
     logInfo(s"Killing task ($reason): $taskId")
     val execId = taskIdToExecutorId.getOrElse(
       taskId, throw new IllegalArgumentException("Task not found: " + taskId))
-    backend.killTask(taskId, execId, interruptThread, reason, shouldRetry)
+    backend.killTask(taskId, execId, interruptThread, reason)
   }
 
   /**
@@ -476,7 +474,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       taskState: TaskState,
       reason: TaskFailedReason): Unit = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (!taskSetManager.isZombie && reason.shouldRetry) {
+    if (!taskSetManager.isZombie) {
       // Need to revive offers again now that the task set manager state has been updated to
       // reflect failed tasks that need to be re-run.
       backend.reviveOffers()

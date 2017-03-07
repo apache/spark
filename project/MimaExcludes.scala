@@ -67,7 +67,6 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.this"),
 
     // [SPARK-19820] Allow reason to be specified to task kill
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskFailedReason.shouldRetry"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.TaskKilled$"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.TaskKilled.productElement"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.TaskKilled.productArity"),

@@ -426,11 +426,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   override def killTask(
-      taskId: Long,
-      executorId: String,
-      interruptThread: Boolean,
-      reason: String,
-      shouldRetry: Boolean): Unit = {
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     mesosDriver.killTask(
       TaskID.newBuilder()
         .setValue(taskId.toString).build()
