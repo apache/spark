@@ -15,7 +15,7 @@ To follow along with this guide, first download a packaged release of Spark from
 [Spark website](http://spark.apache.org/downloads.html). Since we won't be using HDFS,
 you can download a package for any version of Hadoop.
 
-Note that, before Spark 2.0, the main programming interface of Spark was Resilient Distributed Dataset (RDD). After Spark 2.0, RDD is replaced by Dataset, which is strongly typed like RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more complete reference at [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
+Note that, before Spark 2.0, the main programming interface of Spark was the Resilient Distributed Dataset (RDD). After Spark 2.0, RDDs are replaced by Dataset, which is strongly-typed like an RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more complete reference at the [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See the [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
 
 # Interactive Analysis with the Spark Shell
 
@@ -47,7 +47,7 @@ scala> textFile.first() // First item in this Dataset
 res1: String = # Apache Spark
 {% endhighlight %}
 
-Now let's transform this Dataset to a new one. We will call the `filter` to return a new Dataset with a subset of the items in the file.
+Now let's transform this Dataset to a new one. We just call the `filter` to return a new Dataset with a subset of the items in the file.
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
@@ -66,7 +66,7 @@ res3: Long = 15
 
     ./bin/pyspark
 
-Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Due to Python's dynamic nature, we don't need the Dataset to be strongly typed in Python. As a result, all Datasets in Python are Dataset[Row], and we call it `DataFrame` to be consistent with the data frame concept in Pandas and R. Let's make a new DataFrame from the text of the README file in the Spark source directory:
+Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Due to Python's dynamic nature, we don't need the Dataset to be strongly-typed in Python. As a result, all Datasets in Python are Dataset[Row], and we call it `DataFrame` to be consistent with the data frame concept in Pandas and R. Let's make a new DataFrame from the text of the README file in the Spark source directory:
 
 {% highlight python %}
 >>> textFile = spark.read.text("README.md")
@@ -143,7 +143,7 @@ res6: Array[(String, Int)] = Array((means,1), (under,2), (this,3), (Because,1), 
 [Row(max(numWords)=15)]
 {% endhighlight %}
 
-This first maps a line to an integer value and alias it with "numWords", creating a new DataFrame. `agg` is called on that DataFrame to find the largest word count. The arguments to `select` and `agg` are both _[Column](api/python/index.html#pyspark.sql.Column)_, we can use `df.colName` to get a column from a DataFrame, we can also import pyspark.sql.functions, which provides a lot of convenient functions to build a new Column from an old one.
+This first maps a line to an integer value and aliases it as "numWords", creating a new DataFrame. `agg` is called on that DataFrame to find the largest word count. The arguments to `select` and `agg` are both _[Column](api/python/index.html#pyspark.sql.Column)_, we can use `df.colName` to get a column from a DataFrame. We can also import pyspark.sql.functions, which provides a lot of convenient functions to build a new Column from an old one.
 
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
@@ -412,8 +412,7 @@ Lines with a: 46, Lines with b: 23
 # Where to Go from Here
 Congratulations on running your first Spark application!
 
-* For an in-depth overview of the API, start with the [RDD programming guide](rdd-programming-guide.html),
-  or see "Programming Guides" menu for other components.
+* For an in-depth overview of the API, start with the [RDD programming guide](rdd-programming-guide.html) and the [SQL programming guide](sql-programming-guide.html), or see "Programming Guides" menu for other components.
 * For running applications on a cluster, head to the [deployment overview](cluster-overview.html).
 * Finally, Spark includes several samples in the `examples` directory
 ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
