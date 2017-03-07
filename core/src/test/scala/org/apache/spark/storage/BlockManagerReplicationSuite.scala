@@ -486,7 +486,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     executorsToRemove.foreach{exec =>
       master.removeExecutor(exec.executorId)
       // giving enough time for replication to happen and new block be reported to master
-      Thread.sleep(500)
+      Thread.sleep(200)
     }
 
     val newLocations = eventually(timeout(5 seconds), interval(10 millis)) {
