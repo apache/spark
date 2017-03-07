@@ -95,7 +95,6 @@ class CollapseRepartitionSuite extends PlanTest {
     val query1 = testRelation
       .coalesce(10)
       .repartition(20)
-    // Remove useless coalesce above repartition
     val query2 = testRelation
       .coalesce(30)
       .repartition(20)
@@ -109,6 +108,7 @@ class CollapseRepartitionSuite extends PlanTest {
   }
 
   test("repartitionBy above repartition") {
+    // Always respects the top repartitionBy amd removes useless repartition
     val query1 = testRelation
       .repartition(10)
       .distribute('a)(20)
@@ -125,82 +125,76 @@ class CollapseRepartitionSuite extends PlanTest {
   }
 
   test("repartitionBy above coalesce") {
+    // Always respects the top repartitionBy amd removes useless coalesce below repartition
     val query1 = testRelation
       .coalesce(10)
       .distribute('a)(20)
+    val query2 = testRelation
+      .coalesce(30)
+      .distribute('a)(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.distribute('a)(20).analyze
-
-    comparePlans(optimized1, correctAnswer1)
-
-    val query2 = testRelation
-      .coalesce(20)
-      .distribute('a)(30)
-
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.distribute('a)(30).analyze
+    val correctAnswer = testRelation.distribute('a)(20).analyze
 
-    comparePlans(optimized2, correctAnswer2)
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
   }
 
   test("repartition above repartitionBy") {
+    // Always respects the top repartition amd removes useless distribute below repartition
     val query1 = testRelation
-      .distribute('a)(20)
-      .repartition(10)
+      .distribute('a)(10)
+      .repartition(20)
+    val query2 = testRelation
+      .distribute('a)(30)
+      .repartition(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.repartition(10).analyze
-
-    comparePlans(optimized1, correctAnswer1)
-
-    val query2 = testRelation
-      .distribute('a)(20)
-      .repartition(30)
-
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.repartition(30).analyze
+    val correctAnswer = testRelation.repartition(20).analyze
 
-    comparePlans(optimized2, correctAnswer2)
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
+
   }
 
   test("coalesce above repartitionBy") {
+    // Remove useless coalesce above repartition
     val query1 = testRelation
-      .distribute('a)(20)
-      .coalesce(10)
+      .distribute('a)(10)
+      .coalesce(20)
 
     val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.distribute('a)(20).coalesce(10).analyze
+    val correctAnswer1 = testRelation.distribute('a)(10).analyze
 
     comparePlans(optimized1, correctAnswer1)
 
+    // No change in this case
     val query2 = testRelation
-      .distribute('a)(20)
-      .coalesce(30)
+      .distribute('a)(30)
+      .coalesce(20)
 
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.distribute('a)(20).analyze
+    val correctAnswer2 = query2.analyze
 
     comparePlans(optimized2, correctAnswer2)
   }
 
   test("collapse two adjacent repartitionBys into one") {
+    // Always respects the top repartitionBy
     val query1 = testRelation
       .distribute('b)(10)
       .distribute('a)(20)
-
-    val optimized1 = Optimize.execute(query1.analyze)
-    val correctAnswer1 = testRelation.distribute('a)(20).analyze
-
-    comparePlans(optimized1, correctAnswer1)
-
     val query2 = testRelation
       .distribute('b)(30)
       .distribute('a)(20)
 
+    val optimized1 = Optimize.execute(query1.analyze)
     val optimized2 = Optimize.execute(query2.analyze)
-    val correctAnswer2 = testRelation.distribute('a)(20).analyze
+    val correctAnswer = testRelation.distribute('a)(20).analyze
 
-    comparePlans(optimized2, correctAnswer2)
+    comparePlans(optimized1, correctAnswer)
+    comparePlans(optimized2, correctAnswer)
   }
 }
