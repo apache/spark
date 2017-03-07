@@ -277,7 +277,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toLong catch {
+      buildCast[UTF8String](_, s => try {
+        if (s.isLongMaybe) s.toLong else null
+      } catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -293,7 +295,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toInt catch {
+      buildCast[UTF8String](_, s => try {
+        if (s.isIntMaybe) s.toInt else null
+      } catch {
         case _: NumberFormatException => null
       })
     case BooleanType =>
@@ -783,7 +787,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = $c.toInt();
+            if ($c.isIntMaybe()) {
+              $evPrim = $c.toInt();
+            } else {
+              $evNull = true;
+            }
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }
@@ -805,7 +813,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         s"""
           try {
-            $evPrim = $c.toLong();
+            if ($c.isLongMaybe()) {
+              $evPrim = $c.toLong();
+            } else {
+              $evNull = true;
+            }
           } catch (java.lang.NumberFormatException e) {
             $evNull = true;
           }

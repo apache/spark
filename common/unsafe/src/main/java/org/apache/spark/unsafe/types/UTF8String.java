@@ -857,6 +857,55 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     throw new NumberFormatException(toString());
   }
 
+  // Mimics LazyUtils.isNumberMaybe() with an additional check for number of bytes
+  private boolean isNumericMaybe(int maxLengthWithoutSign) {
+    if (numBytes <= 0) {
+      // check for empty string
+      return false;
+    }
+
+    int maxNumBytes = maxLengthWithoutSign;
+    byte firstByte = getByte(0);
+
+    if (!Character.isDigit(firstByte)) {
+      // if the first character isn't a digit, then it has to be either `+` OR `-`
+      if ((firstByte == '-' || firstByte == '+')) {
+        maxNumBytes += 1;
+      } else {
+        return false;
+      }
+    }
+
+    if (numBytes > maxNumBytes) {
+      return false;
+    }
+
+    // maybe valid - too expensive to check without a full parse
+    return true;
+  }
+
+  /**
+   * Does a cheap check if the current string can be converted to a long. Note that even if this
+   * method returns `true`, the underlying string still _may_ not be assumed to be a proper long
+   * and one _can_ get an `NumberFormatException` while parsing it. The main purpose of having this
+   * method is to save the cost from raising an exception for obvious cases wherein the parsing
+   * would fail (eg. null or empty string)
+   */
+  public boolean isLongMaybe() {
+    return isNumericMaybe(String.valueOf(Long.MAX_VALUE).length());
+  }
+
+  /**
+   * Does a cheap check if the current string can be converted to a int. Note that even if this
+   * method returns `true`, the underlying string still _may_ not be assumed to be a proper int
+   * and one _can_ get an `NumberFormatException` while parsing it. The main purpose of having this
+   * method is to save the cost from raising an exception for obvious cases wherein the parsing
+   * would fail (eg. null or empty string)
+   */
+  public boolean isIntMaybe() {
+    return isNumericMaybe(String.valueOf(Integer.MAX_VALUE).length());
+  }
+
   /**
    * Parses this UTF8String to long.
    *

@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Random;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
@@ -608,4 +609,55 @@ public class UTF8StringSuite {
         .writeTo(outputStream);
     assertEquals("大千世界", outputStream.toString("UTF-8"));
   }
+
+  @Test
+  public void testIsIntMaybe() throws IOException {
+    assertEquals(true, UTF8String.fromString("1").isIntMaybe());
+    assertEquals(true, UTF8String.fromString("+1").isIntMaybe());
+    assertEquals(true, UTF8String.fromString("-1").isIntMaybe());
+    assertEquals(true, UTF8String.fromString("0").isIntMaybe());
+    assertEquals(true, UTF8String.fromString(String.valueOf(Integer.MAX_VALUE)).isIntMaybe());
+    assertEquals(true, UTF8String.fromString("+" + String.valueOf(Integer.MAX_VALUE)).isIntMaybe());
+    assertEquals(true, UTF8String.fromString(String.valueOf(Integer.MIN_VALUE)).isIntMaybe());
+
+    Random rand = new Random();
+    for(int i = 0; i < 10; i++) {
+      assertEquals(true, UTF8String.fromString(String.valueOf(rand.nextInt())).isIntMaybe());
+    }
+
+    // negative testing
+    assertEquals(false, UTF8String.fromString("").isIntMaybe());
+    assertEquals(false, UTF8String.fromString("   ").isIntMaybe());
+    assertEquals(false, UTF8String.fromString("null").isIntMaybe());
+    assertEquals(false, UTF8String.fromString("NULL").isIntMaybe());
+    assertEquals(false, UTF8String.fromString("\n").isIntMaybe());
+    assertEquals(false, UTF8String.fromString("~1212121").isIntMaybe());
+    assertEquals(false, UTF8String.fromString("12345678901234567890").isIntMaybe());
+  }
+
+  @Test
+  public void testIsLongMaybe() throws IOException {
+    assertEquals(true, UTF8String.fromString("1").isLongMaybe());
+    assertEquals(true, UTF8String.fromString("+1").isLongMaybe());
+    assertEquals(true, UTF8String.fromString("-1").isLongMaybe());
+    assertEquals(true, UTF8String.fromString("0").isLongMaybe());
+    assertEquals(true, UTF8String.fromString(String.valueOf(Long.MAX_VALUE)).isLongMaybe());
+    assertEquals(true, UTF8String.fromString("+" + String.valueOf(Long.MAX_VALUE)).isLongMaybe());
+    assertEquals(true, UTF8String.fromString(String.valueOf(Long.MIN_VALUE)).isLongMaybe());
+
+    Random rand = new Random();
+    for(int i = 0; i < 10; i++) {
+      assertEquals(true, UTF8String.fromString(String.valueOf(rand.nextLong())).isLongMaybe());
+    }
+
+    // negative testing
+    assertEquals(false, UTF8String.fromString("").isLongMaybe());
+    assertEquals(false, UTF8String.fromString("   ").isLongMaybe());
+    assertEquals(false, UTF8String.fromString("null").isLongMaybe());
+    assertEquals(false, UTF8String.fromString("NULL").isLongMaybe());
+    assertEquals(false, UTF8String.fromString("\n").isLongMaybe());
+    assertEquals(false, UTF8String.fromString("~1212121").isLongMaybe());
+    assertEquals(false, UTF8String.fromString("1234567890123456789012345678901234").isLongMaybe());
+  }
+
 }
