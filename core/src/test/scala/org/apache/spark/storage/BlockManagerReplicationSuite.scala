@@ -486,7 +486,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     executorsToRemove.foreach{exec =>
       master.removeExecutor(exec.executorId)
       // giving enough time for replication to happen and new block be reported to master
-      Thread.sleep(1000)
+      Thread.sleep(200)
     }
 
     // giving enough time for replication complete and locks released
@@ -494,7 +494,9 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
 
     val newLocations = master.getLocations(blockId).toSet
     logInfo(s"New locations : $newLocations")
-    assert(newLocations.size === replicationFactor)
+    eventually(timeout(5 seconds), interval(10 millis)) {
+      assert(newLocations.size === replicationFactor)
+    }
     // there should only be one common block manager between initial and new locations
     assert(newLocations.intersect(blockLocations.toSet).size === 1)
 
