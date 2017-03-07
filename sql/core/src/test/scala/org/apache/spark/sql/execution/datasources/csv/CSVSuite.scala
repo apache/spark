@@ -469,7 +469,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
 
-      // escapeQuotes should be true by default
+
       val df1 = spark.sqlContext.createDataFrame(List(
         (1, """AA\"BB"""),              // 1 escape char anc 1 quote char
         (2, """AA\\"BB"""),             // 2 escape char and 1 quote char
@@ -479,6 +479,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         (6, """Yes, \"inside"\""")
       ))
 
+      // escapeQuotes should be true by default
+      // escapeEscape should be equal to quote by default
       df1.coalesce(1).write
         .format("csv")
         .option("quote", "\"")
