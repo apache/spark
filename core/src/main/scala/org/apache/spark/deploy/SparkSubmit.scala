@@ -546,6 +546,17 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
+
+    ////////////////////////////
+    ////////////////////////////
+
+    ///////   TODO = standalone mode should log in as well
+
+    ////////////////////////////
+    ////////////////////////////////////////////////////////
+
+
+
     // assure a keytab is available from any place in a JVM
     if (clusterManager == YARN || clusterManager == LOCAL) {
       if (args.principal != null) {
