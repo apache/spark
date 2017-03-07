@@ -18,12 +18,58 @@
 package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 
-class StatsConfSuite extends StatsEstimationTestBase {
+class BasicStatsEstimationSuite extends StatsEstimationTestBase {
+  val (ar, colStat) = (attr("key"), ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+    nullCount = 0, avgLen = 4, maxLen = 4))
+
+  val plan = StatsTestPlan(
+    outputList = Seq(ar),
+    attributeStats = AttributeMap(Seq(ar -> colStat)),
+    rowCount = 10,
+    // row count * (overhead + column size)
+    size = Some(10 * (8 + 4)))
+
+  test("limit estimation: limit < child's rowCount") {
+    val localLimit = LocalLimit(Literal(2), plan)
+    val globalLimit = GlobalLimit(Literal(2), plan)
+    // LocalLimit's stats is just its child's stats except column stats
+    checkStats(localLimit, plan.stats(conf).copy(attributeStats = AttributeMap(Nil)))
+    checkStats(globalLimit, Statistics(sizeInBytes = 24, rowCount = Some(2)))
+  }
+
+  test("limit estimation: limit > child's rowCount") {
+    val localLimit = LocalLimit(Literal(20), plan)
+    val globalLimit = GlobalLimit(Literal(20), plan)
+    checkStats(localLimit, plan.stats(conf).copy(attributeStats = AttributeMap(Nil)))
+    // Limit is larger than child's rowCount, so GlobalLimit's stats is equal to its child's stats.
+    checkStats(globalLimit, plan.stats(conf).copy(attributeStats = AttributeMap(Nil)))
+  }
+
+  test("limit estimation: limit = 0") {
+    val localLimit = LocalLimit(Literal(0), plan)
+    val globalLimit = GlobalLimit(Literal(0), plan)
+    val stats = Statistics(sizeInBytes = 1, rowCount = Some(0))
+    checkStats(localLimit, stats)
+    checkStats(globalLimit, stats)
+  }
+
+  test("sample estimation") {
+    val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)()
+    checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
+
+    // Child doesn't have rowCount in stats
+    val childStats = Statistics(sizeInBytes = 120)
+    val childPlan = DummyLogicalPlan(childStats, childStats)
+    val sample2 =
+      Sample(0.0, 0.11, withReplacement = false, (math.random * 1000).toLong, childPlan)()
+    checkStats(sample2, Statistics(sizeInBytes = 14))
+  }
+
   test("estimate statistics when the conf changes") {
     val expectedDefaultStats =
       Statistics(
@@ -41,13 +87,24 @@ class StatsConfSuite extends StatsEstimationTestBase {
         isBroadcastable = false)
 
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
-    // Return the statistics estimated by cbo
-    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedCboStats)
+    checkStats(
+      plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
+  }
+
+  /** Check estimated stats when cbo is turned on/off. */
+  private def checkStats(
+      plan: LogicalPlan,
+      expectedStatsCboOn: Statistics,
+      expectedStatsCboOff: Statistics): Unit = {
+    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedStatsCboOn)
     // Invalidate statistics
     plan.invalidateStatsCache()
-    // Return the simple statistics
-    assert(plan.stats(conf.copy(cboEnabled = false)) == expectedDefaultStats)
+    assert(plan.stats(conf.copy(cboEnabled = false)) == expectedStatsCboOff)
   }
+
+  /** Check estimated stats when it's the same whether cbo is turned on or off. */
+  private def checkStats(plan: LogicalPlan, expectedStats: Statistics): Unit =
+    checkStats(plan, expectedStats, expectedStats)
 }
 
 /**
