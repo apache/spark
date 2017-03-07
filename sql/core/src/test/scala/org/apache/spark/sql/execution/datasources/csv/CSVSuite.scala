@@ -1105,7 +1105,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Empty file produces empty dataframe - CSV string dataset") {
+  test("Empty dataframe produces empty dataframe") {
     // Empty dataframe with schema.
     val emptyDF = spark.createDataFrame(
       spark.sparkContext.emptyRDD[Row],
