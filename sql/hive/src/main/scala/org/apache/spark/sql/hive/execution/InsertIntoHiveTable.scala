@@ -393,8 +393,8 @@ case class InsertIntoHiveTable(
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
-    // Invalidate the cache.
-    sparkSession.catalog.uncacheTable(table.qualifiedName)
+    // un-cache this table.
+    sparkSession.catalog.uncacheTable(table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,

@@ -199,8 +199,7 @@ case class DropTableCommand(
       }
     }
     try {
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession.table(tableName.quotedString))
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
     } catch {
       case _: NoSuchTableException if ifExists =>
       case NonFatal(e) => log.warn(e.toString, e)
