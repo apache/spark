@@ -12,15 +12,28 @@ currently limited and not well-tested. This should not be used in production env
 * You must have appropriate permissions to create and list [pods](https://kubernetes.io/docs/user-guide/pods/), [nodes](https://kubernetes.io/docs/admin/node/) and [services](https://kubernetes.io/docs/user-guide/services/) in your cluster. You can verify that you can list these resources by running `kubectl get nodes`, `kubectl get pods` and `kubectl get svc` which should give you a list of nodes, pods and services (if any) respectively.
 * You must have an extracted spark distribution with Kubernetes support, or build one from [source](https://github.com/apache-spark-on-k8s/spark).
 
-## Setting Up Docker Images
+## Driver & Executor Images
 
 Kubernetes requires users to supply images that can be deployed into containers within pods. The images are built to
 be run in a container runtime environment that Kubernetes supports. Docker is a container runtime environment that is
 frequently used with Kubernetes, so Spark provides some support for working with Docker to get started quickly.
 
-To use Spark on Kubernetes with Docker, images for the driver and the executors need to built and published to an
-accessible Docker registry. Spark distributions include the Docker files for the driver and the executor at
-`dockerfiles/driver/Dockerfile` and `docker/executor/Dockerfile`, respectively. Use these Docker files to build the
+If you wish to use pre-built docker images, you may use the images published in [kubespark](https://hub.docker.com/u/kubespark/). The images are as follows:
+
+<table class="table">
+<tr><th>Component</th><th>Image</th></tr>
+<tr>
+  <td>Spark Driver Image</td>
+  <td><code>kubespark/spark-driver:v2.1.0-k8s-support-0.1.0-alpha.1</code></td>
+</tr>
+<tr>
+  <td>Spark Executor Image</td>
+  <td><code>kubespark/spark-executor:v2.1.0-k8s-support-0.1.0-alpha.1</code></td>
+</tr>
+</table>
+
+You may also build these docker images from sources, or customize them as required. Spark distributions include the Docker files for the driver and the executor at
+`dockerfiles/driver/Dockerfile` and `dockerfiles/executor/Dockerfile`, respectively. Use these Docker files to build the
 Docker images, and then tag them with the registry that the images should be sent to. Finally, push the images to the
 registry.
 
@@ -44,8 +57,8 @@ are set up as described above:
       --kubernetes-namespace default \
       --conf spark.executor.instances=5 \
       --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-k8s-support-0.1.0-alpha.1 \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-k8s-support-0.1.0-alpha.1 \
       examples/jars/spark_examples_2.11-2.2.0.jar
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
@@ -54,7 +67,6 @@ master string with `k8s://` will cause the Spark application to launch on the Ku
 being contacted at `api_server_url`. If no HTTP protocol is specified in the URL, it defaults to `https`. For example,
 setting the master to `k8s://example.com:443` is equivalent to setting it to `k8s://https://example.com:443`, but to
 connect without SSL on a different port, the master would be set to `k8s://http://example.com:8443`.
-
 
 If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
 
@@ -67,13 +79,45 @@ In the above example, the specific Kubernetes cluster can be used with spark sub
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
  
-### Dependency Management and Docker Containers
+### Specifying input files
 
 Spark supports specifying JAR paths that are either on the submitting host's disk, or are located on the disk of the
 driver and executors. Refer to the [application submission](submitting-applications.html#advanced-dependency-management)
 section for details. Note that files specified with the `local://` scheme should be added to the container image of both
 the driver and the executors. Files without a scheme or with the scheme `file://` are treated as being on the disk of
 the submitting machine, and are uploaded to the driver running in Kubernetes before launching the application.
+
+### Accessing Kubernetes Clusters
+
+For details about running on public cloud environments, such as Google Container Engine (GKE), refer to [running Spark in the cloud with Kubernetes](running-on-kubernetes-cloud.md).
+
+Spark-submit also supports submission through the
+[local kubectl proxy](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#using-kubectl-proxy). One can use the
+authenticating proxy to communicate with the api server directly without passing credentials to spark-submit.
+
+The local proxy can be started by running:
+
+    kubectl proxy
+
+If our local proxy were listening on port 8001, we would have our submission looking like the following:
+
+    bin/spark-submit \
+      --deploy-mode cluster \
+      --class org.apache.spark.examples.SparkPi \
+      --master k8s://http://127.0.0.1:8001 \
+      --kubernetes-namespace default \
+      --conf spark.executor.instances=5 \
+      --conf spark.app.name=spark-pi \
+      --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.1.0-k8s-support-0.1.0-alpha.1 \
+      --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.1.0-k8s-support-0.1.0-alpha.1 \
+      examples/jars/spark_examples_2.11-2.2.0.jar
+
+Communication between Spark and Kubernetes clusters is performed using the fabric8 kubernetes-client library.
+The above mechanism using `kubectl proxy` can be used when we have authentication providers that the fabric8
+kubernetes-client library does not support. Authentication using X509 Client Certs and OAuth tokens
+is currently supported.
+
+## Advanced
  
 ### Setting Up SSL For Submitting the Driver
 
@@ -93,35 +137,7 @@ or `local:`. A scheme of `file:` corresponds to the keyStore being located on th
 the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
 `local:`, the file is assumed to already be on the container's disk at the appropriate path.
 
-### Kubernetes Clusters and the authenticated proxy endpoint
-
-Spark-submit also supports submission through the
-[local kubectl proxy](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#using-kubectl-proxy). One can use the
-authenticating proxy to communicate with the api server directly without passing credentials to spark-submit.
-
-The local proxy can be started by running:
-
-    kubectl proxy
-
-If our local proxy were listening on port 8001, we would have our submission looking like the following:
-
-    bin/spark-submit \
-      --deploy-mode cluster \
-      --class org.apache.spark.examples.SparkPi \
-      --master k8s://http://127.0.0.1:8001 \
-      --kubernetes-namespace default \
-      --conf spark.executor.instances=5 \
-      --conf spark.app.name=spark-pi \
-      --conf spark.kubernetes.driver.docker.image=registry-host:5000/spark-driver:latest \
-      --conf spark.kubernetes.executor.docker.image=registry-host:5000/spark-executor:latest \
-      examples/jars/spark_examples_2.11-2.2.0.jar
-
-Communication between Spark and Kubernetes clusters is performed using the fabric8 kubernetes-client library.
-The above mechanism using `kubectl proxy` can be used when we have authentication providers that the fabric8
-kubernetes-client library does not support. Authentication using X509 Client Certs and oauth tokens
-is currently supported.
-
-### Determining the Driver Base URI
+### Submission of Local Files through Ingress/External controller
 
 Kubernetes pods run with their own IP address space. If Spark is run in cluster mode, the driver pod may not be
 accessible to the submitter. However, the submitter needs to send local dependencies from its local disk to the driver
