@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -1195,6 +1197,59 @@ class SessionCatalogSuite extends PlanTest {
     intercept[NoSuchDatabaseException] {
       catalog.listFunctions("unknown_db", "func*")
     }
+  }
+
+  test("clone SessionCatalog - temp views") {
+    val externalCatalog = newEmptyCatalog()
+    val original = new SessionCatalog(externalCatalog)
+    val tempTable1 = Range(1, 10, 1, 10)
+    original.createTempView("copytest1", tempTable1, overrideIfExists = false)
+
+    // check if tables copied over
+    val clone = original.newSessionCatalogWith(
+      SimpleCatalystConf(caseSensitiveAnalysis = true),
+      new Configuration(),
+      new SimpleFunctionRegistry,
+      CatalystSqlParser)
+    assert(original ne clone)
+    assert(clone.getTempView("copytest1") == Some(tempTable1))
+
+    // check if clone and original independent
+    clone.dropTable(TableIdentifier("copytest1"), ignoreIfNotExists = false, purge = false)
+    assert(original.getTempView("copytest1") == Some(tempTable1))
+
+    val tempTable2 = Range(1, 20, 2, 10)
+    original.createTempView("copytest2", tempTable2, overrideIfExists = false)
+    assert(clone.getTempView("copytest2").isEmpty)
+  }
+
+  test("clone SessionCatalog - current db") {
+    val externalCatalog = newEmptyCatalog()
+    val db1 = "db1"
+    val db2 = "db2"
+    val db3 = "db3"
+
+    externalCatalog.createDatabase(newDb(db1), ignoreIfExists = true)
+    externalCatalog.createDatabase(newDb(db2), ignoreIfExists = true)
+    externalCatalog.createDatabase(newDb(db3), ignoreIfExists = true)
+
+    val original = new SessionCatalog(externalCatalog)
+    original.setCurrentDatabase(db1)
+
+    // check if current db copied over
+    val clone = original.newSessionCatalogWith(
+      SimpleCatalystConf(caseSensitiveAnalysis = true),
+      new Configuration(),
+      new SimpleFunctionRegistry,
+      CatalystSqlParser)
+    assert(original ne clone)
+    assert(clone.getCurrentDatabase == db1)
+
+    // check if clone and original independent
+    clone.setCurrentDatabase(db2)
+    assert(original.getCurrentDatabase == db1)
+    original.setCurrentDatabase(db3)
+    assert(clone.getCurrentDatabase == db2)
   }
 
   test("SPARK-19737: detect undefined functions without triggering relation resolution") {
