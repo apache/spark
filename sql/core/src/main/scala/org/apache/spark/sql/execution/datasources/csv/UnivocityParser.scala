@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[csv] class UnivocityParser(
+class UnivocityParser(
     schema: StructType,
     requiredSchema: StructType,
     private val options: CSVOptions) extends Logging {
