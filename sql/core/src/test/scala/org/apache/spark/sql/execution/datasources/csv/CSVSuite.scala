@@ -1105,19 +1105,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Empty dataframe produces empty dataframe") {
-    // Empty dataframe with schema.
-    val emptyDF = spark.createDataFrame(
-      spark.sparkContext.emptyRDD[Row],
-      StructType(StructField("a", StringType) :: Nil))
-    val df1 = spark.read.schema(emptyDF.schema).csv(spark.emptyDataset[String])
-    assert(df1.schema === emptyDF.schema)
-    checkAnswer(df1, emptyDF)
+  test("Empty string dataset produces empty dataframe and keep user-defined schema") {
+    val df1 = spark.read.csv(spark.emptyDataset[String])
+    assert(df1.schema === spark.emptyDataFrame.schema)
+    checkAnswer(df1, spark.emptyDataFrame)
 
-    // Empty dataframe without schema.
-    val df2 = spark.read.csv(spark.emptyDataset[String])
-    assert(df2.schema === spark.emptyDataFrame.schema)
-    checkAnswer(df2, spark.emptyDataFrame)
+    val schema = StructType(StructField("a", StringType) :: Nil)
+    val df2 = spark.read.schema(schema).csv(spark.emptyDataset[String])
+    assert(df2.schema === schema)
   }
 
 }
