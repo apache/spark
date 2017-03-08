@@ -28,12 +28,22 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
   case class StringOffset(override val json: String) extends Offset
 
   test("OffsetSeqMetadata - deserialization") {
-    assert(OffsetSeqMetadata(0, 0) === OffsetSeqMetadata("""{}"""))
-    assert(OffsetSeqMetadata(1, 0) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
-    assert(OffsetSeqMetadata(0, 2) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
+    assert(OffsetSeqMetadata(0, 0, 0) === OffsetSeqMetadata("""{}"""))
+    assert(OffsetSeqMetadata(1, 0, 0) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
+    assert(OffsetSeqMetadata(0, 2, 0) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
+    assert(OffsetSeqMetadata(0, 0, 2) === OffsetSeqMetadata("""{"numShufflePartitions":2}"""))
     assert(
-      OffsetSeqMetadata(1, 2) ===
+      OffsetSeqMetadata(1, 2, 0) ===
         OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
+    assert(
+      OffsetSeqMetadata(1, 0, 3) ===
+        OffsetSeqMetadata("""{"batchWatermarkMs":1,"numShufflePartitions":3}"""))
+    assert(
+      OffsetSeqMetadata(0, 2, 3) ===
+        OffsetSeqMetadata("""{"batchTimestampMs":2,"numShufflePartitions":3}"""))
+    assert(
+      OffsetSeqMetadata(1, 2, 3) === OffsetSeqMetadata(
+          """{"batchWatermarkMs":1,"batchTimestampMs":2,"numShufflePartitions":3}"""))
   }
 
   test("OffsetSeqLog - serialization - deserialization") {

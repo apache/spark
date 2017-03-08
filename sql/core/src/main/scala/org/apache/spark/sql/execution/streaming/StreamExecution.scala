@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -117,7 +118,8 @@ class StreamExecution(
   }
 
   /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata = OffsetSeqMetadata()
+  protected var offsetSeqMetadata = OffsetSeqMetadata(
+    0, 0, sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS))
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -380,7 +382,20 @@ class StreamExecution(
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
+        val numShufflePartitionsFromConf = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+        offsetSeqMetadata = nextOffsets
+          .metadata
+          .getOrElse(OffsetSeqMetadata(0, 0, numShufflePartitionsFromConf))
+
+        /*
+         * For backwards compatibility, if # partitions was not recorded in the offset log, then
+         * ensure it is non-zero. The new value is picked up from the conf.
+         */
+        if (offsetSeqMetadata.numShufflePartitions == 0) {
+          offsetSeqMetadata.numShufflePartitions = numShufflePartitionsFromConf
+          logDebug("Number of shuffle partitions from previous run not found in checkpoint data. " +
+            s"Using the value from the conf, $numShufflePartitionsFromConf partitions.")
+        }
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
           s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
 
@@ -542,9 +557,16 @@ class StreamExecution(
           cd.dataType, cd.timeZoneId)
     }
 
+    // Fork a cloned session and set confs to disallow change in number of partitions
+    val sparkSessionForCurrentBatch = sparkSession.cloneSession()
+    sparkSessionForCurrentBatch.conf.set(
+      SQLConf.SHUFFLE_PARTITIONS.key,
+      offsetSeqMetadata.numShufflePartitions.toString)
+    sparkSessionForCurrentBatch.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
-        sparkSession,
+        sparkSessionForCurrentBatch,
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
@@ -554,7 +576,8 @@ class StreamExecution(
     }
 
     val nextBatch =
-      new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(sparkSessionForCurrentBatch, lastExecution,
+        RowEncoder(lastExecution.analyzed.schema))
 
     reportTimeTaken("addBatch") {
       sink.addBatch(currentBatchId, nextBatch)

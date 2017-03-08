@@ -71,7 +71,10 @@ object OffsetSeq {
  * @param batchTimestampMs: The current batch processing timestamp.
  * Time unit: milliseconds
  */
-case class OffsetSeqMetadata(var batchWatermarkMs: Long = 0, var batchTimestampMs: Long = 0) {
+case class OffsetSeqMetadata(
+    var batchWatermarkMs: Long = 0,
+    var batchTimestampMs: Long = 0,
+    var numShufflePartitions: Int = 0) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 
