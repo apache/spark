@@ -240,7 +240,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @InterfaceStability.Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
       func: (K, Iterator[V], KeyedState[S]) => U,
-      timeout: KeyedStateTimeout = null): Dataset[U] = {
+      timeout: KeyedStateTimeout = KeyedStateTimeout.none): Dataset[U] = {
     flatMapGroupsWithState[S, U](
       (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func(key, it, s)),
       timeout)
@@ -328,7 +328,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @InterfaceStability.Evolving
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       func: (K, Iterator[V], KeyedState[S]) => Iterator[U],
-      timeout: KeyedStateTimeout = null): Dataset[U] = {
+      timeout: KeyedStateTimeout = KeyedStateTimeout.none): Dataset[U] = {
     Dataset[U](
       sparkSession,
       MapGroupsWithState[K, V, S, U](

@@ -144,10 +144,30 @@ case class MapGroupsWithStateExec(
       }.map(getStateObjFromRow)
     }
 
+    def getStateRow(obj: Any): UnsafeRow = {
+      val row = getStateRowFromObj(obj)
+      setStateExists(row)
+      row
+    }
+
     /** Returns the timeout timestamp of a state row is set */
     def getTimeoutTimestamp(stateRow: UnsafeRow): Long = {
       if (isTimeoutEnabled) stateRow.getLong(timeoutTimestampIndex) else TIMEOUT_TIMESTAMP_NOT_SET
     }
+
+    /** Returns a new empty state row */
+    def createNewStateRow(): UnsafeRow = {
+      getEmptyStateRow(emptyStateInternalRow).copy()
+    }
+
+    def setTimeoutTimestamp(stateRow: UnsafeRow, timeoutTimestamps: Long): Unit = {
+      if (isTimeoutEnabled) stateRow.setLong(timeoutTimestampIndex, timeoutTimestamps)
+    }
+
+    def setStateExists(stateRow: UnsafeRow): Unit = {
+      if (isTimeoutEnabled) stateRow.setBoolean(stateExistsIndex, true)
+    }
+
 
     /**
      * For every group, get the key, values and corresponding state and call the function,
@@ -211,20 +231,17 @@ case class MapGroupsWithStateExec(
 
           } else {
             val stateRowToWrite = if (keyedState.isUpdated) {
-              getStateRowFromObj(keyedState.get)
+              getStateRow(keyedState.get)
             } else {
-              stateRowOption.getOrElse(getEmptyStateRow(emptyStateInternalRow))
+              stateRowOption.getOrElse(createNewStateRow)
             }
 
-            // Update timeout timestamp if needed
-            if (isTimeoutEnabled) {
-              stateRowToWrite.setLong(timeoutTimestampIndex, keyedState.getTimeoutTimestamp)
-              if (keyedState.isUpdated) stateRowToWrite.setBoolean(stateExistsIndex, true)
-            }
+            // Update metadata in row as needed
+            setTimeoutTimestamp(stateRowToWrite, keyedState.getTimeoutTimestamp)
 
             // Write state row to store if there is any change worth writing
             if (keyedState.isUpdated || isTimeoutEnabled) {
-              store.put(keyRow, stateRowToWrite)
+              store.put(keyRow, stateRowToWrite.copy())
               numUpdatedStateRows += 1 // note: only timeout updates are measured as updates
             }
           }

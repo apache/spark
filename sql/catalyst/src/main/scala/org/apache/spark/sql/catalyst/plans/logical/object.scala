@@ -317,6 +317,7 @@ case class MapGroups(
 /** Internal class representing State */
 trait LogicalKeyedState[S]
 
+case object NoTimeout extends KeyedStateTimeout
 case object ProcessingTimeTimeout extends KeyedStateTimeout
 
 /** Factory for constructing new `MapGroupsWithState` nodes. */

@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.catalyst.plans.logical.NoTimeout$;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
 
 /**
@@ -35,5 +36,10 @@ public interface KeyedStateTimeout {
   /** Timeout based on processing time.  */
   static KeyedStateTimeout withProcessingTime() {
     return ProcessingTimeTimeout$.MODULE$;
+  }
+
+  /** No timeout */
+  static KeyedStateTimeout none() {
+    return NoTimeout$.MODULE$;
   }
 }

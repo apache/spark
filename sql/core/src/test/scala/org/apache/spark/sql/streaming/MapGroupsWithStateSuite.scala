@@ -35,6 +35,7 @@ case class RunningCount(count: Long)
 class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   import testImplicits._
+  import KeyedStateImpl._
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -132,28 +133,121 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
     }
   }
 
-  test("StateStoreUpdater - state and timeout timestamp update logic") {
-    // tests with no initial state
-    testStateUpdate(
-      func = state => { /* do nothing */ },
-      expectedState = None,
-      expectedTimeoutTimestamp = KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET
-    )
+  test("StateStoreUpdater - state and timeout timestamp update logic - no prior state") {
+    // Test not setting timeout info, when timeout is disabled and enabled
+    for (timeout <- Seq(KeyedStateTimeout.none, KeyedStateTimeout.withProcessingTime)) {
+      testStateUpdate(
+        func = state => { /* do nothing */ },
+        timeoutType = timeout,
+        expectedState = None,
+        expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+      )
 
-    testStateUpdate(
-      func = state => { state.update(5) },
-      expectedState = Some(5),
-      expectedTimeoutTimestamp = KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET
-    )
+      testStateUpdate(
+        func = state => { state.update(5) },
+        timeoutType = timeout,
+        expectedState = Some(5),
+        expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+      )
 
+      testStateUpdate(
+        func = state => { state.remove() },
+        timeoutType = timeout,
+        expectedState = None,
+        expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+      )
+    }
+
+    // Test setting timeout info, when timeout is enabled
     testStateUpdate(
       func = state => { state.setTimeoutDuration(1000) },
+      timeoutType = KeyedStateTimeout.withProcessingTime,
       expectedState = None,
       expectedTimeoutTimestamp = 1000
     )
 
-    // te
+    testStateUpdate(
+      func = state => { state.update(5); state.setTimeoutDuration(1000) },
+      timeoutType = KeyedStateTimeout.withProcessingTime,
+      expectedState = Some(5),
+      expectedTimeoutTimestamp = 1000
+    )
+
+    testStateUpdate(
+      func = state => { state.remove() },
+      timeoutType = KeyedStateTimeout.withProcessingTime,
+      expectedState = None,
+      expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+    )
   }
+
+  test("StateStoreUpdater - state and timeout timestamp update logic - with prior state") {
+    // Test not setting timeout info, when timeout is disabled and enabled
+    // State should get updated according to updates, but timeout timestamp should not be set.
+    for (timeoutType <- Seq(KeyedStateTimeout.none, KeyedStateTimeout.withProcessingTime)) {
+      for (timeoutTimestamp <- Seq(TIMEOUT_TIMESTAMP_NOT_SET, 1000)) {
+        testStateUpdate(
+          func = state => {
+            /* do nothing */
+          },
+          timeoutType = timeoutType,
+          priorState = Some(3),
+          priorTimeoutTimestamp = timeoutTimestamp,
+          expectedState = Some(3),
+          expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+        )
+
+        testStateUpdate(
+          func = state => { state.update(5) },
+          timeoutType = timeoutType,
+          priorState = Some(3),
+          priorTimeoutTimestamp = timeoutTimestamp,
+          expectedState = Some(5),
+          expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+        )
+
+        testStateUpdate(
+          func = state => { state.remove() },
+          timeoutType = timeoutType,
+          priorState = Some(3),
+          priorTimeoutTimestamp = timeoutTimestamp,
+          expectedState = None,
+          expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+        )
+      }
+    }
+
+    // Test setting timeout info, when timeout is enabled
+    for (timeoutTimestamp <- Seq(TIMEOUT_TIMESTAMP_NOT_SET, 1000)) {
+      testStateUpdate(
+        func = state => { state.setTimeoutDuration(1000) },
+        timeoutType = KeyedStateTimeout.withProcessingTime,
+        priorState = Some(3),
+        priorTimeoutTimestamp = timeoutTimestamp,
+        expectedState = Some(3),
+        expectedTimeoutTimestamp = 1000
+      )
+
+      testStateUpdate(
+        func = state => { state.update(5); state.setTimeoutDuration(1000) },
+        timeoutType = KeyedStateTimeout.withProcessingTime,
+        priorState = Some(3),
+        priorTimeoutTimestamp = timeoutTimestamp,
+        expectedState = Some(5),
+        expectedTimeoutTimestamp = 1000
+      )
+
+      testStateUpdate(
+        func = state => { state.remove() },
+        timeoutType = KeyedStateTimeout.withProcessingTime,
+        priorState = Some(3),
+        priorTimeoutTimestamp = timeoutTimestamp,
+        expectedState = None,
+        expectedTimeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+      )
+    }
+  }
+
 
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
@@ -441,10 +535,12 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
 
   def testStateUpdate(
       func: KeyedState[Int] => Unit,
-      store: SingleKeyStateStore = newStore(),
-      timeout: KeyedStateTimeout = KeyedStateTimeout.withProcessingTime,
+      timeoutType: KeyedStateTimeout = KeyedStateTimeout.none,
+      priorState: Option[Int] = None,
+      priorTimeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET,
       expectedState: Option[Int] = None,
-      expectedTimeoutTimestamp: Long = KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET): Unit = {
+      expectedTimeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET): Unit = {
+    val store = newStore()
     val stateUpdateFunc = (key: Int, values: Iterator[Int], state: KeyedState[Int]) => {
       func(state)
       Iterator(1, 2, 3)
@@ -452,23 +548,29 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
     val result = MemoryStream[Int]
       .toDS
       .groupByKey(x => x)
-      .flatMapGroupsWithState[Int, Int](stateUpdateFunc, timeout = timeout)
+      .flatMapGroupsWithState[Int, Int](stateUpdateFunc, timeout = timeoutType)
     val mapGroupsSparkPlan = result.logicalPlan.collectFirst {
       case MapGroupsWithState(f, k, v, g, d, o, s, t, _) =>
         MapGroupsWithStateExec(f, k, v, g, d, o, None, s, t, 0,
           RDDScanExec(g, null, "rdd"))
     }.get
 
-    val updater = new mapGroupsSparkPlan.StateStoreUpdater(store, Iterator(intToRow(1)))
+    val updater = new mapGroupsSparkPlan.StateStoreUpdater(store, Iterator(singleKeyForStore))
+    if (priorState.nonEmpty || priorTimeoutTimestamp != TIMEOUT_TIMESTAMP_NOT_SET) {
+      val row = priorState.map(updater.getStateRow).getOrElse(updater.createNewStateRow())
+      updater.setTimeoutTimestamp(row, priorTimeoutTimestamp)
+      store.put(row.copy())
+    }
+
     val returnedIter = updater.processPartition()
     returnedIter.size // consumer the iterator
 
-    val stateRow = store.get
-    assert(updater.getStateObj(stateRow).map(_.toString.toInt) === expectedState)
+    val updateStateRow = store.get
+    assert(updater.getStateObj(updateStateRow).map(_.toString.toInt) === expectedState)
 
-    val timeoutTimestamp = stateRow
+    val timeoutTimestamp = updateStateRow
       .map(updater.getTimeoutTimestamp)
-      .getOrElse(KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+      .getOrElse(TIMEOUT_TIMESTAMP_NOT_SET)
     assert(timeoutTimestamp === expectedTimeoutTimestamp)
   }
 
@@ -487,26 +589,33 @@ class MapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterA
 object MapGroupsWithStateSuite {
 
   class SingleKeyStateStore(singleKey: UnsafeRow) extends StateStore() {
-    private var value: UnsafeRow = null
+    @volatile private var value: UnsafeRow = null
     def get: Option[UnsafeRow] = Option(value)
-    override def filter(
-        condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
-      iterator().filter { case (k, v) => condition(k, v) }
-    }
-    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = { value = newValue }
-    override def remove(key: UnsafeRow): Unit = { value = null}
-    override def remove(condition: (UnsafeRow) => Boolean): Unit = {}
-    override def commit(): Long = version + 1
-    override def abort(): Unit = { }
+    def put(newValue: UnsafeRow): Unit = { value = newValue }
+
     override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
       Option(value).map { v => (singleKey, value) }.iterator
     }
+    override def filter(c: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
+      iterator.filter { case (k, v) => c(k, v) }
+    }
+
+    override def get(key: UnsafeRow): Option[UnsafeRow] = checkKey(key) { Option(value) }
+    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = checkKey(key) { value = newValue }
+    override def remove(key: UnsafeRow): Unit = checkKey(key) { value = null }
+    override def remove(condition: (UnsafeRow) => Boolean): Unit = throwException
+    override def commit(): Long = version + 1
+    override def abort(): Unit = { }
     override def id: StateStoreId = null
     override def version: Long = 0
-    override def get(key: UnsafeRow): Option[UnsafeRow] = Option(value)
-    override def updates(): Iterator[StoreUpdate] = Iterator.empty
+    override def updates(): Iterator[StoreUpdate] = throwException
     override def numKeys(): Long = Option(value).size
     override def hasCommitted: Boolean = true
+    private def throwException: Nothing = { throw new UnsupportedOperationException }
+    private def checkKey[T](key: UnsafeRow)(body: => T): T = {
+      require(key.hashCode == singleKey.hashCode, s"$key != $singleKey"); body
+    }
   }
+
   var failInTask = true
 }
