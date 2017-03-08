@@ -66,7 +66,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   /**
    * Param for the power in the variance function of the Tweedie distribution which provides
    * the relationship between the variance and mean of the distribution.
-   * Only applicable for the Tweedie family.
+   * Only applicable to the Tweedie family.
    * (see <a href="https://en.wikipedia.org/wiki/Tweedie_distribution">
    * Tweedie Distribution (Wikipedia)</a>)
    * Supported values: 0 and [1, Inf).
@@ -79,7 +79,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   final val variancePower: DoubleParam = new DoubleParam(this, "variancePower",
     "The power in the variance function of the Tweedie distribution which characterizes " +
     "the relationship between the variance and mean of the distribution. " +
-    "Only applicable for the Tweedie family. Supported values: 0 and [1, Inf).",
+    "Only applicable to the Tweedie family. Supported values: 0 and [1, Inf).",
     (x: Double) => x >= 1.0 || x == 0.0)
 
   /** @group getParam */
@@ -106,7 +106,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   def getLink: String = $(link)
 
   /**
-   * Param for the index in the power link function. Only applicable for the Tweedie family.
+   * Param for the index in the power link function. Only applicable to the Tweedie family.
    * Note that link power 0, 1, -1 or 0.5 corresponds to the Log, Identity, Inverse or Sqrt
    * link, respectively.
    * When not set, this value defaults to 1 - [[variancePower]], which matches the R "statmod"
@@ -116,7 +116,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    */
   @Since("2.2.0")
   final val linkPower: DoubleParam = new DoubleParam(this, "linkPower",
-    "The index in the power link function. Only applicable for the Tweedie family.")
+    "The index in the power link function. Only applicable to the Tweedie family.")
 
   /** @group getParam */
   @Since("2.2.0")
