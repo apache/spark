@@ -668,6 +668,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val JOIN_REORDER_ENABLED =
+    buildConf("spark.sql.cbo.joinReorder.enabled")
+      .doc("Enables join reorder in CBO.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val JOIN_REORDER_DP_THRESHOLD =
+    buildConf("spark.sql.cbo.joinReorder.dp.threshold")
+      .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
+      .intConf
+      .createWithDefault(12)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -884,6 +896,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
   override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
+  override def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
+
+  override def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   /** ********************** SQLConf functionality methods ************ */
 

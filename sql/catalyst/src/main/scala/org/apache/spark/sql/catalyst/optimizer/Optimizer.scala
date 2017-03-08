@@ -118,6 +118,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCreateMapOps) ::
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
+    Batch("Join Reorder", Once,
+      CostBasedJoinReorder(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates(conf)) ::
     Batch("Typed Filter Optimization", fixedPoint,
