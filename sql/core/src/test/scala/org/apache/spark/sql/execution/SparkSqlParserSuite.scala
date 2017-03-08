@@ -45,7 +45,7 @@ class SparkSqlParserSuite extends PlanTest {
    * Normalizes plans:
    * - CreateTable the createTime in tableDesc will replaced by -1L.
    */
-  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+  override def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case CreateTable(tableDesc, mode, query) =>
         val newTableDesc = tableDesc.copy(createTime = -1L)
