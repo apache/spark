@@ -27,7 +27,8 @@ import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
-import org.apache.spark.deploy.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.{ApplicationDescription, Command, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -65,39 +66,23 @@ private[spark] class StandaloneSchedulerBackend(
   private val totalExpectedCores = maxCores.getOrElse(0)
 
 
-  //////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////
   private var loginFromKeytab = false
   private var principal: String = null
   private var keytab: String = null
   private var credentials: Credentials = null
-  private val credentialManager = new ConfigurableCredentialManager(sc.conf, sc.hadoopConfiguration)
+
+  private var credentialRenewer: AMCredentialRenewer = _
+
 
   def setupCredentials(): Unit = {
-    loginFromKeytab = sc.conf.contains(PRINCIPAL.key)
+    loginFromKeytab = conf.contains(PRINCIPAL.key)
     if (loginFromKeytab) {
-      principal = sc.conf.get(PRINCIPAL).get
-      keytab = sc.conf.get(KEYTAB).orNull
-
-      require(keytab != null, "Keytab must be specified when principal is specified.")
-      logInfo("Attempting to login to the Kerberos" +
-        s" using principal: $principal and keytab: $keytab")
-      val f = new File(keytab)
-      // Generate a file name that can be used for the keytab file, that does not conflict
-      // with any user file.
-      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      sc.conf.set(KEYTAB.key, keytabFileName)
-      sc.conf.set(PRINCIPAL.key, principal)
+      principal = conf.get(PRINCIPAL).get
+      keytab = conf.get(KEYTAB).orNull
     }
     // Defensive copy of the credentials
     credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
-    logInfo("Credentials loaded: " + UserGroupInformation.getCurrentUser)
   }
-
-  //////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////
-
-
 
 
   override def start() {
@@ -111,9 +96,50 @@ private[spark] class StandaloneSchedulerBackend(
 
     setupCredentials()
 
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val credentialManager = new ConfigurableCredentialManager(conf, hadoopConf)
+
+    // Merge credentials obtained from registered providers
+    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+
+    if (credentials != null) {
+      logDebug(SparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
+
+    // If we use principal and keytab to login, also credentials can be renewed some time
+    // after current time, we should pass the next renewal and updating time to credential
+    // renewer and updater.
+    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
+      nearestTimeOfNextRenewal != Long.MaxValue) {
+
+      // Valid renewal time is 75% of next renewal time, and the valid update time will be
+      // slightly later then renewal time (80% of next renewal time). This is to make sure
+      // credentials are renewed and updated before expired.
+      val currTime = System.currentTimeMillis()
+      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
+      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
+
+      conf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
+      conf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
+    }
+
+    // If the credentials file config is present, we must periodically renew tokens. So create
+    // a new AMDelegationTokenRenewer
+    if (conf.contains(CREDENTIALS_FILE_PATH.key)) {
+      // If a principal and keytab have been set, use that to create new credentials for executors
+      // periodically
+      val hconf = SparkHadoopUtil.get.newConfiguration(conf)
+      credentialRenewer = credentialManager.credentialRenewer()
+      credentialRenewer.scheduleLoginFromKeytab()
+    }
+    // NOTE we don't need an updater since the above accomplishes it already
+
 
     //////////////////////////////////////////////////////
     //////////////////////////////////////////////////////
+
+
+
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
@@ -161,113 +187,11 @@ private[spark] class StandaloneSchedulerBackend(
       }
     val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
-
-
-
-
-    ////////////////////////////////////////////
-    ////////////////////////////////////////////
-    // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(sc.hadoopConfiguration, credentials)
-
-    if (credentials != null) {
-      logDebug(SparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
-    }
-
-    // If we use principal and keytab to login, also credentials can be renewed some time
-    // after current time, we should pass the next renewal and updating time to credential
-    // renewer and updater.
-    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
-      nearestTimeOfNextRenewal != Long.MaxValue) {
-
-      // Valid renewal time is 75% of next renewal time, and the valid update time will be
-      // slightly later then renewal time (80% of next renewal time). This is to make sure
-      // credentials are renewed and updated before expired.
-      val currTime = System.currentTimeMillis()
-      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
-      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
-
-      sc.conf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
-      sc.conf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
-    }
-
-
-    def setupSecurityToken(appDesc: ApplicationDescription): ApplicationDescription = {
-      logInfo(s"Writing credentials to buffer: ${credentials}: ${credentials.getAllTokens}")
-      val dob = new DataOutputBuffer
-      credentials.writeTokenStorageToStream(dob)
-      dob.close()
-
-      val tokens = Some(dob.getData)
-
-      appDesc.copy(tokens = tokens)
-    }
-
-    def buildPath(components: String*): String = {
-      components.mkString(Path.SEPARATOR)
-    }
-
-    val SPARK_STAGING: String = ".sparkStaging"
-
-    def getAppStagingDir(appId: String): String = {
-      buildPath(SPARK_STAGING, appId)
-    }
-
-
-
-    var secureAppDesc = setupSecurityToken(appDesc)
-
-    val appStagingBaseDir = sc.conf.get(STAGING_DIR).map { new Path(_) }
-      .getOrElse(FileSystem.get(sc.hadoopConfiguration).getHomeDirectory())
-    val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
-
-
-
-    val su = UserGroupInformation.getCurrentUser().getShortUserName()
-    if (loginFromKeytab) {
-      val credentialsFile = "credentials-" + UUID.randomUUID().toString
-      sc.conf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
-      logInfo(s"Credentials file set to: $credentialsFile")
-    }
-
-
-
-
-    logInfo(s"Submitting ${secureAppDesc} with tokens ${secureAppDesc.tokens}")
-
-
-    // If we passed in a keytab, make sure we copy the keytab to the staging directory on
-    // HDFS, and setup the relevant environment vars, so the AM can login again.
-//    if (loginFromKeytab) {
-//      logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
-//        " via the YARN Secure Distributed Cache.")
-//      val (_, localizedPath) = distribute(keytab,
-//        destName = sparkConf.get(KEYTAB),
-//        appMasterOnly = true)
-//      require(localizedPath != null, "Keytab file already distributed.")
-//    }
-    ////////////////////////////////////////////
-    ////////////////////////////////////////////
-
-
-
-
-    client = new StandaloneAppClient(sc.env.rpcEnv, masters, secureAppDesc, this, conf)
+    client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
-
-
-
-
-    if (conf.contains(CREDENTIALS_FILE_PATH)) {
-      val newConf = SparkHadoopUtil.get.newConfiguration(conf)
-      val cu = new ConfigurableCredentialManager(conf, newConf).credentialUpdater()
-      cu.start()
-    }
-
-
   }
 
   override def stop(): Unit = synchronized {

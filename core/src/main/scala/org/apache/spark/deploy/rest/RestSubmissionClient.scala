@@ -20,7 +20,6 @@ package org.apache.spark.deploy.rest
 import java.io.{DataOutputStream, File, FileInputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
@@ -28,10 +27,10 @@ import javax.servlet.http.HttpServletResponse
 import com.fasterxml.jackson.core.JsonProcessingException
 import org.apache.commons.codec.binary.Base64
 import org.apache.commons.io
-import org.apache.hadoop.io.{DataInputBuffer, DataOutputBuffer, IOUtils}
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkException, SPARK_VERSION => sparkVersion}
 
@@ -217,22 +216,25 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         io.IOUtils.copy(new FileInputStream(f), dob)
       }
 
-      message.sparkProperties ++= Map(
-        KEYTAB.key -> keytabFileName,
-        KEYTAB.key + ".content" -> keytabContent,
-        PRINCIPAL.key -> principal
-      )
+      message.environmentVariables += KEYTAB_CONTENT.key -> keytabContent
+      // overwrite with localized version
+      message.environmentVariables += KEYTAB.key -> keytabFileName
+      message.sparkProperties += KEYTAB.key -> keytabFileName
     }
 
     // Add credentials - works in the case of a user submitting a job
     // that completes < YARN max token renewal
+    // The reason this is here is so you don't strictly need a keytab/principal
+    // you only need that if you want to run a long running job... but maybe get rid of it?
     val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
-    val bootstrapCredentails = base64EncodedValue { dob =>
-      credentials.writeTokenStorageToStream(dob)
-    }
+    if (credentials.getAllTokens.size() > 0) {
+      val bootstrapCredentails = base64EncodedValue { dob =>
+        credentials.writeTokenStorageToStream(dob)
+      }
 
-    message.sparkProperties ++= Map(
-      "spark.yarn.credentials.bootstrap" -> bootstrapCredentails)
+      logInfo("Security tokens will be sent to driver and executors")
+      message.environmentVariables += BOOTSTRAP_TOKENS.key -> bootstrapCredentails
+    }
     //////////
 
 

@@ -25,9 +25,10 @@ import scala.collection.JavaConverters._
 import com.google.common.io.Files
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BOOTSTRAP_TOKENS
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
@@ -155,30 +156,17 @@ private[deploy] class ExecutorRunner(
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
 
 
-
       /////////////////////////////
-      /////////////////// just a one-time token... it can be renewed by driver
-      /////////////////// but will only last 7 days
-      /////////////////// for longer, the credetial updater will be used
-
-      logInfo(s"APP DESC TOKENS: ${appDesc}  tokens ${appDesc.tokens}")
-      appDesc.tokens.foreach { bytes =>
-        val creds = new File(executorDir, "credentials-" + appId)
-        logInfo("Writing out delegation tokens to " + creds.toString)
-        Utils.writeByteBuffer(ByteBuffer.wrap(bytes), new FileOutputStream(creds))   // TODO - duh
-        logInfo(s"Delegation Tokens written out successfully to $creds")
-        builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", creds.toString)
+      /////////////////////////////
+      if (appDesc.command.environment.contains(BOOTSTRAP_TOKENS.key)) {
+        val tokenFile = new File(executorDir, "executor-credentials-" + appId)
+        SparkHadoopUtil.get.decodeAndWriteToFile(appDesc.command.environment,
+          BOOTSTRAP_TOKENS.key, tokenFile)
+        builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", tokenFile.toString)
       }
 
-
-
       /////////////////////////////
-
-
-
-
-
-
+      /////////////////////////////
 
       // Add webUI log urls
       val baseUrl =
