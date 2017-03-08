@@ -26,42 +26,42 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
-   def createTables(): Unit = {
-     // Creates tables in a star schema relationship i.e.
-     //
-     // d1 - f1 - d2
-     //      |
-     //      d3 - s3
-     //
-     // Table f1 is the fact table. Tables d1, d2, and d3 are the dimension tables.
-     // Dimension d3 is further joined/normalized into table s3.
-     // Tables' cardinality: f1 > d1 > d2 > d3 > s3
-     sql("create table f1 (f1_fk1 int, f1_fk2 int, f1_fk3 int, f1_c4 int)")
-     sql("create table d1 (d1_pk1 int, d1_c2 int, d1_c3 int, d1_c4 int)")
-     sql("create table d2 (d2_c2 int, d2_pk1 int, d2_c3 int, d2_c4 int)")
-     sql("create table d3 (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int)")
-     sql("create table s3 (s3_pk1 int, s3_c2 int, s3_c3 int, s3_c4 int)")
+  def createTables(): Unit = {
+    // Creates tables in a star schema relationship i.e.
+    //
+    // d1 - f1 - d2
+    //      |
+    //      d3 - s3
+    //
+    // Table f1 is the fact table. Tables d1, d2, and d3 are the dimension tables.
+    // Dimension d3 is further joined/normalized into table s3.
+    // Tables' cardinality: f1 > d1 > d2 > d3 > s3
+    sql("create table f1 (f1_fk1 int, f1_fk2 int, f1_fk3 int, f1_c4 int)")
+    sql("create table d1 (d1_pk1 int, d1_c2 int, d1_c3 int, d1_c4 int)")
+    sql("create table d2 (d2_c2 int, d2_pk1 int, d2_c3 int, d2_c4 int)")
+    sql("create table d3 (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int)")
+    sql("create table s3 (s3_pk1 int, s3_c2 int, s3_c3 int, s3_c4 int)")
 
-     sql("insert into f1 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 2), (1, 2, 4, 1)," +
-       " (2, 1, 3, 2), (3, 3, 2, 3)")
-     sql("insert into d1 values (1, 2, 3, 3), (2, 1, 2, 3), (3, 3, 1, 2), (4, 2, 4, 3)")
-     sql("insert into d2 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 3)")
-     sql("insert into d3 values (1, 2, 3, 2), (2, 1, 2, 2), (3, 3, 1, 2), (1, 2, 4, 3)," +
-       " (2, 1, 5, 3)")
-     sql("insert into s3 values (1, 3, 3, 4), (2, 3, null, 3)")
+    sql("insert into f1 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 2), (1, 2, 4, 1)," +
+      " (2, 1, 3, 2), (3, 3, 2, 3)")
+    sql("insert into d1 values (1, 2, 3, 3), (2, 1, 2, 3), (3, 3, 1, 2), (4, 2, 4, 3)")
+    sql("insert into d2 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 3)")
+    sql("insert into d3 values (1, 2, 3, 2), (2, 1, 2, 2), (3, 3, 1, 2), (1, 2, 4, 3)," +
+      " (2, 1, 5, 3)")
+    sql("insert into s3 values (1, 3, 3, 4), (2, 3, null, 3)")
 
-     // Additional tables to test stats availability
-     sql("create table d3_ns (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int)")
-     sql("create table d3_ss (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int)")
-     sql("create table f11 (f1_fk1 int, f1_fk2 int, f1_fk3 int, f1_c4 int)")
+    // Additional tables to test stats availability
+    sql("create table d3_ns (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int)")
+    sql("create table d3_ss (d3_fk1 int, d3_c2 int, d3_pk1 int, d3_c4 int)")
+    sql("create table f11 (f1_fk1 int, f1_fk2 int, f1_fk3 int, f1_c4 int)")
 
-     sql("insert into d3_ns values (1, 2, 3, 4), (2, 1, 2, 4), (3, 3, 1, 2), (1, 2, 4, 4)," +
-       "(2, 1, 5, 2)")
-     sql("insert into d3_ss values (1, 2, 3, 4), (2, 1, 2, 4), (3, 3, 1, 2), (1, 2, 4, 4)," +
-       "(2, 1, 5, 2)")
-     sql("insert into f11 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 2)," +
-       "(1, 2, 4, 1), (2, 1, 3, 2), (3, 3, 2, 3)")
-   }
+    sql("insert into d3_ns values (1, 2, 3, 4), (2, 1, 2, 4), (3, 3, 1, 2), (1, 2, 4, 4)," +
+      "(2, 1, 5, 2)")
+    sql("insert into d3_ss values (1, 2, 3, 4), (2, 1, 2, 4), (3, 3, 1, 2), (1, 2, 4, 4)," +
+      "(2, 1, 5, 2)")
+    sql("insert into f11 values (1, 2, 3, 4), (2, 1, 2, 3), (3, 3, 1, 2)," +
+      "(1, 2, 4, 1), (2, 1, 3, 2), (3, 3, 2, 3)")
+  }
 
   def runStats(): Unit = {
     // Run statistics
@@ -75,9 +75,9 @@ class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     sql("ANALYZE TABLE d3_ss COMPUTE STATISTICS")
   }
 
-  // Given two semantically equivalent SQL queries, query and equivQuery, this function
-  // executes the queries with and without star join enabled and compares their
-  // execution plans and query results.
+  // Verifies star join re-ordering by comparing the plans for two
+  // equivalent queries, the first one run with star join enabled and
+  // the second one run with positional join (to control the order of the joins).
   def verifyStarJoinPlans(
       query: String,
       equivQuery: String,
@@ -85,13 +85,15 @@ class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     var equivQueryPlan: Option[LogicalPlan] = None
     var queryPlan: Option[LogicalPlan] = None
 
-    withSQLConf(SQLConf.STARJOIN_OPTIMIZATION.key -> "true") {
+    withSQLConf(SQLConf.STARJOIN_OPTIMIZATION.key -> "true",
+        SQLConf.CBO_ENABLED.key -> "false") {
       val queryDF = sql(query)
       checkAnswer(queryDF, rows)
       queryPlan = Some(queryDF.queryExecution.optimizedPlan)
     }
 
-    withSQLConf(SQLConf.STARJOIN_OPTIMIZATION.key -> "false") {
+    withSQLConf(SQLConf.STARJOIN_OPTIMIZATION.key -> "false",
+        SQLConf.CBO_ENABLED.key -> "false") {
       val equivQueryDF = sql(equivQuery)
       checkAnswer(equivQueryDF, rows)
       equivQueryPlan = Some(equivQueryDF.queryExecution.optimizedPlan)

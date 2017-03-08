@@ -108,8 +108,8 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
 
     // Find if the input plans are eligible for star join detection.
     // An eligible plan is a base table access with valid statistics.
-    val foundEligibleJoin = input.forall { plan =>
-      plan._1 match {
+    val foundEligibleJoin = input.forall { case (plan, _) =>
+      plan match {
         case BaseTableAccess(t, _) if t.stats(conf).rowCount.isDefined => true
         case _ => false
       }
@@ -124,8 +124,8 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
     } else {
       // Find the fact table using cardinality based heuristics i.e.
       // the table with the largest number of rows.
-      val sortedFactTables = input.map { plan =>
-        TableCardinality(plan, computeTableCardinality(plan._1, conditions))
+      val sortedFactTables = input.map { case p @ (plan, _) =>
+        TableCardinality(p, getBaseTableAccessCardinality(plan))
       }.collect { case t @ TableCardinality(_, Some(_)) =>
         t
       }.sortBy(_.size)(implicitly[Ordering[Option[BigInt]]].reverse)
@@ -133,26 +133,27 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
       sortedFactTables match {
         case Nil =>
           emptyStarJoinPlan
-        case table1 :: table2 :: _ if table2.size.get.toDouble >
-            conf.starJoinFactTableRatio * table1.size.get.toDouble =>
+        case table1 :: table2 :: _
+            if table2.size.get.toDouble > conf.starJoinFactTableRatio * table1.size.get.toDouble =>
           // The largest tables have comparable number of rows.
           emptyStarJoinPlan
         case TableCardinality(factPlan @ (factTable, _), _) :: _ =>
           // Find the fact table joins.
-          val allFactJoins = input.filterNot(_._1 eq factTable).filter { plan =>
-            val joinCond = findJoinConditions(factTable, plan._1, conditions)
+          val allFactJoins = input.filterNot { case (plan, _) =>
+            plan eq factTable
+          }.filter { case (plan, _) =>
+            val joinCond = findJoinConditions(factTable, plan, conditions)
             joinCond.nonEmpty
           }
 
           // Find the corresponding join conditions.
-          val allFactJoinCond = allFactJoins.flatMap { plan =>
-            val joinCond = findJoinConditions(factTable, plan._1, conditions)
+          val allFactJoinCond = allFactJoins.flatMap { case (plan, _) =>
+            val joinCond = findJoinConditions(factTable, plan, conditions)
             joinCond
           }
 
           // Verify if the join columns have valid statistics
-          val areStatsAvailable = allFactJoins.forall { plan =>
-            val dimTable = plan._1
+          val areStatsAvailable = allFactJoins.forall { case (dimTable, _) =>
             allFactJoinCond.exists {
               case BinaryComparison(lhs: AttributeReference, rhs: AttributeReference) =>
                 val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
@@ -168,8 +169,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
             // Find the subset of dimension tables. A dimension table is assumed to be in
             // RI relationship with the fact table. Also, conservatively, only consider
             // equi-join between a fact and a dimension table.
-            val eligibleDimPlans = allFactJoins.filter { plan =>
-              val dimTable = plan._1
+            val eligibleDimPlans = allFactJoins.filter { case (dimTable, _) =>
               allFactJoinCond.exists {
                 case cond @ BinaryComparison(lhs: AttributeReference, rhs: AttributeReference)
                     if cond.isInstanceOf[EqualTo] || cond.isInstanceOf[EqualNullSafe] =>
@@ -187,13 +187,13 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
             } else if (eligibleDimPlans.size < 2) {
               // Conservatively assume that a fact table is joined with more than one dimension.
               emptyStarJoinPlan
-            } else if (isSelectiveStarJoin(eligibleDimPlans.map {_._1}, conditions)) {
+            } else if (isSelectiveStarJoin(eligibleDimPlans.map{case (p, _) => p}, conditions)) {
               // This is a selective star join. Reorder the dimensions in based on their
               // cardinality and return the star-join plan.
-              val sortedDims = eligibleDimPlans.map { plan =>
-                TableCardinality(plan, computeTableCardinality(plan._1, conditions))
+              val sortedDims = eligibleDimPlans.map { case p @ (plan, _) =>
+                TableCardinality(p, getBaseTableAccessCardinality(plan))
               }.sortBy(_.size).map {
-                case TableCardinality(plan, _) => plan
+                case TableCardinality(p1, _) => p1
               }
               factPlan +: sortedDims
             } else {
@@ -233,9 +233,11 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
                   val distinctCount = colStats.get.distinctCount
                   val relDiff = math.abs((distinctCount.toDouble / rowCount.toDouble) - 1.0d)
                   // ndvMaxErr adjusted based on TPCDS 1TB data results
-                  if (relDiff <= conf.ndvMaxError * 2) true else false
+                  relDiff <= conf.ndvMaxError * 2
                 }
-              } else false
+              } else {
+                false
+              }
             case None => false
           }
         case None => false
@@ -330,24 +332,20 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   private case class TableCardinality(plan: (LogicalPlan, InnerLike), size: Option[BigInt])
 
   /**
-   * Computes table cardinality after applying the predicates.
-   * Currently, the function returns table cardinality.
-   * When predicate selectivity is implemented in Catalyst,
-   * the function will be refined based on these estimates.
+   * Returns the cardinality of a base table access. A base table access represents
+   * a LeafNode, or Project or Filter operators above a LeafNode.
    */
-  private def computeTableCardinality(
-      input: LogicalPlan,
-      conditions: Seq[Expression]): Option[BigInt] = input match {
+  private def getBaseTableAccessCardinality(
+      input: LogicalPlan): Option[BigInt] = input match {
     case BaseTableAccess(t, cond) if t.stats(conf).rowCount.isDefined =>
-      val cardinality = t.stats(conf).rowCount.get
-      // Collect predicate selectivity, when available.
-      // val predicates = conditions.filter(canEvaluate(_, p)) ++ cond
-      // Compute the output cardinality = cardinality * predicates' selectivity.
-      Option(cardinality)
+      if (conf.cboEnabled && input.stats(conf).rowCount.isDefined) {
+        Option(input.stats(conf).rowCount.get)
+      } else {
+        Option(t.stats(conf).rowCount.get)
+      }
     case _ => None
   }
 }
-
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
