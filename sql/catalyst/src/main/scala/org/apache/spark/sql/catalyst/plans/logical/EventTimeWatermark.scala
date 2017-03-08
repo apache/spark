@@ -42,6 +42,13 @@ case class EventTimeWatermark(
         .putLong(EventTimeWatermark.delayKey, delay.milliseconds)
         .build()
       a.withMetadata(updatedMetadata)
+    } else if (a.metadata.contains(EventTimeWatermark.delayKey)) {
+      // Remove existing watermark
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .remove(EventTimeWatermark.delayKey)
+        .build()
+      a.withMetadata(updatedMetadata)
     } else {
       a
     }
