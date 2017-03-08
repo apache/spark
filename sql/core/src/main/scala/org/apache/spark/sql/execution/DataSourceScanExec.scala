@@ -23,18 +23,18 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
@@ -104,7 +104,7 @@ case class RowDataSourceScanExec(
     val input = ctx.freshName("input")
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
-      new BoundReference(i, a.dataType, a.nullable)
+      BoundReference(i, a.dataType, a.nullable)
     }
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
@@ -358,7 +358,7 @@ case class FileSourceScanExec(
       selectedPartitions.flatMap { p =>
         p.files.map { f =>
           val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
+          PartitionedFile(p.values, p.metadata, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
       }.groupBy { f =>
         BucketingUtils
@@ -406,12 +406,22 @@ case class FileSourceScanExec(
             val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
             val hosts = getBlockHosts(blockLocations, offset, size)
             PartitionedFile(
-              partition.values, file.getPath.toUri.toString, offset, size, hosts)
+              partition.values,
+              partition.metadata,
+              file.getPath.toUri.toString,
+              offset,
+              size,
+              hosts)
           }
         } else {
           val hosts = getBlockHosts(blockLocations, 0, file.getLen)
           Seq(PartitionedFile(
-            partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
+            partition.values,
+            partition.metadata,
+            file.getPath.toUri.toString,
+            0,
+            file.getLen,
+            hosts))
         }
       }
     }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)

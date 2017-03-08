@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
+import javax.annotation.Nullable
 
 import scala.collection.mutable
 
@@ -31,9 +32,11 @@ import org.apache.spark.util.NextIterator
 
 /**
  * A part (i.e. "block") of a single file that should be read, along with partition column values
- * that need to be prepended to each row.
+ * that need to be prepended to each row and the partition metadata what may affect the read
+ * behavior.
  *
  * @param partitionValues value of partition columns to be prepended to each row.
+ * @param partitionMeta metadata of the partition.
  * @param filePath path of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
@@ -41,10 +44,11 @@ import org.apache.spark.util.NextIterator
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
+    @Nullable partitionMeta: AnyRef,
     filePath: String,
     start: Long,
     length: Long,
-    locations: Array[String] = Array.empty) {
+    @transient locations: Array[String] = Array.empty) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }

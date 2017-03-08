@@ -21,10 +21,9 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.execution.HiveTableScanExec
+import org.apache.spark.sql.hive.execution.{HiveFileIndex, HiveTableScanExec}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -799,14 +798,16 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
             val queryExecution = df.queryExecution
             if (parquetConversion == "true") {
               queryExecution.analyzed.collectFirst {
-                case _: LogicalRelation =>
+                case LogicalRelation(r: HadoopFsRelation, _, _)
+                    if !r.location.isInstanceOf[HiveFileIndex] => ()
               }.getOrElse {
                 fail(s"Expecting the query plan to convert parquet to data sources, " +
                   s"but got:\n$queryExecution")
               }
             } else {
               queryExecution.analyzed.collectFirst {
-                case _: CatalogRelation =>
+                case LogicalRelation(r: HadoopFsRelation, _, _)
+                    if r.location.isInstanceOf[HiveFileIndex] => ()
               }.getOrElse {
                 fail(s"Expecting no conversion from parquet to data sources, " +
                   s"but got:\n$queryExecution")

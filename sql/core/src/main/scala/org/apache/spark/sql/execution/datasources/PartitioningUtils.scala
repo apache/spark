@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.util.TimeZone
+import javax.annotation.Nullable
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -33,20 +34,21 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
 object PartitionPath {
+  // this is for test only.
   def apply(values: InternalRow, path: String): PartitionPath =
     apply(values, new Path(path))
 }
 
 /**
  * Holds a directory in a partitioned collection of files as well as the partition values
- * in the form of a Row.  Before scanning, the files at `path` need to be enumerated.
+ * in the form of a Row and the partition metadata.
+ * Before scanning, the files at `path` need to be enumerated.
  */
-case class PartitionPath(values: InternalRow, path: Path)
+case class PartitionPath(values: InternalRow, path: Path, @Nullable metadata: AnyRef = null)
 
 case class PartitionSpec(
     partitionColumns: StructType,

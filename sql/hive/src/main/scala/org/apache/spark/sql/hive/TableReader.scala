@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.hive
 
-import java.util.Properties
-
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
@@ -36,23 +32,13 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
-
-/**
- * A trait for subclasses that handle table scans.
- */
-private[hive] sealed trait TableReader {
-  def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow]
-
-  def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow]
-}
-
 
 /**
  * Helper class for scanning tables stored in Hadoop - e.g., to read Hive tables that reside in the
@@ -64,8 +50,7 @@ class HadoopTableReader(
     @transient private val partitionKeys: Seq[Attribute],
     @transient private val tableDesc: TableDesc,
     @transient private val sparkSession: SparkSession,
-    hadoopConf: Configuration)
-  extends TableReader with Logging {
+    hadoopConf: Configuration) extends Logging {
 
   // Hadoop honors "mapreduce.job.maps" as hint,
   // but will ignore when mapreduce.jobtracker.address is "local".
@@ -86,7 +71,7 @@ class HadoopTableReader(
   private val _broadcastedHadoopConf =
     sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-  override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
+  def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
       Utils.classForName(tableDesc.getSerdeClassName).asInstanceOf[Class[Deserializer]],
@@ -122,151 +107,17 @@ class HadoopTableReader(
       .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
     val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
 
-    val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
+    val requiredColumns = attributes.map(_.name)
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, localTableDesc.getProperties)
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      HadoopTableReader.fillObject(iter, deserializer, mutableRow, requiredColumns, deserializer)
     }
 
     deserializedHadoopRDD
-  }
-
-  override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
-    val partitionToDeserializer = partitions.map(part =>
-      (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
-    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
-  }
-
-  /**
-   * Create a HadoopRDD for every partition key specified in the query. Note that for on-disk Hive
-   * tables, a data directory is created for each partition corresponding to keys specified using
-   * 'PARTITION BY'.
-   *
-   * @param partitionToDeserializer Mapping from a Hive Partition metadata object to the SerDe
-   *     class to use to deserialize input Writables from the corresponding partition.
-   * @param filterOpt If defined, then the filter is used to reject files contained in the data
-   *     subdirectory of each partition being read. If None, then all files are accepted.
-   */
-  def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
-      filterOpt: Option[PathFilter]): RDD[InternalRow] = {
-
-    // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
-    def verifyPartitionPath(
-        partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
-        Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!sparkSession.sessionState.conf.verifyPartitionPath) {
-        partitionToDeserializer
-      } else {
-        var existPathSet = collection.mutable.Set[String]()
-        var pathPatternSet = collection.mutable.Set[String]()
-        partitionToDeserializer.filter {
-          case (partition, partDeserializer) =>
-            def updateExistPathSetByPathPattern(pathPatternStr: String) {
-              val pathPattern = new Path(pathPatternStr)
-              val fs = pathPattern.getFileSystem(hadoopConf)
-              val matches = fs.globStatus(pathPattern)
-              matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
-            }
-            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
-            def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
-              var path = tempPath
-              for (i <- (1 to parNum)) path = path.getParent
-              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
-              path.toString + tails
-            }
-
-            val partPath = partition.getDataLocation
-            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
-            var pathPatternStr = getPathPatternByPath(partNum, partPath)
-            if (!pathPatternSet.contains(pathPatternStr)) {
-              pathPatternSet += pathPatternStr
-              updateExistPathSetByPathPattern(pathPatternStr)
-            }
-            existPathSet.contains(partPath.toString)
-        }
-      }
-    }
-
-    val hivePartitionRDDs = verifyPartitionPath(partitionToDeserializer)
-      .map { case (partition, partDeserializer) =>
-      val partDesc = Utilities.getPartitionDesc(partition)
-      val partPath = partition.getDataLocation
-      val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
-      val ifc = partDesc.getInputFileFormatClass
-        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-      // Get partition field info
-      val partSpec = partDesc.getPartSpec
-      val partProps = partDesc.getProperties
-
-      val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
-      // Partitioning columns are delimited by "/"
-      val partCols = partColsDelimited.trim().split("/").toSeq
-      // 'partValues[i]' contains the value for the partitioning column at 'partCols[i]'.
-      val partValues = if (partSpec == null) {
-        Array.fill(partCols.size)(new String)
-      } else {
-        partCols.map(col => new String(partSpec.get(col))).toArray
-      }
-
-      val broadcastedHiveConf = _broadcastedHadoopConf
-      val localDeserializer = partDeserializer
-      val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
-
-      // Splits all attributes into two groups, partition key attributes and those that are not.
-      // Attached indices indicate the position of each attribute in the output schema.
-      val (partitionKeyAttrs, nonPartitionKeyAttrs) =
-        attributes.zipWithIndex.partition { case (attr, _) =>
-          partitionKeys.contains(attr)
-        }
-
-      def fillPartitionKeys(rawPartValues: Array[String], row: InternalRow): Unit = {
-        partitionKeyAttrs.foreach { case (attr, ordinal) =>
-          val partOrdinal = partitionKeys.indexOf(attr)
-          row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
-        }
-      }
-
-      // Fill all partition keys to the given MutableRow object
-      fillPartitionKeys(partValues, mutableRow)
-
-      val tableProperties = tableDesc.getProperties
-
-      // Create local references so that the outer object isn't serialized.
-      val localTableDesc = tableDesc
-      createHadoopRdd(localTableDesc, inputPathStr, ifc).mapPartitions { iter =>
-        val hconf = broadcastedHiveConf.value.value
-        val deserializer = localDeserializer.newInstance()
-        // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
-        // information) may be defined in table properties. Here we should merge table properties
-        // and partition properties before initializing the deserializer. Note that partition
-        // properties take a higher priority here. For example, a partition may have a different
-        // SerDe as the one defined in table properties.
-        val props = new Properties(tableProperties)
-        partProps.asScala.foreach {
-          case (key, value) => props.setProperty(key, value)
-        }
-        deserializer.initialize(hconf, props)
-        // get the table deserializer
-        val tableSerDe = localTableDesc.getDeserializerClass.newInstance()
-        tableSerDe.initialize(hconf, localTableDesc.getProperties)
-
-        // fill the non partition key attributes
-        HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
-          mutableRow, tableSerDe)
-      }
-    }.toSeq
-
-    // Even if we don't use any partitions, we still need an empty RDD
-    if (hivePartitionRDDs.size == 0) {
-      new EmptyRDD[InternalRow](sparkSession.sparkContext)
-    } else {
-      new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
-    }
   }
 
   /**
@@ -352,18 +203,18 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
    *
    * @param iterator Iterator of all `Writable`s to be transformed
    * @param rawDeser The `Deserializer` associated with the input `Writable`
-   * @param nonPartitionKeyAttrs Attributes that should be filled together with their corresponding
-   *                             positions in the output schema
    * @param mutableRow A reusable `MutableRow` that should be filled
+   * @param colNames the name of the columns
    * @param tableDeser Table Deserializer
    * @return An `Iterator[Row]` transformed from `iterator`
    */
   def fillObject(
       iterator: Iterator[Writable],
       rawDeser: Deserializer,
-      nonPartitionKeyAttrs: Seq[(Attribute, Int)],
       mutableRow: InternalRow,
+      colNames: Seq[String],
       tableDeser: Deserializer): Iterator[InternalRow] = {
+    assert(mutableRow.numFields == colNames.length)
 
     val soi = if (rawDeser.getObjectInspector.equals(tableDeser.getObjectInspector)) {
       rawDeser.getObjectInspector.asInstanceOf[StructObjectInspector]
@@ -375,9 +226,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
 
     logDebug(soi.toString)
 
-    val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
-      soi.getStructFieldRef(attr.name) -> ordinal
-    }.unzip
+    val fieldRefs = colNames.map(soi.getStructFieldRef)
 
     /**
      * Builds specific unwrappers ahead of time according to object inspector
@@ -433,9 +282,9 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       while (i < length) {
         val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
         if (fieldValue == null) {
-          mutableRow.setNullAt(fieldOrdinals(i))
+          mutableRow.setNullAt(i)
         } else {
-          unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
+          unwrappers(i)(fieldValue, mutableRow, i)
         }
         i += 1
       }

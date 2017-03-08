@@ -19,14 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics}
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.hive.execution.HiveFileIndex
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -58,13 +57,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
                |\"escapeChar\"    = \"\\\\\")
                |LOCATION '${tempDir.toURI}'""".stripMargin)
 
-          val relation = spark.table("csv_table").queryExecution.analyzed.children.head
-            .asInstanceOf[CatalogRelation]
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("csv_table"))
+          assert(table.properties("totalSize").toLong <= 0,
+            "external table totalSize must be <= 0")
+          assert(table.properties("rawDataSize").toLong <= 0,
+            "external table rawDataSize must be <= 0")
 
-          val properties = relation.tableMeta.properties
-          assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-          assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
-
+          val relation = spark.table("csv_table").logicalPlan
           val sizeInBytes = relation.stats(conf).sizeInBytes
           assert(sizeInBytes === BigInt(file1.length() + file2.length()))
         }
@@ -442,68 +441,51 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("estimates the size of a test Hive serde tables") {
     val df = sql("""SELECT * FROM src""")
     val sizes = df.queryExecution.analyzed.collect {
-      case relation: CatalogRelation => relation.stats(conf).sizeInBytes
+      case LogicalRelation(h: HadoopFsRelation, _, _)
+          if h.location.isInstanceOf[HiveFileIndex] => h.sizeInBytes
     }
     assert(sizes.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-    assert(sizes(0).equals(BigInt(5812)),
-      s"expected exact size 5812 for test table 'src', got: ${sizes(0)}")
+    assert(sizes.head == 5812,
+      s"expected exact size 5812 for test table 'src', got: ${sizes.head}")
   }
 
   test("auto converts to broadcast hash join, by size estimate of a relation") {
-    def mkTest(
-        before: () => Unit,
-        after: () => Unit,
-        query: String,
-        expectedAnswer: Seq[Row],
-        ct: ClassTag[_]): Unit = {
-      before()
+    val query = """SELECT * FROM src a JOIN src b ON a.key = 238 AND a.key = b.key"""
+    val expectedAnswer = Seq.fill(4)(Row(238, "val_238", 238, "val_238"))
 
-      var df = sql(query)
+    var df = sql(query)
 
-      // Assert src has a size smaller than the threshold.
-      val sizes = df.queryExecution.analyzed.collect {
-        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.stats(conf).sizeInBytes
-      }
-      assert(sizes.size === 2 && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold
-        && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
-        s"query should contain two relations, each of which has size smaller than autoConvertSize")
-
-      // Using `sparkPlan` because for relevant patterns in HashJoin to be
-      // matched, other strategies need to be applied.
-      var bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-      assert(bhj.size === 1,
-        s"actual query plans do not contain broadcast join: ${df.queryExecution}")
-
-      checkAnswer(df, expectedAnswer) // check correctness of output
-
-      spark.sessionState.conf.settings.synchronized {
-        val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
-
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
-        df = sql(query)
-        bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-        assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
-
-        val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoinExec => j }
-        assert(shj.size === 1,
-          "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
-
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
-      }
-
-      after()
+    // Assert src has a size smaller than the threshold.
+    val sizes = df.queryExecution.analyzed.collect {
+      case LogicalRelation(h: HadoopFsRelation, _, _)
+          if h.location.isInstanceOf[HiveFileIndex] => h.sizeInBytes
     }
+    assert(sizes.size === 2 && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold
+      && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold,
+      s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
-    /** Tests for Hive serde tables */
-    val metastoreQuery = """SELECT * FROM src a JOIN src b ON a.key = 238 AND a.key = b.key"""
-    val metastoreAnswer = Seq.fill(4)(Row(238, "val_238", 238, "val_238"))
-    mkTest(
-      () => (),
-      () => (),
-      metastoreQuery,
-      metastoreAnswer,
-      implicitly[ClassTag[CatalogRelation]]
-    )
+    // Using `sparkPlan` because for relevant patterns in HashJoin to be
+    // matched, other strategies need to be applied.
+    var bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
+    assert(bhj.size === 1,
+      s"actual query plans do not contain broadcast join: ${df.queryExecution}")
+
+    checkAnswer(df, expectedAnswer) // check correctness of output
+
+    spark.sessionState.conf.settings.synchronized {
+      val tmp = spark.sessionState.conf.autoBroadcastJoinThreshold
+
+      sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
+      df = sql(query)
+      bhj = df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
+      assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
+
+      val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoinExec => j }
+      assert(shj.size === 1,
+        "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
+
+      sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
+    }
   }
 
   test("auto converts to broadcast left semi join, by size estimate of a relation") {
@@ -516,7 +498,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
     // Assert src has a size smaller than the threshold.
     val sizes = df.queryExecution.analyzed.collect {
-      case relation: CatalogRelation => relation.stats(conf).sizeInBytes
+      case LogicalRelation(h: HadoopFsRelation, _, _)
+          if h.location.isInstanceOf[HiveFileIndex] => h.sizeInBytes
     }
     assert(sizes.size === 2 && sizes(1) <= spark.sessionState.conf.autoBroadcastJoinThreshold
       && sizes(0) <= spark.sessionState.conf.autoBroadcastJoinThreshold,

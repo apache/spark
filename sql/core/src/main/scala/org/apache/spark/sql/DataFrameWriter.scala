@@ -347,21 +347,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
-        val srcRelations = df.logicalPlan.collect {
-          case LogicalRelation(src: BaseRelation, _, _) => src
+        val srcTables = df.logicalPlan.collect {
+          case LogicalRelation(_, _, Some(tbl)) => tbl.identifier
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) =>
             relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
         EliminateSubqueryAliases(tableRelation) match {
-          // check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
+          // check table relations for overwrite mode
+          case LogicalRelation(_, _, Some(tbl)) if srcTables.contains(tbl.identifier) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
-          // check hive table relation when overwrite mode
+          // check hive table relation for overwrite mode
           case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta)
-            && srcRelations.contains(relation.tableMeta.identifier) =>
+            && srcTables.contains(relation.tableMeta.identifier) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import javax.annotation.Nullable
+
 import org.apache.hadoop.fs._
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,9 +27,12 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * A collection of data files from a partitioned relation, along with the partition values in the
- * form of an [[InternalRow]].
+ * form of an [[InternalRow]] and the partition metadata.
  */
-case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
+case class PartitionDirectory(
+    values: InternalRow,
+    files: Seq[FileStatus],
+    @Nullable metadata: AnyRef = null)
 
 /**
  * An interface for objects capable of enumerating the root paths of a relation as well as the

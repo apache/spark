@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URI
-
 import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 

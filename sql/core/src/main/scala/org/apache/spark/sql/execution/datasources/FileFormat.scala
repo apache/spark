@@ -70,9 +70,7 @@ trait FileFormat {
   def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
-      path: Path): Boolean = {
-    false
-  }
+      path: Path): Boolean
 
   /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
@@ -97,11 +95,7 @@ trait FileFormat {
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String],
-      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    // TODO: Remove this default implementation when the other formats have been ported
-    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
-    throw new UnsupportedOperationException(s"buildReader is not supported for $this")
-  }
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow]
 
   /**
    * Exactly the same as [[buildReader]] except that the reader function returned by this method

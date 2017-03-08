@@ -71,7 +71,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         PreprocessTableCreation(sparkSession) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
-        HiveAnalysis :: Nil
+        HiveAnalysis ::
+        new ReadHiveDataSource(sparkSession) ::  Nil
 
       override val extendedCheckRules = Seq(PreWriteCheck)
     }

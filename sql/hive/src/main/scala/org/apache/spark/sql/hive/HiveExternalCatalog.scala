@@ -982,13 +982,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[String] = withClient {
     val catalogTable = getTable(db, table)
-    val partColNameMap = buildLowerCasePartColNameMap(catalogTable).mapValues(escapePathName)
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
     val clientPartitionNames =
       client.getPartitionNames(catalogTable, partialSpec.map(lowerCasePartitionSpec))
     clientPartitionNames.map { partName =>
       val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
-      partSpec.map { case (partName, partValue) =>
-        partColNameMap(partName.toLowerCase) + "=" + escapePathName(partValue)
+      partSpec.map { case (partColName, partValue) =>
+        partColNameMap(partColName.toLowerCase) + "=" + escapePathName(partValue)
       }.mkString("/")
     }
   }
