@@ -60,7 +60,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         if stages is None:
             stages = []
         super(Pipeline, self).__init__()
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @since("1.3.0")
@@ -90,7 +90,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         if stages is None:
             stages = []
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _fit(self, dataset):
