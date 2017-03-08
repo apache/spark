@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.OutputMode._
@@ -303,6 +304,19 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
+  }
+
+  test("the new watermark should override the old one") {
+    val df = MemoryStream[(Long, Long)].toDF()
+      .withColumn("first", $"_1".cast("timestamp"))
+      .withColumn("second", $"_2".cast("timestamp"))
+      .withWatermark("first", "1 minute")
+      .withWatermark("second", "2 minutes")
+
+    val eventTimeColumns = df.logicalPlan.output
+      .filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    assert(eventTimeColumns.size === 1)
+    assert(eventTimeColumns(0).name === "second")
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
