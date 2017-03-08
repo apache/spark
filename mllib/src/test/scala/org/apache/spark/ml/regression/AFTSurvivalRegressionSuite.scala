@@ -419,7 +419,8 @@ class AFTSurvivalRegressionSuite
     }
     val aft = new AFTSurvivalRegression()
     testEstimatorAndModelReadWrite(aft, datasetMultivariate,
-      AFTSurvivalRegressionSuite.allParamSettings, checkModelData)
+      AFTSurvivalRegressionSuite.allParamSettings, AFTSurvivalRegressionSuite.allParamSettings,
+      checkModelData)
   }
 
   test("SPARK-15892: Incorrectly merged AFTAggregator with zero total count") {

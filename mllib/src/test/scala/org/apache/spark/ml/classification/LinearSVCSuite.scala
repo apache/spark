@@ -232,7 +232,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     }
     val svm = new LinearSVC()
     testEstimatorAndModelReadWrite(svm, smallBinaryDataset, LinearSVCSuite.allParamSettings,
-      checkModelData)
+      LinearSVCSuite.allParamSettings, checkModelData)
   }
 }
 

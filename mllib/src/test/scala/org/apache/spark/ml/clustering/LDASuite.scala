@@ -250,7 +250,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
         Vectors.dense(model2.getDocConcentration) absTol 1e-6)
     }
     val lda = new LDA()
-    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings,
+      LDASuite.allParamSettings, checkModelData)
   }
 
   test("read/write DistributedLDAModel") {
@@ -271,6 +272,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"),
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
   }
 

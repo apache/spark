@@ -163,7 +163,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
       assert(model.gaussians.map(_.cov) === model2.gaussians.map(_.cov))
     }
     val gm = new GaussianMixture()
-    testEstimatorAndModelReadWrite(gm, dataset,
+    testEstimatorAndModelReadWrite(gm, dataset, GaussianMixtureSuite.allParamSettings,
       GaussianMixtureSuite.allParamSettings, checkModelData)
   }
 

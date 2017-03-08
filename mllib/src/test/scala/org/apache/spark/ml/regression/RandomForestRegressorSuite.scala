@@ -124,7 +124,8 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
 
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
-    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
   }
 }
 

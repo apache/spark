@@ -218,7 +218,8 @@ class RandomForestClassifierSuite
 
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
   }
 }
 

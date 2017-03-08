@@ -99,8 +99,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         model2.freqItemsets.sort("items").collect())
     }
     val fPGrowth = new FPGrowth()
-    testEstimatorAndModelReadWrite(
-      fPGrowth, dataset, FPGrowthSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(fPGrowth, dataset, FPGrowthSuite.allParamSettings,
+      FPGrowthSuite.allParamSettings, checkModelData)
   }
 
 }

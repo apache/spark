@@ -63,7 +63,7 @@ class BucketedRandomProjectionLSHSuite
     }
     val mh = new BucketedRandomProjectionLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values", "bucketLength" -> 1.0)
-    testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
+    testEstimatorAndModelReadWrite(mh, dataset, settings, settings, checkModelData)
   }
 
   test("hashFunction") {

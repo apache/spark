@@ -2089,7 +2089,7 @@ class LogisticRegressionSuite
     }
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, smallBinaryDataset, LogisticRegressionSuite.allParamSettings,
-      checkModelData)
+      LogisticRegressionSuite.allParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
