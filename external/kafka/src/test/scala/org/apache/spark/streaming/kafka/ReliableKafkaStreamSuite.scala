@@ -90,11 +90,13 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
     kafkaTestUtils.createTopic(topic)
     kafkaTestUtils.sendMessages(topic, data)
 
+    val topicFilter = KafkaTopicFilter(Map(topic -> 1))
+
     // Verify whether the offset of this group/topic/partition is 0 before starting.
     assert(getCommitOffset(groupId, topic, 0) === None)
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
+      ssc, kafkaParams, topicFilter, StorageLevel.MEMORY_ONLY)
     val result = new mutable.HashMap[String, Long]()
     stream.map { case (k, v) => v }.foreachRDD { r =>
         val ret = r.collect()
@@ -123,12 +125,14 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
       kafkaTestUtils.sendMessages(t, data)
     }
 
+    val topicFilter = KafkaTopicFilter(topics)
+
     // Before started, verify all the group/topic/partition offsets are 0.
     topics.foreach { case (t, _) => assert(getCommitOffset(groupId, t, 0) === None) }
 
     // Consuming all the data sent to the broker which will potential commit the offsets internally.
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, topics, StorageLevel.MEMORY_ONLY)
+      ssc, kafkaParams, topicFilter, StorageLevel.MEMORY_ONLY)
     stream.foreachRDD(_ => Unit)
     ssc.start()
 

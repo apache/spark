@@ -17,29 +17,54 @@
 
 package org.apache.spark.streaming.kafka
 
+import kafka.serializer.StringDecoder
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Milliseconds, StreamingContext}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.scalatest.concurrent.Eventually
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import kafka.serializer.StringDecoder
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Eventually
+class KafkaStreamSuite extends SparkFunSuite
+    with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Milliseconds, StreamingContext}
+  private val sparkConf = new SparkConf()
+    .setMaster("local[4]")
+    .setAppName(this.getClass.getSimpleName)
+  private val data = Map("a" -> 5, "b" -> 3, "c" -> 10)
 
-class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterAll {
-  private var ssc: StreamingContext = _
   private var kafkaTestUtils: KafkaTestUtils = _
 
-  override def beforeAll(): Unit = {
-    kafkaTestUtils = new KafkaTestUtils
-    kafkaTestUtils.setup()
+  private var groupId: String = _
+  private var kafkaParams: Map[String, String] = _
+  private var ssc: StreamingContext = _
+
+  override def beforeAll() : Unit = {
+    groupId = s"test-consumer-${Random.nextInt(10000)}"
   }
 
   override def afterAll(): Unit = {
+    // Nothing to be done here
+  }
+
+  before {
+    ssc = new StreamingContext(sparkConf, Milliseconds(500))
+
+    kafkaTestUtils = new KafkaTestUtils
+    kafkaTestUtils.setup()
+
+    kafkaParams = Map(
+      "zookeeper.connect" -> kafkaTestUtils.zkAddress,
+      "group.id" -> groupId,
+      "auto.offset.reset" -> "smallest"
+    )
+  }
+
+  after {
     if (ssc != null) {
       ssc.stop()
       ssc = null
@@ -52,19 +77,14 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
   }
 
   test("Kafka input stream") {
-    val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
-    ssc = new StreamingContext(sparkConf, Milliseconds(500))
     val topic = "topic1"
-    val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     kafkaTestUtils.createTopic(topic)
-    kafkaTestUtils.sendMessages(topic, sent)
+    kafkaTestUtils.sendMessages(topic, data)
 
-    val kafkaParams = Map("zookeeper.connect" -> kafkaTestUtils.zkAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt(10000)}",
-      "auto.offset.reset" -> "smallest")
+    val topicFilter = KafkaTopicFilter(Map(topic -> 1))
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
+      ssc, kafkaParams, topicFilter, StorageLevel.MEMORY_ONLY)
     val result = new mutable.HashMap[String, Long]() with mutable.SynchronizedMap[String, Long]
     stream.map(_._2).countByValue().foreachRDD { r =>
       val ret = r.collect()
@@ -77,7 +97,7 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
     ssc.start()
 
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(sent === result)
+      assert(data === result)
     }
   }
 }
