@@ -970,4 +970,19 @@ class JDBCSuite extends SparkFunSuite
       assert(sql("select * from people_view").count() == 3)
     }
   }
+
+  test("SPARK-16848: jdbc API throws an exception for user specified schema") {
+    val schema = StructType(Seq(
+      StructField("name", StringType, false), StructField("theid", IntegerType, false)))
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    val e1 = intercept[AnalysisException] {
+      spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
+    }.getMessage
+    assert(e1.contains("User specified schema not supported with `jdbc`"))
+
+    val e2 = intercept[AnalysisException] {
+      spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
+    }.getMessage
+    assert(e2.contains("User specified schema not supported with `jdbc`"))
+  }
 }
