@@ -677,6 +677,10 @@ object SQLConf {
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
+
+  object Replaced {
+    val MAPREDUCE_JOB_REDUCES = "mapreduce.job.reduces"
+  }
 }
 
 /**
