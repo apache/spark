@@ -229,6 +229,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
+  private def getDBPath(dbName: String): URI = {
+    val warehousePath = s"file:${spark.sessionState.conf.warehousePath.stripPrefix("file:")}"
+    new Path(warehousePath, s"$dbName.db").toUri
+  }
+
   test("the qualified path of a database is stored in the catalog") {
     val catalog = spark.sessionState.catalog
 
@@ -244,18 +249,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(expectedPath.getPath === pathInCatalog.getPath)
       sql("DROP DATABASE db1")
     }
-  }
-
-  private def makeQualifiedPath(path: String): URI = {
-    // copy-paste from SessionCatalog
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toUri
-  }
-
-  private def getDBPath(dbName: String): URI = {
-    val warehousePath = s"file:${spark.sessionState.conf.warehousePath.stripPrefix("file:")}"
-    new Path(warehousePath, s"$dbName.db").toUri
   }
 
   test("Create Database using Default Warehouse Path") {
@@ -1367,7 +1360,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val partitionLocation = if (isUsingHiveMetastore) {
       val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
       assert(tableLocation.isDefined)
-      makeQualifiedPath(tableLocation.get + "/paris")
+      makeQualifiedPath(new Path(tableLocation.get.toString, "paris"))
     } else {
       new URI("paris")
     }
@@ -2160,9 +2153,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Seq(1).toDF("a").write.saveAsTable("t")
             val tblloc = new File(loc, "t")
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            val tblPath = new Path(tblloc.getAbsolutePath)
-            val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
-            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(table.location == makeQualifiedPath(tblloc.getAbsolutePath))
             assert(tblloc.listFiles().nonEmpty)
           }
         }

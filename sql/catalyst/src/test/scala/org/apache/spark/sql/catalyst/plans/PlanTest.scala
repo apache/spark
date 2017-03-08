@@ -62,7 +62,7 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
    * - Sample the seed will replaced by 0L.
    * - Join conditions will be resorted by hashCode.
    */
-  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+  protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case filter @ Filter(condition: Expression, child: LogicalPlan) =>
         Filter(splitConjunctivePredicates(condition).map(rewriteEqual(_)).sortBy(_.hashCode())

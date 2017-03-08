@@ -2592,8 +2592,8 @@ test_that("coalesce, repartition, numPartitions", {
 
   df2 <- repartition(df1, 10)
   expect_equal(getNumPartitions(df2), 10)
-  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
-  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 7)
   expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 

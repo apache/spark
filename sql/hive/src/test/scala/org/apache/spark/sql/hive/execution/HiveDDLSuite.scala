@@ -1726,10 +1726,8 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-              val dirPath = new Path(dir.getAbsolutePath)
-              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              assert(new Path(table.location) == fs.makeQualified(dirPath))
+              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
               checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
           }
@@ -1747,10 +1745,8 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-              val dirPath = new Path(dir.getAbsolutePath)
-              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-              assert(new Path(table.location) == fs.makeQualified(dirPath))
+              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
               val partDir = new File(dir, "a=3")
               assert(partDir.exists())
@@ -1809,9 +1805,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          val path = new Path(loc.getAbsolutePath)
-          val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(table.location == fs.makeQualified(path).toUri)
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
           assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
@@ -1839,9 +1833,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          val path = new Path(loc.getAbsolutePath)
-          val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(table.location == fs.makeQualified(path).toUri)
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
           assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
