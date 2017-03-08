@@ -95,9 +95,6 @@ case class CreateTableLikeCommand(
   }
 }
 
-
-// TODO: move the rest of the table commands from ddl.scala to this file
-
 /**
  * A command to create a table.
  *
