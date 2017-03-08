@@ -277,7 +277,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
         true
       },
       StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
-      CheckLastBatch((20L, 1), (85L, 1)),
+      // The commit log should ensure that we do not run another batch
+      CheckLastBatch(),
       AssertOnQuery { q =>
         clock.getTimeMillis() == 90000L
       },
@@ -327,7 +328,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
         true
       },
       StartStream(ProcessingTime("10 day"), triggerClock = clock),
-      CheckLastBatch((20L, 1), (85L, 1)),
+      // Commit log should prevent batch from running again
+      CheckLastBatch(),
 
       // advance clock to 100 days, should retain keys >= 90
       AddData(inputData, 85L, 90L, 100L, 105L),

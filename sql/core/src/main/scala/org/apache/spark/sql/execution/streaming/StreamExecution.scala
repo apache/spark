@@ -395,7 +395,7 @@ class StreamExecution(
               logDebug(s"Resuming with committed offsets: $committedOffsets")
           }
         }
-        logInfo(s"Resuming streaming query, starting with batch $batchId")
+        logInfo(s"Resuming streaming query, starting with batch $currentBatchId")
         if (currentBatchId == batchId) {
           availableOffsets = nextOffsets.toStreamProgress(sources)
           offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())

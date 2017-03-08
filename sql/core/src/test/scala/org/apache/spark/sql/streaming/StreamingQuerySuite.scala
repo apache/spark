@@ -306,8 +306,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       // Test status and progress after query terminated with error
       StartStream(ProcessingTime(100), triggerClock = clock),
+      AdvanceManualClock(100), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
-      AdvanceManualClock(100),
+      AdvanceManualClock(100), // allow another trigger
       ExpectFailure[SparkException](),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),

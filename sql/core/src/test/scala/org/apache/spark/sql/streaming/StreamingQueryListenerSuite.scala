@@ -109,8 +109,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
         // Termination event generated with exception message when stopped with error
         StartStream(ProcessingTime(100), triggerClock = clock),
+        AdvanceManualClock(100), // advance clock to ensure completed initial trigger
         AddData(inputData, 0),
-        AdvanceManualClock(100),
+        AdvanceManualClock(100), // process bad data
         ExpectFailure[SparkException](),
         AssertOnQuery { query =>
           eventually(Timeout(streamingTimeout)) {
