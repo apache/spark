@@ -580,7 +580,7 @@ class Dataset[T] private[sql](
       val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
       parsedDelay.milliseconds + parsedDelay.months * millisPerMonth
     }
-    assert(delayMs >= 0, s"delay threshold should not be a negative time: $delayThreshold")
+    require(delayMs >= 0, s"delay threshold should not be a negative time: $delayThreshold")
     EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 
