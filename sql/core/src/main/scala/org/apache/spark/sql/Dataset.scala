@@ -1093,7 +1093,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan, None)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
