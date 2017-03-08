@@ -24,6 +24,10 @@ context("Structured Streaming")
 sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 jsonSubDir <- file.path("sparkr-test", "json", "")
+if (.Platform$OS.type == "windows") {
+  # file.path removes the empty separator on Windows, adds it back
+  jsonSubDir <- paste0(jsonSubDir, .Platform$file.sep)
+}
 jsonDir <- file.path(tempdir(), jsonSubDir)
 dir.create(jsonDir, recursive = TRUE)
 

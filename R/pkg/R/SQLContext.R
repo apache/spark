@@ -970,7 +970,7 @@ read.jdbc <- function(url, tableName,
 read.stream <- function(source = NULL, schema = NULL, ...) {
   sparkSession <- getSparkSession()
   if (!is.null(source) && !is.character(source)) {
-    stop("source should be character, NULL or omitted. It is the datasource specified ",
+    stop("source should be character, NULL or omitted. It is the data source specified ",
          "in 'spark.sql.sources.default' configuration by default.")
   }
   if (is.null(source)) {
