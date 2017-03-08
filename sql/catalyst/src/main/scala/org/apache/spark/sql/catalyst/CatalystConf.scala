@@ -66,6 +66,8 @@ trait CatalystConf {
 
   /** The maximum number of joined nodes allowed in the dynamic programming algorithm. */
   def joinReorderDPThreshold: Int
+
+  override def clone(): CatalystConf = throw new CloneNotSupportedException()
 }
 
 
@@ -85,4 +87,7 @@ case class SimpleCatalystConf(
     joinReorderDPThreshold: Int = 12,
     warehousePath: String = "/user/hive/warehouse",
     sessionLocalTimeZone: String = TimeZone.getDefault().getID)
-  extends CatalystConf
+  extends CatalystConf {
+
+  override def clone(): SimpleCatalystConf = this.copy()
+}
