@@ -185,14 +185,15 @@ private[deploy] class DriverRunner(
       driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
 
     ///////////////
+    ////////////////   we don't support user token propogation in cluster mode
     ////////////////
     ////
-    if (driverDesc.command.environment.contains(BOOTSTRAP_TOKENS.key)) {
-      val tokenFile = new File(driverDir, "driver-credentials-" + driverId)
-      SparkHadoopUtil.get.decodeAndWriteToFile(driverDesc.command.environment,
-        BOOTSTRAP_TOKENS.key, tokenFile)
-      builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", tokenFile.toString)
-    }
+//    if (driverDesc.command.environment.contains(BOOTSTRAP_TOKENS.key)) {
+//      val tokenFile = new File(driverDir, "driver-credentials-" + driverId)
+//      SparkHadoopUtil.get.decodeAndWriteToFile(driverDesc.command.environment,
+//        BOOTSTRAP_TOKENS.key, tokenFile)
+//      builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", tokenFile.toString)
+//    }
 
     if (driverDesc.command.environment.contains(KEYTAB_CONTENT.key)) {
       val keytab = driverDesc.command.environment.get(KEYTAB.key).get

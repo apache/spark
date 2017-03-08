@@ -158,11 +158,16 @@ private[deploy] class ExecutorRunner(
 
       /////////////////////////////
       /////////////////////////////
+      logInfo("Environment")
+      appDesc.command.environment.foreach(kv => logInfo(" * " + kv))
+
       if (appDesc.command.environment.contains(BOOTSTRAP_TOKENS.key)) {
         val tokenFile = new File(executorDir, "executor-credentials-" + appId)
         SparkHadoopUtil.get.decodeAndWriteToFile(appDesc.command.environment,
           BOOTSTRAP_TOKENS.key, tokenFile)
         builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", tokenFile.toString)
+
+        logInfo("Wrote HADOOP_TOKEN_FILE_LOCATION to " + tokenFile)
       }
 
       /////////////////////////////

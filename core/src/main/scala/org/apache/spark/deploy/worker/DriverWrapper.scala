@@ -19,7 +19,9 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
@@ -51,6 +53,22 @@ object DriverWrapper {
             new MutableURLClassLoader(Array(userJarUrl), currentLoader)
           }
         Thread.currentThread.setContextClassLoader(loader)
+
+
+        ////////////////////////////////
+        val loginFromKeytab = conf.contains(PRINCIPAL.key)
+        if (loginFromKeytab) {
+          val principal = conf.get(PRINCIPAL).get
+          val keytab = conf.get(KEYTAB).orNull
+          require(keytab != null, "Keytab must be specified when principal is specified")
+          if (!new File(keytab).exists()) {
+            throw new SparkException(s"Keytab file: ${keytab} does not exist")
+          } else {
+            UserGroupInformation.loginUserFromKeytab(principal, keytab)
+          }
+        }
+        //////////////////////////////
+
 
         // Delegate to supplied main class
         val clazz = Utils.classForName(mainClass)

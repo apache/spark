@@ -222,21 +222,21 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       message.sparkProperties += KEYTAB.key -> keytabFileName
     }
 
-    // Add credentials - works in the case of a user submitting a job
-    // that completes < YARN max token renewal
-    // The reason this is here is so you don't strictly need a keytab/principal
-    // you only need that if you want to run a long running job... but maybe get rid of it?
-    val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
-    if (credentials.getAllTokens.size() > 0) {
-      val bootstrapCredentails = base64EncodedValue { dob =>
-        credentials.writeTokenStorageToStream(dob)
-      }
-
-      logInfo("Security tokens will be sent to driver and executors")
-      message.environmentVariables += BOOTSTRAP_TOKENS.key -> bootstrapCredentails
-    }
+//    // Add credentials - works in the case of a user submitting a job
+//    // that completes < YARN max token renewal
+//    // The reason this is here is so you don't strictly need a keytab/principal
+//    // you only need that if you want to run a long running job... but maybe get rid of it?
+//    val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+//    logInfo(s"USERS CURRENT CREDENTAILS ${credentials}")
+//    if (credentials.getAllTokens.size() > 0) {
+//      val bootstrapCredentials = base64EncodedValue { dob =>
+//        credentials.writeTokenStorageToStream(dob)
+//      }
+//
+//      logInfo("Security tokens will be sent to driver and executors")
+//      message.environmentVariables += BOOTSTRAP_TOKENS.key -> bootstrapCredentials
+//    }
     //////////
-
 
     message.validate()
     message

@@ -19,6 +19,8 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
+import org.apache.commons.codec.binary.Base64
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
@@ -163,11 +165,36 @@ private[spark] class StandaloneSchedulerBackend(
         Nil
       }
 
+
+    //////////////////////
+    //////////////////////
+
+    def base64EncodedValue(fn: DataOutputBuffer => Unit): String = {
+      val dob = new DataOutputBuffer
+      fn(dob)
+      dob.close()
+      new String(Base64.encodeBase64(dob.getData))
+    }
+
+    val bootstrap = if (credentials.getAllTokens.size() > 0) {
+      val bootstrapCredentials = base64EncodedValue { dob =>
+        credentials.writeTokenStorageToStream(dob)
+      }
+
+      logInfo("Security tokens will be sent to executors")
+      Map(BOOTSTRAP_TOKENS.key -> bootstrapCredentials)
+    } else Map.empty[String, String]
+
+    val executorEnv = sc.executorEnvs.toMap ++ bootstrap
+
+    //////////////////////
+    //////////////////////
+
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
+      args, executorEnv, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.
