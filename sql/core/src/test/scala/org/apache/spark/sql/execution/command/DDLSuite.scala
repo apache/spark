@@ -50,13 +50,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       catalog: SessionCatalog,
       name: TableIdentifier): CatalogTable = {
     val storage =
-      CatalogStorageFormat(
-        locationUri = Some(catalog.defaultTablePath(name)),
-        inputFormat = None,
-        outputFormat = None,
-        serde = None,
-        compressed = false,
-        properties = Map())
+      CatalogStorageFormat.empty.copy(locationUri = Some(catalog.defaultTablePath(name)))
     val metadata = new MetadataBuilder()
       .putString("key", "value")
       .build()
