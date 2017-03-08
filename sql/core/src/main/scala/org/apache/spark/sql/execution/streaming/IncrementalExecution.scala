@@ -103,11 +103,11 @@ class IncrementalExecution(
           child,
           Some(stateId),
           Some(currentEventTimeWatermark))
-      case MapGroupsWithStateExec(
+      case FlatMapGroupsWithStateExec(
              f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
-        MapGroupsWithStateExec(
+        FlatMapGroupsWithStateExec(
           f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
     }
   }

@@ -20,8 +20,8 @@ package org.apache.spark.sql.streaming
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, ForeachWriter}
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
@@ -69,17 +69,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def outputMode(outputMode: String): DataStreamWriter[T] = {
-    this.outputMode = outputMode.toLowerCase match {
-      case "append" =>
-        OutputMode.Append
-      case "complete" =>
-        OutputMode.Complete
-      case "update" =>
-        OutputMode.Update
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append', 'complete', 'update'")
-    }
+    this.outputMode = InternalOutputModes(outputMode)
     this
   }
 
