@@ -70,7 +70,7 @@ class HiveDDLSuite
       CatalogUtils.stringToURI(path), spark.sessionState.newHadoopConf())
   }
 
-    test("drop tables") {
+  test("drop tables") {
     withTable("tab1") {
       val tabName = "tab1"
 
