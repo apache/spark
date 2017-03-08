@@ -46,7 +46,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   protected def supportsDataType(dataType: DataType): Boolean = true
 
   protected def makeQualifiedPath(path: String): URI = {
-    CatalogUtils.makeQualifiedPath(CatalogUtils.stringToURI(path), SparkHadoopUtil.get.conf)
+    SQLTestUtils.makeQualifiedPath(CatalogUtils.stringToURI(path), SparkHadoopUtil.get.conf)
   }
 
   val dataSchema =

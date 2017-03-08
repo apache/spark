@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -66,7 +66,7 @@ class HiveDDLSuite
   }
 
   private def makeQualifiedPath(path: String): URI = {
-    CatalogUtils.makeQualifiedPath(
+    SQLTestUtils.makeQualifiedPath(
       CatalogUtils.stringToURI(path), spark.sessionState.newHadoopConf())
   }
 
