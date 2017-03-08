@@ -17,18 +17,11 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.io.File
-import java.nio.ByteBuffer
-import java.util.UUID
 import java.util.concurrent.Semaphore
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.{ApplicationDescription, Command, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
