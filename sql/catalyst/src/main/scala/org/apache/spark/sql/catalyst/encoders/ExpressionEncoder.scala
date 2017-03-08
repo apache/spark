@@ -45,8 +45,8 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val mirror = typeTag[T].mirror
-    val tpe = typeTag[T].tpe
+    val mirror = ScalaReflection.mirror
+    val tpe = typeTag[T].in(mirror).tpe
 
     if (ScalaReflection.optionOfProductType(tpe)) {
       throw new UnsupportedOperationException(
