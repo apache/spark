@@ -370,6 +370,9 @@ package object dsl {
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
+
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)
 
