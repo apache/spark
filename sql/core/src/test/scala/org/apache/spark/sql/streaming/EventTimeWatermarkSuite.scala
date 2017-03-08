@@ -305,6 +305,14 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     )
   }
 
+  test("delay threshold should not be a negative time.") {
+    val inputData = MemoryStream[Int].toDF()
+    val e = intercept[AssertionError] {
+      inputData.withWatermark("value", "-1 minute")
+    }
+    assert(e.getMessage contains "delay threshold should not be a negative time")
+  }
+
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
     val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
