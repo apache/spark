@@ -35,11 +35,9 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Filter Pushdown", FixedPoint(100),
+      Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        BooleanSimplification,
-        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
@@ -112,7 +110,18 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(originalPlan, bestPlan)
   }
 
-  test("reorder 3 tables with project") {
+  test("reorder 3 tables - put cross join at the end") {
+    val originalPlan =
+      t1.join(t2).join(t3).where(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100"))
+
+    val bestPlan =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, None)
+
+    assertEqualPlans(originalPlan, bestPlan)
+  }
+
+  test("reorder 3 tables with pure-attribute project") {
     val originalPlan =
       t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
         (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
@@ -125,6 +134,16 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         .select(nameToAttr("t1.v-1-10"))
 
     assertEqualPlans(originalPlan, bestPlan)
+  }
+
+  test("don't reorder if project contains non-attribute") {
+    val originalPlan =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select((nameToAttr("t1.k-1-2") + nameToAttr("t2.k-1-5")) as "key", nameToAttr("t1.v-1-10"))
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select("key".attr)
+
+    assertEqualPlans(originalPlan, originalPlan)
   }
 
   test("reorder 4 tables (bushy tree)") {
@@ -150,9 +169,9 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
   private def assertEqualPlans(
       originalPlan: LogicalPlan,
       groundTruthBestPlan: LogicalPlan): Unit = {
-    val optimized = Optimize.execute(originalPlan)
+    val optimized = Optimize.execute(originalPlan.analyze)
     val normalized1 = normalizePlan(normalizeExprIds(optimized))
-    val normalized2 = normalizePlan(normalizeExprIds(groundTruthBestPlan))
+    val normalized2 = normalizePlan(normalizeExprIds(groundTruthBestPlan.analyze))
     if (!sameJoinPlan(normalized1, normalized2)) {
       fail(
         s"""
