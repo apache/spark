@@ -851,15 +851,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public static class LongWrapper {
-    private long value = 0;
-
-    public long getValue() {
-      return value;
-    }
-
-    private void setValue(long value) {
-      this.value = value;
-    }
+    public long value = 0;
   }
 
   /**
@@ -946,20 +938,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
 
-    toLongResult.setValue(result);
+    toLongResult.value = result;
     return true;
   }
 
   public static class IntWrapper {
-    private int value = 0;
-
-    public int getValue() {
-      return value;
-    }
-
-    private void setValue(int value) {
-      this.value = value;
-    }
+    public int value = 0;
   }
 
   /**
@@ -1048,13 +1032,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         return false;
       }
     }
-    intWrapper.setValue(result);
+    intWrapper.value = result;
     return true;
   }
 
   public boolean toShort(IntWrapper intWrapper) {
     if (toInt(intWrapper)) {
-      int intValue = intWrapper.getValue();
+      int intValue = intWrapper.value;
       short result = (short) intValue;
       if (result == intValue) {
         return true;
@@ -1065,7 +1049,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   public boolean toByte(IntWrapper intWrapper) {
     if (toInt(intWrapper)) {
-      int intValue = intWrapper.getValue();
+      int intValue = intWrapper.value;
       byte result = (byte) intValue;
       if (result == intValue) {
         return true;

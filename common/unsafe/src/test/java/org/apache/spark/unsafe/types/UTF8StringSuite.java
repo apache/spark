@@ -627,7 +627,7 @@ public class UTF8StringSuite {
     IntWrapper wrapper = new IntWrapper();
     for (Map.Entry<String, Short> entry : inputToExpectedOutput.entrySet()) {
       assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toShort(wrapper));
-      assertEquals((short) entry.getValue(), wrapper.getValue());
+      assertEquals((short) entry.getValue(), wrapper.value);
     }
 
     List<String> negativeInputs =
@@ -658,7 +658,7 @@ public class UTF8StringSuite {
     IntWrapper intWrapper = new IntWrapper();
     for (Map.Entry<String, Byte> entry : inputToExpectedOutput.entrySet()) {
       assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toByte(intWrapper));
-      assertEquals((byte) entry.getValue(), intWrapper.getValue());
+      assertEquals((byte) entry.getValue(), intWrapper.value);
     }
 
     List<String> negativeInputs =
@@ -689,7 +689,7 @@ public class UTF8StringSuite {
     IntWrapper intWrapper = new IntWrapper();
     for (Map.Entry<String, Integer> entry : inputToExpectedOutput.entrySet()) {
       assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toInt(intWrapper));
-      assertEquals((int) entry.getValue(), intWrapper.getValue());
+      assertEquals((int) entry.getValue(), intWrapper.value);
     }
 
     List<String> negativeInputs =
@@ -717,17 +717,17 @@ public class UTF8StringSuite {
       inputToExpectedOutput.put(String.valueOf(value), value);
     }
 
-    LongWrapper longWrapper = new LongWrapper();
+    LongWrapper wrapper = new LongWrapper();
     for (Map.Entry<String, Long> entry : inputToExpectedOutput.entrySet()) {
-      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toLong(longWrapper));
-      assertEquals((long) entry.getValue(), longWrapper.getValue());
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toLong(wrapper));
+      assertEquals((long) entry.getValue(), wrapper.value);
     }
 
     List<String> negativeInputs = Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121",
         "1234567890123456789012345678901234");
 
     for (String negativeInput : negativeInputs) {
-      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(longWrapper));
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(wrapper));
     }
   }
 }

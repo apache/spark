@@ -278,7 +278,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new LongWrapper()
-      buildCast[UTF8String](_, s => if (s.toLong(result)) result.getValue else null)
+      buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0L)
     case DateType =>
@@ -293,7 +293,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType =>
       val result = new IntWrapper()
-      buildCast[UTF8String](_, s => if (s.toInt(result)) result.getValue else null)
+      buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
@@ -309,7 +309,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
-        result.getValue.asInstanceOf[Short]
+        result.value.toShort
       } else {
         null
       })
@@ -328,7 +328,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
-        result.getValue.asInstanceOf[Byte]
+        result.value.toByte
       } else {
         null
       })
@@ -746,7 +746,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         s"""
           if ($c.toByte($wrapper)) {
-            $evPrim = (byte) $wrapper.getValue();
+            $evPrim = (byte) $wrapper.value;
           } else {
             $evNull = true;
           }
@@ -773,7 +773,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         s"""
           if ($c.toShort($wrapper)) {
-            $evPrim = (short) $wrapper.getValue();
+            $evPrim = (short) $wrapper.value;
           } else {
             $evNull = true;
           }
@@ -798,7 +798,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         s"""
           if ($c.toInt($wrapper)) {
-            $evPrim = $wrapper.getValue();
+            $evPrim = $wrapper.value;
           } else {
             $evNull = true;
           }
@@ -824,7 +824,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         s"""
           if ($c.toLong($wrapper)) {
-            $evPrim = $wrapper.getValue();
+            $evPrim = $wrapper.value;
           } else {
             $evNull = true;
           }
