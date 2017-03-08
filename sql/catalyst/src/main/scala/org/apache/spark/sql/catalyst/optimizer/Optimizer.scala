@@ -608,16 +608,10 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 case class InferFiltersFromConstraints(conf: CatalystConf)
     extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = if (conf.constraintPropagationEnabled) {
-    doInferFilters(plan)
-  } else {
-    plan
-  }
-
-  private def doInferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
-      val newFilters = filter.constraints --
-        (child.constraints ++ splitConjunctivePredicates(condition))
+      val newFilters = filter.getConstraints(conf) --
+        (child.getConstraints(conf) ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -627,11 +621,12 @@ case class InferFiltersFromConstraints(conf: CatalystConf)
     case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
-      val constraints = join.constraints.filter { c =>
+      val constraints = join.getConstraints(conf).filter { c =>
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
       }
       // Remove those constraints that are already enforced by either the left or the right child
-      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
+      val additionalConstraints = constraints --
+        (left.getConstraints(conf) ++ right.getConstraints(conf))
       val newConditionOpt = conditionOpt match {
         case Some(condition) =>
           val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
@@ -713,10 +708,10 @@ case class PruneFilters(conf: CatalystConf) extends Rule[LogicalPlan] with Predi
     case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
-    case f @ Filter(fc, p: LogicalPlan) if conf.constraintPropagationEnabled =>
+    case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.constraints.contains(cond)
+          cond.deterministic && p.getConstraints(conf).contains(cond)
         }
       if (prunedPredicates.isEmpty) {
         f

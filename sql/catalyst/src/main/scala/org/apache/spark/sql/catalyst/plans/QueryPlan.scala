@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -185,6 +186,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * evaluate to `true` for all rows produced.
    */
   lazy val constraints: ExpressionSet = ExpressionSet(getRelevantConstraints(validConstraints))
+
+  /**
+   * Returns [[constraints]] depending on the config of enabling constraint propagation. If the
+   * flag is disabled, simply returning an empty constraints.
+   */
+  private[spark] def getConstraints(conf: CatalystConf): ExpressionSet =
+    if (conf.constraintPropagationEnabled) {
+      constraints
+    } else {
+      ExpressionSet(Set.empty)
+    }
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
