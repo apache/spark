@@ -24,8 +24,8 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
-import org.apache.spark.sql.catalyst.expressions.aggregate.NGrams.NGramBuffer
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.NGrams.NGramBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
