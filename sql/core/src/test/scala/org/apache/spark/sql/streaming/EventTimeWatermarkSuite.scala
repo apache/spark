@@ -319,7 +319,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     assert(e.getMessage contains "delay threshold should not be a negative time")
 
     e = intercept[AssertionError] {
-      inputData.withWatermark("value", "1 months -40 days")
+      inputData.withWatermark("value", "1 month -40 days")
     }
     assert(e.getMessage contains "delay threshold should not be a negative time")
 
