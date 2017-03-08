@@ -139,7 +139,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsgs = Seq("distinct aggregation"))
 
   val att = new AttributeReference(name = "a", dataType = LongType)()
-  // FlatMapGroupsWithState in batch
+  // FlatMapGroupsWithState: Both function modes equivalent and supported in batch.
   for (funcMode <- Seq(Append, Update)) {
     assertSupportedInBatchPlan(
       s"flatMapGroupsWithState - flatMapGroupsWithState($funcMode) on batch relation",
