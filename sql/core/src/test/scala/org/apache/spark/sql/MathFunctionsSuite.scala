@@ -233,6 +233,18 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("round/bround with data frame from a local Seq of Product") {
+    val df = spark.createDataFrame(Seq(Tuple1(BigDecimal("5.9")))).toDF("value")
+    checkAnswer(
+      df.withColumn("value_rounded", round('value)),
+      Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
+    )
+    checkAnswer(
+      df.withColumn("value_brounded", bround('value)),
+      Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
+    )
+  }
+
   test("exp") {
     testOneToOneMathFunction(exp, math.exp)
   }

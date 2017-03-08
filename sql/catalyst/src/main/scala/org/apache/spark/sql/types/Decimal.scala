@@ -21,6 +21,7 @@ import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.sql.AnalysisException
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -223,6 +224,19 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Create new `Decimal` with given precision and scale.
+   *
+   * @return `Some(decimal)` if successful or `None` if overflow would occur
+   */
+  private[sql] def toPrecision(
+      precision: Int,
+      scale: Int,
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Option[Decimal] = {
+    val copy = clone()
+    if (copy.changePrecision(precision, scale, roundMode)) Some(copy) else None
+  }
+
+  /**
    * Update precision and scale while keeping our value the same, and return true if successful.
    *
    * @return true if successful, false if overflow would occur
@@ -362,17 +376,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def abs: Decimal = if (this.compare(Decimal.ZERO) < 0) this.unary_- else this
 
   def floor: Decimal = if (scale == 0) this else {
-    val value = this.clone()
-    value.changePrecision(
-      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_FLOOR)
-    value
+    val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
+    toPrecision(newPrecision, 0, ROUND_FLOOR).getOrElse(
+      throw new AnalysisException(s"Overflow when setting precision to $newPrecision"))
   }
 
   def ceil: Decimal = if (scale == 0) this else {
-    val value = this.clone()
-    value.changePrecision(
-      DecimalType.bounded(precision - scale + 1, 0).precision, 0, ROUND_CEILING)
-    value
+    val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
+    toPrecision(newPrecision, 0, ROUND_CEILING).getOrElse(
+      throw new AnalysisException(s"Overflow when setting precision to $newPrecision"))
   }
 }
 
