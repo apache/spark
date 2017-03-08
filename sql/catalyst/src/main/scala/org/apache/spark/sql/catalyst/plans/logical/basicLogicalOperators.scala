@@ -792,8 +792,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 
 case class SubqueryAlias(
     alias: String,
-    child: LogicalPlan,
-    view: Option[TableIdentifier])
+    child: LogicalPlan)
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))

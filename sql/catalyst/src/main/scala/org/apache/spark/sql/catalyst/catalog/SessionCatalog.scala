@@ -578,7 +578,7 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef, None)
+          SubqueryAlias(table, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -591,17 +591,17 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
+          SubqueryAlias(table, child)
         } else {
           val tableRelation = CatalogRelation(
             metadata,
             // we assume all the columns are nullable.
             metadata.dataSchema.asNullable.toAttributes,
             metadata.partitionSchema.asNullable.toAttributes)
-          SubqueryAlias(table, tableRelation, None)
+          SubqueryAlias(table, tableRelation)
         }
       } else {
-        SubqueryAlias(table, tempTables(table), None)
+        SubqueryAlias(table, tempTables(table))
       }
     }
   }

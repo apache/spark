@@ -62,23 +62,23 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
       Project(Seq(UnresolvedAttribute("tBl.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tBl.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
@@ -374,8 +374,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input)),
           Cross, None))
 
     assertAnalysisSuccess(query)
@@ -435,10 +435,10 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   test("resolve as with an already existed alias") {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tbl2.a")),
-        SubqueryAlias("tbl", testRelation, None).as("tbl2")),
+        SubqueryAlias("tbl", testRelation).as("tbl2")),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysis(SubqueryAlias("tbl", testRelation, None).as("tbl2"), testRelation)
+    checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
   }
 }

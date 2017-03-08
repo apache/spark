@@ -108,7 +108,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    SubqueryAlias(ctx.name.getText, plan(ctx.query), None)
+    SubqueryAlias(ctx.name.getText, plan(ctx.query))
   }
 
   /**
@@ -666,7 +666,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     val tableWithAlias = Option(ctx.strictIdentifier).map(_.getText) match {
       case Some(strictIdentifier) =>
-        SubqueryAlias(strictIdentifier, table, None)
+        SubqueryAlias(strictIdentifier, table)
       case _ => table
     }
     tableWithAlias.optionalMap(ctx.sample)(withSample)
@@ -731,7 +731,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
   private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
-    SubqueryAlias(alias.getText, plan, None)
+    SubqueryAlias(alias.getText, plan)
   }
 
   /**
