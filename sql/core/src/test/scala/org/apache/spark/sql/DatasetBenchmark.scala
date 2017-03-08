@@ -31,6 +31,49 @@ object DatasetBenchmark {
 
   case class Data(l: Long, s: String)
 
+  def backToBackMapLong(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
+
+    val rdd = spark.sparkContext.range(0, numRows)
+    val ds = spark.range(0, numRows)
+    val df = ds.toDF("l")
+    val func = (l: Long) => l + 1
+
+    val benchmark = new Benchmark("back-to-back map long", numRows)
+
+    benchmark.addCase("RDD") { iter =>
+      var res = rdd
+      var i = 0
+      while (i < numChains) {
+        res = res.map(func)
+        i += 1
+      }
+      res.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("DataFrame") { iter =>
+      var res = df
+      var i = 0
+      while (i < numChains) {
+        res = res.select($"l" + 1 as "l")
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("Dataset") { iter =>
+      var res = ds.as[Long]
+      var i = 0
+      while (i < numChains) {
+        res = res.map(func)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark
+  }
+
   def backToBackMap(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
@@ -165,9 +208,21 @@ object DatasetBenchmark {
     val numRows = 100000000
     val numChains = 10
 
-    val benchmark = backToBackMap(spark, numRows, numChains)
+    val benchmark0 = backToBackMapLong(spark, numRows, numChains)
+    val benchmark1 = backToBackMap(spark, numRows, numChains)
     val benchmark2 = backToBackFilter(spark, numRows, numChains)
     val benchmark3 = aggregate(spark, numRows)
+
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_111-8u111-b14-2ubuntu0.16.04.2-b14 on Linux 4.4.0-47-generic
+    Intel(R) Xeon(R) CPU E5-2667 v3 @ 3.20GHz
+    back-to-back map long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           1883 / 1892         53.1          18.8       1.0X
+    DataFrame                                      502 /  642        199.1           5.0       3.7X
+    Dataset                                        657 /  784        152.2           6.6       2.9X
+    */
+    benchmark0.run()
 
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
@@ -178,7 +233,7 @@ object DatasetBenchmark {
     DataFrame                                     2647 / 3116         37.8          26.5       1.3X
     Dataset                                       4781 / 5155         20.9          47.8       0.7X
     */
-    benchmark.run()
+    benchmark1.run()
 
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
