@@ -17,11 +17,15 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Properties
+
 import org.mockito.Matchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.executor.{Executor, TaskMetricsSuite}
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -58,7 +62,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(closureSerializer.serialize((rdd, func)).array)
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, Seq.empty)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, Seq.empty)
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -79,7 +83,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, Seq.empty)
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, Seq.empty)
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -146,6 +150,18 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }.collect()
     assert(attemptIds.toSet === Set(0, 1, 2, 3))
   }
+
+  test("localProperties are propagated to executors correctly") {
+    sc = new SparkContext("local", "test")
+    sc.setLocalProperty("testPropKey", "testPropValue")
+    val res = sc.parallelize(Array(1), 1).map(i => i).map(i => {
+      val inTask = TaskContext.get().getLocalProperty("testPropKey")
+      val inDeser = Executor.taskDeserializationProps.get().getProperty("testPropKey")
+      s"$inTask,$inDeser"
+    }).collect()
+    assert(res === Array("testPropValue,testPropValue"))
+  }
+
 }
 
 private object TaskContextSuite {
