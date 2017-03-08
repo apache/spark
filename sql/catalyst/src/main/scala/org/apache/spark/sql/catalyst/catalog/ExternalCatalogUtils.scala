@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
@@ -162,6 +163,17 @@ object CatalogUtils {
       normalizeColumnName(tableName, tableCols, colName, "sort", resolver)
     }
     BucketSpec(numBuckets, normalizedBucketCols, normalizedSortCols)
+  }
+
+  /**
+   * This method is used to make the given path qualified, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  def makeQualifiedPath(path: URI, hadoopConf: Configuration): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(hadoopConf)
+    fs.makeQualified(hadoopPath).toUri
   }
 
   /**

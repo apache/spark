@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
@@ -65,7 +65,12 @@ class HiveDDLSuite
     fs.exists(filesystemPath)
   }
 
-  test("drop tables") {
+  private def makeQualifiedPath(path: String): URI = {
+    CatalogUtils.makeQualifiedPath(
+      CatalogUtils.stringToURI(path), spark.sessionState.newHadoopConf())
+  }
+
+    test("drop tables") {
     withTable("tab1") {
       val tabName = "tab1"
 
@@ -1654,10 +1659,8 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-              val dirPath = new Path(dir.getAbsolutePath)
-              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              assert(new Path(table.location) == fs.makeQualified(dirPath))
+              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
               checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
           }
@@ -1675,10 +1678,8 @@ class HiveDDLSuite
                    |LOCATION '$dir'
                    |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                  """.stripMargin)
-              val dirPath = new Path(dir.getAbsolutePath)
-              val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
               val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-              assert(new Path(table.location) == fs.makeQualified(dirPath))
+              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
               val partDir = new File(dir, "a=3")
               assert(partDir.exists())
@@ -1792,9 +1793,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          val path = new Path(loc.getAbsolutePath)
-          val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(table.location == fs.makeQualified(path).toUri)
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
           assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
@@ -1822,9 +1821,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          val path = new Path(loc.getAbsolutePath)
-          val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(table.location == fs.makeQualified(path).toUri)
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
           assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
@@ -1871,7 +1868,7 @@ class HiveDDLSuite
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
             val tblPath = new Path(tblloc.getAbsolutePath)
             val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
-            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(table.location == makeQualifiedPath(tblloc.getAbsolutePath))
             assert(tblloc.listFiles().nonEmpty)
           }
         }

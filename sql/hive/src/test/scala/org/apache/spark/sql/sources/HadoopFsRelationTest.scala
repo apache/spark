@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.net.URI
 
 import scala.util.Random
 
@@ -28,6 +29,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -42,6 +44,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   val dataSourceName: String
 
   protected def supportsDataType(dataType: DataType): Boolean = true
+
+  protected def makeQualifiedPath(path: String): URI = {
+    CatalogUtils.makeQualifiedPath(CatalogUtils.stringToURI(path), SparkHadoopUtil.get.conf)
+  }
 
   val dataSchema =
     StructType(

@@ -133,10 +133,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def makeQualifiedPath(path: String): URI = {
-    // copy-paste from SessionCatalog
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toUri
+    CatalogUtils.makeQualifiedPath(
+      CatalogUtils.stringToURI(path), spark.sessionState.newHadoopConf())
   }
 
   test("Create Database using Default Warehouse Path") {
@@ -2086,9 +2084,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             Seq(1).toDF("a").write.saveAsTable("t")
             val tblloc = new File(loc, "t")
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            val tblPath = new Path(tblloc.getAbsolutePath)
-            val fs = tblPath.getFileSystem(spark.sessionState.newHadoopConf())
-            assert(table.location == fs.makeQualified(tblPath).toUri)
+            assert(table.location == makeQualifiedPath(tblloc.getAbsolutePath))
             assert(tblloc.listFiles().nonEmpty)
           }
         }

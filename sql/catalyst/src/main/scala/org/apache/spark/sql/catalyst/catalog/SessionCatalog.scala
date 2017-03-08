@@ -126,18 +126,6 @@ class SessionCatalog(
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
   }
 
-  /**
-   * This method is used to make the given path qualified before we
-   * store this path in the underlying external catalog. So, when a path
-   * does not contain a scheme, this path will not be changed after the default
-   * FileSystem is changed.
-   */
-  private def makeQualifiedPath(path: URI): URI = {
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(hadoopConf)
-    fs.makeQualified(hadoopPath).toUri
-  }
-
   private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
@@ -171,7 +159,7 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri)
+    val qualifiedPath = CatalogUtils.makeQualifiedPath(dbDefinition.locationUri, hadoopConf)
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
       ignoreIfExists)
