@@ -46,9 +46,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def planner = sparkSession.sessionState.planner
 
   def assertAnalyzed(): Unit = {
-    try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
+    var analyzedPlan: Option[LogicalPlan] = None
+    try {
+      analyzedPlan = Some(analyzed)
+      sparkSession.sessionState.analyzer.checkAnalysis(analyzedPlan.get)
+    } catch {
       case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, analyzedPlan)
         ae.setStackTrace(e.getStackTrace)
         throw ae
     }
