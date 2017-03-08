@@ -137,9 +137,9 @@ class Imputer @Since("2.2.0")(override val uid: String)
       val ic = col(inputCol)
       val filtered = dataset.select(ic.cast(DoubleType))
         .filter(ic.isNotNull && ic =!= $(missingValue) && !ic.isNaN)
-      if(filtered.rdd.isEmpty()) {
+      if(filtered.take(1).length == 0) {
         throw new SparkException(s"surrogate cannot be computed. " +
-          s"All the values in $inputCol are Null, Nan or missingValue ($missingValue)")
+          s"All the values in $inputCol are Null, Nan or missingValue(${$(missingValue)})")
       }
       val surrogate = $(strategy) match {
         case Imputer.mean => filtered.select(avg(inputCol)).as[Double].first()
