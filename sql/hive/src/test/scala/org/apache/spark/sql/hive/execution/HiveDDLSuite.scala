@@ -65,11 +65,6 @@ class HiveDDLSuite
     fs.exists(filesystemPath)
   }
 
-  private def makeQualifiedPath(path: String): URI = {
-    SQLTestUtils.makeQualifiedPath(
-      CatalogUtils.stringToURI(path), spark.sessionState.newHadoopConf())
-  }
-
   test("drop tables") {
     withTable("tab1") {
       val tabName = "tab1"

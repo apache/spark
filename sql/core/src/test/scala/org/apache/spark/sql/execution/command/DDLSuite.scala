@@ -132,11 +132,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def makeQualifiedPath(path: String): URI = {
-    SQLTestUtils.makeQualifiedPath(
-      CatalogUtils.stringToURI(path), spark.sessionState.newHadoopConf())
-  }
-
   test("Create Database using Default Warehouse Path") {
     val catalog = spark.sessionState.catalog
     val dbName = "db1"

@@ -25,7 +25,6 @@ import scala.language.implicitConversions
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
@@ -296,6 +295,17 @@ private[sql] trait SQLTestUtils
       test(name) { runOnThread() }
     }
   }
+
+  /**
+   * This method is used to make the given path qualified, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  def makeQualifiedPath(path: String): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.makeQualified(hadoopPath).toUri
+  }
 }
 
 private[sql] object SQLTestUtils {
@@ -338,16 +348,5 @@ private[sql] object SQLTestUtils {
     } else {
       None
     }
-  }
-
-  /**
-   * This method is used to make the given path qualified, when a path
-   * does not contain a scheme, this path will not be changed after the default
-   * FileSystem is changed.
-   */
-  def makeQualifiedPath(path: URI, hadoopConf: Configuration): URI = {
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(hadoopConf)
-    fs.makeQualified(hadoopPath).toUri
   }
 }
