@@ -576,7 +576,7 @@ class Dataset[T] private[sql](
     val parsedDelay =
       Option(CalendarInterval.fromString("interval " + delayThreshold))
         .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
-    assert(parsedDelay.microseconds > 0,
+    assert(parsedDelay.microseconds >= 0,
       s"delay threshold should not be a negative time: $delayThreshold")
     EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
