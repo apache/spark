@@ -1995,6 +1995,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  Seq("a b", "a:b", "a%b", "a,b").foreach { specialChars =>
+    test(s"data source table:partition column name containing $specialChars") {
+      withTable("t") {
+        withTempDir { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string, `$specialChars` string)
+               |USING parquet
+               |PARTITIONED BY(`$specialChars`)
+               |LOCATION '$dir'
+             """.stripMargin)
+
+          assert(dir.listFiles().isEmpty)
+          spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
+          val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
+          val partFile = new File(dir, partEscaped)
+          assert(partFile.listFiles().length >= 1)
+          checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
+        }
+      }
+    }
+  }
+
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"location uri contains $specialChars for datasource table") {
       withTable("t", "t1") {
