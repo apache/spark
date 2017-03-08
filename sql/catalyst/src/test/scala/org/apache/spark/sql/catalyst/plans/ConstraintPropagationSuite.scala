@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.plans
 import java.util.TimeZone
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -400,25 +399,20 @@ class ConstraintPropagationSuite extends SparkFunSuite {
   }
 
   test("enable/disable constraint propagation") {
-    val enabledConf = SimpleCatalystConf(caseSensitiveAnalysis = true,
-      constraintPropagationEnabled = true)
-    val disabledConf = SimpleCatalystConf(caseSensitiveAnalysis = true,
-      constraintPropagationEnabled = false)
-
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     val filterRelation = tr.where('a.attr > 10)
 
     verifyConstraints(
-      filterRelation.analyze.getConstraints(enabledConf),
+      filterRelation.analyze.getConstraints(constraintPropagationEnabled = true),
       filterRelation.analyze.constraints)
 
-    assert(filterRelation.analyze.getConstraints(disabledConf).isEmpty)
+    assert(filterRelation.analyze.getConstraints(constraintPropagationEnabled = false).isEmpty)
 
     val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
       .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3)
 
-    verifyConstraints(aliasedRelation.analyze.getConstraints(enabledConf),
+    verifyConstraints(aliasedRelation.analyze.getConstraints(constraintPropagationEnabled = true),
       aliasedRelation.analyze.constraints)
-    assert(aliasedRelation.analyze.getConstraints(disabledConf).isEmpty)
+    assert(aliasedRelation.analyze.getConstraints(constraintPropagationEnabled = false).isEmpty)
   }
 }
