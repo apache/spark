@@ -52,12 +52,14 @@ summary.treeEnsemble <- function(model) {
   numFeatures <- callJMethod(jobj, "numFeatures")
   features <-  callJMethod(jobj, "features")
   featureImportances <- callJMethod(callJMethod(jobj, "featureImportances"), "toString")
+  maxDepth <- callJMethod(jobj, "maxDepth")
   numTrees <- callJMethod(jobj, "numTrees")
   treeWeights <- callJMethod(jobj, "treeWeights")
   list(formula = formula,
        numFeatures = numFeatures,
        features = features,
        featureImportances = featureImportances,
+       maxDepth = maxDepth,
        numTrees = numTrees,
        treeWeights = treeWeights,
        jobj = jobj)
@@ -70,6 +72,7 @@ print.summary.treeEnsemble <- function(x) {
   cat("\nNumber of features: ", x$numFeatures)
   cat("\nFeatures: ", unlist(x$features))
   cat("\nFeature importances: ", x$featureImportances)
+  cat("\nMax Depth: ", x$maxDepth)
   cat("\nNumber of trees: ", x$numTrees)
   cat("\nTree weights: ", unlist(x$treeWeights))
 
