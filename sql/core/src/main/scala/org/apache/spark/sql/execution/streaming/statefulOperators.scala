@@ -257,8 +257,8 @@ case class StateStoreSaveExec(
 }
 
 
-/** Physical operator for executing streaming mapGroupsWithState. */
-case class MapGroupsWithStateExec(
+/** Physical operator for executing streaming flatMapGroupsWithState. */
+case class FlatMapGroupsWithStateExec(
     func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
