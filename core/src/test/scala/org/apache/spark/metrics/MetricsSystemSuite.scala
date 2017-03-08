@@ -184,4 +184,108 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName != s"$appId.$executorId.${source.sourceName}")
     assert(metricName === source.sourceName)
   }
+
+  test("MetricsSystem with Executor instance, with litteral custom namespace") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    val metricsNamespace = "metricsNamespace"
+    val executorId = "1"
+    conf.set("spark.app.id", appId)
+    conf.set("spark.executor.id", executorId)
+    conf.set(MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME, metricsNamespace)
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === s"$metricsNamespace.$executorId.${source.sourceName}")
+  }
+
+  test("MetricsSystem with Executor instance, with reference to config key as custom namespace ") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    val appName = "testName"
+    val executorId = "1"
+    conf.set("spark.app.id", appId)
+    conf.set("spark.app.name", appName)
+    conf.set("spark.executor.id", executorId)
+    conf.set(MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME, "${spark.app.name}")
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === s"$appName.$executorId.${source.sourceName}")
+  }
+
+  test("MetricsSystem with Executor instance, custom namespace which is not set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val executorId = "1"
+    val namespaceToResolve = "${spark.doesnotexist}"
+    conf.set("spark.executor.id", executorId)
+    conf.set(MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME, namespaceToResolve)
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    // If the user set the spark.metrics.namespace property to an expansion of another property
+    // (say ${spark.doesnotexist}, the unresolved name (i.e. literally ${spark.doesnotexist})
+    // is used as the root logger name.
+    assert(metricName === s"$namespaceToResolve.$executorId.${source.sourceName}")
+  }
+
+  test("MetricsSystem with Executor instance, custom namespace, spark.executor.id not set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    conf.set("spark.app.name", appId)
+    conf.set(MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME, "${spark.app.name}")
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === source.sourceName)
+  }
+
+  test("MetricsSystem with non-driver, non-executor instance with custom namespace") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    val appName = "testName"
+    val executorId = "dummyExecutorId"
+    conf.set("spark.app.id", appId)
+    conf.set("spark.app.name", appName)
+    conf.set(MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME, "${spark.app.name}")
+    conf.set("spark.executor.id", executorId)
+
+    val instanceName = "testInstance"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+
+    // Even if spark.app.id and spark.executor.id are set, they are not used for the metric name.
+    assert(metricName != s"$appId.$executorId.${source.sourceName}")
+    assert(metricName === source.sourceName)
+  }
+
 }

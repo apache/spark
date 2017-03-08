@@ -20,8 +20,6 @@ package org.apache.spark.metrics
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
@@ -30,26 +28,27 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.util.Utils
 
 /**
- * Spark Metrics System, created by specific "instance", combined by source,
- * sink, periodically poll source metrics data to sink destinations.
+ * Spark Metrics System, created by a specific "instance", combined by source,
+ * sink, periodically polls source metrics data to sink destinations.
  *
- * "instance" specify "who" (the role) use metrics system. In spark there are several roles
- * like master, worker, executor, client driver, these roles will create metrics system
- * for monitoring. So instance represents these roles. Currently in Spark, several instances
+ * "instance" specifies "who" (the role) uses the metrics system. In Spark, there are several roles
+ * like master, worker, executor, client driver. These roles will create metrics system
+ * for monitoring. So, "instance" represents these roles. Currently in Spark, several instances
  * have already implemented: master, worker, executor, driver, applications.
  *
- * "source" specify "where" (source) to collect metrics data. In metrics system, there exists
+ * "source" specifies "where" (source) to collect metrics data from. In metrics system, there exists
  * two kinds of source:
  *   1. Spark internal source, like MasterSource, WorkerSource, etc, which will collect
  *   Spark component's internal state, these sources are related to instance and will be
- *   added after specific metrics system is created.
+ *   added after a specific metrics system is created.
  *   2. Common source, like JvmSource, which will collect low level state, is configured by
  *   configuration and loaded through reflection.
  *
- * "sink" specify "where" (destination) to output metrics data to. Several sinks can be
- * coexisted and flush metrics to all these sinks.
+ * "sink" specifies "where" (destination) to output metrics data to. Several sinks can
+ * coexist and metrics can be flushed to all these sinks.
  *
  * Metrics configuration format is like below:
  * [instance].[sink|source].[name].[options] = xxxx
@@ -62,9 +61,9 @@ import org.apache.spark.metrics.source.Source
  * [sink|source] means this property belongs to source or sink. This field can only be
  * source or sink.
  *
- * [name] specify the name of sink or source, it is custom defined.
+ * [name] specify the name of sink or source, if it is custom defined.
  *
- * [options] is the specific property of this source or sink.
+ * [options] represent the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
     val instance: String,
@@ -124,19 +123,27 @@ private[spark] class MetricsSystem private (
    *         application, executor/driver and metric source.
    */
   private[spark] def buildRegistryName(source: Source): String = {
-    val appId = conf.getOption("spark.app.id")
+    val metricsNamespace = conf
+      .getOptionSubstituted(MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME)
+      .orElse(conf.getOption("spark.app.id"))
+
     val executorId = conf.getOption("spark.executor.id")
     val defaultName = MetricRegistry.name(source.sourceName)
 
     if (instance == "driver" || instance == "executor") {
-      if (appId.isDefined && executorId.isDefined) {
-        MetricRegistry.name(appId.get, executorId.get, source.sourceName)
+      if (metricsNamespace.isDefined && executorId.isDefined) {
+        MetricRegistry.name(metricsNamespace.get, executorId.get, source.sourceName)
       } else {
         // Only Driver and Executor set spark.app.id and spark.executor.id.
         // Other instance types, e.g. Master and Worker, are not related to a specific application.
-        val warningMsg = s"Using default name $defaultName for source because %s is not set."
-        if (appId.isEmpty) { logWarning(warningMsg.format("spark.app.id")) }
-        if (executorId.isEmpty) { logWarning(warningMsg.format("spark.executor.id")) }
+        if (metricsNamespace.isEmpty) {
+          logWarning(s"Using default name $defaultName for source because neither " +
+            s"${MetricsSystem.METRICS_NAMESPACE_CONFIG_NAME} nor spark.app.id is set.")
+        }
+        if (executorId.isEmpty) {
+          logWarning(s"Using default name $defaultName for source because spark.executor.id is " +
+            s"not set.")
+        }
         defaultName
       }
     } else { defaultName }
@@ -209,6 +216,8 @@ private[spark] class MetricsSystem private (
 private[spark] object MetricsSystem {
   val SINK_REGEX = "^sink\\.(.+)\\.(.+)".r
   val SOURCE_REGEX = "^source\\.(.+)\\.(.+)".r
+
+  val METRICS_NAMESPACE_CONFIG_NAME = "spark.metrics.namespace"
 
   private[this] val MINIMAL_POLL_UNIT = TimeUnit.SECONDS
   private[this] val MINIMAL_POLL_PERIOD = 1

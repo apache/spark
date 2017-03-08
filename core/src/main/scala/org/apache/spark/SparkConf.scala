@@ -21,11 +21,11 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
-
-import org.apache.avro.{SchemaNormalization, Schema}
-
+import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
+
+import scala.util.matching.Regex
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -312,6 +312,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
   }
 
+  /** Get a parameter as an Option and substitute for parameter references */
+  def getOptionSubstituted(key: String): Option[String] = {
+    getOption(key).map( v => substitute(v, Set[String]()) )
+  }
+
   /** Get all parameters as a list of pairs */
   def getAll: Array[(String, String)] = {
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
@@ -524,6 +529,22 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
 
+  private val REF_RE = """\$\{(\S+?)\}""".r
+  private def substitute(input: String, usedRefs: Set[String]): String = {
+    if (input != null) {
+      REF_RE.replaceAllIn(input, { m =>
+        val name = m.group(1)
+        require(!usedRefs.contains(name), s"Circular reference in $input: $name")
+
+        val replacement = this.getOption(name)
+          .map { v => substitute(v, usedRefs + name) }
+          .getOrElse(m.matched)
+        Regex.quoteReplacement(replacement)
+      })
+    } else {
+      input
+    }
+  }
 }
 
 private[spark] object SparkConf extends Logging {
