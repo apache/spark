@@ -50,7 +50,6 @@ object SessionCatalog {
 class SessionCatalog(
     externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf,
     hadoopConf: Configuration,
@@ -66,16 +65,19 @@ class SessionCatalog(
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
-      DummyFunctionResourceLoader,
       functionRegistry,
       conf,
       new Configuration(),
       CatalystSqlParser)
+    functionResourceLoader = DummyFunctionResourceLoader
   }
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
+    this(
+      externalCatalog,
+      new SimpleFunctionRegistry,
+      SimpleCatalystConf(caseSensitiveAnalysis = true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -88,6 +90,8 @@ class SessionCatalog(
   // the corresponding item in the current database.
   @GuardedBy("this")
   protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
+
+  @volatile var functionResourceLoader: FunctionResourceLoader = _
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -987,6 +991,9 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    if (functionResourceLoader == null) {
+      throw new IllegalStateException("functionResourceLoader has not yet been initialized")
+    }
     resources.foreach(functionResourceLoader.loadResource)
   }
 
@@ -1182,4 +1189,29 @@ class SessionCatalog(
     }
   }
 
+  /**
+   * Create a new [[SessionCatalog]] with the provided parameters. `externalCatalog` and
+   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
+   */
+  def newSessionCatalogWith(
+      conf: CatalystConf,
+      hadoopConf: Configuration,
+      functionRegistry: FunctionRegistry,
+      parser: ParserInterface): SessionCatalog = {
+    val catalog = new SessionCatalog(
+      externalCatalog,
+      globalTempViewManager,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
+
+    synchronized {
+      catalog.currentDb = currentDb
+      // copy over temporary tables
+      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    }
+
+    catalog
+  }
 }

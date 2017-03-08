@@ -1019,6 +1019,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def clear(): Unit = {
     settings.clear()
   }
+
+  override def clone(): SQLConf = {
+    val result = new SQLConf
+    getAllConfs.foreach {
+      case(k, v) => if (v ne null) result.setConfString(k, v)
+    }
+    result
+  }
 }
 
 /**
