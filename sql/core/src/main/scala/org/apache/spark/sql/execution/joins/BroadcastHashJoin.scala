@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -57,6 +58,8 @@ case class BroadcastHashJoin(
     }
   }
 
+  val lazyBroadcast: Boolean = sqlContext.conf.autoBroadcastJoinLazy
+
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] =
@@ -66,35 +69,48 @@ case class BroadcastHashJoin(
   // for the same query.
   @transient
   private lazy val broadcastFuture = {
-    val numBuildRows = buildSide match {
-      case BuildLeft => longMetric("numLeftRows")
-      case BuildRight => longMetric("numRightRows")
-    }
-
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
-        // Note that we use .execute().collect() because we don't want to convert data to Scala
-        // types
-        val input: Array[InternalRow] = buildPlan.execute().map { row =>
-          numBuildRows += 1
-          row.copy()
-        }.collect()
-        // The following line doesn't run in a job so we cannot track the metric value. However, we
-        // have already tracked it in the above lines. So here we can use
-        // `SQLMetrics.nullLongMetric` to ignore it.
-        val hashed = HashedRelation(
-          input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
-        sparkContext.broadcast(hashed)
+        doBroadcast()
       }
     }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
   }
 
+  private def broadcastRelation = {
+    if (lazyBroadcast) {
+      doBroadcast()
+    } else {
+      Await.result(broadcastFuture, timeout)
+    }
+  }
+
+  private def doBroadcast(): Broadcast[HashedRelation] = {
+    val numBuildRows = buildSide match {
+      case BuildLeft => longMetric("numLeftRows")
+      case BuildRight => longMetric("numRightRows")
+    }
+    // Note that we use .execute().collect() because we don't want to convert data to Scala
+    // types
+    val input: Array[InternalRow] = buildPlan.execute().map { row =>
+      numBuildRows += 1
+      row.copy()
+    }.collect()
+    // The following line doesn't run in a job so we cannot track the metric value. However, we
+    // have already tracked it in the above lines. So here we can use
+    // `SQLMetrics.nullLongMetric` to ignore it.
+    val hashed = HashedRelation(
+      input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+    sparkContext.broadcast(hashed)
+  }
+
   protected override def doPrepare(): Unit = {
-    broadcastFuture
+    if (!lazyBroadcast) {
+      broadcastFuture
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -104,10 +120,9 @@ case class BroadcastHashJoin(
     }
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
-
+    val localBroadcast = broadcastRelation
     streamedPlan.execute().mapPartitions { streamedIter =>
-      val hashedRelation = broadcastRelation.value
+      val hashedRelation = localBroadcast.value
       hashedRelation match {
         case unsafe: UnsafeHashedRelation =>
           TaskContext.get().internalMetricsToAccumulators(
@@ -121,6 +136,6 @@ case class BroadcastHashJoin(
 
 object BroadcastHashJoin {
 
-  private[joins] val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
+  private[joins] lazy val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 128))
 }

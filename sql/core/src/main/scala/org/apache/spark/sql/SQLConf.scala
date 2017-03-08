@@ -221,6 +221,11 @@ private[spark] object SQLConf {
       "Note that currently statistics are only supported for Hive Metastore tables where the " +
       "command<code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.")
 
+  val AUTO_BROADCASTJOIN_LAZY = booleanConf("spark.sql.autoBroadcastJoin.lazy",
+    defaultValue = Some(false),
+    doc = "When true, perform automatic broadcasting of tables at execution time rather than " +
+      "asynchronously during query preparation")
+
   val DEFAULT_SIZE_IN_BYTES = longConf(
     "spark.sql.defaultSizeInBytes",
     doc = "The default table size used in query planning. By default, it is set to a larger " +
@@ -539,6 +544,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  private[spark] def autoBroadcastJoinLazy: Boolean = getConf(AUTO_BROADCASTJOIN_LAZY)
 
   private[spark] def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
