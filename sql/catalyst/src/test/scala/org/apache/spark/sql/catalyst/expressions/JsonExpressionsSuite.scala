@@ -22,7 +22,7 @@ import java.util.Calendar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, ParseModes}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -370,6 +370,62 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       JsonToStruct(schema, Map("mode" -> ParseModes.PERMISSIVE_MODE), Literal(jsonData), gmtId),
       null
     )
+  }
+
+  test("from_json - input=array, schema=array, output=array") {
+    val input = """[{"a": 1}, {"a": 2}]"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = InternalRow(1) :: InternalRow(2) :: Nil
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=object, schema=array, output=array of single row") {
+    val input = """{"a": 1}"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = InternalRow(1) :: Nil
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty array, schema=array, output=empty array") {
+    val input = "[ ]"
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = Nil
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty object, schema=array, output=array of single row with null") {
+    val input = "{ }"
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = InternalRow(null) :: Nil
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=array of single object, schema=struct, output=single row") {
+    val input = """[{"a": 1}]"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = InternalRow(1)
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=array, schema=struct, output=null") {
+    val input = """[{"a": 1}, {"a": 2}]"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = null
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty array, schema=struct, output=null") {
+    val input = """[]"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = null
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty object, schema=struct, output=single row with null") {
+    val input = """{  }"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = InternalRow(null)
+    checkEvaluation(JsonToStruct(schema, Map.empty, Literal(input), gmtId), output)
   }
 
   test("from_json null input column") {
