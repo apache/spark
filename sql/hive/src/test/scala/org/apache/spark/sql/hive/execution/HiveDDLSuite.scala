@@ -95,9 +95,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       "totalSize",
       "totalNumberFiles",
       "maxFileSize",
-      "minFileSize",
-      // EXTERNAL is not non-deterministic, but it is filtered out for external tables.
-      "EXTERNAL"
+      "minFileSize"
     )
 
     table.copy(

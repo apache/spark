@@ -259,19 +259,21 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     fs.makeQualified(hadoopPath).toUri
   }
 
+  private def getDBPath(dbName: String): URI = {
+    val warehousePath = s"file:${spark.sessionState.conf.warehousePath.stripPrefix("file:")}"
+    new Path(warehousePath, s"$dbName.db").toUri
+  }
+
   test("Create Database using Default Warehouse Path") {
     val catalog = spark.sessionState.catalog
     val dbName = "db1"
     try {
       sql(s"CREATE DATABASE $dbName")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val dbPath = new Path(spark.sessionState.conf.warehousePath)
-      val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
-      val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
       assert(db1 == CatalogDatabase(
         dbName,
         "",
-        expectedDBUri, // expectedLocation,
+        getDBPath(dbName),
         Map.empty))
       sql(s"DROP DATABASE $dbName CASCADE")
       assert(!catalog.databaseExists(dbName))
@@ -314,15 +316,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        val dbPath = new Path(spark.sessionState.conf.warehousePath)
-        val expectedDBLocation =
-          s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbNameWithoutBackTicks.db"
-        val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
-
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          expectedDBUri,
+          getDBPath(dbNameWithoutBackTicks),
           Map.empty))
 
         // TODO: HiveExternalCatalog should throw DatabaseAlreadyExistsException
@@ -555,10 +552,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     databaseNames.foreach { dbName =>
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        val dbPath = new Path(spark.sessionState.conf.warehousePath)
-        val expectedDBLocation =
-          s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbNameWithoutBackTicks.db"
-        val location = CatalogUtils.stringToURI(expectedDBLocation)
+        val location = getDBPath(dbNameWithoutBackTicks)
 
         sql(s"CREATE DATABASE $dbName")
 
@@ -602,6 +596,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
+      // TODO: Unify the exception.
       if (isUsingHiveMetastore) {
         assert(message.contains(s"NoSuchObjectException: $dbNameWithoutBackTicks"))
       } else {
@@ -635,6 +630,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val message = intercept[AnalysisException] {
       sql(s"DROP DATABASE $dbName RESTRICT")
     }.getMessage
+    // TODO: Unify the exception.
     if (isUsingHiveMetastore) {
       assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
     } else {
@@ -967,6 +963,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         Set(part1, part2))
       if (!isUsingHiveMetastore) {
         assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+        assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
+      } else {
+        // After ALTER TABLE, the statistics of the first partition is removed by Hive megastore
+        assert(catalog.getPartition(tableIdent, part1).parameters.get("numFiles").isEmpty)
         assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
       }
     } finally {
