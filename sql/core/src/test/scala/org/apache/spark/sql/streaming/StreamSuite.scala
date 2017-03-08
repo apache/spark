@@ -354,34 +354,6 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("streaming agg without change in number of partitions") {
-    val inputData = MemoryStream[(Int, Int)]
-    val agg = inputData.toDS().groupBy("_1").count()
-
-    testStream(agg, OutputMode.Complete())(
-      AddData(inputData, (1, 1), (2, 1), (1, 2)),
-      StartStream(additionalConfs = Map("spark.sql.shuffle.partitions" -> "2")),
-      CheckAnswer((1, 2), (2, 1)),
-      StopStream,
-      AddData(inputData, (3, 1), (2, 2), (1, 1)),
-      StartStream(),
-      CheckAnswer((1, 3), (2, 2), (3, 1)))
-  }
-
-  test("streaming agg with change in number of partitions") {
-    val inputData = MemoryStream[(Int, Int)]
-    val agg = inputData.toDS().groupBy("_1").count()
-
-    testStream(agg, OutputMode.Complete())(
-      AddData(inputData, (1, 1), (2, 1), (1, 2)),
-      StartStream(additionalConfs = Map("spark.sql.shuffle.partitions" -> "2")),
-      CheckAnswer((1, 2), (2, 1)),
-      StopStream,
-      AddData(inputData, (3, 1), (2, 2), (1, 1)),
-      StartStream(additionalConfs = Map("spark.sql.shuffle.partitions" -> "5")),
-      CheckAnswer((1, 3), (2, 2), (3, 1)))
-  }
-
   test("handle IOException when the streaming thread is interrupted (pre Hadoop 2.8)") {
     // This test uses a fake source to throw the same IOException as pre Hadoop 2.8 when the
     // streaming thread is interrupted. We should handle it properly by not failing the query.
@@ -416,6 +388,20 @@ class StreamSuite extends StreamTest {
       "ThrowingInterruptedIOException.createSource wasn't called before timeout")
     query.stop()
     assert(query.exception.isEmpty)
+  }
+
+  test("SPARK-19873: streaming agg with change in number of partitions") {
+    val inputData = MemoryStream[(Int, Int)]
+    val agg = inputData.toDS().groupBy("_1").count()
+
+    testStream(agg, OutputMode.Complete())(
+      AddData(inputData, (1, 1), (2, 1), (1, 2)),
+      StartStream(additionalConfs = Map("spark.sql.shuffle.partitions" -> "2")),
+      CheckAnswer((1, 2), (2, 1)),
+      StopStream,
+      AddData(inputData, (3, 1), (2, 2), (1, 1)),
+      StartStream(additionalConfs = Map("spark.sql.shuffle.partitions" -> "5")),
+      CheckAnswer((1, 3), (2, 2), (3, 1)))
   }
 }
 
