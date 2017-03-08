@@ -967,6 +967,7 @@ object SparkSession {
     conf.get(CATALOG_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_CLASS_NAME
       case "in-memory" => classOf[SessionState].getCanonicalName
+      case name => name
     }
   }
 
