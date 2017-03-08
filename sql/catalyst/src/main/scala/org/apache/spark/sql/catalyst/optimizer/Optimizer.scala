@@ -56,7 +56,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
-      RewriteDistinctAggregates) ::
+      RewriteDistinctAggregates,
+      ReplaceDeduplicateWithAggregate) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -578,7 +579,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       RepartitionByExpression(exprs, child, numPartitions)
     // Case 3
     case Repartition(numPartitions, _, r: RepartitionByExpression) =>
-      r.copy(numPartitions = Some(numPartitions))
+      r.copy(numPartitions = numPartitions)
     // Case 3
     case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
       RepartitionByExpression(exprs, child, numPartitions)
@@ -1139,6 +1140,24 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Distinct(child) => Aggregate(child.output, child.output, child)
+  }
+}
+
+/**
+ * Replaces logical [[Deduplicate]] operator with an [[Aggregate]] operator.
+ */
+object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Deduplicate(keys, child, streaming) if !streaming =>
+      val keyExprIds = keys.map(_.exprId)
+      val aggCols = child.output.map { attr =>
+        if (keyExprIds.contains(attr.exprId)) {
+          attr
+        } else {
+          Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
+        }
+      }
+      Aggregate(keys, aggCols, child)
   }
 }
 

@@ -96,6 +96,7 @@ private[hive] class HiveClientImpl(
     case hive.v1_0 => new Shim_v1_0()
     case hive.v1_1 => new Shim_v1_1()
     case hive.v1_2 => new Shim_v1_2()
+    case hive.v2_0 => new Shim_v2_0()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -106,10 +107,6 @@ private[hive] class HiveClientImpl(
 
     // Set up kerberos credentials for UserGroupInformation.loginUser within
     // current class loader
-    // Instead of using the spark conf of the current spark context, a new
-    // instance of SparkConf is needed for the original value of spark.yarn.keytab
-    // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
-    // keytab configuration for the link name in distributed cache
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")
       val keytabFileName = sparkConf.get("spark.yarn.keytab")
@@ -272,16 +269,21 @@ private[hive] class HiveClientImpl(
    */
   def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
+    val originalConfLoader = state.getConf.getClassLoader
+    // The classloader in clientLoader could be changed after addJar, always use the latest
+    // classloader. We explicitly set the context class loader since "conf.setClassLoader" does
+    // not do that, and the Hive client libraries may need to load classes defined by the client's
+    // class loader.
+    Thread.currentThread().setContextClassLoader(clientLoader.classLoader)
+    state.getConf.setClassLoader(clientLoader.classLoader)
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
-    // The classloader in clientLoader could be changed after addJar, always use the latest
-    // classloader
-    state.getConf.setClassLoader(clientLoader.classLoader)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
     shim.setCurrentSessionState(state)
     val ret = try f finally {
+      state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
       HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
@@ -315,7 +317,7 @@ private[hive] class HiveClientImpl(
       new HiveDatabase(
         database.name,
         database.description,
-        database.locationUri,
+        CatalogUtils.URIToString(database.locationUri),
         Option(database.properties).map(_.asJava).orNull),
         ignoreIfExists)
   }
@@ -333,7 +335,7 @@ private[hive] class HiveClientImpl(
       new HiveDatabase(
         database.name,
         database.description,
-        database.locationUri,
+        CatalogUtils.URIToString(database.locationUri),
         Option(database.properties).map(_.asJava).orNull))
   }
 
@@ -342,7 +344,7 @@ private[hive] class HiveClientImpl(
       CatalogDatabase(
         name = d.getName,
         description = d.getDescription,
-        locationUri = d.getLocationUri,
+        locationUri = CatalogUtils.stringToURI(d.getLocationUri),
         properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
@@ -408,7 +410,7 @@ private[hive] class HiveClientImpl(
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
-          locationUri = shim.getDataLocation(h),
+          locationUri = shim.getDataLocation(h).map(CatalogUtils.stringToURI(_)),
           // To avoid ClassNotFound exception, we try our best to not get the format class, but get
           // the class name directly. However, for non-native tables, there is no interface to get
           // the format class name, so we may still throw ClassNotFound in this case.
@@ -668,7 +670,6 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
@@ -678,7 +679,6 @@ private[hive] class HiveClientImpl(
       s"$dbName.$tableName",
       partSpec,
       replace,
-      holdDDLTime,
       inheritTableSpecs,
       isSkewedStoreAsSubdir = hiveTable.isStoredAsSubDirectories,
       isSrcLocal = isSrcLocal)
@@ -688,14 +688,12 @@ private[hive] class HiveClientImpl(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     shim.loadTable(
       client,
       new Path(loadPath),
       tableName,
       replace,
-      holdDDLTime,
       isSrcLocal)
   }
 
@@ -705,8 +703,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit = withHiveState {
+      numDP: Int): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
     shim.loadDynamicPartitions(
       client,
@@ -715,7 +712,6 @@ private[hive] class HiveClientImpl(
       partSpec,
       replace,
       numDP,
-      holdDDLTime,
       listBucketingEnabled = hiveTable.isStoredAsSubDirectories)
   }
 
@@ -855,7 +851,8 @@ private[hive] object HiveClientImpl {
     conf.foreach(c => hiveTable.setOwner(c.getUser))
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
-    table.storage.locationUri.foreach { loc => hiveTable.getTTable.getSd.setLocation(loc)}
+    table.storage.locationUri.map(CatalogUtils.URIToString(_)).foreach { loc =>
+      hiveTable.getTTable.getSd.setLocation(loc)}
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
     hiveTable.setSerializationLib(
@@ -889,7 +886,7 @@ private[hive] object HiveClientImpl {
     }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
-    p.storage.locationUri.foreach(storageDesc.setLocation)
+    p.storage.locationUri.map(CatalogUtils.URIToString(_)).foreach(storageDesc.setLocation)
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
@@ -910,7 +907,7 @@ private[hive] object HiveClientImpl {
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
       storage = CatalogStorageFormat(
-        locationUri = Option(apiPartition.getSd.getLocation),
+        locationUri = Option(CatalogUtils.stringToURI(apiPartition.getSd.getLocation)),
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),

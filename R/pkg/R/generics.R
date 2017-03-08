@@ -991,6 +991,10 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
+#' @rdname from_json
+#' @export
+setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
+
 #' @rdname from_unixtime
 #' @export
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
@@ -1265,6 +1269,10 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 #' @export
 setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
 
+#' @rdname to_json
+#' @export
+setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
+
 #' @rdname to_timestamp
 #' @export
 setGeneric("to_timestamp", function(x, format) { standardGeneric("to_timestamp") })
@@ -1406,7 +1414,7 @@ setGeneric("spark.randomForest",
 
 #' @rdname spark.survreg
 #' @export
-setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
 #' @rdname spark.svmLinear
 #' @export

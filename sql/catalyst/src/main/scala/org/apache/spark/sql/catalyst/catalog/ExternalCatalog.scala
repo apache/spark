@@ -38,7 +38,7 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
 
   lazy val defaultDB: CatalogDatabase = {
     val qualifiedWarehousePath = SessionCatalog
-      .makeQualifiedPath(warehousePath, hadoopConf).toString
+      .makeQualifiedPath(CatalogUtils.stringToURI(warehousePath), hadoopConf)
     CatalogDatabase(
       SessionCatalog.DEFAULT_DATABASE,
       "The default database created by Spark using current warehouse path",
@@ -148,7 +148,6 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit
 
   /**
@@ -163,7 +162,6 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
       loadPath: String,
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit
 
@@ -173,8 +171,7 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit
+      numDP: Int): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -270,11 +267,13 @@ abstract class ExternalCatalog(conf: SparkConf, hadoopConf: Configuration) {
    * @param db database name
    * @param table table name
    * @param predicates partition-pruning predicates
+   * @param defaultTimeZoneId default timezone id to parse partition values of TimestampType
    */
   def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition]
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions

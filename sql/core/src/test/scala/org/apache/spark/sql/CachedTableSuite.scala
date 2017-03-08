@@ -634,4 +634,20 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       assert(getNumInMemoryRelations(cachedPlan2) == 4)
     }
   }
+
+  test("refreshByPath should refresh all cached plans with the specified path") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath()
+
+      spark.range(10).write.mode("overwrite").parquet(path)
+      spark.read.parquet(path).cache()
+      spark.read.parquet(path).filter($"id" > 4).cache()
+      assert(spark.read.parquet(path).filter($"id" > 4).count() == 5)
+
+      spark.range(20).write.mode("overwrite").parquet(path)
+      spark.catalog.refreshByPath(path)
+      assert(spark.read.parquet(path).count() == 20)
+      assert(spark.read.parquet(path).filter($"id" > 4).count() == 15)
+    }
+  }
 }

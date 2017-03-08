@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -433,15 +433,15 @@ class SessionCatalogSuite extends PlanTest {
     sessionCatalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
+    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
+      .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
     // Otherwise, we'll first look up a temporary table with the same name
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", tempTable1, None))
     // Then, if that does not exist, look up the relation in the current database
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
+    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1")).children.head
+      .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
   }
 
   test("look up view relation") {
@@ -1194,6 +1194,27 @@ class SessionCatalogSuite extends PlanTest {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[NoSuchDatabaseException] {
       catalog.listFunctions("unknown_db", "func*")
+    }
+  }
+
+  test("SPARK-19737: detect undefined functions without triggering relation resolution") {
+    import org.apache.spark.sql.catalyst.dsl.plans._
+
+    Seq(true, false) foreach { caseSensitive =>
+      val conf = SimpleCatalystConf(caseSensitive)
+      val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
+      val analyzer = new Analyzer(catalog, conf)
+
+      // The analyzer should report the undefined function rather than the undefined table first.
+      val cause = intercept[AnalysisException] {
+        analyzer.execute(
+          UnresolvedRelation(TableIdentifier("undefined_table")).select(
+            UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+          )
+        )
+      }
+
+      assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
     }
   }
 }

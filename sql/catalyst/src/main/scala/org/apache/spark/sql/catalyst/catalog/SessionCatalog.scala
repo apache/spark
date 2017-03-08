@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -44,10 +45,10 @@ object SessionCatalog {
    * does not contain a scheme, this path will not be changed after the default
    * FileSystem is changed.
    */
-  def makeQualifiedPath(path: String, conf: Configuration): Path = {
+  def makeQualifiedPath(path: URI, conf: Configuration): URI = {
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(conf)
-    fs.makeQualified(hadoopPath)
+    fs.makeQualified(hadoopPath).toUri
   }
 }
 
@@ -170,7 +171,7 @@ class SessionCatalog(
           "you cannot create a database with this name.")
     }
     validateName(dbName)
-    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri, hadoopConf).toString
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri, hadoopConf)
     externalCatalog.createDatabase(
       dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
       ignoreIfExists)
@@ -228,9 +229,9 @@ class SessionCatalog(
    * Get the path for creating a non-default database when database location is not provided
    * by users.
    */
-  def getDefaultDBPath(db: String): String = {
+  def getDefaultDBPath(db: String): URI = {
     val database = formatDatabaseName(db)
-    new Path(new Path(conf.warehousePath), database + ".db").toString
+    new Path(new Path(conf.warehousePath), database + ".db").toUri
   }
 
   // ----------------------------------------------------------------------------
@@ -322,13 +323,12 @@ class SessionCatalog(
       name: TableIdentifier,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime, isSrcLocal)
+    externalCatalog.loadTable(db, table, loadPath, isOverwrite, isSrcLocal)
   }
 
   /**
@@ -341,7 +341,6 @@ class SessionCatalog(
       loadPath: String,
       spec: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -350,14 +349,14 @@ class SessionCatalog(
     requireTableExists(TableIdentifier(table, Some(db)))
     requireNonEmptyValueInPartitionSpec(Seq(spec))
     externalCatalog.loadPartition(
-      db, table, loadPath, spec, isOverwrite, holdDDLTime, inheritTableSpecs, isSrcLocal)
+      db, table, loadPath, spec, isOverwrite, inheritTableSpecs, isSrcLocal)
   }
 
-  def defaultTablePath(tableIdent: TableIdentifier): String = {
+  def defaultTablePath(tableIdent: TableIdentifier): URI = {
     val dbName = formatDatabaseName(tableIdent.database.getOrElse(getCurrentDatabase))
     val dbLocation = getDatabaseMetadata(dbName).locationUri
 
-    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
+    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toUri
   }
 
   // ----------------------------------------------
@@ -594,7 +593,12 @@ class SessionCatalog(
             child = parser.parsePlan(viewText))
           SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
         } else {
-          SubqueryAlias(table, SimpleCatalogRelation(metadata), None)
+          val tableRelation = CatalogRelation(
+            metadata,
+            // we assume all the columns are nullable.
+            metadata.dataSchema.asNullable.toAttributes,
+            metadata.partitionSchema.asNullable.toAttributes)
+          SubqueryAlias(table, tableRelation, None)
         }
       } else {
         SubqueryAlias(table, tempTables(table), None)
@@ -838,7 +842,7 @@ class SessionCatalog(
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.listPartitionsByFilter(db, table, predicates)
+    externalCatalog.listPartitionsByFilter(db, table, predicates, conf.sessionLocalTimeZone)
   }
 
   /**
