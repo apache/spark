@@ -175,6 +175,37 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
+      .autoShutdown()
+      .addAppArgs("proc");
+    final Process app = launcher.launch();
+
+    new OutputRedirector(app.getInputStream(), TF);
+    new OutputRedirector(app.getErrorStream(), TF);
+    assertEquals(0, app.waitFor());
+  }
+
+  @Test
+  public void testThreadLauncher() throws Exception {
+    // This test is failed on Windows due to the failure of initiating executors
+    // by the path length limitation. See SPARK-18718.
+    assumeTrue(!Utils.isWindows());
+
+    SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
+    Map<String, String> env = new HashMap<>();
+    env.put("SPARK_PRINT_LAUNCH_COMMAND", "1");
+
+    launcher
+      .setMaster("local")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .addSparkArg(opts.CONF,
+        String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
+        "-Dfoo=bar -Dtest.appender=childproc")
+      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
+      .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
+      .setMainClass(SparkLauncherTestApp.class.getName())
+      .launchAsThread(true)
+      .autoShutdown()
       .addAppArgs("proc");
     final Process app = launcher.launch();
 
