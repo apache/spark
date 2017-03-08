@@ -850,60 +850,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromString(sb.toString());
   }
 
-  private int getDigit(byte b) {
-    if (b >= '0' && b <= '9') {
-      return b - '0';
-    }
-    throw new NumberFormatException(toString());
-  }
+  public static class LongWrapper {
+    private long value = 0;
 
-  // Mimics LazyUtils.isNumberMaybe() with an additional check for number of bytes
-  private boolean isNumericMaybe(int maxLengthWithoutSign) {
-    if (numBytes <= 0) {
-      // check for empty string
-      return false;
+    public long getValue() {
+      return value;
     }
 
-    int maxNumBytes = maxLengthWithoutSign;
-    byte firstByte = getByte(0);
-
-    if (!Character.isDigit(firstByte)) {
-      // if the first character isn't a digit, then it has to be either `+` OR `-`
-      if ((firstByte == '-' || firstByte == '+')) {
-        maxNumBytes += 1;
-      } else {
-        return false;
-      }
+    private void setValue(long value) {
+      this.value = value;
     }
-
-    if (numBytes > maxNumBytes) {
-      return false;
-    }
-
-    // maybe valid - too expensive to check without a full parse
-    return true;
-  }
-
-  /**
-   * Does a cheap check if the current string can be converted to a long. Note that even if this
-   * method returns `true`, the underlying string still _may_ not be assumed to be a proper long
-   * and one _can_ get an `NumberFormatException` while parsing it. The main purpose of having this
-   * method is to save the cost from raising an exception for obvious cases wherein the parsing
-   * would fail (eg. null or empty string)
-   */
-  public boolean isLongMaybe() {
-    return isNumericMaybe(String.valueOf(Long.MAX_VALUE).length());
-  }
-
-  /**
-   * Does a cheap check if the current string can be converted to a int. Note that even if this
-   * method returns `true`, the underlying string still _may_ not be assumed to be a proper int
-   * and one _can_ get an `NumberFormatException` while parsing it. The main purpose of having this
-   * method is to save the cost from raising an exception for obvious cases wherein the parsing
-   * would fail (eg. null or empty string)
-   */
-  public boolean isIntMaybe() {
-    return isNumericMaybe(String.valueOf(Integer.MAX_VALUE).length());
   }
 
   /**
@@ -911,14 +867,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *
    * Note that, in this method we accumulate the result in negative format, and convert it to
    * positive format at the end, if this string is not started with '-'. This is because min value
-   * is bigger than max value in digits, e.g. Integer.MAX_VALUE is '2147483647' and
-   * Integer.MIN_VALUE is '-2147483648'.
+   * is bigger than max value in digits, e.g. Long.MAX_VALUE is '9223372036854775807' and
+   * Long.MIN_VALUE is '-9223372036854775808'.
    *
    * This code is mostly copied from LazyLong.parseLong in Hive.
+   *
+   * @param toLongResult If a valid `long` was parsed from this UTF8String, then its value would
+   *                     be set in `toLongResult`
+   * @return true if the parsing was successful else false
    */
-  public long toLong() {
+  public boolean toLong(LongWrapper toLongResult) {
     if (numBytes == 0) {
-      throw new NumberFormatException("Empty string");
+      return false;
     }
 
     byte b = getByte(0);
@@ -927,7 +887,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (negative || b == '+') {
       offset++;
       if (numBytes == 1) {
-        throw new NumberFormatException(toString());
+        return false;
       }
     }
 
@@ -946,20 +906,25 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         break;
       }
 
-      int digit = getDigit(b);
+      int digit;
+      if (b >= '0' && b <= '9') {
+        digit = b - '0';
+      } else {
+        return false;
+      }
+
       // We are going to process the new digit and accumulate the result. However, before doing
       // this, if the result is already smaller than the stopValue(Long.MIN_VALUE / radix), then
-      // result * 10 will definitely be smaller than minValue, and we can stop and throw exception.
+      // result * 10 will definitely be smaller than minValue, and we can stop.
       if (result < stopValue) {
-        throw new NumberFormatException(toString());
+        return false;
       }
 
       result = result * radix - digit;
       // Since the previous result is less than or equal to stopValue(Long.MIN_VALUE / radix), we
-      // can just use `result > 0` to check overflow. If result overflows, we should stop and throw
-      // exception.
+      // can just use `result > 0` to check overflow. If result overflows, we should stop.
       if (result > 0) {
-        throw new NumberFormatException(toString());
+        return false;
       }
     }
 
@@ -967,8 +932,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
     while (offset < numBytes) {
-      if (getDigit(getByte(offset)) == -1) {
-        throw new NumberFormatException(toString());
+      byte currentByte = getByte(offset);
+      if (currentByte < '0' || currentByte > '9') {
+        return false;
       }
       offset++;
     }
@@ -976,11 +942,24 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (!negative) {
       result = -result;
       if (result < 0) {
-        throw new NumberFormatException(toString());
+        return false;
       }
     }
 
-    return result;
+    toLongResult.setValue(result);
+    return true;
+  }
+
+  public static class IntWrapper {
+    private int value = 0;
+
+    public int getValue() {
+      return value;
+    }
+
+    private void setValue(int value) {
+      this.value = value;
+    }
   }
 
   /**
@@ -995,10 +974,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *
    * Note that, this method is almost same as `toLong`, but we leave it duplicated for performance
    * reasons, like Hive does.
+   *
+   * @param intWrapper If a valid `int` was parsed from this UTF8String, then its value would
+   *                    be set in `intWrapper`
+   * @return true if the parsing was successful else false
    */
-  public int toInt() {
+  public boolean toInt(IntWrapper intWrapper) {
     if (numBytes == 0) {
-      throw new NumberFormatException("Empty string");
+      return false;
     }
 
     byte b = getByte(0);
@@ -1007,7 +990,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (negative || b == '+') {
       offset++;
       if (numBytes == 1) {
-        throw new NumberFormatException(toString());
+        return false;
       }
     }
 
@@ -1026,20 +1009,25 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         break;
       }
 
-      int digit = getDigit(b);
+      int digit;
+      if (b >= '0' && b <= '9') {
+        digit = b - '0';
+      } else {
+        return false;
+      }
+
       // We are going to process the new digit and accumulate the result. However, before doing
       // this, if the result is already smaller than the stopValue(Integer.MIN_VALUE / radix), then
-      // result * 10 will definitely be smaller than minValue, and we can stop and throw exception.
+      // result * 10 will definitely be smaller than minValue, and we can stop
       if (result < stopValue) {
-        throw new NumberFormatException(toString());
+        return false;
       }
 
       result = result * radix - digit;
       // Since the previous result is less than or equal to stopValue(Integer.MIN_VALUE / radix),
-      // we can just use `result > 0` to check overflow. If result overflows, we should stop and
-      // throw exception.
+      // we can just use `result > 0` to check overflow. If result overflows, we should stop
       if (result > 0) {
-        throw new NumberFormatException(toString());
+        return false;
       }
     }
 
@@ -1047,8 +1035,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // part will not change the number, but we will verify that the fractional part
     // is well formed.
     while (offset < numBytes) {
-      if (getDigit(getByte(offset)) == -1) {
-        throw new NumberFormatException(toString());
+      byte currentByte = getByte(offset);
+      if (currentByte < '0' || currentByte > '9') {
+        return false;
       }
       offset++;
     }
@@ -1056,31 +1045,33 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (!negative) {
       result = -result;
       if (result < 0) {
-        throw new NumberFormatException(toString());
+        return false;
       }
     }
-
-    return result;
+    intWrapper.setValue(result);
+    return true;
   }
 
-  public short toShort() {
-    int intValue = toInt();
-    short result = (short) intValue;
-    if (result != intValue) {
-      throw new NumberFormatException(toString());
+  public boolean toShort(IntWrapper intWrapper) {
+    if (toInt(intWrapper)) {
+      int intValue = intWrapper.getValue();
+      short result = (short) intValue;
+      if (result == intValue) {
+        return true;
+      }
     }
-
-    return result;
+    return false;
   }
 
-  public byte toByte() {
-    int intValue = toInt();
-    byte result = (byte) intValue;
-    if (result != intValue) {
-      throw new NumberFormatException(toString());
+  public boolean toByte(IntWrapper intWrapper) {
+    if (toInt(intWrapper)) {
+      int intValue = intWrapper.getValue();
+      byte result = (byte) intValue;
+      if (result == intValue) {
+        return true;
+      }
     }
-
-    return result;
+    return false;
   }
 
   @Override
