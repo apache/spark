@@ -282,23 +282,6 @@ class DataFrameReader(OptionUtils):
         """
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
-    @since(2.2)
-    def parquet(self, path):
-        """Loads Parquet files, returning the result as a :class:`DataFrame`.
-
-        You can set the following Parquet-specific option(s) for reading Parquet files:
-            * ``mergeSchema``: sets whether we should merge schemas collected from all \
-                Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
-                The default value is specified in ``spark.sql.parquet.mergeSchema``.
-
-        >>> df = spark.read.parquet(path='python/test_support/sql/parquet_partitioned')
-        >>> df.dtypes
-        [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
-        """
-        if isinstance(path, basestring):
-            path = [path]
-        return self._df(self._jreader.parquet(self._spark._sc._jvm.PythonUtils.toSeq(path)))
-
     @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths):
