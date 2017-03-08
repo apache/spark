@@ -191,18 +191,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Without joining keys ------------------------------------------------------------
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcasted
-      case j @ logical.Join(left, right, joinType, condition)
+      case logical.Join(left, right, joinType, condition)
           if canBuildRight(joinType) && canBroadcast(right) =>
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
-      case j @ logical.Join(left, right, joinType, condition)
+      case logical.Join(left, right, joinType, condition)
           if canBuildLeft(joinType) && canBroadcast(left) =>
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
-      case logical.Join(left, right, _: InnerLike, condition) =>
-        joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
+      case logical.Join(left, right, joinType: InnerLike, condition) =>
+        joins.CartesianProductExec(planLater(left), planLater(right), joinType, condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
@@ -213,7 +213,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+          planLater(left),
+          planLater(right),
+          buildSide,
+          joinType,
+          condition,
+          withinBroadcastThreshold = false) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 

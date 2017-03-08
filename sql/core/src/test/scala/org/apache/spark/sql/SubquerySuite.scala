@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -320,7 +321,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             | select c1 from t1
             | where c2 IN (select c2 from t2)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
@@ -329,37 +329,35 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             | select c1 from t1
             | where c2 NOT IN (select c2 from t2)
-            |
           """.stripMargin),
        Nil)
 
-      checkAnswer(
-        sql(
-          """
-            | select c1 from t1
-            | where EXISTS (select c2 from t2)
-            |
-          """.stripMargin),
-        Row(1) :: Row(2) :: Nil)
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        checkAnswer(
+          sql(
+            """
+              | select c1 from t1
+              | where EXISTS (select c2 from t2)
+            """.stripMargin),
+          Row(1) :: Row(2) :: Nil)
 
-       checkAnswer(
-        sql(
-          """
-            | select c1 from t1
-            | where NOT EXISTS (select c2 from t2)
-            |
-          """.stripMargin),
-      Nil)
+        checkAnswer(
+          sql(
+            """
+              | select c1 from t1
+              | where NOT EXISTS (select c2 from t2)
+            """.stripMargin),
+          Nil)
 
-      checkAnswer(
-        sql(
-          """
-            | select c1 from t1
-            | where NOT EXISTS (select c2 from t2) and
-            |       c2 IN (select c2 from t3)
-            |
-          """.stripMargin),
-        Nil)
+        checkAnswer(
+          sql(
+            """
+              | select c1 from t1
+              | where NOT EXISTS (select c2 from t2) and
+              |       c2 IN (select c2 from t3)
+            """.stripMargin),
+          Nil)
+      }
 
       checkAnswer(
         sql(
@@ -367,7 +365,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | select c1 from t1
             | where (case when c2 IN (select 1 as one) then 1
             |             else 2 end) = c1
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
@@ -378,7 +375,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | where (case when c2 IN (select 1 as one) then 1
             |             else 2 end)
             |        IN (select c2 from t2)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
@@ -389,7 +385,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | where (case when c2 IN (select c2 from t2) then 1
             |             else 2 end)
             |       IN (select c2 from t3)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
@@ -401,7 +396,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |             when c2 IN (select c2 from t3) then 2
             |             else 3 end)
             |       IN (select c2 from t1)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
@@ -413,7 +407,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |                  when c2 IN (select c2 from t3) then 2
             |                  else 3 end))
             |       IN (select c1, c2 from t1)
-            |
           """.stripMargin),
         Row(1) :: Nil)
 
@@ -424,20 +417,20 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
             |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
             |     IN (select c1, c2 from t3)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Row(1) :: Nil)
 
-      checkAnswer(
-        sql(
-          """
-            | select c1 from t1
-            | where ((case when EXISTS (select c2 from t2) then 1 else 2 end),
-            |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
-            |     IN (select c1, c2 from t3)
-            |
-          """.stripMargin),
-        Row(1) :: Row(2) :: Nil)
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        checkAnswer(
+          sql(
+            """
+              | select c1 from t1
+              | where ((case when EXISTS (select c2 from t2) then 1 else 2 end),
+              |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
+              |     IN (select c1, c2 from t3)
+            """.stripMargin),
+          Row(1) :: Row(2) :: Nil)
+      }
 
       checkAnswer(
         sql(
@@ -446,22 +439,22 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | where (case when c2 IN (select c2 from t2) then 3
             |             else 2 end)
             |       NOT IN (select c2 from t3)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
 
-      checkAnswer(
-        sql(
-          """
-            | select c1 from t1
-            | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
-            |        (case when NOT EXISTS (select c2 from t3) then 2
-            |              when EXISTS (select c2 from t2) then 3
-            |              else 3 end))
-            |     NOT IN (select c1, c2 from t3)
-            |
-          """.stripMargin),
-        Row(1) :: Row(2) :: Nil)
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        checkAnswer(
+          sql(
+            """
+              | select c1 from t1
+              | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
+              |        (case when NOT EXISTS (select c2 from t3) then 2
+              |              when EXISTS (select c2 from t2) then 3
+              |              else 3 end))
+              |     NOT IN (select c1, c2 from t3)
+            """.stripMargin),
+          Row(1) :: Row(2) :: Nil)
+      }
 
       checkAnswer(
         sql(
@@ -469,7 +462,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             | select c1 from t1
             | where (select max(c1) from t2 where c2 IN (select c2 from t3))
             |       IN (select c2 from t2)
-            |
           """.stripMargin),
         Row(1) :: Row(2) :: Nil)
     }
@@ -631,13 +623,15 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     withTempView("onerow") {
       Seq(1).toDF("c1").createOrReplaceTempView("onerow")
 
-      checkAnswer(
-        sql(
-          """
-            | select c1 from onerow t1
-            | where exists (select 1 from onerow t2 where t1.c1=t2.c1)
-            | and   exists (select 1 from onerow LIMIT 1)""".stripMargin),
-        Row(1) :: Nil)
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        checkAnswer(
+          sql(
+            """
+              | select c1 from onerow t1
+              | where exists (select 1 from onerow t2 where t1.c1=t2.c1)
+              | and   exists (select 1 from onerow LIMIT 1)""".stripMargin),
+          Row(1) :: Nil)
+      }
     }
   }
 

@@ -34,7 +34,8 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression]) extends BinaryExecNode {
+    condition: Option[Expression],
+    withinBroadcastThreshold: Boolean = true) extends BinaryExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -337,6 +338,34 @@ case class BroadcastNestedLoopJoinExec(
       matchedStreamRows,
       sparkContext.makeRDD(notMatchedBroadcastRows)
     )
+  }
+
+  protected override def doPrepare(): Unit = {
+    if (!sqlContext.conf.crossJoinEnabled) {
+      joinType match {
+        case Cross => // Do nothing
+        // Based on the current join selection order, we always pick CartesianProduct for InnerJoin
+        // When hitting this branch, at least one side is small enough for broadcasting.
+        // Thus, we do not need to issue exceptions.
+        case Inner => // Do nothing
+        case _ if !withinBroadcastThreshold =>
+          // The broadcast nested loop join is the last option, if we do not have any better join
+          // types.
+          throw new AnalysisException(
+            s"""Both sides of this join are outside the broadcasting threshold and
+               |computing it could be prohibitively expensive. To explicitly enable it,
+               |please use the CROSS JOIN syntax or set ${SQLConf.CROSS_JOINS_ENABLED.key} = true
+               |to allow cartesian products between these relations.
+               |Join type: $joinType
+               |Left side:
+               |${left.treeString(false).trim}
+               |Right side:
+               |${right.treeString(false).trim}
+             """.stripMargin)
+        case _ =>
+      }
+    }
+    super.doPrepare()
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

@@ -33,14 +33,14 @@ CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
   ("emp 6 - no dept", 500.00D)
 AS BONUS(emp_name, bonus_amt);
 
--- uncorrelated exist query 
+-- uncorrelated exist query
 -- TC.01.01
 SELECT * 
 FROM   emp 
 WHERE  EXISTS (SELECT 1 
                FROM   dept 
                WHERE  dept.dept_id > 10 
-                      AND dept.dept_id < 30); 
+                      AND dept.dept_id < 30);
 
 -- simple correlated predicate in exist subquery
 -- TC.01.02

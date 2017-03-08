@@ -190,7 +190,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
         SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          CartesianProductExec(left, right, Some(condition())),
+          CartesianProductExec(left, right, Inner, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
