@@ -202,6 +202,7 @@ def do_setup():
         scripts=['airflow/bin/airflow'],
         install_requires=[
             'alembic>=0.8.3, <0.9',
+            'configparser>=3.5.0, <3.6.0',
             'croniter>=0.3.8, <0.4',
             'dill>=0.2.2, <0.3',
             'flask>=0.11, <0.12',
@@ -211,7 +212,7 @@ def do_setup():
             'flask-swagger==0.2.13',
             'flask-wtf==0.12',
             'funcsigs==1.0.0',
-            'future>=0.15.0, <0.17',
+            'future>=0.16.0, <0.17',
             'gitpython>=2.0.2',
             'gunicorn>=19.3.0, <19.4.0',  # 19.4.? seemed to have issues
             'jinja2>=2.7.3, <2.9.0',
