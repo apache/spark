@@ -614,6 +614,7 @@ public class UTF8StringSuite {
     inputToExpectedOutput.put("+1", (short) 1);
     inputToExpectedOutput.put("-1", (short) -1);
     inputToExpectedOutput.put("0", (short) 0);
+    inputToExpectedOutput.put("1111.12345678901234567890", (short) 1111);
     inputToExpectedOutput.put(String.valueOf(Short.MAX_VALUE), Short.MAX_VALUE);
     inputToExpectedOutput.put(String.valueOf(Short.MIN_VALUE), Short.MIN_VALUE);
 
@@ -644,6 +645,7 @@ public class UTF8StringSuite {
     inputToExpectedOutput.put("+1",(byte)  1);
     inputToExpectedOutput.put("-1", (byte)  -1);
     inputToExpectedOutput.put("0", (byte)  0);
+    inputToExpectedOutput.put("111.12345678901234567890", (byte) 111);
     inputToExpectedOutput.put(String.valueOf(Byte.MAX_VALUE), Byte.MAX_VALUE);
     inputToExpectedOutput.put(String.valueOf(Byte.MIN_VALUE), Byte.MIN_VALUE);
 
@@ -674,6 +676,7 @@ public class UTF8StringSuite {
     inputToExpectedOutput.put("+1", 1);
     inputToExpectedOutput.put("-1", -1);
     inputToExpectedOutput.put("0", 0);
+    inputToExpectedOutput.put("11111.1234567", 11111);
     inputToExpectedOutput.put(String.valueOf(Integer.MAX_VALUE), Integer.MAX_VALUE);
     inputToExpectedOutput.put(String.valueOf(Integer.MIN_VALUE), Integer.MIN_VALUE);
 
@@ -704,6 +707,7 @@ public class UTF8StringSuite {
     inputToExpectedOutput.put("+1", 1L);
     inputToExpectedOutput.put("-1", -1L);
     inputToExpectedOutput.put("0", 0L);
+    inputToExpectedOutput.put("1076753423.12345678901234567890", 1076753423L);
     inputToExpectedOutput.put(String.valueOf(Long.MAX_VALUE), Long.MAX_VALUE);
     inputToExpectedOutput.put(String.valueOf(Long.MIN_VALUE), Long.MIN_VALUE);
 

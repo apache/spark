@@ -823,11 +823,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
       (c, evPrim, evNull) =>
         s"""
-           if ($c.toLong($wrapper)) {
-             $evPrim = $wrapper.getValue();
-           } else {
-             $evNull = true;
-           }
+          if ($c.toLong($wrapper)) {
+            $evPrim = $wrapper.getValue();
+          } else {
+            $evNull = true;
+          }
         """
     case BooleanType =>
       (c, evPrim, evNull) => s"$evPrim = $c ? 1L : 0L;"
