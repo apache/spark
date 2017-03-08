@@ -408,8 +408,10 @@ object ViewHelper {
 
     // Detect cyclic references from subqueries.
     plan.expressions.foreach { expr =>
-      if (expr.isInstanceOf[SubqueryExpression]) {
-        checkCyclicViewReference(expr.asInstanceOf[SubqueryExpression].plan, path, viewIdent)
+      expr match {
+        case s: SubqueryExpression =>
+          checkCyclicViewReference(s.plan, path, viewIdent)
+        case _ => // Do nothing.
       }
     }
   }
