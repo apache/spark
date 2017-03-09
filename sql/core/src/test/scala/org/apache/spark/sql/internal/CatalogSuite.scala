@@ -18,9 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
-import java.net.URI
 
-import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
