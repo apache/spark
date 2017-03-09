@@ -106,7 +106,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
                    regParam = 0.0, variancePower = 0.0, linkPower = 1.0 - variancePower) {
 
             if (is.character(family)) {
-              # family = "tweedie"
+              # Handle when family = "tweedie"
               if (tolower(family) == "tweedie") {
                 family <- list(family = "tweedie", link = "linkNotUsed")
               } else {
@@ -120,7 +120,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               print(family)
               stop("'family' not recognized")
             }
-            # family = statmod::tweedie()
+            # Handle when family = statmod::tweedie()
             if (tolower(family$family) == "tweedie" && !is.null(family$variance)) {
               variancePower <- log(family$variance(exp(1)))
               linkPower <- log(family$linkfun(exp(1)))
