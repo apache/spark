@@ -62,6 +62,14 @@ trait CatalystConf {
    * Enables CBO for estimation of plan statistics when set true.
    */
   def cboEnabled: Boolean
+
+  /** Enables join reorder in CBO. */
+  def joinReorderEnabled: Boolean
+
+  /** The maximum number of joined nodes allowed in the dynamic programming algorithm. */
+  def joinReorderDPThreshold: Int
+
+  override def clone(): CatalystConf = throw new CloneNotSupportedException()
 }
 
 
@@ -77,7 +85,12 @@ case class SimpleCatalystConf(
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,
+    joinReorderEnabled: Boolean = false,
+    joinReorderDPThreshold: Int = 12,
     warehousePath: String = "/user/hive/warehouse",
     sessionLocalTimeZone: String = TimeZone.getDefault().getID,
     constraintPropagationEnabled: Boolean = true)
-  extends CatalystConf
+  extends CatalystConf {
+
+  override def clone(): SimpleCatalystConf = this.copy()
+}
