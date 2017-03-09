@@ -39,6 +39,7 @@ import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
@@ -2588,11 +2589,29 @@ private[spark] object Utils extends Logging {
 
   def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN).r
+    redact(redactionPattern, kvs)
+  }
+
+  private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
     kvs.map { kv =>
       redactionPattern.findFirstIn(kv._1)
-        .map { ignore => (kv._1, REDACTION_REPLACEMENT_TEXT) }
+        .map { _ => (kv._1, REDACTION_REPLACEMENT_TEXT) }
         .getOrElse(kv)
     }
+  }
+
+  /**
+   * Looks up the redaction regex from within the key value pairs and uses it to redact the rest
+   * of the key value pairs. No care is taken to make sure the redaction property itself is not
+   * redacted. So theoretically, the property itself could be configured to redact its own value
+   * when printing.
+   */
+  def redact(kvs: Map[String, String]): Seq[(String, String)] = {
+    val redactionPattern = kvs.getOrElse(
+      SECRET_REDACTION_PATTERN.key,
+      SECRET_REDACTION_PATTERN.defaultValueString
+    ).r
+    redact(redactionPattern, kvs.toArray)
   }
 
 }

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -317,13 +318,15 @@ case class MapGroups(
 trait LogicalKeyedState[S]
 
 /** Factory for constructing new `MapGroupsWithState` nodes. */
-object MapGroupsWithState {
+object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
       func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
+      outputMode: OutputMode,
+      isMapGroupsWithState: Boolean,
       child: LogicalPlan): LogicalPlan = {
-    val mapped = new MapGroupsWithState(
+    val mapped = new FlatMapGroupsWithState(
       func,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
@@ -332,7 +335,9 @@ object MapGroupsWithState {
       CatalystSerde.generateObjAttr[U],
       encoderFor[S].resolveAndBind().deserializer,
       encoderFor[S].namedExpressions,
-      child)
+      outputMode,
+      child,
+      isMapGroupsWithState)
     CatalystSerde.serialize[U](mapped)
   }
 }
@@ -350,8 +355,10 @@ object MapGroupsWithState {
  * @param outputObjAttr used to define the output object
  * @param stateDeserializer used to deserialize state before calling `func`
  * @param stateSerializer used to serialize updated state after calling `func`
+ * @param outputMode the output mode of `func`
+ * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
  */
-case class MapGroupsWithState(
+case class FlatMapGroupsWithState(
     func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
@@ -360,7 +367,14 @@ case class MapGroupsWithState(
     outputObjAttr: Attribute,
     stateDeserializer: Expression,
     stateSerializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectProducer
+    outputMode: OutputMode,
+    child: LogicalPlan,
+    isMapGroupsWithState: Boolean = false) extends UnaryNode with ObjectProducer {
+
+  if (isMapGroupsWithState) {
+    assert(outputMode == OutputMode.Update)
+  }
+}
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
 object FlatMapGroupsInR {

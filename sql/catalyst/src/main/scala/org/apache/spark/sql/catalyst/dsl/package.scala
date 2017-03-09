@@ -346,7 +346,7 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan, None)
+      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
 
       def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
 
@@ -368,7 +368,10 @@ package object dsl {
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
           Map.empty, logicalPlan, overwrite, false)
 
-      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan, None)
+      def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
+
+      def coalesce(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = false, logicalPlan)
 
       def repartition(num: Integer): LogicalPlan =
         Repartition(num, shuffle = true, logicalPlan)

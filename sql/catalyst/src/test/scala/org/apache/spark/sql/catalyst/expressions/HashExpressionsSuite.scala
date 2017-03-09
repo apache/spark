@@ -75,7 +75,6 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
   }
 
-
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
     val actual = HiveHashFunction.hash(input, dataType, seed = 0)
@@ -370,6 +369,51 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .add("structOfArrayAndMap",
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
+
+  test("hive-hash for decimal") {
+    def checkHiveHashForDecimal(
+        input: String,
+        precision: Int,
+        scale: Int,
+        expected: Long): Unit = {
+      val decimalType = DataTypes.createDecimalType(precision, scale)
+      val decimal = {
+        val value = Decimal.apply(new java.math.BigDecimal(input))
+        if (value.changePrecision(precision, scale)) value else null
+      }
+
+      checkHiveHash(decimal, decimalType, expected)
+    }
+
+    checkHiveHashForDecimal("18", 38, 0, 558)
+    checkHiveHashForDecimal("-18", 38, 0, -558)
+    checkHiveHashForDecimal("-18", 38, 12, -558)
+    checkHiveHashForDecimal("18446744073709001000", 38, 19, 0)
+    checkHiveHashForDecimal("-18446744073709001000", 38, 22, 0)
+    checkHiveHashForDecimal("-18446744073709001000", 38, 3, 17070057)
+    checkHiveHashForDecimal("18446744073709001000", 38, 4, -17070057)
+    checkHiveHashForDecimal("9223372036854775807", 38, 4, 2147482656)
+    checkHiveHashForDecimal("-9223372036854775807", 38, 5, -2147482656)
+    checkHiveHashForDecimal("00000.00000000000", 38, 34, 0)
+    checkHiveHashForDecimal("-00000.00000000000", 38, 11, 0)
+    checkHiveHashForDecimal("123456.1234567890", 38, 2, 382713974)
+    checkHiveHashForDecimal("123456.1234567890", 38, 20, 1871500252)
+    checkHiveHashForDecimal("123456.1234567890", 38, 10, 1871500252)
+    checkHiveHashForDecimal("-123456.1234567890", 38, 10, -1871500234)
+    checkHiveHashForDecimal("123456.1234567890", 38, 0, 3827136)
+    checkHiveHashForDecimal("-123456.1234567890", 38, 0, -3827136)
+    checkHiveHashForDecimal("123456.1234567890", 38, 20, 1871500252)
+    checkHiveHashForDecimal("-123456.1234567890", 38, 20, -1871500234)
+    checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 0, 3827136)
+    checkHiveHashForDecimal("-123456.123456789012345678901234567890", 38, 0, -3827136)
+    checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 10, 1871500252)
+    checkHiveHashForDecimal("-123456.123456789012345678901234567890", 38, 10, -1871500234)
+    checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 20, 236317582)
+    checkHiveHashForDecimal("-123456.123456789012345678901234567890", 38, 20, -236317544)
+    checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 30, 1728235666)
+    checkHiveHashForDecimal("-123456.123456789012345678901234567890", 38, 30, -1728235608)
+    checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 31, 1728235666)
+  }
 
   test("SPARK-18207: Compute hash for a lot of expressions") {
     val N = 1000
