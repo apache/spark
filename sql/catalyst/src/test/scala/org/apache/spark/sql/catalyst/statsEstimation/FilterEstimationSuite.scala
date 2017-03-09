@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 import java.sql.Date
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.types._
 
@@ -33,219 +33,235 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   // Suppose our test table has 10 rows and 6 columns.
   // First column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
-  val arInt = AttributeReference("cint", IntegerType)()
-  val childColStatInt = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+  val attrInt = AttributeReference("cint", IntegerType)()
+  val colStatInt = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
   // only 2 values
-  val arBool = AttributeReference("cbool", BooleanType)()
-  val childColStatBool = ColumnStat(distinctCount = 2, min = Some(false), max = Some(true),
+  val attrBool = AttributeReference("cbool", BooleanType)()
+  val colStatBool = ColumnStat(distinctCount = 2, min = Some(false), max = Some(true),
     nullCount = 0, avgLen = 1, maxLen = 1)
 
   // Second column cdate has 10 values from 2017-01-01 through 2017-01-10.
   val dMin = Date.valueOf("2017-01-01")
   val dMax = Date.valueOf("2017-01-10")
-  val arDate = AttributeReference("cdate", DateType)()
-  val childColStatDate = ColumnStat(distinctCount = 10, min = Some(dMin), max = Some(dMax),
+  val attrDate = AttributeReference("cdate", DateType)()
+  val colStatDate = ColumnStat(distinctCount = 10, min = Some(dMin), max = Some(dMax),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
   // Fourth column cdecimal has 4 values from 0.20 through 0.80 at increment of 0.20.
   val decMin = new java.math.BigDecimal("0.200000000000000000")
   val decMax = new java.math.BigDecimal("0.800000000000000000")
-  val arDecimal = AttributeReference("cdecimal", DecimalType(18, 18))()
-  val childColStatDecimal = ColumnStat(distinctCount = 4, min = Some(decMin), max = Some(decMax),
+  val attrDecimal = AttributeReference("cdecimal", DecimalType(18, 18))()
+  val colStatDecimal = ColumnStat(distinctCount = 4, min = Some(decMin), max = Some(decMax),
     nullCount = 0, avgLen = 8, maxLen = 8)
 
   // Fifth column cdouble has 10 double values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
-  val arDouble = AttributeReference("cdouble", DoubleType)()
-  val childColStatDouble = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
+  val attrDouble = AttributeReference("cdouble", DoubleType)()
+  val colStatDouble = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
     nullCount = 0, avgLen = 8, maxLen = 8)
 
   // Sixth column cstring has 10 String values:
   // "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"
-  val arString = AttributeReference("cstring", StringType)()
-  val childColStatString = ColumnStat(distinctCount = 10, min = None, max = None,
+  val attrString = AttributeReference("cstring", StringType)()
+  val colStatString = ColumnStat(distinctCount = 10, min = None, max = None,
     nullCount = 0, avgLen = 2, maxLen = 2)
+
+  val attributeMap = AttributeMap(Seq(
+    attrInt -> colStatInt,
+    attrBool -> colStatBool,
+    attrDate -> colStatDate,
+    attrDecimal -> colStatDecimal,
+    attrDouble -> colStatDouble,
+    attrString -> colStatString))
 
   test("cint = 2") {
     validateEstimatedStats(
-      arInt,
-      Filter(EqualTo(arInt, Literal(2)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      1)
+      Filter(EqualTo(attrInt, Literal(2)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 1)
   }
 
   test("cint <=> 2") {
     validateEstimatedStats(
-      arInt,
-      Filter(EqualNullSafe(arInt, Literal(2)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      1)
+      Filter(EqualNullSafe(attrInt, Literal(2)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 1, min = Some(2), max = Some(2),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 1)
   }
 
   test("cint = 0") {
     // This is an out-of-range case since 0 is outside the range [min, max]
     validateEstimatedStats(
-      arInt,
-      Filter(EqualTo(arInt, Literal(0)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      Filter(EqualTo(attrInt, Literal(0)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
   }
 
   test("cint < 3") {
     validateEstimatedStats(
-      arInt,
-      Filter(LessThan(arInt, Literal(3)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      Filter(LessThan(attrInt, Literal(3)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 3)
   }
 
   test("cint < 0") {
     // This is a corner case since literal 0 is smaller than min.
     validateEstimatedStats(
-      arInt,
-      Filter(LessThan(arInt, Literal(0)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      Filter(LessThan(attrInt, Literal(0)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
   }
 
   test("cint <= 3") {
     validateEstimatedStats(
-      arInt,
-      Filter(LessThanOrEqual(arInt, Literal(3)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      Filter(LessThanOrEqual(attrInt, Literal(3)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(3),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 3)
   }
 
   test("cint > 6") {
     validateEstimatedStats(
-      arInt,
-      Filter(GreaterThan(arInt, Literal(6)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      5)
+      Filter(GreaterThan(attrInt, Literal(6)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 5)
   }
 
   test("cint > 10") {
     // This is a corner case since max value is 10.
     validateEstimatedStats(
-      arInt,
-      Filter(GreaterThan(arInt, Literal(10)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      Filter(GreaterThan(attrInt, Literal(10)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
   }
 
   test("cint >= 6") {
     validateEstimatedStats(
-      arInt,
-      Filter(GreaterThanOrEqual(arInt, Literal(6)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      5)
+      Filter(GreaterThanOrEqual(attrInt, Literal(6)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 4, min = Some(6), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 5)
   }
 
   test("cint IS NULL") {
     validateEstimatedStats(
-      arInt,
-      Filter(IsNull(arInt), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 0, min = None, max = None,
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      0)
+      Filter(IsNull(attrInt), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
   }
 
   test("cint IS NOT NULL") {
     validateEstimatedStats(
-      arInt,
-      Filter(IsNotNull(arInt), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      10)
+      Filter(IsNotNull(attrInt), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 10)
   }
 
   test("cint > 3 AND cint <= 6") {
-    val condition = And(GreaterThan(arInt, Literal(3)), LessThanOrEqual(arInt, Literal(6)))
+    val condition = And(GreaterThan(attrInt, Literal(3)), LessThanOrEqual(attrInt, Literal(6)))
     validateEstimatedStats(
-      arInt,
-      Filter(condition, childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 3, min = Some(3), max = Some(6),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      4)
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 3, min = Some(3), max = Some(6),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 4)
   }
 
   test("cint = 3 OR cint = 6") {
-    val condition = Or(EqualTo(arInt, Literal(3)), EqualTo(arInt, Literal(6)))
+    val condition = Or(EqualTo(attrInt, Literal(3)), EqualTo(attrInt, Literal(6)))
     validateEstimatedStats(
-      arInt,
-      Filter(condition, childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      2)
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 2)
+  }
+
+  test("Not(cint > 3 AND cint <= 6)") {
+    val condition = Not(And(GreaterThan(attrInt, Literal(3)), LessThanOrEqual(attrInt, Literal(6))))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> colStatInt),
+      expectedRowCount = 6)
+  }
+
+  test("Not(cint <= 3 OR cint > 6)") {
+    val condition = Not(Or(LessThanOrEqual(attrInt, Literal(3)), GreaterThan(attrInt, Literal(6))))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> colStatInt),
+      expectedRowCount = 5)
+  }
+
+  test("Not(cint = 3 AND cstring < 'A8')") {
+    val condition = Not(And(EqualTo(attrInt, Literal(3)), LessThan(attrString, Literal("A8"))))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt, attrString), 10L)),
+      Seq(attrInt -> colStatInt, attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
+  test("Not(cint = 3 OR cstring < 'A8')") {
+    val condition = Not(Or(EqualTo(attrInt, Literal(3)), LessThan(attrString, Literal("A8"))))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt, attrString), 10L)),
+      Seq(attrInt -> colStatInt, attrString -> colStatString),
+      expectedRowCount = 9)
   }
 
   test("cint IN (3, 4, 5)") {
     validateEstimatedStats(
-      arInt,
-      Filter(InSet(arInt, Set(3, 4, 5)), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 3, min = Some(3), max = Some(5),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      Filter(InSet(attrInt, Set(3, 4, 5)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 3, min = Some(3), max = Some(5),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 3)
   }
 
   test("cint NOT IN (3, 4, 5)") {
     validateEstimatedStats(
-      arInt,
-      Filter(Not(InSet(arInt, Set(3, 4, 5))), childStatsTestPlan(Seq(arInt), 10L)),
-      ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      7)
+      Filter(Not(InSet(attrInt, Set(3, 4, 5))), childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 7)
   }
 
   test("cbool = true") {
     validateEstimatedStats(
-      arBool,
-      Filter(EqualTo(arBool, Literal(true)), childStatsTestPlan(Seq(arBool), 10L)),
-      ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
-        nullCount = 0, avgLen = 1, maxLen = 1),
-      5)
+      Filter(EqualTo(attrBool, Literal(true)), childStatsTestPlan(Seq(attrBool), 10L)),
+      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
+        nullCount = 0, avgLen = 1, maxLen = 1)),
+      expectedRowCount = 5)
   }
 
   test("cbool > false") {
-    // bool comparison is not supported yet, so stats remain same.
     validateEstimatedStats(
-      arBool,
-      Filter(GreaterThan(arBool, Literal(false)), childStatsTestPlan(Seq(arBool), 10L)),
-      ColumnStat(distinctCount = 2, min = Some(false), max = Some(true),
-        nullCount = 0, avgLen = 1, maxLen = 1),
-      10)
+      Filter(GreaterThan(attrBool, Literal(false)), childStatsTestPlan(Seq(attrBool), 10L)),
+      Seq(attrBool -> ColumnStat(distinctCount = 1, min = Some(true), max = Some(true),
+        nullCount = 0, avgLen = 1, maxLen = 1)),
+      expectedRowCount = 5)
   }
 
   test("cdate = cast('2017-01-02' AS DATE)") {
     val d20170102 = Date.valueOf("2017-01-02")
     validateEstimatedStats(
-      arDate,
-      Filter(EqualTo(arDate, Literal(d20170102)),
-        childStatsTestPlan(Seq(arDate), 10L)),
-      ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      1)
+      Filter(EqualTo(attrDate, Literal(d20170102)),
+        childStatsTestPlan(Seq(attrDate), 10L)),
+      Seq(attrDate -> ColumnStat(distinctCount = 1, min = Some(d20170102), max = Some(d20170102),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 1)
   }
 
   test("cdate < cast('2017-01-03' AS DATE)") {
     val d20170103 = Date.valueOf("2017-01-03")
     validateEstimatedStats(
-      arDate,
-      Filter(LessThan(arDate, Literal(d20170103)),
-        childStatsTestPlan(Seq(arDate), 10L)),
-      ColumnStat(distinctCount = 2, min = Some(dMin), max = Some(d20170103),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      Filter(LessThan(attrDate, Literal(d20170103)),
+        childStatsTestPlan(Seq(attrDate), 10L)),
+      Seq(attrDate -> ColumnStat(distinctCount = 2, min = Some(dMin), max = Some(d20170103),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 3)
   }
 
   test("""cdate IN ( cast('2017-01-03' AS DATE),
@@ -254,133 +270,118 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     val d20170104 = Date.valueOf("2017-01-04")
     val d20170105 = Date.valueOf("2017-01-05")
     validateEstimatedStats(
-      arDate,
-      Filter(In(arDate, Seq(Literal(d20170103), Literal(d20170104), Literal(d20170105))),
-        childStatsTestPlan(Seq(arDate), 10L)),
-      ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      3)
+      Filter(In(attrDate, Seq(Literal(d20170103), Literal(d20170104), Literal(d20170105))),
+        childStatsTestPlan(Seq(attrDate), 10L)),
+      Seq(attrDate -> ColumnStat(distinctCount = 3, min = Some(d20170103), max = Some(d20170105),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 3)
   }
 
   test("cdecimal = 0.400000000000000000") {
     val dec_0_40 = new java.math.BigDecimal("0.400000000000000000")
     validateEstimatedStats(
-      arDecimal,
-      Filter(EqualTo(arDecimal, Literal(dec_0_40)),
-        childStatsTestPlan(Seq(arDecimal), 4L)),
-      ColumnStat(distinctCount = 1, min = Some(dec_0_40), max = Some(dec_0_40),
-        nullCount = 0, avgLen = 8, maxLen = 8),
-      1)
+      Filter(EqualTo(attrDecimal, Literal(dec_0_40)),
+        childStatsTestPlan(Seq(attrDecimal), 4L)),
+      Seq(attrDecimal -> ColumnStat(distinctCount = 1, min = Some(dec_0_40), max = Some(dec_0_40),
+        nullCount = 0, avgLen = 8, maxLen = 8)),
+      expectedRowCount = 1)
   }
 
   test("cdecimal < 0.60 ") {
     val dec_0_60 = new java.math.BigDecimal("0.600000000000000000")
     validateEstimatedStats(
-      arDecimal,
-      Filter(LessThan(arDecimal, Literal(dec_0_60)),
-        childStatsTestPlan(Seq(arDecimal), 4L)),
-      ColumnStat(distinctCount = 3, min = Some(decMin), max = Some(dec_0_60),
-        nullCount = 0, avgLen = 8, maxLen = 8),
-      3)
+      Filter(LessThan(attrDecimal, Literal(dec_0_60)),
+        childStatsTestPlan(Seq(attrDecimal), 4L)),
+      Seq(attrDecimal -> ColumnStat(distinctCount = 3, min = Some(decMin), max = Some(dec_0_60),
+        nullCount = 0, avgLen = 8, maxLen = 8)),
+      expectedRowCount = 3)
   }
 
   test("cdouble < 3.0") {
     validateEstimatedStats(
-      arDouble,
-      Filter(LessThan(arDouble, Literal(3.0)), childStatsTestPlan(Seq(arDouble), 10L)),
-      ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
-        nullCount = 0, avgLen = 8, maxLen = 8),
-      3)
+      Filter(LessThan(attrDouble, Literal(3.0)), childStatsTestPlan(Seq(attrDouble), 10L)),
+      Seq(attrDouble -> ColumnStat(distinctCount = 2, min = Some(1.0), max = Some(3.0),
+        nullCount = 0, avgLen = 8, maxLen = 8)),
+      expectedRowCount = 3)
   }
 
   test("cstring = 'A2'") {
     validateEstimatedStats(
-      arString,
-      Filter(EqualTo(arString, Literal("A2")), childStatsTestPlan(Seq(arString), 10L)),
-      ColumnStat(distinctCount = 1, min = None, max = None,
-        nullCount = 0, avgLen = 2, maxLen = 2),
-      1)
+      Filter(EqualTo(attrString, Literal("A2")), childStatsTestPlan(Seq(attrString), 10L)),
+      Seq(attrString -> ColumnStat(distinctCount = 1, min = None, max = None,
+        nullCount = 0, avgLen = 2, maxLen = 2)),
+      expectedRowCount = 1)
   }
 
-  // There is no min/max statistics for String type.  We estimate 10 rows returned.
-  test("cstring < 'A2'") {
+  test("cstring < 'A2' - unsupported condition") {
     validateEstimatedStats(
-      arString,
-      Filter(LessThan(arString, Literal("A2")), childStatsTestPlan(Seq(arString), 10L)),
-      ColumnStat(distinctCount = 10, min = None, max = None,
-        nullCount = 0, avgLen = 2, maxLen = 2),
-      10)
+      Filter(LessThan(attrString, Literal("A2")), childStatsTestPlan(Seq(attrString), 10L)),
+      Seq(attrString -> ColumnStat(distinctCount = 10, min = None, max = None,
+        nullCount = 0, avgLen = 2, maxLen = 2)),
+      expectedRowCount = 10)
   }
 
-  // This is a corner test case.  We want to test if we can handle the case when the number of
-  // valid values in IN clause is greater than the number of distinct values for a given column.
-  // For example, column has only 2 distinct values 1 and 6.
-  // The predicate is: column IN (1, 2, 3, 4, 5).
   test("cint IN (1, 2, 3, 4, 5)") {
+    // This is a corner test case.  We want to test if we can handle the case when the number of
+    // valid values in IN clause is greater than the number of distinct values for a given column.
+    // For example, column has only 2 distinct values 1 and 6.
+    // The predicate is: column IN (1, 2, 3, 4, 5).
     val cornerChildColStatInt = ColumnStat(distinctCount = 2, min = Some(1), max = Some(6),
       nullCount = 0, avgLen = 4, maxLen = 4)
     val cornerChildStatsTestplan = StatsTestPlan(
-      outputList = Seq(arInt),
+      outputList = Seq(attrInt),
       rowCount = 2L,
-      attributeStats = AttributeMap(Seq(arInt -> cornerChildColStatInt))
+      attributeStats = AttributeMap(Seq(attrInt -> cornerChildColStatInt))
     )
     validateEstimatedStats(
-      arInt,
-      Filter(InSet(arInt, Set(1, 2, 3, 4, 5)), cornerChildStatsTestplan),
-      ColumnStat(distinctCount = 2, min = Some(1), max = Some(5),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-      2)
+      Filter(InSet(attrInt, Set(1, 2, 3, 4, 5)), cornerChildStatsTestplan),
+      Seq(attrInt -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(5),
+        nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 2)
   }
 
   private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {
     StatsTestPlan(
       outputList = outList,
       rowCount = tableRowCount,
-      attributeStats = AttributeMap(Seq(
-        arInt -> childColStatInt,
-        arBool -> childColStatBool,
-        arDate -> childColStatDate,
-        arDecimal -> childColStatDecimal,
-        arDouble -> childColStatDouble,
-        arString -> childColStatString
-      ))
-    )
+      attributeStats = AttributeMap(outList.map(a => a -> attributeMap(a))))
   }
 
   private def validateEstimatedStats(
-      ar: AttributeReference,
       filterNode: Filter,
-      expectedColStats: ColumnStat,
-      rowCount: Int): Unit = {
+      expectedColStats: Seq[(Attribute, ColumnStat)],
+      expectedRowCount: Int): Unit = {
 
-    val expectedAttrStats = toAttributeMap(Seq(ar.name -> expectedColStats), filterNode)
-    val expectedSizeInBytes = getOutputSize(filterNode.output, rowCount, expectedAttrStats)
+    // If the filter has a binary operator (including those nested inside AND/OR/NOT), swap the
+    // sides of the attribute and the literal, reverse the operator, and then check again.
+    val swappedFilter = filterNode transformExpressionsDown {
+      case EqualTo(attr: Attribute, l: Literal) =>
+        EqualTo(l, attr)
 
-    val filteredStats = filterNode.stats(conf)
-    assert(filteredStats.sizeInBytes == expectedSizeInBytes)
-    assert(filteredStats.rowCount.get == rowCount)
-    assert(filteredStats.attributeStats(ar) == expectedColStats)
+      case LessThan(attr: Attribute, l: Literal) =>
+        GreaterThan(l, attr)
+      case LessThanOrEqual(attr: Attribute, l: Literal) =>
+        GreaterThanOrEqual(l, attr)
 
-    // If the filter has a binary operator (including those nested inside
-    // AND/OR/NOT), swap the sides of the attribte and the literal, reverse the
-    // operator, and then check again.
-    val rewrittenFilter = filterNode transformExpressionsDown {
-      case EqualTo(ar: AttributeReference, l: Literal) =>
-        EqualTo(l, ar)
-
-      case LessThan(ar: AttributeReference, l: Literal) =>
-        GreaterThan(l, ar)
-      case LessThanOrEqual(ar: AttributeReference, l: Literal) =>
-        GreaterThanOrEqual(l, ar)
-
-      case GreaterThan(ar: AttributeReference, l: Literal) =>
-        LessThan(l, ar)
-      case GreaterThanOrEqual(ar: AttributeReference, l: Literal) =>
-        LessThanOrEqual(l, ar)
+      case GreaterThan(attr: Attribute, l: Literal) =>
+        LessThan(l, attr)
+      case GreaterThanOrEqual(attr: Attribute, l: Literal) =>
+        LessThanOrEqual(l, attr)
     }
 
-    if (rewrittenFilter != filterNode) {
-      validateEstimatedStats(ar, rewrittenFilter, expectedColStats, rowCount)
+    val testFilters = if (swappedFilter != filterNode) {
+      Seq(swappedFilter, filterNode)
+    } else {
+      Seq(filterNode)
+    }
+
+    testFilters.foreach { filter =>
+      val expectedAttributeMap = AttributeMap(expectedColStats)
+      val expectedStats = Statistics(
+        sizeInBytes = getOutputSize(filter.output, expectedRowCount, expectedAttributeMap),
+        rowCount = Some(expectedRowCount),
+        attributeStats = expectedAttributeMap)
+      assert(filter.stats(conf) == expectedStats)
     }
   }
 }
