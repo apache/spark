@@ -18,7 +18,6 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
-import java.net.URI
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -459,7 +458,7 @@ class CatalogSuite
           options = Map("path" -> dir.getAbsolutePath))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
-        assert(table.storage.locationUri.get == new URI(dir.getAbsolutePath))
+        assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
 
         Seq((1)).toDF("i").write.insertInto("t")
         assert(dir.exists() && dir.listFiles().nonEmpty)
