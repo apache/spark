@@ -296,6 +296,25 @@ object SQLConf {
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
+  object HiveCaseSensitiveInferenceMode extends Enumeration {
+    val INFER_AND_SAVE, INFER_ONLY, NEVER_INFER = Value
+  }
+
+  val HIVE_CASE_SENSITIVE_INFERENCE = buildConf("spark.sql.hive.caseSensitiveInferenceMode")
+    .doc("Sets the action to take when a case-sensitive schema cannot be read from a Hive " +
+      "table's properties. Although Spark SQL itself is not case-sensitive, Hive compatible file " +
+      "formats such as Parquet are. Spark SQL must use a case-preserving schema when querying " +
+      "any table backed by files containing case-sensitive field names or queries may not return " +
+      "accurate results. Valid options include INFER_AND_SAVE (the default mode-- infer the " +
+      "case-sensitive schema from the underlying data files and write it back to the table " +
+      "properties), INFER_ONLY (infer the schema but don't attempt to write it to the table " +
+      "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
+      "instead of inferring).")
+    .stringConf
+    .transform(_.toUpperCase())
+    .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
+    .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
@@ -791,6 +810,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
+
+  def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
+    HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

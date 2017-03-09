@@ -163,6 +163,11 @@ case class BucketSpec(
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
  *                                  catalog. If false, it is inferred automatically based on file
  *                                  structure.
+ * @param schemaPresevesCase Whether or not the schema resolved for this table is case-sensitive.
+ *                           When using a Hive Metastore, this flag is set to false if a case-
+ *                           sensitive schema was unable to be read from the table properties.
+ *                           Used to trigger case-sensitive schema inference at query time, when
+ *                           configured.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -180,7 +185,8 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    tracksPartitionsInCatalog: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false,
+    schemaPreservesCase: Boolean = true) {
 
   import CatalogTable._
 
