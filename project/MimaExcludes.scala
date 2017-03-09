@@ -55,6 +55,9 @@ object MimaExcludes {
     // [SPARK-14272][ML] Add logLikelihood in GaussianMixtureSummary
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.clustering.GaussianMixtureSummary.this"),
 
+    // [SPARK-19267] Fetch Failure handling robust to user error handling
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.setFetchFailed"),
+
     // [SPARK-19069] [CORE] Expose task 'status' and 'duration' in spark history server REST API.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$10"),
@@ -911,6 +914,10 @@ object MimaExcludes {
     ) ++ Seq(
       // [SPARK-17163] Unify logistic regression interface. Private constructor has new signature.
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.this")
+    ) ++ Seq(
+      // [SPARK-17498] StringIndexer enhancement for handling unseen labels
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.StringIndexer"),
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.StringIndexerModel")
     ) ++ Seq(
       // [SPARK-17365][Core] Remove/Kill multiple executors together to reduce RPC call time
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkContext")

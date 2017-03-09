@@ -202,7 +202,7 @@ class InMemoryCatalog(
           tableDefinition.storage.locationUri.isEmpty
 
       val tableWithLocation = if (needDefaultTableLocation) {
-        val defaultTableLocation = new Path(catalog(db).db.locationUri, table)
+        val defaultTableLocation = new Path(new Path(catalog(db).db.locationUri), table)
         try {
           val fs = defaultTableLocation.getFileSystem(hadoopConfig)
           fs.mkdirs(defaultTableLocation)
@@ -211,7 +211,7 @@ class InMemoryCatalog(
             throw new SparkException(s"Unable to create table $table as failed " +
               s"to create its directory $defaultTableLocation", e)
         }
-        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri.toString))
+        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
       } else {
         tableDefinition
       }
@@ -274,7 +274,7 @@ class InMemoryCatalog(
         "Managed table should always have table location, as we will assign a default location " +
           "to it if it doesn't have one.")
       val oldDir = new Path(oldDesc.table.location)
-      val newDir = new Path(catalog(db).db.locationUri, newName)
+      val newDir = new Path(new Path(catalog(db).db.locationUri), newName)
       try {
         val fs = oldDir.getFileSystem(hadoopConfig)
         fs.rename(oldDir, newDir)
@@ -283,7 +283,7 @@ class InMemoryCatalog(
           throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
             s"to rename its directory $oldDir", e)
       }
-      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri.toString))
+      oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
     }
 
     catalog(db).tables.put(newName, oldDesc)
@@ -389,7 +389,7 @@ class InMemoryCatalog(
 
       existingParts.put(
         p.spec,
-        p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toString))))
+        p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri))))
     }
   }
 
@@ -462,7 +462,7 @@ class InMemoryCatalog(
         }
         oldPartition.copy(
           spec = newSpec,
-          storage = oldPartition.storage.copy(locationUri = Some(newPartPath.toString)))
+          storage = oldPartition.storage.copy(locationUri = Some(newPartPath.toUri)))
       } else {
         oldPartition.copy(spec = newSpec)
       }
@@ -544,7 +544,8 @@ class InMemoryCatalog(
   override def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = {
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
     // TODO: Provide an implementation
     throw new UnsupportedOperationException(
       "listPartitionsByFilter is not implemented for InMemoryCatalog")

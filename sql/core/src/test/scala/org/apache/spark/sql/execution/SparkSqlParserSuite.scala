@@ -45,7 +45,7 @@ class SparkSqlParserSuite extends PlanTest {
    * Normalizes plans:
    * - CreateTable the createTime in tableDesc will replaced by -1L.
    */
-  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+  override def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case CreateTable(tableDesc, mode, query) =>
         val newTableDesc = tableDesc.copy(createTime = -1L)
@@ -208,6 +208,17 @@ class SparkSqlParserSuite extends PlanTest {
     )
     intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
       "no viable alternative at input")
+  }
+
+  test("create view as insert into table") {
+    // Single insert query
+    intercept("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)",
+      "Operation not allowed: CREATE VIEW ... AS INSERT INTO")
+
+    // Multi insert query
+    intercept("CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
+      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
+      "Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+")
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {

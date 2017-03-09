@@ -752,14 +752,13 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   }
   override def computeStats(conf: CatalystConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
-    val sizeInBytes = if (limit == 0) {
-      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
-      // (product of children).
-      1
-    } else {
-      (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    }
-    child.stats(conf).copy(sizeInBytes = sizeInBytes)
+    val childStats = child.stats(conf)
+    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
+    // Don't propagate column stats, because we don't know the distribution after a limit operation
+    Statistics(
+      sizeInBytes = EstimationUtils.getOutputSize(output, rowCount, childStats.attributeStats),
+      rowCount = Some(rowCount),
+      isBroadcastable = childStats.isBroadcastable)
   }
 }
 
@@ -773,21 +772,27 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
   override def computeStats(conf: CatalystConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
-    val sizeInBytes = if (limit == 0) {
+    val childStats = child.stats(conf)
+    if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
-      1
+      Statistics(
+        sizeInBytes = 1,
+        rowCount = Some(0),
+        isBroadcastable = childStats.isBroadcastable)
     } else {
-      (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+      // The output row count of LocalLimit should be the sum of row counts from each partition.
+      // However, since the number of partitions is not available here, we just use statistics of
+      // the child. Because the distribution after a limit operation is unknown, we do not propagate
+      // the column stats.
+      childStats.copy(attributeStats = AttributeMap(Nil))
     }
-    child.stats(conf).copy(sizeInBytes = sizeInBytes)
   }
 }
 
 case class SubqueryAlias(
     alias: String,
-    child: LogicalPlan,
-    view: Option[TableIdentifier])
+    child: LogicalPlan)
   extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
@@ -816,12 +821,14 @@ case class Sample(
 
   override def computeStats(conf: CatalystConf): Statistics = {
     val ratio = upperBound - lowerBound
-    // BigInt can't multiply with Double
-    var sizeInBytes = child.stats(conf).sizeInBytes * (ratio * 100).toInt / 100
+    val childStats = child.stats(conf)
+    var sizeInBytes = EstimationUtils.ceil(BigDecimal(childStats.sizeInBytes) * ratio)
     if (sizeInBytes == 0) {
       sizeInBytes = 1
     }
-    child.stats(conf).copy(sizeInBytes = sizeInBytes)
+    val sampledRowCount = childStats.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
+    // Don't propagate column stats, because we don't know the distribution after a sample operation
+    Statistics(sizeInBytes, sampledRowCount, isBroadcastable = childStats.isBroadcastable)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
@@ -836,15 +843,23 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
+ * A base interface for [[RepartitionByExpression]] and [[Repartition]]
+ */
+abstract class RepartitionOperation extends UnaryNode {
+  def shuffle: Boolean
+  def numPartitions: Int
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * Returns a new RDD that has exactly `numPartitions` partitions. Differs from
  * [[RepartitionByExpression]] as this method is called directly by DataFrame's, because the user
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
-  extends UnaryNode {
+  extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
-  override def output: Seq[Attribute] = child.output
 }
 
 /**
@@ -856,12 +871,12 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    numPartitions: Int) extends UnaryNode {
+    numPartitions: Int) extends RepartitionOperation {
 
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def shuffle: Boolean = true
 }
 
 /**
