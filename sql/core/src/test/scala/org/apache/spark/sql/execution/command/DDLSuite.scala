@@ -2019,19 +2019,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("create datasource table with a non-existing location") {
     withTable("t", "t1") {
       withTempPath { dir =>
-          spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
+        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
 
-          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-          spark.sql("INSERT INTO TABLE t SELECT 1, 2")
-          assert(dir.exists())
+        spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+        assert(dir.exists())
 
-          checkAnswer(spark.table("t"), Row(1, 2))
+        checkAnswer(spark.table("t"), Row(1, 2))
       }
       // partition table
-      withTempPath {
-        dir =>
+      withTempPath { dir =>
           spark.sql(
             s"""
                |CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'
@@ -2054,8 +2053,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val tcName = if (shouldDelete) "non-existing" else "existed"
     test(s"CTAS for external data source table with a $tcName location") {
       withTable("t", "t1") {
-        withTempDir {
-          dir =>
+        withTempDir { dir =>
             if (shouldDelete) {
               dir.delete()
             }
@@ -2072,8 +2070,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
         // partition table
-        withTempDir {
-          dir =>
+        withTempDir { dir =>
             if (shouldDelete) {
               dir.delete()
             }

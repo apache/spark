@@ -1665,8 +1665,7 @@ class HiveDDLSuite
 
   test("create hive table with a non-existing location") {
     withTable("t", "t1") {
-      withTempPath {
-        dir =>
+      withTempPath { dir =>
           spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -1678,8 +1677,7 @@ class HiveDDLSuite
           checkAnswer(spark.table("t"), Row(1, 2))
       }
       // partition table
-      withTempPath {
-        dir =>
+      withTempPath { dir =>
           spark.sql(
             s"""
                |CREATE TABLE t1(a int, b int)
