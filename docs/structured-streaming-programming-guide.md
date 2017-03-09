@@ -1052,10 +1052,18 @@ Here are the details of all the sinks in Spark.
     <td>Append</td>
     <td>
         <code>path</code>: path to the output directory, must be specified.
+        <br/>
         <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
         <br/>
-        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files(default: false)
-        <br/><br/>
+        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files (default: false)
+        <br/>
+        <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
+        <br/>
+        · "file:///dataset.txt"<br/>
+        · "s3://a/dataset.txt"<br/>
+        · "s3n://a/b/dataset.txt"<br/>
+        · "s3a://a/b/c/dataset.txt"<br/>
+        <br/>
         For file-format-specific options, see the related methods in DataFrameWriter
         (<a href="api/scala/index.html#org.apache.spark.sql.DataFrameWriter">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>).
         E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>

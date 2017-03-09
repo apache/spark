@@ -1236,7 +1236,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("SeenFilesMap") {
-    val map = new SeenFilesMap(maxAgeMs = 10)
+    val map = new SeenFilesMap(maxAgeMs = 10, fileNameOnly = false)
 
     map.add("a", 5)
     assert(map.size == 1)
@@ -1269,8 +1269,26 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assert(map.isNewFile("e", 20))
   }
 
+  test("SeenFilesMap with fileNameOnly = true") {
+    val map = new SeenFilesMap(maxAgeMs = 10, fileNameOnly = true)
+
+    map.add("file:///a/b/c/d", 5)
+    map.add("file:///a/b/c/e", 5)
+    assert(map.size === 2)
+
+    assert(!map.isNewFile("d", 5))
+    assert(!map.isNewFile("file:///d", 5))
+    assert(!map.isNewFile("file:///x/d", 5))
+    assert(!map.isNewFile("file:///x/y/d", 5))
+
+    map.add("s3:///bucket/d", 5)
+    map.add("s3n:///bucket/d", 5)
+    map.add("s3a:///bucket/d", 5)
+    assert(map.size === 2)
+  }
+
   test("SeenFilesMap should only consider a file old if it is earlier than last purge time") {
-    val map = new SeenFilesMap(maxAgeMs = 10)
+    val map = new SeenFilesMap(maxAgeMs = 10, fileNameOnly = false)
 
     map.add("a", 20)
     assert(map.size == 1)
