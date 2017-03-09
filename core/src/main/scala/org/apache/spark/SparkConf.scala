@@ -518,28 +518,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    sys.env.get("SPARK_CLASSPATH").foreach { value =>
-      val warning =
-        s"""
-          |SPARK_CLASSPATH was detected (set to '$value').
-          |This is deprecated in Spark 1.0+.
-          |
-          |Please instead use:
-          | - ./spark-submit with --driver-class-path to augment the driver classpath
-          | - spark.executor.extraClassPath to augment the executor classpath
-        """.stripMargin
-      logWarning(warning)
-
-      for (key <- Seq(executorClasspathKey, driverClassPathKey)) {
-        if (getOption(key).isDefined) {
-          throw new SparkException(s"Found both $key and SPARK_CLASSPATH. Use only the former.")
-        } else {
-          logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
-        }
-      }
-    }
-
     if (!contains(sparkExecutorInstances)) {
       sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
         val warning =
