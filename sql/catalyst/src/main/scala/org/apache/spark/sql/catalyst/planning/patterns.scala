@@ -167,9 +167,8 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond) =>
       val (plans, conditions) = flattenJoin(left, joinType)
-      val joinCond = cond.map(splitConjunctivePredicates(_)).getOrElse(Seq.empty[Expression])
-      (plans ++ Seq((right, joinType)), conditions ++ joinCond)
-
+       (plans ++ Seq((right, joinType)), conditions ++
+        cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
@@ -256,30 +255,5 @@ object PhysicalAggregation {
         child))
 
     case _ => None
-  }
-}
-
-/**
- * A pattern that matches a base table access and collects the
- * the corresponding leaf node and the applied predicates.
- * A base table access represents a LeafNode, or a Project or Filter operators
- * above a LeafNode.
- */
-object BaseTableAccess extends PredicateHelper {
-  def unapply(plan: LogicalPlan): Option[(LogicalPlan, Seq[Expression])] = plan match {
-    case t: LeafNode =>
-      Some(t, Seq.empty[Expression])
-
-    case Project(_, BaseTableAccess(t, pr)) =>
-      Some(t, pr)
-
-    case Filter(filterCond, p @ BaseTableAccess(t, pr)) =>
-      val predicates = splitConjunctivePredicates(filterCond).filter { pred =>
-        canEvaluate(pred, p) || canEvaluate(pred, t)
-      }
-
-      Some(t, predicates ++ pr)
-    case _ =>
-      None
   }
 }

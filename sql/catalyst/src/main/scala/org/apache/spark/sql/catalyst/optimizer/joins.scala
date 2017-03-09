@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.{BaseTableAccess, ExtractFiltersAndInnerJoins}
+import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -108,11 +108,9 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
 
     // Find if the input plans are eligible for star join detection.
     // An eligible plan is a base table access with valid statistics.
-    val foundEligibleJoin = input.forall { case (plan, _) =>
-      plan match {
-        case BaseTableAccess(t, _) if t.stats(conf).rowCount.isDefined => true
-        case _ => false
-      }
+    val foundEligibleJoin = input.forall {
+      case (PhysicalOperation(_, _, t: LeafNode), _) if t.stats(conf).rowCount.isDefined => true
+      case _ => false
     }
 
     if (!foundEligibleJoin) {
@@ -218,7 +216,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   private def isUnique(
       column: Attribute,
       plan: LogicalPlan): Boolean = plan match {
-    case BaseTableAccess(t, _) =>
+    case PhysicalOperation(_, _, t: LeafNode) =>
       val leafCol = findLeafNodeCol(column, plan)
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
@@ -253,7 +251,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   private def findLeafNodeCol(
       column: Attribute,
       plan: LogicalPlan): Option[Attribute] = plan match {
-    case pl @ BaseTableAccess(_, _) =>
+    case pl @ PhysicalOperation(_, _, _: LeafNode) =>
       pl match {
         case t: LeafNode if t.outputSet.contains(column) =>
           Option(column)
@@ -274,7 +272,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   private def hasStatistics(
       column: Attribute,
       plan: LogicalPlan): Boolean = plan match {
-    case BaseTableAccess(t, _) =>
+    case PhysicalOperation(_, _, t: LeafNode) =>
       val leafCol = findLeafNodeCol(column, plan)
       leafCol match {
         case Some(col) if t.outputSet.contains(col) =>
@@ -311,7 +309,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   private def isSelectiveStarJoin(
       dimTables: Seq[LogicalPlan],
       conditions: Seq[Expression]): Boolean = dimTables.exists {
-    case plan @ BaseTableAccess(_, p) =>
+    case plan @ PhysicalOperation(_, p, _: LeafNode) =>
       // Checks if any condition applies to the dimension tables.
       // Exclude the IsNotNull predicates until predicate selectivity is available.
       // In most cases, this predicate is artificially introduced by the Optimizer
@@ -337,7 +335,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
    */
   private def getBaseTableAccessCardinality(
       input: LogicalPlan): Option[BigInt] = input match {
-    case BaseTableAccess(t, cond) if t.stats(conf).rowCount.isDefined =>
+    case PhysicalOperation(_, cond, t: LeafNode) if t.stats(conf).rowCount.isDefined =>
       if (conf.cboEnabled && input.stats(conf).rowCount.isDefined) {
         Option(input.stats(conf).rowCount.get)
       } else {

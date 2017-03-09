@@ -405,18 +405,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val STARJOIN_OPTIMIZATION = buildConf("spark.sql.starJoinOptimization")
-    .doc("When true, it enables join reordering based on star schema detection. ")
-    .booleanConf
-    .createWithDefault(false)
-
-  val STARJOIN_FACT_TABLE_RATIO = buildConf("spark.sql.starJoinFactTableRatio")
-    .internal()
-    .doc("Specifies the upper limit of the ratio between the largest fact tables" +
-      " for a star join to be considered. ")
-    .doubleConf
-    .createWithDefault(0.9)
-
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS =
@@ -731,6 +719,18 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val STARJOIN_OPTIMIZATION = buildConf("spark.sql.cbo.starJoinOptimization")
+    .doc("When true, it enables join reordering based on star schema detection. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val STARJOIN_FACT_TABLE_RATIO = buildConf("spark.sql.cbo.starJoinFactTableRatio")
+    .internal()
+    .doc("Specifies the upper limit of the ratio between the largest fact tables" +
+      " for a star join to be considered. ")
+    .doubleConf
+    .createWithDefault(0.9)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -980,7 +980,7 @@ class SQLConf extends Serializable with Logging {
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
-  override def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
+  def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
@@ -1000,9 +1000,9 @@ class SQLConf extends Serializable with Logging {
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
-  override def starJoinOptimization: Boolean = getConf(STARJOIN_OPTIMIZATION)
+  def starJoinOptimization: Boolean = getConf(STARJOIN_OPTIMIZATION)
 
-  override def starJoinFactTableRatio: Double = getConf(STARJOIN_FACT_TABLE_RATIO)
+  def starJoinFactTableRatio: Double = getConf(STARJOIN_FACT_TABLE_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 
