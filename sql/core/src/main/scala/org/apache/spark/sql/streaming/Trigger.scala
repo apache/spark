@@ -38,6 +38,26 @@ sealed trait Trigger
 
 /**
  * :: Experimental ::
+ * A trigger that runs a query once then terminates
+ *
+ * Scala Example:
+ * {{{
+ *   df.write.trigger(OneTime)
+ * }}}
+ *
+ * Java Example:
+ * {{{
+ *   df.write.trigger(OneTime.create())
+ * }}}
+ *
+ * @since 2.2.0
+ */
+@Experimental
+@InterfaceStability.Evolving
+object OneTime extends Trigger
+
+/**
+ * :: Experimental ::
  * A trigger that runs a query periodically based on the processing time. If `interval` is 0,
  * the query will run as fast as possible.
  *

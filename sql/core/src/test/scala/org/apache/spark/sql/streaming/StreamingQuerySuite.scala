@@ -158,6 +158,51 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
+  testQuietly("OneTime trigger, commit log, and exception") {
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS().map { 6 / _}
+
+    testStream(mapped)(
+      AssertOnQuery(_.isActive === true),
+      StopStream,
+      AddData(inputData, 1, 2),
+      StartStream(trigger = OneTime),
+      CheckAnswer(6, 3),
+      AssertOnQuery(_.isActive === false),
+      StopStream, // clears out StreamTest state
+      AssertOnQuery { q =>
+        // both commit log and offset log contain the same (latest) batch id
+        q.commitLog.getLatest().map(_._1).getOrElse(-1L) ==
+          q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
+      },
+      AssertOnQuery { q =>
+        // blow away commit log and sink result
+        q.commitLog.purge(1)
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
+      StartStream(trigger = OneTime),
+      CheckAnswer(6, 3), // ensure we fall back to offset log and reprocess batch
+      AssertOnQuery(_.isActive === false),
+      StopStream,
+      AddData(inputData, 3),
+      StartStream(trigger = OneTime),
+      CheckLastBatch(2), // commit log should be back in place
+      AssertOnQuery(_.isActive === false),
+      StopStream,
+      AddData(inputData, 0),
+      StartStream(OneTime),
+      ExpectFailure[SparkException](),
+      AssertOnQuery(_.isActive === false),
+      AssertOnQuery(q => {
+        q.exception.get.startOffset ===
+          q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
+          q.exception.get.endOffset ===
+            q.availableOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString
+      }, "incorrect start offset or end offset on exception")
+    )
+  }
+
   testQuietly("status, lastProgress, and recentProgress") {
     import StreamingQuerySuite._
     clock = new StreamManualClock

@@ -162,6 +162,7 @@ class StreamExecution(
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
+    case _ @ OneTime => OneTimeExecutor()
   }
 
   /** Defines the internal state of execution */
