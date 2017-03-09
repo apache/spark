@@ -230,7 +230,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   private def getDBPath(dbName: String): URI = {
-    val warehousePath = makeQualifiedPath(s"${spark.sessionState.conf.warehousePath}")
+    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
     new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
   }
 
