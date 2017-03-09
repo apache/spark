@@ -494,7 +494,12 @@ class Analyzer(
             value + "_" + suffix
           }
         }
-        if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
+
+        val shouldTwoStepAggregate =
+          aggregates.forall(a => PivotFirst.supportsDataType(a.dataType)) &&
+          !pivotValues.exists(_.dataType.acceptsType(NullType))
+
+        if (shouldTwoStepAggregate) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
@@ -524,15 +529,21 @@ class Analyzer(
             def ifExpr(expr: Expression) = {
               If(EqualTo(pivotColumn, value), expr, Literal(null))
             }
+            def ifNullSafeExpr(expr: Expression) = {
+              If(EqualNullSafe(pivotColumn, value), expr, Literal(null))
+            }
             aggregates.map { aggregate =>
               val filteredAggregate = aggregate.transformDown {
                 // Assumption is the aggregate function ignores nulls. This is true for all current
-                // AggregateFunction's with the exception of First and Last in their default mode
-                // (which we handle) and possibly some Hive UDAF's.
+                // AggregateFunction's with the exception of First, Last and Count in their
+                // default mode (which we handle) and possibly some Hive UDAF's.
                 case First(expr, _) =>
                   First(ifExpr(expr), Literal(true))
                 case Last(expr, _) =>
                   Last(ifExpr(expr), Literal(true))
+                case c: Count =>
+                  // In case of count, `null` should be counted.
+                  c.withNewChildren(c.children.map(ifNullSafeExpr))
                 case a: AggregateFunction =>
                   a.withNewChildren(a.children.map(ifExpr))
               }.transform {
