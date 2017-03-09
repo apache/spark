@@ -112,6 +112,7 @@ object EvaluatePython {
     case (c: Int, DateType) => c
 
     case (c: Long, TimestampType) => c
+    case (c: Int, TimestampType) => c.toLong
 
     case (c, StringType) => UTF8String.fromString(c.toString)
 

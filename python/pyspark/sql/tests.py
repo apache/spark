@@ -1438,8 +1438,10 @@ class SQLTests(ReusedPySparkTestCase):
     # regression test for SPARK-19561
     def test_datetime_at_epoch(self):
         epoch = datetime.datetime.fromtimestamp(0)
-        df = self.spark.createDataFrame([Row(date=epoch)])
-        self.assertEqual(df.first()['date'], epoch)
+        df = self.spark.createDataFrame([Row(date=epoch)]).select('date', lit(epoch).alias('lit_date'))
+        first = df.first()
+        self.assertEqual(first['date'], epoch)
+        self.assertEqual(first['lit_date'], epoch)
 
     def test_decimal(self):
         from decimal import Decimal
