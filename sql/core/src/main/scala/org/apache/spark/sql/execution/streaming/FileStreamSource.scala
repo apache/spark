@@ -84,8 +84,8 @@ class FileStreamSource(
   private val fileNameOnly = sourceOptions.fileNameOnly
   if (fileNameOnly) {
     logWarning("'fileNameOnly' is enabled. Make sure your file names are unique (e.g. using " +
-      "UUID), otherwise, files using the same name will be considered as the same file and causes" +
-      " data lost")
+      "UUID), otherwise, files with the same name but under different paths will be considered " +
+      "the same and causes data lost.")
   }
 
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
