@@ -1146,6 +1146,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val conf = new SparkConf()
       .set(config.BLACKLIST_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)

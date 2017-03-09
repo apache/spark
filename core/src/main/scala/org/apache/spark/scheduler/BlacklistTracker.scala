@@ -61,6 +61,7 @@ private[scheduler] class BlacklistTracker (
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
+  private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
 
   /**
    * A map from executorId to information on task failures.  Tracks the time of each task failure,
@@ -176,28 +177,30 @@ private[scheduler] class BlacklistTracker (
   }
 
   def updateBlacklistForFetchFailure(host: String, exec: String, numFailedTasks: Int): Unit = {
-    val now = clock.getTimeMillis()
-    val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
-    if (!executorIdToBlacklistStatus.contains(exec)) {
-      logInfo(s"Blacklisting executor $exec due to fetch failure")
+    if (BLACKLIST_FETCH_FAILURE_ENABLED) {
+      val now = clock.getTimeMillis()
+      val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
+      if (!executorIdToBlacklistStatus.contains(exec)) {
+        logInfo(s"Blacklisting executor $exec due to fetch failure")
 
-      executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(host, expiryTimeForNewBlacklists))
-      listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, numFailedTasks))
-      updateNextExpiryTime()
-      killBlacklistedExecutor(exec)
+        executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(host, expiryTimeForNewBlacklists))
+        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, numFailedTasks))
+        updateNextExpiryTime()
+        killBlacklistedExecutor(exec)
 
-      val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(exec, HashSet[String]())
-      blacklistedExecsOnNode += exec
+        val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(exec, HashSet[String]())
+        blacklistedExecsOnNode += exec
 
-      if (SparkEnv.get.blockManager.externalShuffleServiceEnabled &&
-        !nodeIdToBlacklistExpiryTime.contains(host)) {
-        logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
+        if (SparkEnv.get.blockManager.externalShuffleServiceEnabled &&
+          !nodeIdToBlacklistExpiryTime.contains(host)) {
+          logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
 
-        nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
-        listenerBus.post(SparkListenerNodeBlacklisted(now, exec, blacklistedExecsOnNode.size))
-        _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
-        killExecutorsOnBlacklistedNode(host)
-     }
+          nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
+          listenerBus.post(SparkListenerNodeBlacklisted(now, exec, blacklistedExecsOnNode.size))
+          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+          killExecutorsOnBlacklistedNode(host)
+        }
+      }
     }
   }
 

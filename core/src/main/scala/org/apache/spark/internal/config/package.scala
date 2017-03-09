@@ -149,6 +149,11 @@ package object config {
       .internal()
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val BLACKLIST_FETCH_FAILURE_ENABLED =
+    ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
+      .booleanConf
+      .createWithDefault(false)
   // End blacklist confs
 
   private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
