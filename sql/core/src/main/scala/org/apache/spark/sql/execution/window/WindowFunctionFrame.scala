@@ -44,6 +44,12 @@ private[window] abstract class WindowFunctionFrame {
   def write(index: Int, current: InternalRow): Unit
 }
 
+object WindowFunctionFrame {
+  def getNextOrNull(iterator: Iterator[UnsafeRow]): UnsafeRow = {
+    if (iterator.hasNext) iterator.next() else null
+  }
+}
+
 /**
  * The offset window frame calculates frames containing LEAD/LAG statements.
  *
@@ -123,7 +129,7 @@ private[window] final class OffsetWindowFunctionFrame(
 
   override def write(index: Int, current: InternalRow): Unit = {
     if (inputIndex >= 0 && inputIndex < input.length) {
-      val r = if (inputIterator.hasNext) inputIterator.next() else null
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       projection(r)
     } else {
       // Use default values since the offset row does not exist.
@@ -179,9 +185,7 @@ private[window] final class SlidingWindowFunctionFrame(
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIterator = input.generateIterator()
-    if (inputIterator.hasNext) {
-      nextRow = inputIterator.next()
-    }
+    nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
     inputHighIndex = 0
     inputLowIndex = 0
     buffer.clear()
@@ -195,7 +199,7 @@ private[window] final class SlidingWindowFunctionFrame(
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputHighIndex, current, index) <= 0) {
       buffer.add(nextRow.copy())
-      nextRow = if (inputIterator.hasNext) inputIterator.next() else null
+      nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputHighIndex += 1
       bufferUpdated = true
     }
@@ -311,7 +315,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
       processor.update(nextRow)
-      nextRow = if (inputIterator.hasNext) inputIterator.next() else null
+      nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputIndex += 1
       bufferUpdated = true
     }
@@ -368,23 +372,21 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
     // the output row lower bound.
     val iterator = input.generateIterator(startIndex = inputIndex)
 
-    def getNextOrNull(iterator: Iterator[UnsafeRow]): UnsafeRow = {
-      if (iterator.hasNext) iterator.next() else null
-    }
-
-    var nextRow = getNextOrNull(iterator)
+    var nextRow = WindowFunctionFrame.getNextOrNull(iterator)
     while (nextRow != null && lbound.compare(nextRow, inputIndex, current, index) < 0) {
       inputIndex += 1
       bufferUpdated = true
-      nextRow = getNextOrNull(iterator)
+      nextRow = WindowFunctionFrame.getNextOrNull(iterator)
     }
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
       processor.initialize(input.length)
-      while (nextRow != null) {
+      if (nextRow != null) {
         processor.update(nextRow)
-        nextRow = getNextOrNull(iterator)
+      }
+      while (iterator.hasNext) {
+        processor.update(iterator.next())
       }
       processor.evaluate(target)
     }

@@ -718,18 +718,21 @@ object SQLConf {
 
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
+      .internal()
       .doc("Threshold for number of rows buffered in window operator")
       .intConf
       .createWithDefault(4096)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
+      .internal()
       .doc("Threshold for number of rows buffered in sort merge join operator")
       .intConf
       .createWithDefault(Int.MaxValue)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.spill.threshold")
+      .internal()
       .doc("Threshold for number of rows buffered in cartesian product operator")
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
