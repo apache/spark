@@ -1663,41 +1663,6 @@ class HiveDDLSuite
     }
   }
 
-  test("create datasource table with a non-existing location") {
-    withTable("t", "t1") {
-      withTempPath {
-        dir =>
-          spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
-
-          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.location == dir.getAbsolutePath)
-
-          spark.sql("INSERT INTO TABLE t SELECT 1, 2")
-          assert(dir.exists())
-
-          checkAnswer(spark.table("t"), Row(1, 2))
-      }
-      // partition table
-      withTempPath {
-        dir =>
-          spark.sql(
-            s"""
-               |CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'
-             """.stripMargin)
-
-          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          assert(table.location == dir.getAbsolutePath)
-
-          spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
-
-          val partDir = new File(dir, "a=1")
-          assert(partDir.exists())
-
-          checkAnswer(spark.table("t1"), Row(2, 1))
-      }
-    }
-  }
-
   test("create hive table with a non-existing location") {
     withTable("t", "t1") {
       withTempPath {
@@ -1705,9 +1670,7 @@ class HiveDDLSuite
           spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          val dirPath = new Path(dir.getAbsolutePath)
-          val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(new Path(table.location) == fs.makeQualified(dirPath))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
           spark.sql("INSERT INTO TABLE t SELECT 1, 2")
           assert(dir.exists())
@@ -1726,9 +1689,7 @@ class HiveDDLSuite
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          val dirPath = new Path(dir.getAbsolutePath)
-          val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
-          assert(new Path(table.location) == fs.makeQualified(dirPath))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
           spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
 
