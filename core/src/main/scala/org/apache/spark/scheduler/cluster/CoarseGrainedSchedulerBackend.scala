@@ -222,12 +222,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on all executors
     private def makeOffers() {
-      // Filter out executors under killing
-      val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
-      val workOffers = activeExecutors.map { case (id, executorData) =>
-        new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
-      }.toIndexedSeq
-      launchTasks(scheduler.resourceOffers(workOffers))
+      // Make sure no executor is killed while some task is launching on it
+      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+        // Filter out executors under killing
+        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+        val workOffers = activeExecutors.map { case (id, executorData) =>
+          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+        }.toIndexedSeq
+        scheduler.resourceOffers(workOffers)
+      }
+      if (!taskDescs.isEmpty) {
+        launchTasks(taskDescs)
+      }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -240,12 +246,20 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
-      // Filter out executors under killing
-      if (executorIsAlive(executorId)) {
-        val executorData = executorDataMap(executorId)
-        val workOffers = IndexedSeq(
-          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
-        launchTasks(scheduler.resourceOffers(workOffers))
+      // Make sure no executor is killed while some task is launching on it
+      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+        // Filter out executors under killing
+        if (executorIsAlive(executorId)) {
+          val executorData = executorDataMap(executorId)
+          val workOffers = IndexedSeq(
+            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+          scheduler.resourceOffers(workOffers)
+        } else {
+          Seq.empty
+        }
+      }
+      if (!taskDescs.isEmpty) {
+        launchTasks(taskDescs)
       }
     }
 
