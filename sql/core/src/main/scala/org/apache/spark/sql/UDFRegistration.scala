@@ -504,6 +504,21 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
 
   }
 
+  private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
+    try {
+      val clazz = Utils.classForName(className)
+      if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
+        throw new IOException(s"class $className doesn't implement interface UserDefinedAggregateFunction")
+      }
+      val udaf = clazz.newInstance().asInstanceOf[UserDefinedAggregateFunction]
+      register(name, udaf)
+    } catch {
+      case e: ClassNotFoundException => logError(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e @ (_: InstantiationException | _: IllegalArgumentException) =>
+        logError(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+    }
+  }
+
   /**
    * Register a user-defined function with 1 arguments.
    * @since 1.3.0
