@@ -39,19 +39,6 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
-#' Family object for tweedie .
-#'
-#' @param var.power the power index in the variance function.
-#' @param link.power the power index in the link function.
-#' @noRd
-#' @return a list for internal use in spark.glm
-tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
-  list(family = "tweedie",
-       variance = function(mu) mu ^ var.power,
-       linkfun = function(mu) mu ^ link.power,
-       link = paste("mu^", as.character(link.power), sep = ""))
-}
-
 #' Generalized Linear Models
 #'
 #' Fits generalized linear model against a SparkDataFrame.
@@ -67,17 +54,20 @@ tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #'               Currently these families are supported: \code{binomial}, \code{gaussian},
 #'               \code{Gamma}, \code{poisson} and \code{tweedie}.
-#'               Note that when package \code{statmod} is loaded, the tweedie family is specified using the
+#'
+#'               Note that there are two ways to specify the tweedie family.
+#'               a) Set \code{family = "tweedie"} and specify the variancePower and linkPower
+#'               b) When package \code{statmod} is loaded, the tweedie family is specified using the
 #'               family definition therein, i.e., \code{tweedie(var.power, link.power)}.
-#'               For example, \code{tweedie(var.power = 0, link.power = 1)} is gaussian with idenity link and
-#'               \code{tweedie(1, 0)} is poisson with log link.
-#'               When package \code{statmod} is not available,  one can use the SparkR internal definition
-#'               \code{SparkR:::tweedie(var.power, link.power)}.
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
 #' @param regParam regularization parameter for L2 regularization.
+#' @param variancePower the power in the variance function of the Tweedie distribution which provides
+#'                      the relationship between the variance and mean of the distribution. Only
+#'                      applicable to the Tweedie family.
+#' @param linkPower the index in the power link function. Only applicable to the Tweedie family.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
@@ -105,19 +95,33 @@ tweedie <- function(var.power = 0.0, link.power = 1.0 - var.power) {
 #' summary(savedModel)
 #'
 #' # fit tweedie model
-#' model <- spark.glm(df, Freq ~ Sex + Age, family = SparkR:::tweedie(1.2, 0.0))
+#' model <- spark.glm(df, Freq ~ Sex + Age, family = "tweedie",
+#'                    variancePower = 1.2, linkPower = 0)
 #' summary(model)
 #' }
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
-                   regParam = 0.0) {
+                   regParam = 0.0, variancePower = 0.0, linkPower = 1.0 - variancePower) {
+
             if (is.character(family)) {
-              family <- get(family, mode = "function", envir = parent.frame())
+              # family = "tweedie"
+              if (tolower(family) == "tweedie") {
+                family <- list(family = "tweedie", link = "linkNotUsed")
+              } else {
+                family <- get(family, mode = "function", envir = parent.frame())
+              }
             }
             if (is.function(family)) {
-              family <- family()
+              # family = statmod::tweedie()
+              if (tolower(family$family) == "tweedie") {
+                family <- list(family = "tweedie", link = "linkNotUsed")
+                variancePower <- log(family$variance(exp(1)))
+                linkPower <- log(family$linkfun(exp(1)))
+              } else {
+                family <- family()
+              }
             }
             if (is.null(family$family)) {
               print(family)
@@ -131,19 +135,11 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- as.character(weightCol)
             }
 
-            # set variancePower and linkPower
-            variancePower <- 0.0
-            linkPower <- 1.0
-            if (tolower(family$family) == "tweedie") {
-              variancePower <- log(family$variance(exp(1)))
-              linkPower <- log(family$linkfun(exp(1)))
-            }
-
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
                                 tol, as.integer(maxIter), weightCol, regParam,
-                                variancePower, linkPower)
+                                as.double(variancePower), as.double(linkPower))
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -163,6 +159,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'                  weights as 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
+#' @param variancePower the index of the power variance function in the Tweedie family.
+#' @param linkPower the index of the power link function in the Tweedie family.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -177,8 +175,10 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @note glm since 1.5.0
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL) {
-            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol)
+          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
+                   variancePower = 0.0, linkPower = 1.0 - variancePower) {
+            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
+                      variancePower = variancePower, linkPower = linkPower)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
