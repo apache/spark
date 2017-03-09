@@ -62,15 +62,10 @@ private[deploy] class Worker(
   private val forwordMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
 
-  // A separated thread to clean up the workDir. Used to provide the implicit parameter of `Future`
-  // methods.
+  // A separated thread to clean up the workDir and the finished application.
+  // Used to provide the implicit parameter of `Future` methods.
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
-
-  // A separated thread to clean up for the finished application. Because cleaning up
-  // may cost much time, and it may block other rpc messages.
-  private val cleanupApplicationThreadExecutor = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-application-thread"))
 
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
@@ -582,17 +577,18 @@ private[deploy] class Worker(
     val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
     if (shouldCleanup) {
       finishedApps -= id
-      cleanupApplicationThreadExecutor.submit(new Runnable {
-        override def run(): Unit = {
-          appDirectories.remove(id).foreach { dirList =>
-            logInfo(s"Cleaning up local directories for application $id")
-            dirList.foreach { dir =>
-              Utils.deleteRecursively(new File(dir))
-            }
+      appDirectories.remove(id).foreach { dirList =>
+        concurrent.Future {
+          logInfo(s"Cleaning up local directories for application $id")
+          dirList.foreach { dir =>
+            Utils.deleteRecursively(new File(dir))
           }
-          shuffleService.applicationRemoved(id)
-        }
-      })
+        }(cleanupThreadExecutor).onFailure {
+          case e: Throwable =>
+            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+        }(cleanupThreadExecutor)
+      }
+      shuffleService.applicationRemoved(id)
     }
   }
 
@@ -615,7 +611,6 @@ private[deploy] class Worker(
 
   override def onStop() {
     cleanupThreadExecutor.shutdownNow()
-    cleanupApplicationThreadExecutor.shutdown()
     metricsSystem.report()
     cancelLastRegistrationRetry()
     forwordMessageScheduler.shutdownNow()
