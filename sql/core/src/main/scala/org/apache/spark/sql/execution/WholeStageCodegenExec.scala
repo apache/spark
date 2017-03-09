@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import org.codehaus.janino.JaninoRuntimeException
+
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -374,7 +376,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case e: Exception if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+      case e: JaninoRuntimeException if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
