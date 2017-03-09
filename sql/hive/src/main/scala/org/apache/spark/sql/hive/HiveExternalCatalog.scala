@@ -597,6 +597,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
+    requireTableExists(db, table)
+    val rawTable = getRawTable(db, table)
+    val withNewSchema = rawTable.copy(schema = schema)
+    // Add table metadata such as table schema, partition columns, etc. to table properties.
+    val updatedTable = withNewSchema.copy(
+      properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
+    try {
+      client.alterTable(updatedTable)
+    } catch {
+      case NonFatal(e) =>
+        val warningMessage =
+          s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
+            "compatible way. Updating Hive metastore in Spark SQL specific format."
+        logWarning(warningMessage, e)
+        client.alterTable(updatedTable.copy(schema = updatedTable.partitionSchema))
+    }
+  }
+
   override def getTable(db: String, table: String): CatalogTable = withClient {
     restoreTableMetadata(getRawTable(db, table))
   }
@@ -690,10 +709,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           "different from the schema when this table was created by Spark SQL" +
           s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema " +
           "from Hive metastore which is not case preserving.")
-        hiveTable
+        hiveTable.copy(schemaPreservesCase = false)
       }
     } else {
-      hiveTable
+      hiveTable.copy(schemaPreservesCase = false)
     }
   }
 

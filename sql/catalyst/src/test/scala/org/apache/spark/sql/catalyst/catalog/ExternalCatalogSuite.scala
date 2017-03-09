@@ -26,7 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
@@ -237,6 +237,19 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     intercept[AnalysisException] {
       catalog.alterTable(newTable("unknown_table", "db2"))
     }
+  }
+
+  test("alter table schema") {
+    val catalog = newBasicCatalog()
+    val tbl1 = catalog.getTable("db2", "tbl1")
+    val newSchema = StructType(Seq(
+      StructField("new_field_1", IntegerType),
+      StructField("new_field_2", StringType),
+      StructField("a", IntegerType),
+      StructField("b", StringType)))
+    catalog.alterTableSchema("db2", "tbl1", newSchema)
+    val newTbl1 = catalog.getTable("db2", "tbl1")
+    assert(newTbl1.schema == newSchema)
   }
 
   test("get table") {
