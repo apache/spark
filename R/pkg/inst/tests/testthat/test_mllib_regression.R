@@ -91,9 +91,9 @@ test_that("spark.glm and predict", {
   #' print(coef(rModel))
 
   rCoef <- c(0.6455409, 0.1169143, -0.3224752, -0.3282174)
-  rVals <- as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
-                                   data = iris) %*% rCoef)
-  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+  rVals <- exp(as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
+                                       data = iris) %*% rCoef))
+  expect_true(all(abs(rVals - vals) < 1e-5), rVals - vals)
 
   # Test stats::predict is working
   x <- rnorm(15)
@@ -281,9 +281,9 @@ test_that("glm and predict", {
   #' print(coef(rModel))
 
   rCoef <- c(0.6455409, 0.1169143, -0.3224752, -0.3282174)
-  rVals <- as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
-                                   data = iris) %*% rCoef)
-  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+  rVals <- exp(as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
+                                   data = iris) %*% rCoef))
+  expect_true(all(abs(rVals - vals) < 1e-5), rVals - vals)
 
   # Test stats::predict is working
   x <- rnorm(15)

@@ -114,18 +114,17 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               }
             }
             if (is.function(family)) {
-              # family = statmod::tweedie()
-              if (tolower(family$family) == "tweedie") {
-                family <- list(family = "tweedie", link = "linkNotUsed")
-                variancePower <- log(family$variance(exp(1)))
-                linkPower <- log(family$linkfun(exp(1)))
-              } else {
-                family <- family()
-              }
+              family <- family()
             }
             if (is.null(family$family)) {
               print(family)
               stop("'family' not recognized")
+            }
+            # family = statmod::tweedie()
+            if (tolower(family$family) == "tweedie" && !is.null(family$variance)) {
+              variancePower <- log(family$variance(exp(1)))
+              linkPower <- log(family$linkfun(exp(1)))
+              family <- list(family = "tweedie", link = "linkNotUsed")
             }
 
             formula <- paste(deparse(formula), collapse = "")
