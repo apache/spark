@@ -81,9 +81,16 @@ class FileStreamSource(
     sourceOptions.maxFileAgeMs
   }
 
+  private val fileNameOnly = sourceOptions.fileNameOnly
+  if (fileNameOnly) {
+    logWarning("'fileNameOnly' is enabled. Make sure your file names are unique (e.g. using " +
+      "UUID), otherwise, files using the same name will be considered as the same file and causes" +
+      " data lost")
+  }
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
-  val seenFiles = new SeenFilesMap(maxFileAgeMs, sourceOptions.fileNameOnly)
+  val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
   metadataLog.allFiles().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
@@ -320,13 +327,5 @@ object FileStreamSource {
     }
 
     def size: Int = map.size()
-
-    /**
-     * Note when `fileNameOnly` is true, each entry would be (file name, timestamp) rather than
-     * (full path, timestamp).
-     */
-    def allEntries: Seq[(String, Timestamp)] = {
-      map.asScala.toSeq
-    }
   }
 }

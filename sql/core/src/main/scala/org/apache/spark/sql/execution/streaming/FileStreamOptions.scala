@@ -82,7 +82,7 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
       } catch {
         case _: IllegalArgumentException =>
           throw new IllegalArgumentException(
-            s"Invalid value '$str' for option '${name}', must be 'true' or 'false'")
+            s"Invalid value '$str' for option '$name', must be 'true' or 'false'")
       }
     }.getOrElse(default)
   }
