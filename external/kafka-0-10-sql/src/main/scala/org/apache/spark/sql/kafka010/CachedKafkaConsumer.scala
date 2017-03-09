@@ -275,15 +275,15 @@ private[kafka010] case class CachedKafkaConsumer private(
     val finalMessage = s"$message ${additionalMessage(failOnDataLoss)}"
     if (failOnDataLoss) {
       if (cause != null) {
-        throw new IllegalStateException(finalMessage)
-      } else {
         throw new IllegalStateException(finalMessage, cause)
+      } else {
+        throw new IllegalStateException(finalMessage)
       }
     } else {
       if (cause != null) {
-        logWarning(finalMessage)
-      } else {
         logWarning(finalMessage, cause)
+      } else {
+        logWarning(finalMessage)
       }
     }
   }
