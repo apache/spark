@@ -306,11 +306,6 @@ private[sql] trait SQLTestUtils
     val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.makeQualified(hadoopPath).toUri
   }
-
-  def makeQualifiedPath(path: Path): URI = {
-    val fs = path.getFileSystem(spark.sessionState.newHadoopConf())
-    fs.makeQualified(path).toUri
-  }
 }
 
 private[sql] object SQLTestUtils {
