@@ -22,6 +22,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
+import org.codehaus.janino.JaninoRuntimeException
+
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
@@ -355,7 +357,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): GenPredicate = {
-    GeneratePredicate.generate(expression, inputSchema)
+    try {
+      GeneratePredicate.generate(expression, inputSchema)
+    } catch {
+      case e: JaninoRuntimeException =>
+        val str = expression.toString
+        val logMessage = if (str.length > 256) {
+          str.substring(0, 256 - 3) + "..."
+        } else {
+          str
+        }
+        logWarning(s"Codegen disabled for this expression:\n $logMessage")
+        null
+      case e: Exception =>
+        throw e
+    }
   }
 
   protected def newOrdering(

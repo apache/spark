@@ -20,9 +20,6 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.commons.lang3.exception.ExceptionUtils
-import org.codehaus.janino.JaninoRuntimeException
-
 import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -217,30 +214,21 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      try {
-        val predicate = newPredicate(condition, child.output)
+      val predicate = newPredicate(condition, child.output)
+      if (predicate != null) {
         predicate.initialize(0)
         iter.filter { row =>
           val r = predicate.eval(row)
           if (r) numOutputRows += 1
           r
         }
-      } catch {
-        // JaninoRuntimeException is in a nested exception if Java compilation error occurs
-        case e: Exception if ExceptionUtils.getRootCause(e).isInstanceOf[JaninoRuntimeException] =>
-          iter.filter { row =>
-            val str = condition.toString
-            val logMessage = if (str.length > 256) {
-              str.substring(0, 256 - 3) + "..."
-            } else {
-              str
-            }
-            logWarning(s"Codegen disabled for this expression:\n $logMessage")
-            val r = BindReferences.bindReference(condition, child.output)
-              .eval(row).isInstanceOf[Predicate]
-            if (r) numOutputRows += 1
-            r
-          }
+      } else {
+        val predicate = BindReferences.bindReference(condition, child.output)
+        iter.filter { row =>
+          val r = predicate.eval(row).isInstanceOf[Predicate]
+          if (r) numOutputRows += 1
+          r
+        }
       }
     }
   }
