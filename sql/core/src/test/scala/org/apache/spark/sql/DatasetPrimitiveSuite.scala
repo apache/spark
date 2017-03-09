@@ -64,29 +64,36 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
 
   test("mapPrimitive") {
     val dsInt = Seq(1, 2, 3).toDS()
+    checkDataset(dsInt.map(e => e > 1), false, true, true)
     checkDataset(dsInt.map(e => e + 1), 2, 3, 4)
     checkDataset(dsInt.map(e => e + 8589934592L), 8589934593L, 8589934594L, 8589934595L)
     checkDataset(dsInt.map(e => e + 1.1F), 2.1F, 3.1F, 4.1F)
     checkDataset(dsInt.map(e => e + 1.23D), 2.23D, 3.23D, 4.23D)
 
     val dsLong = Seq(1L, 2L, 3L).toDS()
+    checkDataset(dsLong.map(e => e > 1), false, true, true)
     checkDataset(dsLong.map(e => (e + 1).toInt), 2, 3, 4)
     checkDataset(dsLong.map(e => e + 8589934592L), 8589934593L, 8589934594L, 8589934595L)
     checkDataset(dsLong.map(e => e + 1.1F), 2.1F, 3.1F, 4.1F)
     checkDataset(dsLong.map(e => e + 1.23D), 2.23D, 3.23D, 4.23D)
 
     val dsFloat = Seq(1F, 2F, 3F).toDS()
+    checkDataset(dsFloat.map(e => e > 1), false, true, true)
     checkDataset(dsFloat.map(e => (e + 1).toInt), 2, 3, 4)
     checkDataset(dsFloat.map(e => (e + 123456L).toLong), 123457L, 123458L, 123459L)
     checkDataset(dsFloat.map(e => e + 1.1F), 2.1F, 3.1F, 4.1F)
     checkDataset(dsFloat.map(e => e + 1.23D), 2.23D, 3.23D, 4.23D)
 
     val dsDouble = Seq(1D, 2D, 3D).toDS()
+    checkDataset(dsDouble.map(e => e > 1), false, true, true)
     checkDataset(dsDouble.map(e => (e + 1).toInt), 2, 3, 4)
     checkDataset(dsDouble.map(e => (e + 8589934592L).toLong),
       8589934593L, 8589934594L, 8589934595L)
     checkDataset(dsDouble.map(e => (e + 1.1F).toFloat), 2.1F, 3.1F, 4.1F)
     checkDataset(dsDouble.map(e => e + 1.23D), 2.23D, 3.23D, 4.23D)
+
+    val dsBoolean = Seq(true, false).toDS()
+    checkDataset(dsBoolean.map(e => !e), false, true)
   }
 
   test("filter") {
