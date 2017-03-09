@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import scala.language.existentials
+
 import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
