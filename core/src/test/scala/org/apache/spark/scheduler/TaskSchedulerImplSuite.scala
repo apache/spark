@@ -898,12 +898,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(taskSet2)
     val offers = Array(WorkerOffer("1", "localhost", 2), WorkerOffer("2", "localhost", 2))
     taskScheduler.makeOffersAndSerializeTasks(offers)
-
-    assert(taskIdToTaskSetManager.values.exists(_.taskSet == taskSet1))
     assert(taskIdToTaskSetManager.values.exists(_.taskSet == taskSet2))
-    taskIdToTaskSetManager.values.filter(_.taskSet == taskSet1).foreach { taskSet =>
-      assert(taskSet.isZombie === true)
-    }
     taskIdToTaskSetManager.values.filter(_.taskSet == taskSet2).foreach { taskSet =>
       assert(taskSet.isZombie === false)
     }

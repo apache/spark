@@ -372,7 +372,11 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private[scheduler] def makeOffersAndSerializeTasks(
       offers: IndexedSeq[WorkerOffer]): Seq[Seq[(TaskDescription, ByteBuffer)]] = {
     resourceOffers(offers).map(_.map { task =>
-      (task, prepareSerializedTask(task, MAX_RRC_MESSAGE_SIZE))
+      val serializedTask = prepareSerializedTask(task, MAX_RRC_MESSAGE_SIZE)
+      if (serializedTask == null) {
+        statusUpdate(task.taskId, TaskState.KILLED, null.asInstanceOf[ByteBuffer])
+      }
+      (task, serializedTask)
     }.filter(_._2 != null))
   }
 

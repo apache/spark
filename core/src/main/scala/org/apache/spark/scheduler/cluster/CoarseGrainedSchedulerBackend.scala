@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -109,7 +110,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val serializedTask = scheduler.prepareSerializedTask(task, maxRpcMessageSize)
       val executorData = executorDataMap(task.executorId)
       if (executorData == null) {
-        // Ignoring task.
+        driverEndpoint.send(StatusUpdate(task.executorId, task.taskId, TaskState.KILLED,
+          null.asInstanceOf[ByteBuffer]))
         return
       }
       if (serializedTask != null) {
@@ -117,7 +119,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           s"${executorData.executorHost}, serializedTask: ${serializedTask.limit} bytes.")
         executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
       } else {
-        executorData.incrementFreeCores(scheduler.CPUS_PER_TASK)
+        driverEndpoint.send(StatusUpdate(task.executorId, task.taskId, TaskState.FAILED,
+          ByteBuffer.allocate(0)))
       }
     }
   }
