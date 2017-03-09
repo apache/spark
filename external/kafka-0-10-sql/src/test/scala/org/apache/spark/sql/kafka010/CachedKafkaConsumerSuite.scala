@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.{HashMap => JavaMap}
-
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.sql.test.SharedSQLContext
