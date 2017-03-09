@@ -28,10 +28,14 @@ class CachedKafkaConsumerSuite extends SparkFunSuite with PrivateMethodTester {
   test("SPARK-19886: Report error cause correctly in reportDataLoss") {
     val cause = new Exception("D'oh!")
     val consumer = CachedKafkaConsumer.getOrCreate("topic", 1, new JavaMap[String, Object]())
-    val reportDataLoss = PrivateMethod[Unit]('reportDataLoss)
-    val e = intercept[IllegalStateException] {
-      consumer.invokePrivate(reportDataLoss(true, "message", cause))
+    try {
+      val reportDataLoss = PrivateMethod[Unit]('reportDataLoss)
+      val e = intercept[IllegalStateException] {
+        consumer.invokePrivate(reportDataLoss(true, "message", cause))
+      }
+      assert(e.getCause === cause)
+    } finally {
+      CachedKafkaConsumer.removeKafkaConsumer("topic", 1, new JavaMap[String, Object]())
     }
-    assert(e.getCause === cause)
   }
 }
