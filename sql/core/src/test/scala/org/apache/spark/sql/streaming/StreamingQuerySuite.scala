@@ -166,7 +166,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.isActive === true),
       StopStream,
       AddData(inputData, 1, 2),
-      StartStream(trigger = OneTime),
+      StartStream(trigger = OneTime()),
       CheckAnswer(6, 3),
       AssertOnQuery(_.isActive === false),
       StopStream, // clears out StreamTest state
@@ -181,17 +181,17 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
-      StartStream(trigger = OneTime),
+      StartStream(trigger = OneTime()),
       CheckAnswer(6, 3), // ensure we fall back to offset log and reprocess batch
       AssertOnQuery(_.isActive === false),
       StopStream,
       AddData(inputData, 3),
-      StartStream(trigger = OneTime),
+      StartStream(trigger = OneTime()),
       CheckLastBatch(2), // commit log should be back in place
       AssertOnQuery(_.isActive === false),
       StopStream,
       AddData(inputData, 0),
-      StartStream(OneTime),
+      StartStream(trigger = OneTime()),
       ExpectFailure[SparkException](),
       AssertOnQuery(_.isActive === false),
       AssertOnQuery(q => {

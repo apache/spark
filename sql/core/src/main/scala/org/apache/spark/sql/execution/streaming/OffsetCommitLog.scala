@@ -24,6 +24,24 @@ import scala.io.{Source => IOSource}
 
 import org.apache.spark.sql.SparkSession
 
+/**
+ * Used to write log files that represent commit points in structured streaming.
+ * A log file will be written immediately after the successful completion of a
+ * batch, and before processing the next batch. Here is an execution summary:
+ * - trigger batch 1
+ * - obtain batch 1 offsets and write to offset log
+ * - process batch 1
+ * - write batch 1 to commit log
+ * - trigger batch 2
+ * - obtain bactch 2 offsets and write to offset log
+ * - process batch 2
+ * - write batch 2 to commit log
+ * ....
+ *
+ * The current format of the commit log is:
+ * line 1: version
+ * line 2: metadata (optional json string)
+ */
 class OffsetCommitLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[Option[String]](sparkSession, path) {
 
@@ -33,9 +51,9 @@ class OffsetCommitLog(sparkSession: SparkSession, path: String)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines.next()
-    if (version != OffsetCommitLog.VERSION) {
-      throw new IllegalStateException(s"Unknown log version: ${version}")
+    val version = lines.next().trim.toInt
+    if (OffsetCommitLog.VERSION < version) {
+      throw new IllegalStateException(s"Incompatible log file version ${version}")
     }
     // read metadata
     lines.next().trim match {
@@ -46,7 +64,7 @@ class OffsetCommitLog(sparkSession: SparkSession, path: String)
 
   override protected def serialize(metadata: Option[String], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(OffsetCommitLog.VERSION.getBytes(UTF_8))
+    out.write(OffsetCommitLog.VERSION.toString.getBytes(UTF_8))
     out.write('\n')
 
     // write metadata or void
@@ -55,7 +73,7 @@ class OffsetCommitLog(sparkSession: SparkSession, path: String)
 }
 
 object OffsetCommitLog {
-  private val VERSION = "v1"
-  private val SERIALIZED_VOID = "-"
+  private val VERSION = 1
+  private val SERIALIZED_VOID = "{}"
 }
 

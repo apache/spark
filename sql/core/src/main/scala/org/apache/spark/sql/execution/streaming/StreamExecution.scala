@@ -162,7 +162,7 @@ class StreamExecution(
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
-    case _ @ OneTime => OneTimeExecutor()
+    case _: OneTime => OneTimeExecutor()
   }
 
   /** Defines the internal state of execution */
@@ -385,11 +385,20 @@ class StreamExecution(
   private def populateStartOffsets(): Unit = {
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
+        /* identify the current batch id: if commit log indicates we successfully processed the
+         * latest batch id in the offset log, then we can safely move to the next batch
+         * i.e., committedBatchId + 1
+         */
         currentBatchId = commitLog.getLatest() match {
-          case Some((committedBatchId, metadata)) => committedBatchId + 1
-          case None => batchId // can only happen if batchId is 0
+          case Some((committedBatchId, metadata))
+            if batchId == committedBatchId => committedBatchId + 1
+          case _ => batchId
         }
         if (currentBatchId > 0) {
+          /* We have successfully committed at least one batch, the most recent
+           * being the batch at: (currentBatchId - 1). Use that batch to initialize
+           * committedOffsets.
+           */
           offsetLog.get(currentBatchId - 1).foreach {
             case lastOffsets =>
               committedOffsets = lastOffsets.toStreamProgress(sources)
@@ -398,11 +407,17 @@ class StreamExecution(
         }
         logInfo(s"Resuming streaming query, starting with batch $currentBatchId")
         if (currentBatchId == batchId) {
+          /* The last batch was not successfully committed so we need to reprocess
+           * it be using the offsets in the offset log i.e., nextOffsets
+           */
           availableOffsets = nextOffsets.toStreamProgress(sources)
           offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
           logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
             s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
         } else {
+          /* The last batch was successfully committed, so we can safely process a
+           * new next batch.
+           */
           constructNextBatch()
         }
       case None => // We are starting this stream for the first time.

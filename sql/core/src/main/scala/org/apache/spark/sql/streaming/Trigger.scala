@@ -54,7 +54,32 @@ sealed trait Trigger
  */
 @Experimental
 @InterfaceStability.Evolving
-object OneTime extends Trigger
+case class OneTime() extends Trigger
+
+/**
+ * :: Experimental ::
+ * Used to create [[OneTime]] triggers for [[StreamingQuery]]s.
+ *
+ * @since 2.2.0
+ */
+@Experimental
+@InterfaceStability.Evolving
+object OneTime {
+
+  /**
+   * Create a [[OneTime]] trigger.
+   *
+   * Example:
+   * {{{
+   *   df.write.trigger(OneTime.create())
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  def create(): OneTime = {
+    apply()
+  }
+}
 
 /**
  * :: Experimental ::
