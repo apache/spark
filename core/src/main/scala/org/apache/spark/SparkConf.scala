@@ -518,24 +518,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (!contains(sparkExecutorInstances)) {
-      sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
-        val warning =
-          s"""
-             |SPARK_WORKER_INSTANCES was detected (set to '$value').
-             |This is deprecated in Spark 1.0+.
-             |
-             |Please instead use:
-             | - ./spark-submit with --num-executors to specify the number of executors
-             | - Or set SPARK_EXECUTOR_INSTANCES
-             | - spark.executor.instances to configure the number of instances in the spark config.
-        """.stripMargin
-        logWarning(warning)
-
-        set("spark.executor.instances", value)
-      }
-    }
-
     if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
       val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
         "instead use \"yarn\" with specified deploy mode."
