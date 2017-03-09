@@ -129,6 +129,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
+  test("simple csv test with string dataset") {
+    val csvDataset = spark.read.text(testFile(carsFile)).as[String]
+    val cars = spark.read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(csvDataset)
+
+    verifyCars(cars, withHeader = true, checkTypes = true)
+
+    val carsWithoutHeader = spark.read
+      .option("header", "false")
+      .csv(csvDataset)
+
+    verifyCars(carsWithoutHeader, withHeader = false, checkTypes = false)
+  }
+
   test("test inferring booleans") {
     val result = spark.read
       .format("csv")
@@ -742,10 +758,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(iso8601timestampsPath)
 
       // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val iso8601Timestamps = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(iso8601timestampsPath)
 
       val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd'T'HH:mm:ss.SSSZZ", Locale.US)
@@ -775,10 +792,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(iso8601datesPath)
 
       // This will load back the dates as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val iso8601dates = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(iso8601datesPath)
 
       val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
@@ -833,10 +851,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(datesWithFormatPath)
 
       // This will load back the dates as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val stringDatesWithFormat = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(datesWithFormatPath)
       val expectedStringDatesWithFormat = Seq(
         Row("2015/08/26"),
@@ -864,10 +883,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val stringTimestampsWithFormat = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(timestampsWithFormatPath)
       val expectedStringTimestampsWithFormat = Seq(
         Row("2015/08/26 18:00"),
@@ -896,10 +916,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
       val stringTimestampsWithFormat = spark.read
         .format("csv")
+        .schema(stringSchema)
         .option("header", "true")
-        .option("inferSchema", "false")
         .load(timestampsWithFormatPath)
       val expectedStringTimestampsWithFormat = Seq(
         Row("2015/08/27 01:00"),
@@ -1072,17 +1093,26 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Empty file produces empty dataframe with empty schema - wholeFile option") {
-    withTempPath { path =>
-      path.createNewFile()
-
+  test("Empty file produces empty dataframe with empty schema") {
+    Seq(false, true).foreach { wholeFile =>
       val df = spark.read.format("csv")
         .option("header", true)
-        .option("wholeFile", true)
-        .load(path.getAbsolutePath)
+        .option("wholeFile", wholeFile)
+        .load(testFile(emptyFile))
 
       assert(df.schema === spark.emptyDataFrame.schema)
       checkAnswer(df, spark.emptyDataFrame)
     }
   }
+
+  test("Empty string dataset produces empty dataframe and keep user-defined schema") {
+    val df1 = spark.read.csv(spark.emptyDataset[String])
+    assert(df1.schema === spark.emptyDataFrame.schema)
+    checkAnswer(df1, spark.emptyDataFrame)
+
+    val schema = StructType(StructField("a", StringType) :: Nil)
+    val df2 = spark.read.schema(schema).csv(spark.emptyDataset[String])
+    assert(df2.schema === schema)
+  }
+
 }

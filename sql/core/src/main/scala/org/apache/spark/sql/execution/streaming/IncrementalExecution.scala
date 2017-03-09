@@ -107,11 +107,11 @@ class IncrementalExecution(
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
         StreamingReservoirSampleExec(
           k, keys, child, Some(stateId), Some(currentEventTimeWatermark), Some(outputMode))
-      case MapGroupsWithStateExec(
+      case FlatMapGroupsWithStateExec(
              f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
-        MapGroupsWithStateExec(
+        FlatMapGroupsWithStateExec(
           f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
     }
   }

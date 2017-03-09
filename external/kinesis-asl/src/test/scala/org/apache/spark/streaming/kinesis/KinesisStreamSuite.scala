@@ -119,13 +119,13 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Generate block info data for testing
     val seqNumRanges1 = SequenceNumberRanges(
-      SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy"))
+      SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy", 67))
     val blockId1 = StreamBlockId(kinesisStream.id, 123)
     val blockInfo1 = ReceivedBlockInfo(
       0, None, Some(seqNumRanges1), new BlockManagerBasedStoreResult(blockId1, None))
 
     val seqNumRanges2 = SequenceNumberRanges(
-      SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb"))
+      SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb", 89))
     val blockId2 = StreamBlockId(kinesisStream.id, 345)
     val blockInfo2 = ReceivedBlockInfo(
       0, None, Some(seqNumRanges2), new BlockManagerBasedStoreResult(blockId2, None))
