@@ -262,7 +262,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file and returns the results as a `DataFrame`.
+   * Loads JSON files and returns the results as a `DataFrame`.
    *
    * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
    * default. For JSON (one record per file), set the `wholeFile` option to true.
@@ -438,7 +438,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a CSV file and returns the result as a `DataFrame`.
+   * Loads CSV files and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
@@ -549,7 +549,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads an ORC file and returns the result as a `DataFrame`.
+   * Loads ORC files and returns the result as a `DataFrame`.
    *
    * @param paths input paths
    * @since 2.0.0
