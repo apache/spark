@@ -364,6 +364,16 @@ class KafkaSourceSuite extends KafkaSourceTest {
         "failOnDataLoss" -> failOnDataLoss.toString)
     }
 
+    test(s"assign from specific offsets (topic with uppercase characters) " +
+      s"(failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic().toUpperCase
+      testFromSpecificOffsets(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        "assign" -> assignString(topic, 0 to 4),
+        "failOnDataLoss" -> failOnDataLoss.toString)
+    }
+
     test(s"subscribing topic by name from latest offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromLatestOffsets(
@@ -384,6 +394,12 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
     test(s"subscribing topic by name from specific offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
+      testFromSpecificOffsets(topic, failOnDataLoss = failOnDataLoss, "subscribe" -> topic)
+    }
+
+    test(s"subscribing topic (with uppercase characters) by name from specific offsets " +
+      s"(failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic().toUpperCase
       testFromSpecificOffsets(topic, failOnDataLoss = failOnDataLoss, "subscribe" -> topic)
     }
 
@@ -409,6 +425,16 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
     test(s"subscribing topic by pattern from specific offsets (failOnDataLoss: $failOnDataLoss)") {
       val topicPrefix = newTopic()
+      val topic = topicPrefix + "-suffix"
+      testFromSpecificOffsets(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        "subscribePattern" -> s"$topicPrefix-.*")
+    }
+
+    test(s"subscribing topic (with uppercase characters) by pattern from specific offsets " +
+      s"(failOnDataLoss: $failOnDataLoss)") {
+      val topicPrefix = newTopic().toUpperCase
       val topic = topicPrefix + "-suffix"
       testFromSpecificOffsets(
         topic,
