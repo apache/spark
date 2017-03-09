@@ -306,27 +306,27 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
     )
   }
 
-  test("delay threshold should not be a negative time.") {
+  test("delay threshold should not be negative.") {
     val inputData = MemoryStream[Int].toDF()
     var e = intercept[IllegalArgumentException] {
       inputData.withWatermark("value", "-1 year")
     }
-    assert(e.getMessage contains "delay threshold should not be a negative time")
+    assert(e.getMessage contains "should not be negative.")
 
     e = intercept[IllegalArgumentException] {
       inputData.withWatermark("value", "1 year -13 months")
     }
-    assert(e.getMessage contains "delay threshold should not be a negative time")
+    assert(e.getMessage contains "should not be negative.")
 
     e = intercept[IllegalArgumentException] {
       inputData.withWatermark("value", "1 month -40 days")
     }
-    assert(e.getMessage contains "delay threshold should not be a negative time")
+    assert(e.getMessage contains "should not be negative.")
 
     e = intercept[IllegalArgumentException] {
       inputData.withWatermark("value", "-10 seconds")
     }
-    assert(e.getMessage contains "delay threshold should not be a negative time")
+    assert(e.getMessage contains "should not be negative.")
   }
 
   test("the new watermark should override the old one") {
