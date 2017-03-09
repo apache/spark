@@ -21,21 +21,16 @@ import java.util.{HashMap => JavaMap}
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.SharedSQLContext
 
-class CachedKafkaConsumerSuite extends SparkFunSuite with PrivateMethodTester {
+class CachedKafkaConsumerSuite extends SharedSQLContext with PrivateMethodTester {
 
   test("SPARK-19886: Report error cause correctly in reportDataLoss") {
     val cause = new Exception("D'oh!")
-    val consumer = CachedKafkaConsumer.getOrCreate("topic", 1, new JavaMap[String, Object]())
-    try {
-      val reportDataLoss = PrivateMethod[Unit]('reportDataLoss)
-      val e = intercept[IllegalStateException] {
-        consumer.invokePrivate(reportDataLoss(true, "message", cause))
-      }
-      assert(e.getCause === cause)
-    } finally {
-      CachedKafkaConsumer.removeKafkaConsumer("topic", 1, new JavaMap[String, Object]())
+    val reportDataLoss = PrivateMethod[Unit]('reportDataLoss0)
+    val e = intercept[IllegalStateException] {
+      CachedKafkaConsumer.invokePrivate(reportDataLoss(true, "message", cause))
     }
+    assert(e.getCause === cause)
   }
 }
