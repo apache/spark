@@ -23,11 +23,12 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ParseModes}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, ParseModes}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -330,7 +331,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Return a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   extended = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
@@ -564,6 +565,17 @@ case class JsonToStruct(
 /**
  * Converts a [[StructType]] to a json output string.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       {"a":1,"b":2}
+      > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"26/08/2015"}
+  """)
+// scalastyle:on line.size.limit
 case class StructToJson(
     options: Map[String, String],
     child: Expression,
@@ -572,6 +584,14 @@ case class StructToJson(
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression) = this(Map.empty, child, None)
+  def this(child: Expression, options: Expression) =
+    this(
+      options = StructToJson.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
 
   @transient
   lazy val writer = new CharArrayWriter()
@@ -612,4 +632,21 @@ case class StructToJson(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
+}
+
+object StructToJson {
+
+  def convertToMapData(exp: Expression): Map[String, String] = exp match {
+    case m: CreateMap
+        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
+      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
+      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
+        key.toString -> value.toString
+      }
+    case m: CreateMap =>
+      throw new AnalysisException(
+        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+    case _ =>
+      throw new AnalysisException("Must use a map() function for options")
+  }
 }

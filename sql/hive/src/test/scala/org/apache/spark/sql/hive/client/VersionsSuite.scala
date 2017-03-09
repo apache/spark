@@ -658,19 +658,17 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
         val tPath = new Path(spark.sessionState.conf.warehousePath, "t")
         Seq("1").toDF("a").write.saveAsTable("t")
-        val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
-        assert(table.location == CatalogUtils.stringToURI(expectedPath))
+        assert(table.location == makeQualifiedPath(tPath.toString))
         assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
         checkAnswer(spark.table("t"), Row("1") :: Nil)
 
         val t1Path = new Path(spark.sessionState.conf.warehousePath, "t1")
         spark.sql("create table t1 using parquet as select 2 as a")
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-        val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
 
-        assert(table1.location == CatalogUtils.stringToURI(expectedPath1))
+        assert(table1.location == makeQualifiedPath(t1Path.toString))
         assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
         checkAnswer(spark.table("t1"), Row(2) :: Nil)
       }

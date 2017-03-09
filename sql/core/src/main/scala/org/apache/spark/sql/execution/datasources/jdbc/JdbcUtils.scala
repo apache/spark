@@ -481,7 +481,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
+  // A `JDBCInternalValueSetter` is responsible for setting a value from `InternalRow` into a field for
   // `PreparedStatement`. The last argument `Int` means the index for the value to be set
   // in the SQL statement and also used for the value in `Row`.
   private type JDBCInternalValueSetter = (PreparedStatement, InternalRow, Int) => Unit
