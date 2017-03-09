@@ -263,7 +263,12 @@ class InMemoryCatalog(
     }
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
+  protected override def renameTable(
+      tableIdentifier: TableIdentifier,
+      newTableDefinition: CatalogTable): Unit = synchronized {
+    val db = tableIdentifier.database.get
+    val oldName = tableIdentifier.table
+    val newName = newTableDefinition.identifier.table
     requireTableExists(db, oldName)
     requireTableNotExists(db, newName)
     val oldDesc = catalog(db).tables(oldName)
@@ -274,7 +279,7 @@ class InMemoryCatalog(
         "Managed table should always have table location, as we will assign a default location " +
           "to it if it doesn't have one.")
       val oldDir = new Path(oldDesc.table.location)
-      val newDir = new Path(new Path(catalog(db).db.locationUri), newName)
+      val newDir = new Path(newTableDefinition.location)
       try {
         val fs = oldDir.getFileSystem(hadoopConfig)
         fs.rename(oldDir, newDir)
@@ -290,7 +295,17 @@ class InMemoryCatalog(
     catalog(db).tables.remove(oldName)
   }
 
-  override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
+  override def alterTable(
+      tableIdentifier: TableIdentifier,
+      newTableDefinition: CatalogTable): Unit = synchronized {
+    if (newTableDefinition.identifier != tableIdentifier) {
+      renameTable(tableIdentifier, newTableDefinition)
+    } else {
+      alterSameTable(newTableDefinition)
+    }
+  }
+
+  protected override def alterSameTable(tableDefinition: CatalogTable): Unit = synchronized {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
