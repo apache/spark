@@ -1684,7 +1684,7 @@ class HiveDDLSuite
              |USING hive
              |PARTITIONED BY(a)
              |LOCATION '$dir'
-             """.stripMargin)
+           """.stripMargin)
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1713,7 +1713,7 @@ class HiveDDLSuite
                |USING parquet
                |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-               """.stripMargin)
+             """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1732,7 +1732,7 @@ class HiveDDLSuite
                |PARTITIONED BY(a, b)
                |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-               """.stripMargin)
+             """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1758,7 +1758,7 @@ class HiveDDLSuite
                  |USING hive
                  |LOCATION '$dir'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-                 """.stripMargin)
+               """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
             assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
@@ -1776,7 +1776,7 @@ class HiveDDLSuite
                  |PARTITIONED BY(a, b)
                  |LOCATION '$dir'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-                 """.stripMargin)
+               """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
             assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 

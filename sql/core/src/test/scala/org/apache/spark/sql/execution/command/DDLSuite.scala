@@ -2034,7 +2034,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         spark.sql(
           s"""
              |CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'
-             """.stripMargin)
+           """.stripMargin)
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -2063,7 +2063,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                |USING parquet
                |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-               """.stripMargin)
+             """.stripMargin)
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
@@ -2081,7 +2081,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                |PARTITIONED BY(a, b)
                |LOCATION '$dir'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-               """.stripMargin)
+             """.stripMargin)
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
           assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
