@@ -77,7 +77,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY, false)
         jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
-        taskInfo.markFinished(TaskState.FINISHED)
+        taskInfo.markFinished(TaskState.FINISHED, System.currentTimeMillis())
         val taskMetrics = TaskMetrics.empty
         taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
         jobListener.onTaskEnd(
