@@ -558,10 +558,11 @@ class DataStreamReader(OptionUtils):
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
-            comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
-            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
+            escapeQuoteEscaping=None, comment=None, header=None, inferSchema=None,
+            ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None, nullValue=None,
+            nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
+            timestampFormat=None, maxColumns=None, maxCharsPerColumn=None,
+            maxMalformedLogPerPartition=None, mode=None, timeZone=None,
             columnNameOfCorruptRecord=None, wholeFile=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
@@ -583,6 +584,8 @@ class DataStreamReader(OptionUtils):
                       empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
+        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
+                                    character. If None is set, it uses the default value, ``\0``.
         :param comment: sets the single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
@@ -647,8 +650,9 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(
-            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
-            header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
+            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape,
+            escapeQuoteEscaping=escapeQuoteEscaping, comment=comment, header=header,
+            inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
