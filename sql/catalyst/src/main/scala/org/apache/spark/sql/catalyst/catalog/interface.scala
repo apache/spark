@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
 import java.util.Date
 
-import scala.collection.mutable
+import com.google.common.base.Objects
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
 
 
@@ -47,10 +49,7 @@ case class CatalogFunction(
  * Storage format, used to describe how a partition or a table is stored.
  */
 case class CatalogStorageFormat(
-    // TODO(ekl) consider storing this field as java.net.URI for type safety. Note that this must
-    // be converted to/from a hadoop Path object using new Path(new URI(locationUri)) and
-    // path.toUri respectively before use as a filesystem path due to URI char escaping.
-    locationUri: Option[String],
+    locationUri: Option[URI],
     inputFormat: Option[String],
     outputFormat: Option[String],
     serde: Option[String],
@@ -104,7 +103,7 @@ case class CatalogTablePartition(
   }
 
   /** Return the partition location, assuming it is specified. */
-  def location: String = storage.locationUri.getOrElse {
+  def location: URI = storage.locationUri.getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
@@ -112,11 +111,11 @@ case class CatalogTablePartition(
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
-  def toRow(partitionSchema: StructType): InternalRow = {
+  def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
+    val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
+    val timeZoneId = caseInsensitiveProperties.getOrElse("timeZone", defaultTimeZondId)
     InternalRow.fromSeq(partitionSchema.map { field =>
-      // TODO: use correct timezone for partition values.
-      Cast(Literal(spec(field.name)), field.dataType,
-        Option(DateTimeUtils.defaultTimeZone().getID)).eval()
+      Cast(Literal(spec(field.name)), field.dataType, Option(timeZoneId)).eval()
     })
   }
 }
@@ -164,6 +163,11 @@ case class BucketSpec(
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
  *                                  catalog. If false, it is inferred automatically based on file
  *                                  structure.
+ * @param schemaPresevesCase Whether or not the schema resolved for this table is case-sensitive.
+ *                           When using a Hive Metastore, this flag is set to false if a case-
+ *                           sensitive schema was unable to be read from the table properties.
+ *                           Used to trigger case-sensitive schema inference at query time, when
+ *                           configured.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -181,7 +185,8 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    tracksPartitionsInCatalog: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false,
+    schemaPreservesCase: Boolean = true) {
 
   import CatalogTable._
 
@@ -209,7 +214,7 @@ case class CatalogTable(
   }
 
   /** Return the table location, assuming it is specified. */
-  def location: String = storage.locationUri.getOrElse {
+  def location: URI = storage.locationUri.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 
@@ -240,7 +245,7 @@ case class CatalogTable(
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
-      locationUri: Option[String] = storage.locationUri,
+      locationUri: Option[URI] = storage.locationUri,
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
@@ -336,7 +341,7 @@ object CatalogTableType {
 case class CatalogDatabase(
     name: String,
     description: String,
-    locationUri: String,
+    locationUri: URI,
     properties: Map[String, String])
 
 
@@ -349,36 +354,43 @@ object CatalogTypes {
 
 
 /**
- * An interface that is implemented by logical plans to return the underlying catalog table.
- * If we can in the future consolidate SimpleCatalogRelation and MetastoreRelation, we should
- * probably remove this interface.
+ * A [[LogicalPlan]] that represents a table.
  */
-trait CatalogRelation {
-  def catalogTable: CatalogTable
-  def output: Seq[Attribute]
-}
+case class CatalogRelation(
+    tableMeta: CatalogTable,
+    dataCols: Seq[Attribute],
+    partitionCols: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+  assert(tableMeta.identifier.database.isDefined)
+  assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
+  assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
 
+  // The partition column should always appear after data columns.
+  override def output: Seq[Attribute] = dataCols ++ partitionCols
 
-/**
- * A [[LogicalPlan]] that wraps [[CatalogTable]].
- *
- * Note that in the future we should consolidate this and HiveCatalogRelation.
- */
-case class SimpleCatalogRelation(
-    metadata: CatalogTable)
-  extends LeafNode with CatalogRelation {
+  def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def catalogTable: CatalogTable = metadata
-
-  override lazy val resolved: Boolean = false
-
-  override val output: Seq[Attribute] = {
-    val (partCols, dataCols) = metadata.schema.toAttributes
-      // Since data can be dumped in randomly with no validation, everything is nullable.
-      .map(_.withNullability(true).withQualifier(Some(metadata.identifier.table)))
-      .partition { a =>
-        metadata.partitionColumnNames.contains(a.name)
-      }
-    dataCols ++ partCols
+  override def equals(relation: Any): Boolean = relation match {
+    case other: CatalogRelation => tableMeta == other.tableMeta && output == other.output
+    case _ => false
   }
+
+  override def hashCode(): Int = {
+    Objects.hashCode(tableMeta.identifier, output)
+  }
+
+  /** Only compare table identifier. */
+  override lazy val cleanArgs: Seq[Any] = Seq(tableMeta.identifier)
+
+  override def computeStats(conf: CatalystConf): Statistics = {
+    // For data source tables, we will create a `LogicalRelation` and won't call this method, for
+    // hive serde tables, we will always generate a statistics.
+    // TODO: unify the table stats generation.
+    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+      throw new IllegalStateException("table stats must be specified.")
+    }
+  }
+
+  override def newInstance(): LogicalPlan = copy(
+    dataCols = dataCols.map(_.newInstance()),
+    partitionCols = partitionCols.map(_.newInstance()))
 }

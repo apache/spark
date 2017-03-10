@@ -66,7 +66,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
  * Preprocess [[CreateTable]], to do some normalization and checking.
  */
 case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private val catalog = sparkSession.sessionState.catalog
+  // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
+  private def catalog = sparkSession.sessionState.catalog
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
@@ -379,7 +380,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: CatalogRelation =>
-          val metadata = relation.catalogTable
+          val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")

@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
@@ -210,7 +210,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         tableDefinition.storage.locationUri.isEmpty
 
       val tableLocation = if (needDefaultTableLocation) {
-        Some(defaultTablePath(tableDefinition.identifier))
+        Some(CatalogUtils.stringToURI(defaultTablePath(tableDefinition.identifier)))
       } else {
         tableDefinition.storage.locationUri
       }
@@ -260,7 +260,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // However, in older version of Spark we already store table location in storage properties
     // with key "path". Here we keep this behaviour for backward compatibility.
     val storagePropsWithLocation = table.storage.properties ++
-      table.storage.locationUri.map("path" -> _)
+      table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
 
     // converts the table metadata to Spark SQL specific format, i.e. set data schema, names and
     // bucket specification to empty. Note that partition columns are retained, so that we can
@@ -285,7 +285,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // compatible format, which means the data source is file-based and must have a `path`.
         require(table.storage.locationUri.isDefined,
           "External file-based data source table must have a `path` entry in storage properties.")
-        Some(new Path(table.location).toUri.toString)
+        Some(table.location)
       } else {
         None
       }
@@ -432,13 +432,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       //
       // Please refer to https://issues.apache.org/jira/browse/SPARK-15269 for more details.
       val tempPath = {
-        val dbLocation = getDatabase(tableDefinition.database).locationUri
+        val dbLocation = new Path(getDatabase(tableDefinition.database).locationUri)
         new Path(dbLocation, tableDefinition.identifier.table + "-__PLACEHOLDER__")
       }
 
       try {
         client.createTable(
-          tableDefinition.withNewStorage(locationUri = Some(tempPath.toString)),
+          tableDefinition.withNewStorage(locationUri = Some(tempPath.toUri)),
           ignoreIfExists)
       } finally {
         FileSystem.get(tempPath.toUri, hadoopConf).delete(tempPath, true)
@@ -563,7 +563,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         //       want to alter the table location to a file path, we will fail. This should be fixed
         //       in the future.
 
-        val newLocation = tableDefinition.storage.locationUri
+        val newLocation = tableDefinition.storage.locationUri.map(CatalogUtils.URIToString(_))
         val storageWithPathOption = tableDefinition.storage.copy(
           properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
 
@@ -594,6 +594,25 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         properties = newTableProps)
 
       client.alterTable(newDef)
+    }
+  }
+
+  override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
+    requireTableExists(db, table)
+    val rawTable = getRawTable(db, table)
+    val withNewSchema = rawTable.copy(schema = schema)
+    // Add table metadata such as table schema, partition columns, etc. to table properties.
+    val updatedTable = withNewSchema.copy(
+      properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
+    try {
+      client.alterTable(updatedTable)
+    } catch {
+      case NonFatal(e) =>
+        val warningMessage =
+          s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
+            "compatible way. Updating Hive metastore in Spark SQL specific format."
+        logWarning(warningMessage, e)
+        client.alterTable(updatedTable.copy(schema = updatedTable.partitionSchema))
     }
   }
 
@@ -690,10 +709,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           "different from the schema when this table was created by Spark SQL" +
           s"(${schemaFromTableProps.simpleString}). We have to fall back to the table schema " +
           "from Hive metastore which is not case preserving.")
-        hiveTable
+        hiveTable.copy(schemaPreservesCase = false)
       }
     } else {
-      hiveTable
+      hiveTable.copy(schemaPreservesCase = false)
     }
   }
 
@@ -704,7 +723,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val storageWithLocation = {
       val tableLocation = getLocationFromStorageProps(table)
       // We pass None as `newPath` here, to remove the path option in storage properties.
-      updateLocationInStorageProps(table, newPath = None).copy(locationUri = tableLocation)
+      updateLocationInStorageProps(table, newPath = None).copy(
+        locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
     }
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
@@ -848,10 +868,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // However, Hive metastore is not case preserving and will generate wrong partition location
       // with lower cased partition column names. Here we set the default partition location
       // manually to avoid this problem.
-      val partitionPath = p.storage.locationUri.map(uri => new Path(new URI(uri))).getOrElse {
+      val partitionPath = p.storage.locationUri.map(uri => new Path(uri)).getOrElse {
         ExternalCatalogUtils.generatePartitionPath(p.spec, partitionColumnNames, tablePath)
       }
-      p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri.toString)))
+      p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri)))
     }
     val lowerCasedParts = partsWithLocation.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
     client.createPartitions(db, table, lowerCasedParts, ignoreIfExists)
@@ -890,7 +910,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val newParts = newSpecs.map { spec =>
         val rightPath = renamePartitionDirectory(fs, tablePath, partitionColumnNames, spec)
         val partition = client.getPartition(db, table, lowerCasePartitionSpec(spec))
-        partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toString)))
+        partition.copy(storage = partition.storage.copy(locationUri = Some(rightPath.toUri)))
       }
       alterPartitions(db, table, newParts)
     }
@@ -1008,7 +1028,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
     val partitionColumnNames = catalogTable.partitionColumnNames.toSet
@@ -1034,7 +1055,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             val index = partitionSchema.indexWhere(_.name == att.name)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
-      clientPrunedPartitions.filter { p => boundPredicate(p.toRow(partitionSchema)) }
+      clientPrunedPartitions.filter { p =>
+        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
+      }
     } else {
       client.getPartitions(catalogTable).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))

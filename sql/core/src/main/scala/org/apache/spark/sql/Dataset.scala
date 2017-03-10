@@ -563,7 +563,7 @@ class Dataset[T] private[sql](
    * @param eventTime the name of the column that contains the event time of the row.
    * @param delayThreshold the minimum delay to wait to data to arrive late, relative to the latest
    *                       record that has been processed in the form of an interval
-   *                       (e.g. "1 minute" or "5 hours").
+   *                       (e.g. "1 minute" or "5 hours"). NOTE: This should not be negative.
    *
    * @group streaming
    * @since 2.1.0
@@ -576,6 +576,8 @@ class Dataset[T] private[sql](
     val parsedDelay =
       Option(CalendarInterval.fromString("interval " + delayThreshold))
         .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+    require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
+      s"delay threshold ($delayThreshold) should not be negative.")
     EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 
@@ -1093,7 +1095,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan, None)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
@@ -2441,11 +2443,11 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset that has exactly `numPartitions` partitions.
-   * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
-   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-   * the 100 new partitions will claim 10 of the current partitions.  If a larger number of
-   * partitions is requested, it will stay at the current number of partitions.
+   * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
+   * are requested. If a larger number of partitions is requested, it will stay at the current
+   * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in
+   * a narrow dependency, e.g. if you go from 1000 partitions to 100 partitions, there will not
+   * be a shuffle, instead each of the 100 new partitions will claim 10 of the current partitions.
    *
    * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
    * this may result in your computation taking place on fewer nodes than

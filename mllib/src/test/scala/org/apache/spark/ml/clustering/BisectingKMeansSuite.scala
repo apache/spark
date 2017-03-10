@@ -138,8 +138,8 @@ class BisectingKMeansSuite
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val bisectingKMeans = new BisectingKMeans()
-    testEstimatorAndModelReadWrite(
-      bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(bisectingKMeans, dataset, BisectingKMeansSuite.allParamSettings,
+      BisectingKMeansSuite.allParamSettings, checkModelData)
   }
 }
 

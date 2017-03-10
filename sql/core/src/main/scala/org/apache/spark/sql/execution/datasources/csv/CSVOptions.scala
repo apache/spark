@@ -26,7 +26,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
 
-private[csv] class CSVOptions(
+class CSVOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
@@ -129,6 +129,8 @@ private[csv] class CSVOptions(
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)
 

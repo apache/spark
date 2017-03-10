@@ -433,8 +433,8 @@ class DataStreamReader(OptionUtils):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
-        Both JSON (one record per file) and `JSON Lines <http://jsonlines.org/>`_
-        (newline-delimited JSON) are supported and can be selected with the `wholeFile` parameter.
+        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -562,7 +562,7 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
-            columnNameOfCorruptRecord=None):
+            columnNameOfCorruptRecord=None, wholeFile=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -637,6 +637,8 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
+        :param wholeFile: parse one record, which may span multiple lines. If None is
+                          set, it uses the default value, ``false``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -652,7 +654,7 @@ class DataStreamReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:

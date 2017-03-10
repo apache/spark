@@ -28,12 +28,12 @@ import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -526,7 +526,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       case LogicalRelation(r: HadoopFsRelation, _, _) =>
         if (!isDataSourceTable) {
           fail(
-            s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
+            s"${classOf[CatalogRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
         }
         userSpecifiedLocation match {
@@ -536,15 +536,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         assert(catalogTable.provider.get === format)
 
-      case r: MetastoreRelation =>
+      case r: CatalogRelation =>
         if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
-              s"${classOf[MetastoreRelation].getCanonicalName}.")
+              s"${classOf[CatalogRelation].getCanonicalName}.")
         }
         userSpecifiedLocation match {
           case Some(location) =>
-            assert(r.catalogTable.location === location)
+            assert(r.tableMeta.location === CatalogUtils.stringToURI(location))
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
@@ -973,30 +973,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
-    val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
-    read.json(rdd).createOrReplaceTempView("data")
+    val ds = Seq("""{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""").toDS()
+    read.json(ds).createOrReplaceTempView("data")
     checkAnswer(
       sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
       Row("str-1", 1970))
 
     dropTempTable("data")
 
-    read.json(rdd).createOrReplaceTempView("data")
+    read.json(ds).createOrReplaceTempView("data")
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
   }
 
   test("resolve udtf in projection #1") {
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    read.json(rdd).createOrReplaceTempView("data")
+    val ds = (1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}""").toDS()
+    read.json(ds).createOrReplaceTempView("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
   }
 
   test("resolve udtf in projection #2") {
-    val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    read.json(rdd).createOrReplaceTempView("data")
+    val ds = (1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}""").toDS()
+    read.json(ds).createOrReplaceTempView("data")
     checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     intercept[AnalysisException] {
@@ -1010,8 +1010,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
   test("TGF with non-TGF in projection") {
-    val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
-    read.json(rdd).createOrReplaceTempView("data")
+    val ds = Seq("""{"a": "1", "b":"1"}""").toDS()
+    read.json(ds).createOrReplaceTempView("data")
     checkAnswer(
       sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
       Row("1", "1", "1", "1") :: Nil)
@@ -1024,13 +1024,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // is not in a valid state (cannot be executed). Because of this bug, the analysis rule of
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
-    val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    read.json(rdd).createOrReplaceTempView("data")
+    val ds = (1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}""").toDS()
+    read.json(ds).createOrReplaceTempView("data")
 
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
       sql("CREATE TABLE explodeTest (key bigInt)")
       table("explodeTest").queryExecution.analyzed match {
-        case SubqueryAlias(_, r: MetastoreRelation, _) => // OK
+        case SubqueryAlias(_, r: CatalogRelation) => // OK
         case _ =>
           fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
       }
@@ -1262,9 +1262,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-9371: fix the support for special chars in column names for hive context") {
-    read.json(sparkContext.makeRDD(
-      """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
-      .createOrReplaceTempView("t")
+    val ds = Seq("""{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""").toDS()
+    read.json(ds).createOrReplaceTempView("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
@@ -2041,6 +2040,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         checkAnswer(sql("SELECT i, j FROM tbl WHERE J=10"), Row(1, 10))
         checkAnswer(spark.table("tbl").filter($"J" === 10), Row(1, 10))
+      }
+    }
+  }
+
+  test("SPARK-17409: Do Not Optimize Query in CTAS (Hive Serde Table) More Than Once") {
+    withTable("bar") {
+      withTempView("foo") {
+        sql("select 0 as id").createOrReplaceTempView("foo")
+        // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+        // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+        sql("SELECT * FROM foo group by id").toDF().write.format("hive").saveAsTable("bar")
+        checkAnswer(spark.table("bar"), Row(0) :: Nil)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+        assert(tableMetadata.provider == Some("hive"), "the expected table is a Hive serde table")
       }
     }
   }

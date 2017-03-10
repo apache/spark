@@ -161,15 +161,15 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              timeZone=None, wholeFile=None):
         """
-        Loads a JSON file and returns the results as a :class:`DataFrame`.
+        Loads JSON files and returns the results as a :class:`DataFrame`.
 
-        Both JSON (one record per file) and `JSON Lines <http://jsonlines.org/>`_
-        (newline-delimited JSON) are supported and can be selected with the `wholeFile` parameter.
+        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        :param path: string represents path to the JSON dataset,
+        :param path: string represents path to the JSON dataset, or a list of paths,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
@@ -252,7 +252,7 @@ class DataFrameReader(OptionUtils):
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
-            raise TypeError("path can be only string or RDD")
+            raise TypeError("path can be only string, list or RDD")
 
     @since(1.4)
     def table(self, tableName):
@@ -269,7 +269,7 @@ class DataFrameReader(OptionUtils):
 
     @since(1.4)
     def parquet(self, *paths):
-        """Loads a Parquet file, returning the result as a :class:`DataFrame`.
+        """Loads Parquet files, returning the result as a :class:`DataFrame`.
 
         You can set the following Parquet-specific option(s) for reading Parquet files:
             * ``mergeSchema``: sets whether we should merge schemas collected from all \
@@ -308,7 +308,7 @@ class DataFrameReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
-            columnNameOfCorruptRecord=None):
+            columnNameOfCorruptRecord=None, wholeFile=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -385,6 +385,8 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
+        :param wholeFile: parse records, which may span multiple lines. If None is
+                          set, it uses the default value, ``false``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -398,14 +400,14 @@ class DataFrameReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(1.5)
     def orc(self, path):
-        """Loads an ORC file, returning the result as a :class:`DataFrame`.
+        """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         .. note:: Currently ORC support is only available together with Hive support.
 
@@ -413,7 +415,9 @@ class DataFrameReader(OptionUtils):
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
-        return self._df(self._jreader.orc(path))
+        if isinstance(path, basestring):
+            path = [path]
+        return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
