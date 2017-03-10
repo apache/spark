@@ -504,6 +504,12 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
 
   }
 
+  /**
+   * Register a Java UDAF class using reflection, for use from pyspark
+   *
+   * @param name     UDAF name
+   * @param className    fully qualified class name of UDAF
+   */
   private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
     try {
       val clazz = Utils.classForName(className)
