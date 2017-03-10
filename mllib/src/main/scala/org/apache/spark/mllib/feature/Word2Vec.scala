@@ -610,6 +610,71 @@ class Word2VecModel private[spark] (
   }
 
   /**
+    * Find words similar to the words supplied to 'positive' and dissimilar
+    * to the words supplied to 'negative'.
+    * @param positive array of words similar to the results list
+    * @param negative array of words dissimilar to the results list
+    * @param num number of synonyms to find
+    * @return array of (word, cosineSimilarity)
+    */
+  def findAnalogies(positive: Array[String] = Array(),
+                            negative: Array[String] = Array(),
+                            num: Int = 1): Array[(String, Double)] = {
+    require(num > 0, "Number of similar words should be > 0")
+    require(positive.length > 0 || negative.length > 0,
+      "Either positive or negative argument must be supplied")
+
+    var positiveVectors = Array[Array[Double]]()
+    var negativeVectors = Array[Array[Double]]()
+
+    for(pp <- positive)
+      positiveVectors :+= transform(pp).toArray
+    for(nn <- negative)
+      negativeVectors :+= transform(nn).toArray
+    // Normalize positive and negative vectors before summation
+    positiveVectors = if (positiveVectors.size > 0) {
+      positiveVectors.map(x => {
+        val sumsqr = x.map(y => y * y).reduce((a, b) => a + b)
+        x.map(y => y / math.pow(sumsqr, .5))
+      })
+    } else {
+      Array(Array.fill(vectorSize)(0.0))
+    }
+    negativeVectors = if (negativeVectors.size > 0) {
+      negativeVectors.map(x => {
+        val sumsqr = x.map(y => y * y).reduce((a, b) => a + b)
+        x.map(y => y / math.pow(sumsqr, .5))
+      })
+    } else {
+      Array(Array.fill(vectorSize)(0.0))
+    }
+    // Sum positive vectors
+    val positiveSum = if (positiveVectors.size > 1) {
+      positiveVectors.reduce((x, y) => {
+        x.zip(y).map(a => a._1 + a._2)
+      })
+    } else {
+      positiveVectors(0)
+    }
+    // Sum negative vectors
+    val negativeSum = if (negativeVectors.size > 1) {
+      negativeVectors.reduce((x, y) => {
+        x.zip(y).map(a => a._1 + a._2)
+      })
+    } else {
+      negativeVectors(0)
+    }
+
+    // Subtract negative vectors from positive vectors
+    var cosVec = positiveSum.zip(negativeSum).map(a => a._1 - a._2)
+    val vecnorm = math.pow(cosVec.map(y => y * y).reduce((a, b) => a + b), 0.5)
+    cosVec = cosVec.map(x => x / vecnorm)
+
+    // Find synonyms of calcualted vector
+    findSynonyms(Vectors.dense(cosVec), num)
+  }
+
+  /**
    * Returns a map of words to their vector representations.
    */
   @Since("1.2.0")
