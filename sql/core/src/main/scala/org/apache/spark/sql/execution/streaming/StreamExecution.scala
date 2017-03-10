@@ -119,7 +119,8 @@ class StreamExecution(
 
   /** Metadata associated with the offset seq of a batch in the query. */
   protected var offsetSeqMetadata =
-    OffsetSeqMetadata(numShufflePartitions = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS))
+    OffsetSeqMetadata(conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
+      sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS).toString))
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -382,20 +383,27 @@ class StreamExecution(
         logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        val numShufflePartitionsFromConf = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-        offsetSeqMetadata = nextOffsets
-          .metadata
-          .getOrElse(OffsetSeqMetadata(0, 0, numShufflePartitionsFromConf))
 
-        /*
-         * For backwards compatibility, if # partitions was not recorded in the offset log, then
-         * ensure it is non-zero. The new value is picked up from the conf.
-         */
-        if (offsetSeqMetadata.numShufflePartitions == 0) {
-          offsetSeqMetadata.numShufflePartitions = numShufflePartitionsFromConf
-          logDebug("Number of shuffle partitions from previous run not found in checkpoint data. " +
-            s"Using the value from the conf, $numShufflePartitionsFromConf partitions.")
+        // initialize metadata
+        val shufflePartitionsSparkSession: Int = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+        offsetSeqMetadata = {
+          if (nextOffsets.metadata.nonEmpty) {
+            val offsets = nextOffsets.metadata.get
+            val shufflePartitionsToUse = offsets.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
+              // For backwards compatibility, if # partitions was not recorded in the offset log,
+              // then ensure it is not missing. The new value is picked up from the conf.
+              logDebug("Number of shuffle partitions from previous run not found in checkpoint. "
+                + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
+              shufflePartitionsSparkSession
+            })
+            OffsetSeqMetadata(offsets.batchWatermarkMs, offsets.batchTimestampMs,
+              Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
+          } else {
+            OffsetSeqMetadata(0, 0,
+              Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsSparkSession.toString))
+          }
         }
+
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
           s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
 
@@ -561,7 +569,7 @@ class StreamExecution(
     val sparkSessionForCurrentBatch = sparkSession.cloneSession()
     sparkSessionForCurrentBatch.conf.set(
       SQLConf.SHUFFLE_PARTITIONS.key,
-      offsetSeqMetadata.numShufflePartitions.toString)
+      offsetSeqMetadata.conf(SQLConf.SHUFFLE_PARTITIONS.key))
     sparkSessionForCurrentBatch.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
 
     reportTimeTaken("queryPlanning") {

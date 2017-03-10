@@ -153,11 +153,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         q.exception.get.startOffset ===
           q.committedOffsets.toOffsetSeq(
             Seq(inputData),
-            OffsetSeqMetadata(0, 0, spark.conf.get(SQLConf.SHUFFLE_PARTITIONS))).toString &&
+            OffsetSeqMetadata(0, 0)).toString &&
           q.exception.get.endOffset ===
             q.availableOffsets.toOffsetSeq(
               Seq(inputData),
-              OffsetSeqMetadata(0, 0, spark.conf.get(SQLConf.SHUFFLE_PARTITIONS))).toString
+              OffsetSeqMetadata(0, 0)).toString
       }, "incorrect start offset or end offset on exception")
     )
   }
