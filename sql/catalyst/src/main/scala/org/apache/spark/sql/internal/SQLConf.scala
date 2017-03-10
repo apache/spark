@@ -719,12 +719,12 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
-  val STARJOIN_OPTIMIZATION = buildConf("spark.sql.cbo.starJoinOptimization")
+  val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
     .doc("When true, it enables join reordering based on star schema detection. ")
     .booleanConf
     .createWithDefault(false)
 
-  val STARJOIN_FACT_TABLE_RATIO = buildConf("spark.sql.cbo.starJoinFactTableRatio")
+  val STARSCHEMA_FACT_TABLE_RATIO = buildConf("spark.sql.cbo.starJoinFTRatio")
     .internal()
     .doc("Specifies the upper limit of the ratio between the largest fact tables" +
       " for a star join to be considered. ")
@@ -1000,9 +1000,9 @@ class SQLConf extends Serializable with Logging {
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
-  def starJoinOptimization: Boolean = getConf(STARJOIN_OPTIMIZATION)
+  def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
-  def starJoinFactTableRatio: Double = getConf(STARJOIN_FACT_TABLE_RATIO)
+  def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 

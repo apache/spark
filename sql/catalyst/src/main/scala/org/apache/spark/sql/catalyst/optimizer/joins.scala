@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.CatalystConf
 /**
  * Encapsulates star-schema join detection.
  */
-case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
+case class StarSchemaDetection(conf: CatalystConf) extends PredicateHelper {
 
   /**
    * Star schema consists of one or more fact tables referencing a number of dimension
@@ -61,7 +61,7 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
    * reliable statistics.
    *
    * If some of the plans are not base table access, or statistics are not available, the algorithm
-   * falls back to the positional join reordering, since in the absence of statistics it cannot make
+   * returns an empty star join plan since, in the absence of statistics, it cannot make
    * good planning decisions. Otherwise, the algorithm finds the table with the largest cardinality
    * (number of rows), which is assumed to be a fact table.
    *
@@ -69,137 +69,144 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
    * is assumed to be in a RI relationship with a fact table. To infer column uniqueness,
    * the algorithm compares the number of distinct values with the total number of rows in the
    * table. If their relative difference is within certain limits (i.e. ndvMaxError * 2, adjusted
-   * based on tpcds data), the column is assumed to be unique.
-   *
-   * Given a star join, i.e. fact and dimension tables, the algorithm considers three cases:
-   *
-   * 1) The star join is an expanding join i.e. the fact table is joined using inequality
-   * predicates or Cartesian product. In this case, the algorithm conservatively falls back
-   * to the default join reordering since it cannot make good planning decisions in the absence
-   * of the cost model.
-   *
-   * 2) The star join is a selective join. This case is detected by observing local predicates
-   * on the dimension tables. In a star schema relationship, the join between the fact and the
-   * dimension table is a FK-PK join. Heuristically, a selective dimension may reduce
-   * the result of a join.
-   *
-   * 3) The star join is not a selective join (i.e. doesn't reduce the number of rows). In this
-   * case, the algorithm conservatively falls back to the default join reordering.
-   *
-   * If an eligible star join was found in step 2 above, the algorithm reorders the tables based
-   * on the following heuristics:
-   * 1) Place the largest fact table on the driving arm to avoid large tables on the inner of a
-   *    join and thus favor hash joins.
-   * 2) Apply the most selective dimensions early in the plan to reduce data flow.
-   *
-   * Other assumptions made by the algorithm, mainly to prevent regressions in the absence of a
-   * cost model, are the following:
-   * 1) Only considers star joins with more than one dimensions, which is a typical
-   *    star join scenario.
-   * 2) If the top largest tables have comparable number of rows, fall back to the default
-   *    join reordering. This will prevent changing the position of the large tables in the join.
+   * based on 1TB TPC-DS data), the column is assumed to be unique.
    */
-  def findStarJoinPlan(
+  def findStarJoins(
+      input: Seq[LogicalPlan],
+      conditions: Seq[Expression]): Seq[Seq[LogicalPlan]] = {
+
+    val emptyStarJoinPlan = Seq.empty[Seq[LogicalPlan]]
+
+    if (!conf.starSchemaDetection || input.size < 2) {
+      emptyStarJoinPlan
+    } else {
+      // Find if the input plans are eligible for star join detection.
+      // An eligible plan is a base table access with valid statistics.
+      val foundEligibleJoin = input.forall {
+        case PhysicalOperation(_, _, t: LeafNode) if t.stats(conf).rowCount.isDefined => true
+        case _ => false
+      }
+
+      if (!foundEligibleJoin) {
+        // Some plans don't have stats or are complex plans. Conservatively,
+        // return an empty star join. This restriction can be lifted
+        // once statistics are propagated in the plan.
+        emptyStarJoinPlan
+      } else {
+        // Find the fact table using cardinality based heuristics i.e.
+        // the table with the largest number of rows.
+        val sortedFactTables = input.map { plan =>
+          TableAccessCardinality(plan, getTableAccessCardinality(plan))
+        }.collect { case t @ TableAccessCardinality(_, Some(_)) =>
+          t
+        }.sortBy(_.size)(implicitly[Ordering[Option[BigInt]]].reverse)
+
+        sortedFactTables match {
+          case Nil =>
+            emptyStarJoinPlan
+          case table1 :: table2 :: _
+            if table2.size.get.toDouble > conf.starSchemaFTRatio * table1.size.get.toDouble =>
+            // If the top largest tables have comparable number of rows, return an empty star plan.
+            // This restriction will be lifted when the algorithm is generalized
+            // to return multiple star plans.
+            emptyStarJoinPlan
+          case TableAccessCardinality(factTable, _) :: _ =>
+            // Find the fact table joins.
+            val allFactJoins = input.filterNot { plan =>
+              plan eq factTable
+            }.filter { plan =>
+              val joinCond = findJoinConditions(factTable, plan, conditions)
+              joinCond.nonEmpty
+            }
+
+            // Find the corresponding join conditions.
+            val allFactJoinCond = allFactJoins.flatMap { plan =>
+              val joinCond = findJoinConditions(factTable, plan, conditions)
+              joinCond
+            }
+
+            // Verify if the join columns have valid statistics
+            val areStatsAvailable = allFactJoins.forall { dimTable =>
+              allFactJoinCond.exists {
+                case BinaryComparison(lhs: AttributeReference, rhs: AttributeReference) =>
+                  val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
+                  val factCol = if (factTable.outputSet.contains(lhs)) lhs else rhs
+                  hasStatistics(dimCol, dimTable) && hasStatistics(factCol, factTable)
+                case _ => false
+              }
+            }
+
+            if (!areStatsAvailable) {
+              emptyStarJoinPlan
+            } else {
+              // Find the subset of dimension tables. A dimension table is assumed to be in
+              // RI relationship with the fact table. Also, only consider equi-joins
+              // between a fact and a dimension table.
+              val eligibleDimPlans = allFactJoins.filter { dimTable =>
+                allFactJoinCond.exists {
+                  case cond @ BinaryComparison(lhs: AttributeReference, rhs: AttributeReference)
+                    if cond.isInstanceOf[EqualTo] || cond.isInstanceOf[EqualNullSafe] =>
+                    val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
+                    isUnique(dimCol, dimTable)
+                  case _ => false
+                }
+              }
+
+              if (eligibleDimPlans.isEmpty) {
+                // An eligible star join was not found because the join is not
+                // an RI join, or the star join is an expanding join.
+                emptyStarJoinPlan
+              } else {
+                Seq(factTable +: eligibleDimPlans)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  /**
+   * Reorders a star join based on heuristics:
+   *   1) Finds the star join with the largest fact table and places it on the driving
+   *      arm of the left-deep tree. This plan avoids large table access on the inner, and
+   *      thus favor hash joins.
+   *   2) Applies the most selective dimensions early in the plan to reduce the amount of
+   *      data flow.
+   */
+  def reorderStarJoins(
       input: Seq[(LogicalPlan, InnerLike)],
       conditions: Seq[Expression]): Seq[(LogicalPlan, InnerLike)] = {
     assert(input.size >= 2)
 
     val emptyStarJoinPlan = Seq.empty[(LogicalPlan, InnerLike)]
 
-    // Find if the input plans are eligible for star join detection.
-    // An eligible plan is a base table access with valid statistics.
-    val foundEligibleJoin = input.forall {
-      case (PhysicalOperation(_, _, t: LeafNode), _) if t.stats(conf).rowCount.isDefined => true
-      case _ => false
-    }
+    // Find the eligible star plans. Currently, it only returns
+    // the star join with the largest fact table.
+    val eligibleJoins = input.collect{ case (plan, Inner) => plan }
+    val starPlans = findStarJoins(eligibleJoins, conditions)
 
-    if (!foundEligibleJoin) {
-      // Some plans don't have stats or are complex plans. Conservatively fall back
-      // to the default join reordering by returning an empty star join.
-      // This restriction can be lifted once statistics are propagated in the plan.
+    if (starPlans.isEmpty) {
       emptyStarJoinPlan
-
     } else {
-      // Find the fact table using cardinality based heuristics i.e.
-      // the table with the largest number of rows.
-      val sortedFactTables = input.map { case p @ (plan, _) =>
-        TableCardinality(p, getBaseTableAccessCardinality(plan))
-      }.collect { case t @ TableCardinality(_, Some(_)) =>
-        t
-      }.sortBy(_.size)(implicitly[Ordering[Option[BigInt]]].reverse)
+      val starPlan = starPlans.head
+      val (factTable, dimTables) = (starPlan.head, starPlan.tail)
 
-      sortedFactTables match {
-        case Nil =>
-          emptyStarJoinPlan
-        case table1 :: table2 :: _
-            if table2.size.get.toDouble > conf.starJoinFactTableRatio * table1.size.get.toDouble =>
-          // The largest tables have comparable number of rows.
-          emptyStarJoinPlan
-        case TableCardinality(factPlan @ (factTable, _), _) :: _ =>
-          // Find the fact table joins.
-          val allFactJoins = input.filterNot { case (plan, _) =>
-            plan eq factTable
-          }.filter { case (plan, _) =>
-            val joinCond = findJoinConditions(factTable, plan, conditions)
-            joinCond.nonEmpty
-          }
+      // Only consider selective joins. This case is detected by observing local predicates
+      // on the dimension tables. In a star schema relationship, the join between the fact and the
+      // dimension table is a FK-PK join. Heuristically, a selective dimension may reduce
+      // the result of a join.
+      // Also, conservatively assume that a fact table is joined with more than one dimension.
+      if (dimTables.size >= 2 && isSelectiveStarJoin(dimTables, conditions)) {
+        val reorderDimTables = dimTables.map { plan =>
+          TableAccessCardinality(plan, getTableAccessCardinality(plan))
+        }.sortBy(_.size).map {
+          case TableAccessCardinality(p1, _) => p1
+        }
 
-          // Find the corresponding join conditions.
-          val allFactJoinCond = allFactJoins.flatMap { case (plan, _) =>
-            val joinCond = findJoinConditions(factTable, plan, conditions)
-            joinCond
-          }
-
-          // Verify if the join columns have valid statistics
-          val areStatsAvailable = allFactJoins.forall { case (dimTable, _) =>
-            allFactJoinCond.exists {
-              case BinaryComparison(lhs: AttributeReference, rhs: AttributeReference) =>
-                val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
-                val factCol = if (factTable.outputSet.contains(lhs)) lhs else rhs
-                hasStatistics(dimCol, dimTable) && hasStatistics(factCol, factTable)
-             case _ => false
-            }
-          }
-
-          if (!areStatsAvailable) {
-            emptyStarJoinPlan
-          } else {
-            // Find the subset of dimension tables. A dimension table is assumed to be in
-            // RI relationship with the fact table. Also, conservatively, only consider
-            // equi-join between a fact and a dimension table.
-            val eligibleDimPlans = allFactJoins.filter { case (dimTable, _) =>
-              allFactJoinCond.exists {
-                case cond @ BinaryComparison(lhs: AttributeReference, rhs: AttributeReference)
-                    if cond.isInstanceOf[EqualTo] || cond.isInstanceOf[EqualNullSafe] =>
-                  val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
-                  isUnique(dimCol, dimTable)
-                case _ => false
-              }
-            }
-
-            if (eligibleDimPlans.isEmpty) {
-              // An eligible star join was not found because the join is not
-              // an RI join, or the star join is an expanding join.
-              // Conservatively fall back to the default join order.
-              emptyStarJoinPlan
-            } else if (eligibleDimPlans.size < 2) {
-              // Conservatively assume that a fact table is joined with more than one dimension.
-              emptyStarJoinPlan
-            } else if (isSelectiveStarJoin(eligibleDimPlans.map{case (p, _) => p}, conditions)) {
-              // This is a selective star join. Reorder the dimensions in based on their
-              // cardinality and return the star-join plan.
-              val sortedDims = eligibleDimPlans.map { case p @ (plan, _) =>
-                TableCardinality(p, getBaseTableAccessCardinality(plan))
-              }.sortBy(_.size).map {
-                case TableCardinality(p1, _) => p1
-              }
-              factPlan +: sortedDims
-            } else {
-              // This is a non selective star join. Conservatively fall back to the default
-              // join order.
-              emptyStarJoinPlan
-            }
-          }
+        val reorderStarPlan = factTable +: reorderDimTables
+        reorderStarPlan.map(plan => (plan, Inner))
+      } else {
+        emptyStarJoinPlan
       }
     }
   }
@@ -327,13 +334,13 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
   /**
    * Helper case class to hold (plan, rowCount) pairs.
    */
-  private case class TableCardinality(plan: (LogicalPlan, InnerLike), size: Option[BigInt])
+  private case class TableAccessCardinality(plan: LogicalPlan, size: Option[BigInt])
 
   /**
    * Returns the cardinality of a base table access. A base table access represents
    * a LeafNode, or Project or Filter operators above a LeafNode.
    */
-  private def getBaseTableAccessCardinality(
+  private def getTableAccessCardinality(
       input: LogicalPlan): Option[BigInt] = input match {
     case PhysicalOperation(_, cond, t: LeafNode) if t.stats(conf).rowCount.isDefined =>
       if (conf.cboEnabled && input.stats(conf).rowCount.isDefined) {
@@ -350,6 +357,8 @@ case class DetectStarSchemaJoin(conf: CatalystConf) extends PredicateHelper {
  * one condition.
  *
  * The order of joins will not be changed if all of them already have at least one condition.
+ *
+ * If star schema detection is enabled, reorder the star join plans based on heuristics.
  */
 case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
   /**
@@ -404,8 +413,8 @@ case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with Predic
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      if (conf.starJoinOptimization) {
-        val starJoinPlan = DetectStarSchemaJoin(conf).findStarJoinPlan(input, conditions)
+      if (conf.starSchemaDetection && !conf.cboEnabled) {
+        val starJoinPlan = StarSchemaDetection(conf).reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
           createOrderedJoin(starJoinPlan ++ rest, conditions)

@@ -85,14 +85,14 @@ class StarJoinSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     var equivQueryPlan: Option[LogicalPlan] = None
     var queryPlan: Option[LogicalPlan] = None
 
-    withSQLConf(SQLConf.STARJOIN_OPTIMIZATION.key -> "true",
+    withSQLConf(SQLConf.STARSCHEMA_DETECTION.key -> "true",
         SQLConf.CBO_ENABLED.key -> "false") {
       val queryDF = sql(query)
       checkAnswer(queryDF, rows)
       queryPlan = Some(queryDF.queryExecution.optimizedPlan)
     }
 
-    withSQLConf(SQLConf.STARJOIN_OPTIMIZATION.key -> "false",
+    withSQLConf(SQLConf.STARSCHEMA_DETECTION.key -> "false",
         SQLConf.CBO_ENABLED.key -> "false") {
       val equivQueryDF = sql(equivQuery)
       checkAnswer(equivQueryDF, rows)
