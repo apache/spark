@@ -259,6 +259,10 @@ class StreamExecution(
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
+
+      // Isolated spark session to run the batches with.
+      val sparkSessionToRunBatches = sparkSession.cloneSession()
+
       if (state.compareAndSet(INITIALIZING, ACTIVE)) {
         // Unblock `awaitInitialization`
         initializationLatch.countDown()
@@ -279,7 +283,7 @@ class StreamExecution(
                 if (dataAvailable) {
                   currentStatus = currentStatus.copy(isDataAvailable = true)
                   updateStatusMessage("Processing new data")
-                  runBatch()
+                  runBatch(sparkSessionToRunBatches)
                 }
               }
 
@@ -521,8 +525,9 @@ class StreamExecution(
 
   /**
    * Processes any data available between `availableOffsets` and `committedOffsets`.
+   * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
-  private def runBatch(): Unit = {
+  private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
     // Request unprocessed data from all sources.
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
@@ -565,16 +570,15 @@ class StreamExecution(
           cd.dataType, cd.timeZoneId)
     }
 
-    // Fork a cloned session and set confs to disallow change in number of partitions
-    val sparkSessionForCurrentBatch = sparkSession.cloneSession()
-    sparkSessionForCurrentBatch.conf.set(
+    // Reset confs to disallow change in number of partitions
+    sparkSessionToRunBatch.conf.set(
       SQLConf.SHUFFLE_PARTITIONS.key,
       offsetSeqMetadata.conf(SQLConf.SHUFFLE_PARTITIONS.key))
-    sparkSessionForCurrentBatch.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+    sparkSessionToRunBatch.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
-        sparkSessionForCurrentBatch,
+        sparkSessionToRunBatch,
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
@@ -584,7 +588,7 @@ class StreamExecution(
     }
 
     val nextBatch =
-      new Dataset(sparkSessionForCurrentBatch, lastExecution,
+      new Dataset(sparkSessionToRunBatch, lastExecution,
         RowEncoder(lastExecution.analyzed.schema))
 
     reportTimeTaken("addBatch") {

@@ -114,8 +114,11 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
       inputData.addData(1, 2, 3, 4)
       inputData.addData(3, 4, 5, 6)
       inputData.addData(5, 6, 7, 8)
+      inputData.addData(1)
 
-      val checkpointDir = "./src/test/resources/structured-streaming/checkpoint-version-2.1.0"
+      val resourceUri =
+        this.getClass.getResource("/structured-streaming/checkpoint-version-2.1.0").toURI
+      val checkpointDir = new File(resourceUri).getCanonicalPath
       val query = inputData
         .toDF()
         .groupBy($"value")
@@ -129,7 +132,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
 
       query.processAllAvailable()
       QueryTest.checkAnswer(spark.table("counts").toDF(),
-        Row("1", 1) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
+        Row("1", 2) :: Row("2", 1) :: Row("3", 2) :: Row("4", 2) ::
         Row("5", 2) :: Row("6", 2) :: Row("7", 1) :: Row("8", 1) :: Nil)
     }
   }
