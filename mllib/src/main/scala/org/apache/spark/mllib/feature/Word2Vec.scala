@@ -610,13 +610,13 @@ class Word2VecModel private[spark] (
   }
 
   /**
-    * Find words similar to the words supplied to 'positive' and dissimilar
-    * to the words supplied to 'negative'.
-    * @param positive array of words similar to the results list
-    * @param negative array of words dissimilar to the results list
-    * @param num number of synonyms to find
-    * @return array of (word, cosineSimilarity)
-    */
+   * Find words similar to the words supplied to 'positive' and dissimilar
+   * to the words supplied to 'negative'.
+   * @param positive array of words similar to the results list
+   * @param negative array of words dissimilar to the results list
+   * @param num number of synonyms to find
+   * @return array of (word, cosineSimilarity)
+   */
   def findAnalogies(positive: Array[String] = Array(),
                             negative: Array[String] = Array(),
                             num: Int = 1): Array[(String, Double)] = {

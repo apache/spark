@@ -54,5 +54,5 @@ Collate:
     'types.R'
     'utils.R'
     'window.R'
-RoxygenNote: 5.0.1
+RoxygenNote: 6.0.1
 VignetteBuilder: knitr
