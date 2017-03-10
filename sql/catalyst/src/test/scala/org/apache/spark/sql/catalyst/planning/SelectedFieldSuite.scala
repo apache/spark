@@ -45,7 +45,7 @@ class SelectedFieldSuite extends SparkFunSuite {
   //  |    |    |-- value: struct (valueContainsNull = false)
   //  |    |    |    |-- subfield1: integer (nullable = true)
   //  |    |-- field5: array (nullable = true)
-  //  |    |    |-- element: struct (containsNull = false)
+  //  |    |    |-- element: struct (containsNull = true)
   //  |    |    |    |-- subfield1: struct (nullable = true)
   //  |    |    |    |    |-- subsubfield1: integer (nullable = true)
   //  |    |    |    |    |-- subsubfield2: integer (nullable = true)
@@ -60,6 +60,11 @@ class SelectedFieldSuite extends SparkFunSuite {
   //  |    |    |-- subfield1: struct (nullable = true)
   //  |    |    |    |-- subsubfield1: integer (nullable = true)
   //  |    |    |    |-- subsubfield2: integer (nullable = true)
+  //  |-- col3: array (nullable = true)
+  //  |    |-- element: struct (containsNull = true)
+  //  |    |    |-- field1: struct (nullable = true)
+  //  |    |    |    |-- subfield1: integer (nullable = true)
+  //  |    |    |    |-- subfield2: integer (nullable = true)
   private val schema =
     StructType(
       StructField("col1", StringType) ::
@@ -86,7 +91,11 @@ class SelectedFieldSuite extends SparkFunSuite {
         StructField("field7", StructType(
           StructField("subfield1", StructType(
             StructField("subsubfield1", IntegerType) ::
-            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) :: Nil)) :: Nil)
+            StructField("subsubfield2", IntegerType) :: Nil)) :: Nil)) :: Nil)) ::
+     StructField("col3", ArrayType(StructType(
+       StructField("field1", StructType(
+         StructField("subfield1", IntegerType) ::
+         StructField("subfield2", IntegerType) :: Nil)) :: Nil))) :: Nil)
 
   private val testRelation = LocalRelation(schema.toAttributes)
 
@@ -156,6 +165,19 @@ class SelectedFieldSuite extends SparkFunSuite {
               StructField("subfield1", StructType(
                 StructField("subsubfield1", IntegerType) ::
                 StructField("subsubfield2", IntegerType) :: Nil)) :: Nil))) :: Nil))
+        assertResult(expected)(field)(expr)
+      case None => fail
+    }
+  }
+
+  test("blah") {
+    val expr = "col3.field1.subfield1"
+    unapplySelect(expr) match {
+      case Some(field) =>
+        val expected =
+          StructField("col3", ArrayType(StructType(
+            StructField("field1", StructType(
+              StructField("subfield1", IntegerType) :: Nil)) :: Nil)))
         assertResult(expected)(field)(expr)
       case None => fail
     }
