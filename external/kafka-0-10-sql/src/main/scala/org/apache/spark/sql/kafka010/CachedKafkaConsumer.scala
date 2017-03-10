@@ -273,19 +273,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       message: String,
       cause: Throwable = null): Unit = {
     val finalMessage = s"$message ${additionalMessage(failOnDataLoss)}"
-    if (failOnDataLoss) {
-      if (cause != null) {
-        throw new IllegalStateException(finalMessage)
-      } else {
-        throw new IllegalStateException(finalMessage, cause)
-      }
-    } else {
-      if (cause != null) {
-        logWarning(finalMessage)
-      } else {
-        logWarning(finalMessage, cause)
-      }
-    }
+    reportDataLoss0(failOnDataLoss, finalMessage, cause)
   }
 
   private def close(): Unit = consumer.close()
@@ -396,6 +384,25 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
       val consumer = cache.get(key)
       consumer.inuse = true
       consumer
+    }
+  }
+
+  private def reportDataLoss0(
+      failOnDataLoss: Boolean,
+      finalMessage: String,
+      cause: Throwable = null): Unit = {
+    if (failOnDataLoss) {
+      if (cause != null) {
+        throw new IllegalStateException(finalMessage, cause)
+      } else {
+        throw new IllegalStateException(finalMessage)
+      }
+    } else {
+      if (cause != null) {
+        logWarning(finalMessage, cause)
+      } else {
+        logWarning(finalMessage)
+      }
     }
   }
 }
