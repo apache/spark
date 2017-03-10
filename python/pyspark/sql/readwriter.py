@@ -303,8 +303,8 @@ class DataFrameReader(OptionUtils):
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
-    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None, comment=None,
-            header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
+    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
+            comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,

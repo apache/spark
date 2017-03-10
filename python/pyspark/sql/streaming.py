@@ -557,8 +557,8 @@ class DataStreamReader(OptionUtils):
             raise TypeError("path can be only a single string")
 
     @since(2.0)
-    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None, comment=None,
-            header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
+    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
+            comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
