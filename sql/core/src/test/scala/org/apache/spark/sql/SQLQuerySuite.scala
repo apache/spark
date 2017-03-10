@@ -2608,10 +2608,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14471 Aliases in SELECT could be used in GROUP BY") {
-    Seq(("a", "a", 0), ("b", "a", 1), ("a", "a", 2)).toDF("k1", "k2", "v")
+    Seq((1, "a", 0), (2, "a", 1), (1, "a", 2)).toDF("k1", "k2", "v")
       .createOrReplaceTempView("t")
     checkAnswer(
-      sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY k2, k1"),
-      Row("a", "a", 2) :: Row("b", "a", 1) :: Nil)
+      sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY key1, key2"),
+      Row(1, "a", 2) :: Row(2, "a", 1) :: Nil)
+    checkAnswer(
+      sql("SELECT k1 AS key1, key1 + 1 AS key2, COUNT(1) FROM t GROUP BY key1, key2"),
+      Row(1, 2, 2) :: Row(2, 3, 1) :: Nil)
   }
 }
