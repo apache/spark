@@ -71,7 +71,7 @@ class SparkEnv (
 
   private[spark] var isStopped = false
 
-  case class PythonWorkerKey(pythonExec: String, envVars: Map[String, String],
+  case class PythonWorkerKey(pythonExec: Option[String], envVars: Map[String, String],
                              condaPackages: List[String])
   private val pythonWorkers = mutable.HashMap[PythonWorkerKey, PythonWorkerFactory]()
 
@@ -113,7 +113,7 @@ class SparkEnv (
   }
 
   private[spark]
-  def createPythonWorker(pythonExec: String, envVars: Map[String, String],
+  def createPythonWorker(pythonExec: Option[String], envVars: Map[String, String],
                          condaPackages: List[String]): java.net.Socket = {
     synchronized {
       val key = PythonWorkerKey(pythonExec, envVars, condaPackages)
@@ -123,7 +123,7 @@ class SparkEnv (
   }
 
   private[spark]
-  def destroyPythonWorker(pythonExec: String, envVars: Map[String, String],
+  def destroyPythonWorker(pythonExec: Option[String], envVars: Map[String, String],
                           condaPackages: List[String], worker: Socket) {
     synchronized {
       val key = PythonWorkerKey(pythonExec, envVars, condaPackages)
@@ -132,7 +132,7 @@ class SparkEnv (
   }
 
   private[spark]
-  def releasePythonWorker(pythonExec: String, envVars: Map[String, String],
+  def releasePythonWorker(pythonExec: Option[String], envVars: Map[String, String],
                           condaPackages: List[String], worker: Socket) {
     synchronized {
       val key = PythonWorkerKey(pythonExec, envVars, condaPackages)

@@ -30,7 +30,7 @@ import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
-private[spark] class PythonWorkerFactory(requestedPythonExec: String,
+private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
                                          requestedEnvVars: Map[String, String],
                                          condaPackages: List[String])
   extends Logging {
@@ -78,12 +78,13 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: String,
 
   private[this] val pythonExec = {
     condaEnv.map { conda =>
-      require (!requestedPythonExec.contains("/"),
-        s"It's forbidden to set the PYSPARK python path " +
-        s"to anything but a file name when using conda, but found: $requestedPythonExec")
+      requestedPythonExec.foreach(exec => sys.error(
+        s"It's forbidden to set the PYSPARK_PYTHON when using conda, but found: $exec"))
 
-      conda.condaEnvDir + "/bin/" + requestedPythonExec
-    }.getOrElse(requestedPythonExec)
+      conda.condaEnvDir + "/bin/python"
+    }
+      .orElse(requestedPythonExec)
+      .getOrElse("python")
   }
 
   private[this] val pythonPath = PythonUtils.mergePythonPaths(

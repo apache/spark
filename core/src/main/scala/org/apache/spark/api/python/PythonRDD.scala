@@ -73,7 +73,7 @@ private[spark] case class PythonFunction(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     condaPackages: JList[String],
-    pythonExec: String,
+    pythonExec: Option[String],
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: PythonAccumulatorV2)
