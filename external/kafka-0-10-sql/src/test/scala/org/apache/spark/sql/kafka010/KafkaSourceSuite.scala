@@ -294,6 +294,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
       ),
       StopStream,
       StartStream(ProcessingTime(100), clock),
+      AdvanceManualClock(100),
       waitUntilBatchProcessed,
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
