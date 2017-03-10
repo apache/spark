@@ -1342,7 +1342,6 @@ test_that("column functions", {
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
-
   df <- as.DataFrame(j)
   schema <- structType(structField("age", "integer"),
                        structField("height", "double"))
@@ -1356,8 +1355,8 @@ test_that("column functions", {
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
   expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
-  error = function(e) { stop(e) }),
-  paste0(".*(java.lang.NumberFormatException: For input string:).*"))
+                        error = function(e) { stop(e) }),
+               paste0(".*(java.lang.NumberFormatException: For input string:).*"))
   s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
   expect_is(s[[1]][[1]]$date, "Date")
   expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
