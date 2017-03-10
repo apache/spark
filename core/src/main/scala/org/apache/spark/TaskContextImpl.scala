@@ -90,7 +90,7 @@ private[spark] class TaskContextImpl(
 
   /** Marks the task as failed and triggers the failure listeners. */
   @GuardedBy("this")
-  private[spark] def markTaskFailed(error: Throwable): Unit = {
+  private[spark] def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return
     failed = true
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
@@ -100,7 +100,7 @@ private[spark] class TaskContextImpl(
 
   /** Marks the task as completed and triggers the completion listeners. */
   @GuardedBy("this")
-  private[spark] def markTaskCompleted(): Unit = {
+  private[spark] def markTaskCompleted(): Unit = synchronized {
     completed = true
     invokeListeners(onCompleteCallbacks, "TaskCompletionListener", None) {
       _.onTaskCompletion(this)
@@ -114,19 +114,17 @@ private[spark] class TaskContextImpl(
       callback: T => Unit): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
     // Process callbacks in the reverse order of registration
-    synchronized {
-      listeners.reverse.foreach { listener =>
-        try {
-          callback(listener)
-        } catch {
-          case e: Throwable =>
-            errorMsgs += e.getMessage
-            logError(s"Error in $name", e)
-        }
-        if (errorMsgs.nonEmpty) {
-          throw new TaskCompletionListenerException(errorMsgs, error)
-        }
+    listeners.reverse.foreach { listener =>
+      try {
+        callback(listener)
+      } catch {
+        case e: Throwable =>
+          errorMsgs += e.getMessage
+          logError(s"Error in $name", e)
       }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskCompletionListenerException(errorMsgs, error)
     }
   }
 
