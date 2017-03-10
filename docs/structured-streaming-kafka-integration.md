@@ -3,9 +3,9 @@ layout: global
 title: Structured Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
 ---
 
-Structured Streaming integration for Kafka 0.10 to poll data from Kafka.
+Structured Streaming integration for Kafka 0.10 to consume data from and produce data to Kafka.
 
-### Linking
+## Linking
 For Scala/Java applications using SBT/Maven project definitions, link your application with the following artifact:
 
     groupId = org.apache.spark
@@ -15,7 +15,9 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
-### Creating a Kafka Source Stream
+## Consuming Data from Kafka
+
+### Creating a Kafka Source for Streaming Queries
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -89,29 +91,29 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight python %}
 
 # Subscribe to 1 topic
-ds1 = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("subscribe", "topic1")
+ds1 = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
   .load()
 ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to multiple topics
-ds2 = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("subscribe", "topic1,topic2")
+ds2 = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1,topic2") \
   .load()
 ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern
-ds3 = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("subscribePattern", "topic.*")
+ds3 = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribePattern", "topic.*") \
   .load()
 ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
@@ -119,7 +121,7 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 </div>
 </div>
 
-### Creating a Kafka Source Batch
+### Creating a Kafka Source for Batch Queries 
 If you have a use case that is better suited to batch processing,
 you can create an Dataset/DataFrame for a defined range of offsets.
 
@@ -373,9 +375,202 @@ The following configurations are optional:
 </tr>
 </table>
 
+## Producing Data to Kafka
+
+### Writing Streaming Queries to Kafka
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+val s1 = df1
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .start()
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+val s2 = df2
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .start()
+
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+StreamingQuery s1 = df1
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .start()
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+StreamingQuery s2 = df1
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .start()
+
+{% endhighlight %}
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+s1 = df1 \
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "topic1") \
+  .start()
+
+# Write key-value data from a DataFrame to Kafka using a topic specified in the data
+s2 = df2 \
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .start()
+
+{% endhighlight %}
+</div>
+</div>
+
+### Writing Batch Queries to Kafka
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .save()
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+df2.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .save()
+
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .save()
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+df1.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .save()
+
+{% endhighlight %}
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .write \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "topic1") \
+  .save()
+
+# Write key-value data from a DataFrame to Kafka using a topic specified in the data
+df2.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .write \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .save()
+
+{% endhighlight %}
+</div>
+</div>
+
+Each row being written to Kafka has the following schema:
+<table class="table">
+<tr><th>Column</th><th>Type</th></tr>
+<tr>
+  <td>key (optional)</td>
+  <td>string or binary</td>
+</tr>
+<tr>
+  <td>value (required)</td>
+  <td>string or binary</td>
+</tr>
+<tr>
+  <td>topic (*optional)</td>
+  <td>string</td>
+</tr>
+</table>
+\* The topic column is required if the "topic" configuration option is not specified.<br>
+
+The value column is the only required option. If a key column is not specified then 
+a ```null``` valued key column will be automatically added (see Kafka semantics on 
+how ```null``` valued key values are handled). If a topic column exists then its value
+is used as the topic when writing the given row to Kafka, unless the "topic" configuration
+option is set i.e., the "topic" configuration option overrides the topic column.
+
+The following options must be set for the Kafka sink
+for both batch and streaming queries.
+
+<table class="table">
+<tr><th>Option</th><th>value</th><th>meaning</th></tr>
+<tr>
+  <td>kafka.bootstrap.servers</td>
+  <td>A comma-separated list of host:port</td>
+  <td>The Kafka "bootstrap.servers" configuration.</td>
+</tr>
+</table>
+
+The following configurations are optional:
+
+<table class="table">
+<tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
+<tr>
+  <td>topic</td>
+  <td>string</td>
+  <td>none</td>
+  <td>streaming and batch</td>
+  <td>Sets the topic that all rows will be written to in Kafka. This option overrides any
+  topic column that may exist in the data.</td>
+</tr>
+</table>
+
+
+## Kafka Specific Configurations
+
 Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.` prefix, e.g, 
 `stream.option("kafka.bootstrap.servers", "host:port")`. For possible kafkaParams, see 
-[Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs).
+[Kafka consumer config docs](http://kafka.apache.org/documentation.html#newconsumerconfigs) for
+read related parameters, and [Kafka producer config docs](http://kafka.apache.org/documentation/#producerconfigs)
+for write related parameters.
 
 Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
 
@@ -389,11 +584,15 @@ Note that the following Kafka params cannot be set and the Kafka source will thr
  DataFrame operations to explicitly deserialize the keys.
 - **value.deserializer**: Values are always deserialized as byte arrays with ByteArrayDeserializer. 
  Use DataFrame operations to explicitly deserialize the values.
+- **key.serializer**: Keys are always serialized with ByteArraySerializer or StringSerializer. Use
+DataFrame operations to explicitly serialize the keys into either strings or byte arrays.
+- **value.serializer**: values are always serialized with ByteArraySerializer or StringSerializer. Use
+DataFrame oeprations to explicitly serialize the values into either strings or byte arrays.
 - **enable.auto.commit**: Kafka source doesn't commit any offset.
 - **interceptor.classes**: Kafka source always read keys and values as byte arrays. It's not safe to
  use ConsumerInterceptor as it may break the query.
 
-### Deploying
+## Deploying
 
 As with any Spark applications, `spark-submit` is used to launch your application. `spark-sql-kafka-0-10_{{site.SCALA_BINARY_VERSION}}`
 and its dependencies can be directly added to `spark-submit` using `--packages`, such as,
