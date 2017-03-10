@@ -115,6 +115,49 @@ object DatasetBenchmark {
     benchmark
   }
 
+  def backToBackFilterLong(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
+
+    val rdd = spark.sparkContext.range(1, numRows)
+    val ds = spark.range(1, numRows)
+    val df = ds.toDF("l")
+    val func = (l: Long) => l % 2L == 0L
+
+    val benchmark = new Benchmark("back-to-back filter Long", numRows)
+
+    benchmark.addCase("RDD") { iter =>
+      var res = rdd
+      var i = 0
+      while (i < numChains) {
+        res = res.filter(func)
+        i += 1
+      }
+      res.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("DataFrame") { iter =>
+      var res = df
+      var i = 0
+      while (i < numChains) {
+        res = res.filter($"l" % 2L === 0L)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("Dataset") { iter =>
+      var res = ds.as[Long]
+      var i = 0
+      while (i < numChains) {
+        res = res.filter(func)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark
+  }
+
   def backToBackFilter(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
@@ -210,8 +253,9 @@ object DatasetBenchmark {
 
     val benchmark0 = backToBackMapLong(spark, numRows, numChains)
     val benchmark1 = backToBackMap(spark, numRows, numChains)
-    val benchmark2 = backToBackFilter(spark, numRows, numChains)
-    val benchmark3 = aggregate(spark, numRows)
+    val benchmark2 = backToBackFilterLong(spark, numRows, numChains)
+    val benchmark3 = backToBackFilter(spark, numRows, numChains)
+    val benchmark4 = aggregate(spark, numRows)
 
     /*
     OpenJDK 64-Bit Server VM 1.8.0_111-8u111-b14-2ubuntu0.16.04.2-b14 on Linux 4.4.0-47-generic
@@ -236,6 +280,18 @@ object DatasetBenchmark {
     benchmark1.run()
 
     /*
+    OpenJDK 64-Bit Server VM 1.8.0_121-8u121-b13-0ubuntu1.16.04.2-b13 on Linux 4.4.0-47-generic
+    Intel(R) Xeon(R) CPU E5-2667 v3 @ 3.20GHz
+    back-to-back map long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           1807 / 1833         55.4          18.1       1.0X
+    DataFrame                                      532 /  597        187.9           5.3       3.4X
+    Dataset                                        636 /  702        157.3           6.4       2.8X
+    */
+
+    benchmark2.run()
+
+    /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
@@ -244,7 +300,7 @@ object DatasetBenchmark {
     DataFrame                                       59 /   72       1695.4           0.6      22.8X
     Dataset                                       2777 / 2805         36.0          27.8       0.5X
     */
-    benchmark2.run()
+    benchmark3.run()
 
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.12.1
@@ -256,6 +312,6 @@ object DatasetBenchmark {
     Dataset sum using Aggregator                  4656 / 4758         21.5          46.6       0.4X
     Dataset complex Aggregator                    6636 / 7039         15.1          66.4       0.3X
     */
-    benchmark3.run()
+    benchmark4.run()
   }
 }
