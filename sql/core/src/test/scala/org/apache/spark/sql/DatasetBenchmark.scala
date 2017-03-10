@@ -282,13 +282,12 @@ object DatasetBenchmark {
     /*
     OpenJDK 64-Bit Server VM 1.8.0_121-8u121-b13-0ubuntu1.16.04.2-b13 on Linux 4.4.0-47-generic
     Intel(R) Xeon(R) CPU E5-2667 v3 @ 3.20GHz
-    back-to-back map long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    back-to-back filter Long:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD                                           1807 / 1833         55.4          18.1       1.0X
-    DataFrame                                      532 /  597        187.9           5.3       3.4X
-    Dataset                                        636 /  702        157.3           6.4       2.8X
+    RDD                                            846 / 1120        118.1           8.5       1.0X
+    DataFrame                                      270 /  329        370.9           2.7       3.1X
+    Dataset                                        545 /  789        183.5           5.4       1.6X
     */
-
     benchmark2.run()
 
     /*
