@@ -238,6 +238,8 @@ case class HashAggregateExec(
      """.stripMargin
   }
 
+  protected override val shouldStopRequired = false
+
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
