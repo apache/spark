@@ -2736,7 +2736,7 @@ class Dataset[T] private[sql](
       case fr: FileRelation =>
         fr.inputFiles
       case r: CatalogRelation if DDLUtils.isHiveTable(r.tableMeta) =>
-        r.tableMeta.storage.locationUri.map { _.toString }.toArray
+        r.tableMeta.storage.locationUri.map(_.toString).toArray
     }.flatten
     files.toSet.toArray
   }

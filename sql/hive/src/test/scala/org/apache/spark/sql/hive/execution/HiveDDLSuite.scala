@@ -1868,9 +1868,12 @@ class HiveDDLSuite
 
   test("SPARK-19905: Hive SerDe table input paths") {
     withTable("spark_19905") {
-      spark.range(10).createOrReplaceTempView("spark_19905_view")
-      sql("CREATE TABLE spark_19905 STORED AS RCFILE AS SELECT * FROM spark_19905_view")
-      assert(spark.table("spark_19905").inputFiles.nonEmpty)
+      withTempView("spark_19905_view") {
+        spark.range(10).createOrReplaceTempView("spark_19905_view")
+        sql("CREATE TABLE spark_19905 STORED AS RCFILE AS SELECT * FROM spark_19905_view")
+        assert(spark.table("spark_19905").inputFiles.nonEmpty)
+        assert(sql("SELECT input_file_name() FROM spark_19905").count() > 0)
+      }
     }
   }
 }
