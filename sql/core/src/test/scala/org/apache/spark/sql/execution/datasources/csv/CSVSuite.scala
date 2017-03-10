@@ -491,17 +491,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("escapeQuoteEscaping", "\"")
         .load(path.getAbsolutePath)
 
-      // scalastyle:off println
-      df1.show()
-      spark.read
-        .format("text")
-        .load(path.getAbsolutePath)
-        .collect()
-        .map(_.getString(0))
-        .sortBy(_(0)).map(_.drop(2)).foreach(println)
-      df2.show()
-      // scalastyle:off println
-
       checkAnswer(df1, df2)
     }
   }
