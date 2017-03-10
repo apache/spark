@@ -405,7 +405,7 @@ class StreamExecution(
               logDebug(s"Resuming with committed offsets: $committedOffsets")
               committedOffsets.foreach {
                 case (source, available) =>
-                  logDebug(s"Initializing data retrieval from $source at offset $available")
+                  logDebug(s"Initializing offset retrieval from $source at offset $available")
                   source.getBatch(start = None, end = available)
               }
           }
