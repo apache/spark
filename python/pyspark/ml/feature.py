@@ -1938,9 +1938,9 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     >>> testData2 = sc.parallelize([Row(id=0, label="a"), Row(id=1, label="d"),
     ...     Row(id=2, label="e")], 2)
     >>> dfKeep= spark.createDataFrame(testData2)
-    >>> tdKeep = stringIndexer.setHandleInvalid("keep").fit(stringIndDf).transform(dfKeep)
-    >>> itdKeep = inverter.transform(tdKeep)
-    >>> sorted(set([(i[0], str(i[1])) for i in itdKeep.select(itdKeep.id, itdKeep.label2).collect()]),
+    >>> tdK = stringIndexer.setHandleInvalid("keep").fit(stringIndDf).transform(dfKeep)
+    >>> itdK = inverter.transform(tdK)
+    >>> sorted(set([(i[0], str(i[1])) for i in itdK.select(itdK.id, itdK.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (6, 'd'), (6, 'e')]
     >>> stringIndexerPath = temp_path + "/string-indexer"
@@ -1967,6 +1967,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
                           "error (throw an error), or 'keep' (put unseen labels in a special " +
                           "additional bucket, at index numLabels).",
                           typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
         """
