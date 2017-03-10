@@ -68,6 +68,9 @@ private[spark] class TaskContextImpl(
   // Whether the task has failed.
   @volatile private var failed: Boolean = false
 
+  // Throwable that caused the task to fail
+  private var failure: Throwable = _
+
   // If there was a fetch failure in the task, we store it here, to make sure user-code doesn't
   // hide the exception.  See SPARK-19276
   @volatile private var _fetchFailedException: Option[FetchFailedException] = None
@@ -75,23 +78,32 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     synchronized {
+      if (completed) {
+        listener.onTaskCompletion(this)
+      }
+      // Always add the listener because it is legal to call them multiple times.
       onCompleteCallbacks += listener
-      this
     }
+    this
   }
 
   @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     synchronized {
-      onFailureCallbacks += listener
-      this
+      if (failed) {
+        listener.onTaskFailure(this, failure)
+      } else {
+        onFailureCallbacks += listener
+      }
     }
+    this
   }
 
   /** Marks the task as failed and triggers the failure listeners. */
   @GuardedBy("this")
   private[spark] def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return
+    failure = error
     failed = true
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
