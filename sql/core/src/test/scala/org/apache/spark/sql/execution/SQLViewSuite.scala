@@ -657,8 +657,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val e = intercept[AnalysisException] {
           sql("SELECT * FROM view10")
         }.getMessage
-        assert(e.contains("The nested level of view `default`.`view0` has exceeded 10, " +
-          "terminate the view resolution to avoid further errors."))
+        assert(e.contains("The nested level of view `default`.`view0` has exceeded 10. " +
+          "Terminate the view resolution to avoid further errors."))
       }
     }
   }

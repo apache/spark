@@ -599,7 +599,7 @@ class Analyzer(
         val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
           if (AnalysisContext.get.nestedViewLevel > conf.maxNestedViewDepth) {
             view.failAnalysis(s"The nested level of view ${view.desc.identifier} has exceeded " +
-              s"${conf.maxNestedViewDepth}, terminate the view resolution to avoid further " +
+              s"${conf.maxNestedViewDepth}. Terminate the view resolution to avoid further " +
               "errors.")
           }
           execute(child)
