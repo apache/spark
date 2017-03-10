@@ -2102,11 +2102,9 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     >>> dfKeep= spark.createDataFrame(testData2)
     >>> modelKeep = stringIndexer.setHandleInvalid("keep").fit(stringIndDf)
     >>> tdK = modelKeep.transform(dfKeep)
-    >>> itdK = IndexToString(inputCol="indexed", outputCol="label2",
-    ...     labels=modelKeep.labels).transform(tdK)
-    >>> sorted(set([(i[0], str(i[1])) for i in itdK.select(itdK.id, itdK.label2).collect()]),
+    >>> sorted(set([(i[0], i[1]) for i in tdK.select(tdK.id, tdK.indexed).collect()]),
     ...     key=lambda x: x[0])
-    [(0, 'a'), (6, 'd'), (6, 'e')]
+    [(0, 0.0), (1, 3.0), (2, 3.0)]
     >>> stringIndexerPath = temp_path + "/string-indexer"
     >>> stringIndexer.save(stringIndexerPath)
     >>> loadedIndexer = StringIndexer.load(stringIndexerPath)
