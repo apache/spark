@@ -303,13 +303,12 @@ class DataFrameReader(OptionUtils):
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
-    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
-            escapeQuoteEscaping=None, comment=None, header=None, inferSchema=None,
-            ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None, nullValue=None,
-            nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
-            timestampFormat=None, maxColumns=None, maxCharsPerColumn=None,
-            maxMalformedLogPerPartition=None, mode=None, timeZone=None,
-            columnNameOfCorruptRecord=None, wholeFile=None):
+    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None, comment=None,
+            header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
+            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
+            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
+            columnNameOfCorruptRecord=None, wholeFile=None, escapeQuoteEscaping=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -328,8 +327,6 @@ class DataFrameReader(OptionUtils):
                       empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
-                                    character. If None is set, it uses the default value, ``\0``.
         :param comment: sets the single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
@@ -390,21 +387,23 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param wholeFile: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
+        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
+                                    character. If None is set, it uses the default value, ``\0``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
         """
         self._set_opts(
-            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape,
-            escapeQuoteEscaping=escapeQuoteEscaping, comment=comment, header=header,
-            inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
+            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
+            header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile,
+            escapeQuoteEscaping=escapeQuoteEscaping)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
@@ -697,8 +696,8 @@ class DataFrameWriter(OptionUtils):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            escapeQuoteEscaping=None, header=None, nullValue=None, escapeQuotes=None, quoteAll=None,
-            dateFormat=None, timestampFormat=None, timeZone=None):
+            header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
+            timestampFormat=None, timeZone=None, escapeQuoteEscaping=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -720,8 +719,6 @@ class DataFrameWriter(OptionUtils):
                       empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
-        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
-                                    character. If None is set, it uses the default value, ``\0``.
         :param escapeQuotes: A flag indicating whether values containing quotes should always
                              be enclosed in quotes. If None is set, it uses the default value
                              ``true``, escaping all values containing a quote character.
@@ -742,14 +739,16 @@ class DataFrameWriter(OptionUtils):
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
         :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
                          If None is set, it uses the default value, session local timezone.
+        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
+                                    character. If None is set, it uses the default value, ``\0``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
-        self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape,
-                       escapeQuoteEscaping=escapeQuoteEscaping, header=header, nullValue=nullValue,
-                       escapeQuotes=escapeQuotes, quoteAll=quoteAll, dateFormat=dateFormat,
-                       timestampFormat=timestampFormat, timeZone=timeZone)
+        self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
+                       nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
+                       dateFormat=dateFormat, timestampFormat=timestampFormat, timeZone=timeZone,
+                       escapeQuoteEscaping=escapeQuoteEscaping)
         self._jwrite.csv(path)
 
     @since(1.5)

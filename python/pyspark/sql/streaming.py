@@ -557,13 +557,12 @@ class DataStreamReader(OptionUtils):
             raise TypeError("path can be only a single string")
 
     @since(2.0)
-    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
-            escapeQuoteEscaping=None, comment=None, header=None, inferSchema=None,
-            ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None, nullValue=None,
-            nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
-            timestampFormat=None, maxColumns=None, maxCharsPerColumn=None,
-            maxMalformedLogPerPartition=None, mode=None, timeZone=None,
-            columnNameOfCorruptRecord=None, wholeFile=None):
+    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None, comment=None,
+            header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
+            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
+            negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
+            columnNameOfCorruptRecord=None, wholeFile=None, escapeQuoteEscaping=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -584,8 +583,6 @@ class DataStreamReader(OptionUtils):
                       empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
-                                    character. If None is set, it uses the default value, ``\0``.
         :param comment: sets the single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
@@ -642,6 +639,8 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param wholeFile: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
+        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
+                                    character. If None is set, it uses the default value, ``\0``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -650,15 +649,15 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(
-            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape,
-            escapeQuoteEscaping=escapeQuoteEscaping, comment=comment, header=header,
-            inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
+            schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
+            header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile,
+            escapeQuoteEscaping=escapeQuoteEscaping)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
