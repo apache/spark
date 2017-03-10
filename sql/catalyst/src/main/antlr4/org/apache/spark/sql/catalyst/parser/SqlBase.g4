@@ -546,9 +546,10 @@ primaryExpression
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
-    | '(' expression (',' expression)+ ')'                                                     #rowConstructor
+    | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
+    | qualifiedName '(' (setQuantifier? namedExpression (',' namedExpression)*)? ')'
+       (OVER windowSpec)?                                                                      #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
