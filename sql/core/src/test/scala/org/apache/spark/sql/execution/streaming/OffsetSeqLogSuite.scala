@@ -31,7 +31,7 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
   test("OffsetSeqMetadata - deserialization") {
     val key = SQLConf.SHUFFLE_PARTITIONS.key
 
-    def getMapWith(shufflePartitions: Int): Map[String, String] = {
+    def getConfWith(shufflePartitions: Int): Map[String, String] = {
       Map(key -> shufflePartitions.toString)
     }
 
@@ -41,19 +41,19 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
     // One set
     assert(OffsetSeqMetadata(1, 0, Map.empty) === OffsetSeqMetadata("""{"batchWatermarkMs":1}"""))
     assert(OffsetSeqMetadata(0, 2, Map.empty) === OffsetSeqMetadata("""{"batchTimestampMs":2}"""))
-    assert(OffsetSeqMetadata(0, 0, getMapWith(shufflePartitions = 2)) ===
+    assert(OffsetSeqMetadata(0, 0, getConfWith(shufflePartitions = 2)) ===
       OffsetSeqMetadata(s"""{"conf": {"$key":2}}"""))
 
     // Two set
     assert(OffsetSeqMetadata(1, 2, Map.empty) ===
       OffsetSeqMetadata("""{"batchWatermarkMs":1,"batchTimestampMs":2}"""))
-    assert(OffsetSeqMetadata(1, 0, getMapWith(shufflePartitions = 3)) ===
+    assert(OffsetSeqMetadata(1, 0, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"conf": {"$key":3}}"""))
-    assert(OffsetSeqMetadata(0, 2, getMapWith(shufflePartitions = 3)) ===
+    assert(OffsetSeqMetadata(0, 2, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchTimestampMs":2,"conf": {"$key":3}}"""))
 
     // All set
-    assert(OffsetSeqMetadata(1, 2, getMapWith(shufflePartitions = 3)) ===
+    assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}}"""))
   }
 

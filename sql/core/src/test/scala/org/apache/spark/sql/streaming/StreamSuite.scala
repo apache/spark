@@ -396,13 +396,17 @@ class StreamSuite extends StreamTest {
     val agg = inputData.toDS().groupBy("_1").count()
 
     testStream(agg, OutputMode.Complete())(
-      AddData(inputData, (1, 1), (2, 1), (1, 2)),
+      AddData(inputData, (1, 0), (2, 0)),
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "2")),
-      CheckAnswer((1, 2), (2, 1)),
+      CheckAnswer((1, 1), (2, 1)),
       StopStream,
-      AddData(inputData, (3, 1), (2, 2), (1, 1)),
+      AddData(inputData, (3, 0), (2, 0)),
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "5")),
-      CheckAnswer((1, 3), (2, 2), (3, 1)))
+      CheckAnswer((1, 1), (2, 2), (3, 1)),
+      StopStream,
+      AddData(inputData, (3, 0), (1, 0)),
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")),
+      CheckAnswer((1, 2), (2, 2), (3, 2)))
   }
 
   test("SPARK-19873: backward compat with checkpoints that do not record shuffle partitions") {
