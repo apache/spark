@@ -403,6 +403,11 @@ class StreamExecution(
             case lastOffsets =>
               committedOffsets = lastOffsets.toStreamProgress(sources)
               logDebug(s"Resuming with committed offsets: $committedOffsets")
+              committedOffsets.foreach {
+                case (source, available) =>
+                  logDebug(s"Initializing data retrieval from $source at offset $available")
+                  source.getBatch(start = None, end = available)
+              }
           }
         }
         logInfo(s"Resuming streaming query, starting with batch $currentBatchId")
