@@ -215,20 +215,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val predicate = newPredicate(condition, child.output)
-      if (predicate != null) {
-        predicate.initialize(0)
-        iter.filter { row =>
-          val r = predicate.eval(row)
-          if (r) numOutputRows += 1
-          r
-        }
-      } else {
-        val predicate = BindReferences.bindReference(condition, child.output)
-        iter.filter { row =>
-          val r = predicate.eval(row).isInstanceOf[Predicate]
-          if (r) numOutputRows += 1
-          r
-        }
+      predicate.initialize(0)
+      iter.filter { row =>
+        val r = predicate.eval(row)
+        if (r) numOutputRows += 1
+        r
       }
     }
   }
