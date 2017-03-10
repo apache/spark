@@ -201,7 +201,7 @@ class StringIndexerModel (
         val filterer = udf { label: String =>
           labelToIndex.contains(label)
         }
-        (dataset.where(filterer(dataset($(inputCol)))), false)
+        (dataset.na.drop(Array($(inputCol))).where(filterer(dataset($(inputCol)))), false)
       case _ => (dataset, getHandleInvalid == StringIndexer.KEEP_INVALID)
     }
 
