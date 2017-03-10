@@ -252,6 +252,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends Logging {
     } else {
       val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
         if (source == "console") {
+          checkNotPartitioned("console")
           (true, false)
         } else {
           (false, true)
