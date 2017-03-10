@@ -69,7 +69,8 @@ object JavaTypeInference {
    * @param typeToken Java type
    * @return (SQL data type, nullable)
    */
-  private def inferDataType(typeToken: TypeToken[_]): (DataType, Boolean) = {
+  private def inferDataType(typeToken: TypeToken[_], seenTypeSet: Set[Class[_]] = Set.empty)
+    : (DataType, Boolean) = {
     typeToken.getRawType match {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
@@ -123,11 +124,12 @@ object JavaTypeInference {
         val properties = getJavaBeanReadableProperties(other)
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
-          if (other == returnType.getRawType) {
+          if (seenTypeSet.contains(returnType.getRawType)) {
             throw new UnsupportedOperationException(
-              s"Cannot use one's own class in the fields of class ${other.getName}")
+              "Cannot have circular references in bean class, but got the circular reference of " +
+                s"class ${returnType.getRawType}")
           }
-          val (dataType, nullable) = inferDataType(returnType)
+          val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
           new StructField(property.getName, dataType, nullable)
         }
         (new StructType(fields), true)

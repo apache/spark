@@ -1290,22 +1290,34 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(df.collectAsList().size(), 1);
   }
 
-  public class SelfClassInFieldBean implements Serializable {
-    private SelfClassInFieldBean child;
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
 
-    public SelfClassInFieldBean getChild() {
+    public CircularReference2Bean getChild() {
       return child;
     }
 
-    public void setChild(SelfClassInFieldBean child) {
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
       this.child = child;
     }
   }
 
   @Test(expected = UnsupportedOperationException.class)
-  public void testSelfClassInFieldBean() {
-    SelfClassInFieldBean bean = new SelfClassInFieldBean();
-    bean.setChild(new SelfClassInFieldBean());
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(SelfClassInFieldBean.class));
+  public void testCircularReferenceBean() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    bean.setChild(new CircularReference2Bean());
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
   }
 }

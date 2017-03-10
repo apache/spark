@@ -424,22 +424,34 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
   }
 
-  public class SelfClassInFieldBean implements Serializable {
-    private SelfClassInFieldBean child;
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
 
-    public SelfClassInFieldBean getChild() {
+    public CircularReference2Bean getChild() {
       return child;
     }
 
-    public void setChild(SelfClassInFieldBean child) {
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
       this.child = child;
     }
   }
 
   @Test(expected = UnsupportedOperationException.class)
-  public void testSelfClassInFieldBean() {
-    SelfClassInFieldBean bean = new SelfClassInFieldBean();
-    bean.setChild(new SelfClassInFieldBean());
-    spark.createDataFrame(Arrays.asList(bean), SelfClassInFieldBean.class);
+  public void testCircularReferenceBean() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    bean.setChild(new CircularReference2Bean());
+    spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
   }
 }
