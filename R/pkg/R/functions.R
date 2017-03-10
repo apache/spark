@@ -2430,23 +2430,21 @@ setMethod("date_format", signature(y = "Column", x = "character"),
             column(jc)
           })
 
-setClassUnion("characterOrstructType", c("character", "structType"))
-
 #' from_json
 #'
 #' Parses a column containing a JSON string into a Column of \code{structType} with the specified
 #' \code{schema}. If the string is unparseable, the Column will contains the value NA.
 #'
 #' @param x Column containing the JSON string.
-#' @param schema a structType object or the data type string representing an array or struct type
-#'               used in structField to use as the schema to use when parsing the JSON string.
+#' @param schema a structType object to use as the schema to use when parsing the JSON string.
+#' @param asArray indicating if input string is JSON array or object.
 #' @param ... additional named properties to control how the json is parsed, accepts the same
 #'            options as the JSON data source.
 #'
 #' @family normal_funcs
 #' @rdname from_json
 #' @name from_json
-#' @aliases from_json,Column,characterOrstructType-method
+#' @aliases from_json,Column,structType-method
 #' @export
 #' @examples
 #' \dontrun{
@@ -2454,12 +2452,12 @@ setClassUnion("characterOrstructType", c("character", "structType"))
 #' select(df, from_json(df$value, schema, dateFormat = "dd/MM/yyyy"))
 #'}
 #' @note from_json since 2.2.0
-setMethod("from_json", signature(x = "Column", schema = "characterOrstructType"),
-          function(x, schema, ...) {
-            if (is.character(schema)) {
+setMethod("from_json", signature(x = "Column", schema = "structType"),
+          function(x, schema, asArray = FALSE, ...) {
+            if (asArray) {
               jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                                     "getSQLDataType",
-                                     schema)
+                                     "createArrayType",
+                                     schema$jobj)
             } else {
               jschema <- schema$jobj
             }

@@ -81,8 +81,12 @@ private[sql] object SQLUtils extends Logging {
     new JavaSparkContext(spark.sparkContext)
   }
 
-  def createStructType(fields : Seq[StructField]): StructType = {
+  def createStructType(fields: Seq[StructField]): StructType = {
     StructType(fields)
+  }
+
+  def createArrayType(dataType: DataType): ArrayType = {
+    ArrayType(elementType = dataType)
   }
 
   // Support using regex in string interpolation

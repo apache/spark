@@ -1343,51 +1343,40 @@ test_that("column functions", {
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
 
-  schemas <- list(structType(structField("age", "integer"), structField("height", "double")),
-                  "struct<age:integer,height:double>")
-  for (schema in schemas) {
-    df <- as.DataFrame(j)
-    s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
-    expect_equal(ncol(s), 1)
-    expect_equal(nrow(s), 3)
-    expect_is(s[[1]][[1]], "struct")
-    expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+  df <- as.DataFrame(j)
+  schema <- structType(structField("age", "integer"),
+                       structField("height", "double"))
+  s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
+  expect_equal(ncol(s), 1)
+  expect_equal(nrow(s), 3)
+  expect_is(s[[1]][[1]], "struct")
+  expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
 
-    # passing option
-    df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
-    schema2 <- structType(structField("date", "date"))
-    expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
-    error = function(e) { stop(e) }),
-    paste0(".*(java.lang.NumberFormatException: For input string:).*"))
-    s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
-    expect_is(s[[1]][[1]]$date, "Date")
-    expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
+  # passing option
+  df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
+  schema2 <- structType(structField("date", "date"))
+  expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
+  error = function(e) { stop(e) }),
+  paste0(".*(java.lang.NumberFormatException: For input string:).*"))
+  s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
+  expect_is(s[[1]][[1]]$date, "Date")
+  expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
 
-    # check for unparseable
-    df <- as.DataFrame(list(list("a" = "")))
-    expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
-  }
+  # check for unparseable
+  df <- as.DataFrame(list(list("a" = "")))
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
 
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
-  arr <- collect(select(df, alias(from_json(df$people, "array<struct<name:string>>"), "arrcol")))
+  schema <- structType(structField("name", "string"))
+  arr <- collect(select(df, alias(from_json(df$people, schema, asArray = TRUE), "arrcol")))
   expect_equal(ncol(arr), 1)
   expect_equal(nrow(arr), 1)
   expect_is(arr[[1]][[1]], "list")
   expect_equal(length(arr$arrcol[[1]]), 2)
   expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
   expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
-
-  # check for unparseable data type
-  expect_error(tryCatch(collect(select(df, from_json(df$people, "unknown"))),
-  error = function(e) { stop(e) }),
-  paste0(".*(Invalid type unknown).*"))
-
-  # check for incorrect data type
-  expect_error(tryCatch(collect(select(df, from_json(df$people, "integer"))),
-  error = function(e) { stop(e) }),
-  paste0(".*(data type mismatch: Input schema int must be a struct or an array of structs).*"))
 })
 
 test_that("column binary mathfunctions", {
