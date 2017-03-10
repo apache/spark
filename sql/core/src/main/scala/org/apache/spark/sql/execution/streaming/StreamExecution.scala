@@ -403,6 +403,10 @@ class StreamExecution(
             case lastOffsets =>
               committedOffsets = lastOffsets.toStreamProgress(sources)
               logDebug(s"Resuming with committed offsets: $committedOffsets")
+              /* Make a call a call to getBatch for each source and committed offset.
+               * This will allows sources to re-initialize their state to the current
+               * processed offset; this is specifically important for KafakSource.
+               */
               committedOffsets.foreach {
                 case (source, available) =>
                   logDebug(s"Initializing offset retrieval from $source at offset $available")
