@@ -350,7 +350,7 @@ package object config {
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
 
-  private[yarn] val LAUNCHER_CONFIGs = Seq(
+  private[yarn] val LAUNCHER_CONFIGS = Seq(
     SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET,
     SparkLauncher.LAUNCHER_INTERNAL_PORT)
 

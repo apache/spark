@@ -175,7 +175,7 @@ private[spark] class ApplicationMaster(
     }
 
     // Clean up the spark launcher configuration so it doesn't show up in the Web UI for security.
-    LAUNCHER_CONFIGs.foreach { e =>
+    LAUNCHER_CONFIGS.foreach { e =>
       sparkConf.remove(e)
       sys.props.remove(e)
     }
