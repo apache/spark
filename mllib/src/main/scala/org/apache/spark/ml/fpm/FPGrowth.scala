@@ -241,10 +241,10 @@ class FPGrowthModel private[ml] (
       if (items != null) {
         val itemset = items.toSet
         brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_)))
+          .flatMap(_._2.filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }.distinct }, dt)
+      }}, dt)
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
