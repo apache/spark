@@ -391,20 +391,20 @@ class StreamExecution(
         // initialize metadata
         val shufflePartitionsSparkSession: Int = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
         offsetSeqMetadata = {
-          if (nextOffsets.metadata.nonEmpty) {
+          if (nextOffsets.metadata.isEmpty) {
+            OffsetSeqMetadata(0, 0,
+              Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsSparkSession.toString))
+          } else {
             val offsets = nextOffsets.metadata.get
             val shufflePartitionsToUse = offsets.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
-              // For backwards compatibility, if # partitions was not recorded in the offset log,
+              // For backward compatibility, if # partitions was not recorded in the offset log,
               // then ensure it is not missing. The new value is picked up from the conf.
               logDebug("Number of shuffle partitions from previous run not found in checkpoint. "
                 + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
               shufflePartitionsSparkSession
             })
             OffsetSeqMetadata(offsets.batchWatermarkMs, offsets.batchTimestampMs,
-              Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
-          } else {
-            OffsetSeqMetadata(0, 0,
-              Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsSparkSession.toString))
+              offsets.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
           }
         }
 
