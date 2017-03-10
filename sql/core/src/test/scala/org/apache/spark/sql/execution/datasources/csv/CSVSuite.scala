@@ -466,42 +466,45 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("save csv with quote escaping enabled, using char to escape quote-escape") {
-    withTempDir { dir =>
-      val csvDir = new File(dir, "csv").getCanonicalPath
-
-
-      val df1 = spark.sqlContext.createDataFrame(List(
-        (1, """AA\"BB"""),              // 1 escape char anc 1 quote char
-        (2, """AA\\"BB"""),             // 2 escape char and 1 quote char
-        (3, """AA\"\"\"\"\"BB"""),      // (1 escape char anc 1 quote char) * 5
-        (4, """AA\\"\\"\\"\\"\\"BB"""), // (2 escape char and 1 quote char) * 5
-        (5, """You are "beautiful"""),
-        (6, """Yes, \"inside"\""")
-      ))
+    withTempPath { path =>
+      val df1 = Seq(
+        """You are "beautiful"""",
+        """Yes, \"inside"\""",
+        """AA\"BB""",              // 1 escape char anc 1 quote char
+        """AA\\"BB""",             // 2 escape char and 1 quote char
+        """AA\"\"\"\"\"BB""",      // (1 escape char anc 1 quote char) * 5
+        """AA\\"\\"\\"\\"\\"BB"""  // (2 escape char and 1 quote char) * 5
+      ).toDF()
 
       // escapeQuotes should be true by default
-      // escapeEscape should be equal to quote by default
       df1.coalesce(1).write
         .format("csv")
         .option("quote", "\"")
         .option("escape", "\\")
-        .option("escapeEscape", "\"")
-        .save(csvDir)
+        .option("escapeQuoteEscaping", "\"")
+        .save(path.getAbsolutePath)
 
       val df2 = spark.read
         .format("csv")
         .option("quote", "\"")
         .option("escape", "\\")
-        .option("escapeEscape", "\"")
-        .load(csvDir).orderBy($"_c0")
+        .option("escapeQuoteEscaping", "\"")
+        .load(path.getAbsolutePath)
 
-      val df1Str = df1.collect().map(_.getString(1)).mkString("")
-      val df2Str = df2.collect().map(_.getString(1)).mkString("")
+      // scalastyle:off println
+      df1.show()
+      spark.read
+        .format("text")
+        .load(path.getAbsolutePath)
+        .collect()
+        .map(_.getString(0))
+        .sortBy(_(0)).map(_.drop(2)).foreach(println)
+      df2.show()
+      // scalastyle:off println
 
-      assert(df1Str == df2Str)
+      checkAnswer(df1, df2)
     }
   }
-
 
   test("commented lines in CSV data") {
     val results = spark.read
