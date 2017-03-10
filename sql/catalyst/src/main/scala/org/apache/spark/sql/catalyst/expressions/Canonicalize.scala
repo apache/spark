@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.types.DataType
+
 /**
  * Rewrites an expression using rules that are guaranteed preserve the result while attempting
  * to remove cosmetic variations. Deterministic expressions that are `equal` after canonicalization
@@ -43,11 +45,11 @@ object Canonicalize extends {
     case _ => e
   }
 
-  /** Collects adjacent commutative operations. */
-  private def gatherCommutative(
+  /** Collects adjacent operations. The operations can be non commutative. */
+  private def gatherAdjacent(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] = e match {
-    case c if f.isDefinedAt(c) => f(c).flatMap(gatherCommutative(_, f))
+    case c if f.isDefinedAt(c) => f(c).flatMap(gatherAdjacent(_, f))
     case other => other :: Nil
   }
 
@@ -55,12 +57,88 @@ object Canonicalize extends {
   private def orderCommutative(
       e: Expression,
       f: PartialFunction[Expression, Seq[Expression]]): Seq[Expression] =
-    gatherCommutative(e, f).sortBy(_.hashCode())
+    gatherAdjacent(e, f).sortBy(_.hashCode())
 
-  /** Rearrange expressions that are commutative or associative. */
+  /** Rearrange expressions that are commutative or associative or semantically equal. */
   private def expressionReorder(e: Expression): Expression = e match {
-    case a: Add => orderCommutative(a, { case Add(l, r) => Seq(l, r) }).reduce(Add)
-    case m: Multiply => orderCommutative(m, { case Multiply(l, r) => Seq(l, r) }).reduce(Multiply)
+    case UnaryMinus(UnaryMinus(c)) => c
+
+    // If the expression is composed of `Add` and `Subtract`, we rearrange it by extracting all
+    // sub-expressions like:
+    // a + b => a, b
+    // a - b => a, -b
+    // -(a + b) => -a, -b
+    // -(a - b) => -a, b
+    // Then we concatenate those sub-expressions by:
+    // 1. Remove the pairs of sub-expressions like (b, -b).
+    // 2. Concatenate remainning sub-expressions with `Add`.
+    case a: Add =>
+      // Extract sub-expressions.
+      val (positiveExprs, negativeExprs) = gatherAdjacent(a, {
+        case Add(l, r) => Seq(l, r)
+        case Subtract(l, r) => Seq(l, UnaryMinus(r))
+        case UnaryMinus(Add(l, r)) => Seq(UnaryMinus(l), UnaryMinus(r))
+        case UnaryMinus(Subtract(l, r)) => Seq(UnaryMinus(l), r)
+      }).map { e =>
+        e.transform { case UnaryMinus(UnaryMinus(c)) => c }
+      }.filter {
+        case Literal(0, _) => false
+        case UnaryMinus(Literal(0, _)) => false
+        case _ => true
+      }.partition(!_.isInstanceOf[UnaryMinus])
+
+      // Remove the pairs of sub-expressions like (b, -b).
+      val (newLeftExprs, newRightExprs) = filterOutExprs(positiveExprs,
+        negativeExprs.map(_.asInstanceOf[UnaryMinus].child))
+
+      val finalExprs = (newLeftExprs ++ newRightExprs.map(UnaryMinus(_))).sortBy(_.hashCode())
+      if (finalExprs.isEmpty) {
+        Literal(0, a.dataType)
+      } else {
+        finalExprs.reduce(Add)
+      }
+
+    case Subtract(sl, sr) => expressionReorder(Add(sl, UnaryMinus(sr)))
+
+    // If the expression is composed of `Multiply` and `Divide`, we rearrange it by extracting all
+    // sub-expressions like:
+    // a * b => a, b
+    // a / b => a, 1 / b
+    // 1 / (a * b) => 1 / a, 1 / b
+    // 1 / (a / b) => 1 / a, b
+    // Then we concatenate those sub-expressions by:
+    // 1. Remove the pairs of sub-expressions like (b, 1 / b).
+    // 2. Concatenate remainning sub-expressions with `Multiply` and `Divide`.
+    case m: Multiply =>
+      // Extract sub-expressions.
+      val (multiplyExprs, reciprocalExprs) = gatherAdjacent(m, {
+        case Multiply(l, r) => Seq(l, r)
+        case Divide(l, r) => Seq(l, UnaryReciprocal(r))
+        case UnaryReciprocal(Multiply(l, r)) => Seq(UnaryReciprocal(l), UnaryReciprocal(r))
+        case UnaryReciprocal(Divide(l, r)) => Seq(UnaryReciprocal(l), r)
+      }).map { e =>
+        e.transform { case UnaryReciprocal(UnaryReciprocal(c)) => c }
+      }.filter {
+        case Literal(1, _) => false
+        case UnaryReciprocal(Literal(1, _)) => false
+        case _ => true
+      }.partition(!_.isInstanceOf[UnaryReciprocal])
+
+      // Remove the pairs of sub-expressions like (b, 1 / b).
+      val (newLeftExprs, newRightExprs) = filterOutExprs(multiplyExprs,
+        reciprocalExprs.map(_.asInstanceOf[UnaryReciprocal].child))
+
+      val finalExprs = (newLeftExprs ++ newRightExprs.map(UnaryReciprocal(_))).sortBy(_.hashCode())
+      if (finalExprs.isEmpty) {
+        Literal(1, m.dataType)
+      } else {
+        finalExprs.map {
+          case u: UnaryReciprocal => Divide(Literal(1, u.dataType), u.child)
+          case other => other
+        }.reduce(Multiply)
+      }
+
+    case Divide(dl, dr) => expressionReorder(Multiply(dl, UnaryReciprocal(dr)))
 
     case o: Or =>
       orderCommutative(o, { case Or(l, r) if l.deterministic && r.deterministic => Seq(l, r) })
@@ -87,4 +165,30 @@ object Canonicalize extends {
 
     case _ => e
   }
+
+  /** Finds the expressions existing in both set of expressions and drops them from two set. */
+  private def filterOutExprs(
+      leftExprs: Seq[Expression],
+      rightExprs: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    var newLeftExprs = leftExprs
+    val foundIndexes = rightExprs.zipWithIndex.map { case (r, rIndex) =>
+      val found = newLeftExprs.indexWhere(_.semanticEquals(r))
+      if (found >= 0) {
+        newLeftExprs = newLeftExprs.slice(0, found) ++
+          newLeftExprs.slice(found + 1, newLeftExprs.length)
+      }
+      (found, rIndex)
+    }
+    val dropRightIndexes = foundIndexes.filter(_._1 >= 0).unzip._2
+    val newRightExprs = rightExprs.zipWithIndex.filterNot { case (r, index) =>
+      dropRightIndexes.contains(index)
+    }.unzip._1
+    (newLeftExprs, newRightExprs)
+  }
+}
+
+/** A private [[UnaryExpression]] only used in expression canonicalization. */
+private[expressions] case class UnaryReciprocal(child: Expression)
+    extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = child.dataType
 }

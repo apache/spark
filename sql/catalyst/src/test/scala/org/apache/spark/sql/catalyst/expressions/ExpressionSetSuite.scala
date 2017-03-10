@@ -198,6 +198,53 @@ class ExpressionSetSuite extends SparkFunSuite {
     Rand(1L) > aUpper || (aUpper <= Rand(1L) && aUpper > bUpper) || (aUpper > 10 && bUpper > 10),
     Rand(1L) > aUpper || (aUpper > bUpper && aUpper <= Rand(1L)) || (aUpper > 10 && bUpper > 10))
 
+  // Canonicalize the expressions combined of `Add` and `Subtract`.
+  setTest(1,
+    (aUpper + aLower + bUpper) - (aLower + bUpper),
+    aUpper)
+  setTest(1,
+    (-aUpper + bUpper - aLower) - (-aUpper + bUpper),
+    bUpper - aUpper - aLower + aUpper - bUpper,
+    (bUpper + aUpper) - (aUpper + aLower + bUpper))
+  setTest(1,
+    -(-aUpper - aLower + bUpper) - (aUpper - aUpper + bUpper),
+    -bUpper + aUpper + aLower - aUpper + aUpper - bUpper,
+    (-bUpper - bUpper + aUpper) + (aUpper + aLower - aUpper))
+
+  setTest(1,
+    aUpper + aLower - aLower, aUpper)
+  setTest(1,
+    aUpper + aLower + aUpper + bUpper + bLower - aLower,
+    aUpper + aUpper + bUpper + bLower)
+  setTest(1,
+    aUpper + (aLower + aUpper + bUpper) + bLower - aLower - (aUpper + bUpper),
+    aUpper + bLower)
+  setTest(1,
+    aUpper + aLower - aUpper - aLower - bUpper,
+    -bUpper)
+  setTest(1,
+    aUpper + aLower - aUpper - aLower,
+    0)
+
+  // Canonicalize the expressions composed of `Multiply` and `Divide`.
+  setTest(1,
+    aUpper * bLower / bLower,
+    aUpper)
+  setTest(1,
+    aUpper * bLower * bUpper * bUpper * aLower / bUpper,
+    aUpper * bLower * bUpper * aLower)
+  setTest(1,
+    (aUpper + bUpper) * (bLower * bUpper) * bUpper * aLower / bUpper / (bLower * bUpper),
+    (aUpper + bUpper) * aLower)
+  setTest(1,
+    aUpper * bLower * bUpper / aUpper / bLower / bUpper,
+    aUpper * bLower / aUpper * bUpper / bLower / bUpper,
+    Literal(1))
+  setTest(1,
+    aUpper * bLower * bUpper / aUpper / bLower / bUpper / (aUpper + aLower),
+    aUpper / aUpper * bLower * bUpper / bLower / (aUpper + aLower) / bUpper,
+    Literal(1) / (aUpper + aLower))
+
   test("add to / remove from set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)
 
