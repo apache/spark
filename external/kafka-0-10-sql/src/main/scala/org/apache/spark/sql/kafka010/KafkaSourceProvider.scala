@@ -84,8 +84,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     val startingStreamOffsets =
       caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim) match {
-        case a @ Some(offset) if offset.toLowerCase.equals("latest") => LatestOffsetRangeLimit
-        case a @ Some(offset) if offset.toLowerCase.equals("earliest") => EarliestOffsetRangeLimit
+        case Some(offset) if offset.toLowerCase == "latest" => LatestOffsetRangeLimit
+        case Some(offset) if offset.toLowerCase == "earliest" => EarliestOffsetRangeLimit
         case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
         case None => LatestOffsetRangeLimit
       }
@@ -130,14 +130,14 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     val startingRelationOffsets =
       caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim) match {
-        case a @ Some(offset) if offset.toLowerCase.equals("earliest") => EarliestOffsetRangeLimit
+        case Some(offset) if offset.toLowerCase == "earliest" => EarliestOffsetRangeLimit
         case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
         case None => EarliestOffsetRangeLimit
       }
 
     val endingRelationOffsets =
       caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim) match {
-        case a @ Some(offset) if offset.toLowerCase.equals("latest") => LatestOffsetRangeLimit
+        case Some(offset) if offset.toLowerCase == "latest" => LatestOffsetRangeLimit
         case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
         case None => LatestOffsetRangeLimit
       }
@@ -389,11 +389,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   private def validateBatchOptions(caseInsensitiveParams: Map[String, String]) = {
     // Batch specific options
     caseInsensitiveParams.get(STARTING_OFFSETS_OPTION_KEY).map(_.trim) match {
-      case a @ Some(offset) if offset.toLowerCase.equals("earliest") => // good to go
-      case a @ Some(offset) if offset.toLowerCase.equals("latest") =>
+      case Some(offset) if offset.toLowerCase == "earliest" => // good to go
+      case Some(offset) if offset.toLowerCase == "latest" =>
         throw new IllegalArgumentException("starting offset can't be latest " +
           "for batch queries on Kafka")
-      case Some(json) => (SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json)))
+      case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
         .partitionOffsets.foreach {
           case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
             throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
@@ -404,11 +404,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_.trim) match {
-      case a @ Some(offset) if offset.toLowerCase.equals("earliest") =>
+      case Some(offset) if offset.toLowerCase == "earliest" =>
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
-      case a @ Some(offset) if offset.toLowerCase.equals("latest") => // good to go
-      case Some(json) => (SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json)))
+      case Some(offset) if offset.toLowerCase == "latest" => // good to go
+      case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
         .partitionOffsets.foreach {
           case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
             throw new IllegalArgumentException(s"ending offset for $tp can't be " +
@@ -432,7 +432,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     def set(key: String, value: Object): this.type = {
       map.put(key, value)
-      logInfo(s"$module: Set $key to $value, earlier value: ${kafkaParams.get(key).getOrElse("")}")
+      logInfo(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
       this
     }
 
