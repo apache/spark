@@ -81,4 +81,13 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Stack(Seq(Literal(1), Literal(1), Literal(1.0))).checkInputDataTypes().isSuccess)
     assert(Stack(Seq(Literal(2), Literal(1), Literal(1.0))).checkInputDataTypes().isFailure)
   }
+
+  test("SPARK-19910 `stack` should not reject NULL values due to type mismatch") {
+    assert(Stack(Seq(3, 1, 2, null).map(Literal(_))).checkInputDataTypes().isSuccess)
+    assert(Stack(Seq(3, 1, null, 3).map(Literal(_))).checkInputDataTypes().isSuccess)
+    assert(Stack(Seq(3, null, 2, 3).map(Literal(_))).checkInputDataTypes().isSuccess)
+    assert(Stack(Seq(3, null, 2, 3).map(Literal(_))).elementSchema.head.dataType == IntegerType)
+    assert(Stack(Seq(3, null, 2, "3").map(Literal(_))).checkInputDataTypes().isFailure)
+    assert(Stack(Seq(3, null, "2", 3).map(Literal(_))).checkInputDataTypes().isFailure)
+  }
 }

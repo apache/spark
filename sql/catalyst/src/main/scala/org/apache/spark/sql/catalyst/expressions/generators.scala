@@ -146,7 +146,8 @@ case class Stack(children: Seq[Expression]) extends Generator {
     } else {
       for (i <- 1 until children.length) {
         val j = (i - 1) % numFields
-        if (children(i).dataType != elementSchema.fields(j).dataType) {
+        if (children(i).dataType != NullType &&
+          children(i).dataType != elementSchema.fields(j).dataType) {
           return TypeCheckResult.TypeCheckFailure(
             s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
               s"Argument $i (${children(i).dataType})")
@@ -156,9 +157,21 @@ case class Stack(children: Seq[Expression]) extends Generator {
     }
   }
 
+  private def findDataType(column: Integer): DataType = {
+    // Find the first data type except NullType
+    for (i <- (column + 1) until children.length by numFields) {
+      if (children(i).dataType != NullType) {
+        return children(i).dataType
+      }
+    }
+    // If all values of the column are NullType, use it.
+    children(column + 1).dataType
+  }
+
   override def elementSchema: StructType =
     StructType(children.tail.take(numFields).zipWithIndex.map {
-      case (e, index) => StructField(s"col$index", e.dataType)
+      case (e, index) if e.dataType != NullType => StructField(s"col$index", e.dataType)
+      case (_, index) => StructField(s"col$index", findDataType(index))
     })
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
