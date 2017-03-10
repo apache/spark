@@ -75,6 +75,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
 
+  private val gpuCores = conf.getInt("spark.mesos.gpus", 0)
+
   private val taskLabels = conf.get("spark.mesos.task.labels", "")
 
   private[this] val shutdownTimeoutMS =
@@ -398,9 +400,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           launchTasks = true
           val taskId = newMesosTaskId()
           val offerCPUs = getResource(resources, "cpus").toInt
-          val taskGPUs = Math.min(
-            Math.max(0, maxGpus - totalGpusAcquired), getResource(resources, "gpus").toInt)
-
+          var taskGPUs = Math.min(Math.max(0, maxGpus - totalGpusAcquired),
+                                  getResource(resources, "gpus").toInt)
+          if (gpuCores > 0) {
+            taskGPUs = gpuCores
+          }
           val taskCPUs = executorCores(offerCPUs)
           val taskMemory = executorMemory(sc)
 
@@ -482,6 +486,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
     val offerMem = getResource(resources, "mem")
     val offerCPUs = getResource(resources, "cpus").toInt
+    val offerGPUs = getResource(resources, "gpus").toInt
     val cpus = executorCores(offerCPUs)
     val mem = executorMemory(sc)
     val ports = getRangeResource(resources, "ports")
@@ -491,6 +496,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus <= offerCPUs &&
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
+      gpuCores <= offerGPUs &&
       numExecutors() < executorLimit &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
       meetsPortRequirements
