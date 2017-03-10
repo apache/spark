@@ -30,6 +30,10 @@ dependencies:
     #- PYENV_VERSION=pypy-4.0.1 pip install numpy
   override:
     - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
+  cache_directories:
+    - "build/zinc-0.3.11"
+    - "build/apache-maven-3.3.9"
+    - "build/scala-2.11.8"
 
 general:
   artifacts:
