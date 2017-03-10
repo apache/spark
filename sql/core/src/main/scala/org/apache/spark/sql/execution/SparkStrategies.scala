@@ -329,23 +329,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Strategy to convert [[FlatMapGroupsWithState]] logical operator to physical operator
    * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
    */
-  object MapGroupsWithStateStrategy extends Strategy {
+  object FlatMapGroupsWithStateStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
-          f,
-          keyDeser,
-          valueDeser,
-          groupAttr,
-          dataAttr,
-          outputAttr,
-          stateEnc,
-          outputMode,
-          _,
-          timeout,
-          child) =>
+        func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
+        timeout, child) =>
         val execPlan = FlatMapGroupsWithStateExec(
-          f, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, outputMode,
-          timeout, -1, planLater(child))
+          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, outputMode,
+          timeout, batchTimestampMs = KeyedStateImpl.NO_BATCH_PROCESSING_TIMESTAMP,
+          planLater(child))
         execPlan :: Nil
       case _ =>
         Nil

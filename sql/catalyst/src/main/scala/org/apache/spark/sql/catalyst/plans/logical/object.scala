@@ -354,6 +354,7 @@ object FlatMapGroupsWithState {
  * Func is invoked with an object representation of the grouping key an iterator containing the
  * object representation of all the rows with that key.
  *
+ * @param func function called on each group
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
  * @param groupingAttributes used to group the data
@@ -362,7 +363,7 @@ object FlatMapGroupsWithState {
  * @param stateEncoder used to serialize/deserialize state before calling `func`
  * @param outputMode the output mode of `func`
  * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
- * @param timeout used to timeout a groups that has not received data in a while
+ * @param timeout used to timeout groups that have not received data in a while
  */
 case class FlatMapGroupsWithState(
     func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],

@@ -22,7 +22,16 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.sql.streaming.KeyedState
 import org.apache.spark.unsafe.types.CalendarInterval
 
-/** Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe. */
+/**
+ * Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe.
+ * @param optionalValue Optional value of the state
+ * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
+ *                              for processing time timeouts
+ * @param isTimeoutEnabled Whether timeout is enabled. This will be used to check whether the user
+ *                         is allowed to configure timeouts.
+ * @param isTimingOut     Whether the key for which this state wrapped is being created is
+ *                        getting timed out or not.
+ */
 private[sql] class KeyedStateImpl[S](
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
@@ -73,6 +82,7 @@ private[sql] class KeyedStateImpl[S](
     defined = false
     updated = false
     removed = true
+    timeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
   }
 
   override def setTimeoutDuration(durationMs: Long): Unit = {
@@ -83,7 +93,7 @@ private[sql] class KeyedStateImpl[S](
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
     }
-    if (batchProcessingTimeMs != NO_BATCH_PROCESSING_TIMESTAMP) {
+    if (!removed && batchProcessingTimeMs != NO_BATCH_PROCESSING_TIMESTAMP) {
       timeoutTimestamp = durationMs + batchProcessingTimeMs
     } else {
       // This is being called in a batch query, hence no processing timestamp.
@@ -135,6 +145,10 @@ private[sql] class KeyedStateImpl[S](
 
 
 private[sql] object KeyedStateImpl {
-  val TIMEOUT_TIMESTAMP_NOT_SET = -1
-  val NO_BATCH_PROCESSING_TIMESTAMP = -1
+  // Value used in the state row to represent the lack of any timeout timestamp
+  val TIMEOUT_TIMESTAMP_NOT_SET = -1L
+
+  // Value to represent that no batch processing timestamp is passed to KeyedStateImpl. This is
+  // used in batch queries where there are no streaming batches and timeouts.
+  val NO_BATCH_PROCESSING_TIMESTAMP = -1L
 }

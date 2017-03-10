@@ -43,7 +43,7 @@ class IncrementalExecution(
   // TODO: make this always part of planning.
   val streamingExtraStrategies =
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
-    sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
+    sparkSession.sessionState.planner.FlatMapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.planner.StreamingDeduplicationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies

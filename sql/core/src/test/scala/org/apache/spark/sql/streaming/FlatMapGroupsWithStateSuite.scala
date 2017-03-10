@@ -90,30 +90,45 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   test("KeyedState - isTimingOut, setTimeoutDuration") {
     import KeyedStateImpl._
-    var state: KeyedStateImpl[String] = null
-    state = new KeyedStateImpl[String](None)
+    var state: KeyedStateImpl[Int] = null
 
-    assert(state.isTimingOut === false)
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    intercept[UnsupportedOperationException] {
+    for (initState <- Seq(None, Some(5))) { // for different initial state
+
+      // When isTimeoutEnabled = false, then setTimeoutDuration() is not allowed
+      state = new KeyedStateImpl(None)
+      assert(state.isTimingOut === false)
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+      intercept[UnsupportedOperationException] {
+        state.setTimeoutDuration(1000)
+      }
+      intercept[UnsupportedOperationException] {
+        state.setTimeoutDuration("1 day")
+      }
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+
+      // When isTimeoutEnabled = true, then setTimeoutDuration() is allowed, and
+      // getTimeoutTimestamp returned correct timestamp
+      state = new KeyedStateImpl(initState, 1000, isTimeoutEnabled = true, isTimingOut = false)
+      assert(state.isTimingOut === false)
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
       state.setTimeoutDuration(1000)
-    }
-    intercept[UnsupportedOperationException] {
-      state.setTimeoutDuration("1 day")
-    }
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+      assert(state.getTimeoutTimestamp === 2000)
+      state.setTimeoutDuration("2 second")
+      assert(state.getTimeoutTimestamp === 3000)
+      assert(state.isTimingOut === false)
+      // Test isTimingOut = true
+      state = new KeyedStateImpl(None, 1000, isTimeoutEnabled = true, isTimingOut = true)
+      assert(state.isTimingOut === true)
 
-    state = new KeyedStateImpl[String](None, 1000, isTimeoutEnabled = true, isTimingOut = false)
-    assert(state.isTimingOut === false)
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    state.setTimeoutDuration(1000)
-    assert(state.getTimeoutTimestamp === 2000)
-    state.setTimeoutDuration("2 second")
-    assert(state.getTimeoutTimestamp === 3000)
-    assert(state.isTimingOut === false)
-
-    state = new KeyedStateImpl[String](None, 1000, isTimeoutEnabled = true, isTimingOut = true)
-    assert(state.isTimingOut === true)
+      // Test setTimeoutDuration() after remove() does not throw any error
+      state = new KeyedStateImpl(None, 1000, isTimeoutEnabled = true, isTimingOut = false)
+      state.remove()
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+      state.setTimeoutDuration(1000)
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+      state.setTimeoutDuration("2 second")
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    }
   }
 
   test("KeyedState - primitive type") {
@@ -133,7 +148,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-
+  // Values used for testing StateStoreUpdater
   val currentTimestamp = 1000
   val beforeCurrentTimestamp = 999
   val afterCurrentTimestamp = 1001
@@ -227,7 +242,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-
   // Tests for StateStoreUpdater.updateStateForTimedOutKeys()
   val preTimeoutState = Some(5)
 
@@ -278,7 +292,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     stateUpdates = state => { state.remove(); state.setTimeoutDuration(2000) },
     priorTimeoutTimestamp = beforeCurrentTimestamp,
     expectedState = None)                                     // state should be removed
-
 
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
@@ -633,7 +646,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedTimeoutTimestamp: Long): Unit = {
 
     val store = newStore()
-
     val result = MemoryStream[Int]
       .toDS
       .groupByKey(x => x)
@@ -653,6 +665,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       store.put(row.copy())
     }
 
+    // Call updating function to update state store
     val returnedIter = if (testTimeoutUpdates) {
       updater.updateStateForTimedOutKeys()
     } else {

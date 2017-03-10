@@ -144,14 +144,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     assertSupportedInBatchPlan(
       s"flatMapGroupsWithState - flatMapGroupsWithState($funcMode) on batch relation",
       FlatMapGroupsWithState(
-        null, att, att, Seq(att), Seq(att), att, null, funcMode, false, null, batchRelation))
+        null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false, null,
+        batchRelation))
 
     assertSupportedInBatchPlan(
       s"flatMapGroupsWithState - multiple flatMapGroupsWithState($funcMode)s on batch relation",
       FlatMapGroupsWithState(
-        null, att, att, Seq(att), Seq(att), att, null, funcMode, false, null,
+        null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false, null,
         FlatMapGroupsWithState(
-          null, att, att, Seq(att), Seq(att), att, null, funcMode, false, null, batchRelation)))
+          null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false,
+          null, batchRelation)))
   }
 
   // FlatMapGroupsWithState(Update) in streaming without aggregation
@@ -159,14 +161,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     "flatMapGroupsWithState - flatMapGroupsWithState(Update) " +
       "on streaming relation without aggregation in update mode",
     FlatMapGroupsWithState(
-      null, att, att, Seq(att), Seq(att), att, null, Update, false, null, streamRelation),
+      null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
+      streamRelation),
     outputMode = Update)
 
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Update) " +
       "on streaming relation without aggregation in append mode",
     FlatMapGroupsWithState(
-      null, att, att, Seq(att), Seq(att), att, null, Update, false, null, streamRelation),
+      null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
+      streamRelation),
     outputMode = Append,
     expectedMsgs = Seq("flatMapGroupsWithState in update mode", "Append"))
 
@@ -174,7 +178,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     "flatMapGroupsWithState - flatMapGroupsWithState(Update) " +
       "on streaming relation without aggregation in complete mode",
     FlatMapGroupsWithState(
-      null, att, att, Seq(att), Seq(att), att, null, Update, false, null, streamRelation),
+      null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
+      streamRelation),
     outputMode = Complete,
     // Disallowed by the aggregation check but let's still keep this test in case it's broken in
     // future.
@@ -186,7 +191,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       "flatMapGroupsWithState - flatMapGroupsWithState(Update) on streaming relation " +
         s"with aggregation in $outputMode mode",
       FlatMapGroupsWithState(
-        null, att, att, Seq(att), Seq(att), att, null, Update, false, null,
+        null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
         Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
       outputMode = outputMode,
       expectedMsgs = Seq("flatMapGroupsWithState in update mode", "with aggregation"))
@@ -197,14 +202,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
       "on streaming relation without aggregation in append mode",
     FlatMapGroupsWithState(
-      null, att, att, Seq(att), Seq(att), att, null, Append, false, null, streamRelation),
+      null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
+      streamRelation),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
       "on streaming relation without aggregation in update mode",
     FlatMapGroupsWithState(
-      null, att, att, Seq(att), Seq(att), att, null, Append, false, null, streamRelation),
+      null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
+      streamRelation),
     outputMode = Update,
     expectedMsgs = Seq("flatMapGroupsWithState in append mode", "update"))
 
@@ -251,7 +258,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         s"flatMapGroupsWithState - flatMapGroupsWithState($funcMode) on batch relation inside " +
           s"streaming relation in $outputMode output mode",
         FlatMapGroupsWithState(
-          null, att, att, Seq(att), Seq(att), att, null, funcMode, false, null, batchRelation),
+          null, att, att, Seq(att), Seq(att), att, null, funcMode, isMapGroupsWithState = false,
+          null, batchRelation),
         outputMode = outputMode
       )
     }
@@ -307,7 +315,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         s"with aggregation in $outputMode mode",
       FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
         isMapGroupsWithState = true, null,
-          Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
       outputMode = outputMode,
       expectedMsgs = Seq("mapGroupsWithState", "with aggregation"))
   }

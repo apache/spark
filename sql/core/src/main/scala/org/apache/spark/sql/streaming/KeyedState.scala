@@ -76,10 +76,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *    duration every time the function is called, otherwise there will not be any timeout set.
  *  - Guarantees provided on processing-time-based timeout of key, when timeout duration is D ms:
  *    - Timeout will never be called before real clock time has advanced by D ms
- *    - Timeout will be called eventually when there is a trigger with any data in it
+ *    - Timeout will be called eventually when there is a trigger in the query
  *      (i.e. after D ms). So there is a no strict upper bound on when the timeout would occur.
- *      For example, if there is no data in the stream (for any key) for a while,
- *      then the timeout will not be hit.
+ *      For example, the trigger interval of the query will affect when the timeout is actually hit.
+ *      If there is no data in the stream (for any key) for a while, then their will not be
+ *      any trigger and timeout will not be hit until there is data.
  *
  * Scala example of using KeyedState in `mapGroupsWithState`:
  * {{{
@@ -169,7 +170,7 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   @throws[IllegalArgumentException]("when updating with null")
   def update(newState: S): Unit
 
-  /** Remove this keyed state. */
+  /** Remove this keyed state. Note that this resets any timeout configuration as well. */
   def remove(): Unit
 
   /**
