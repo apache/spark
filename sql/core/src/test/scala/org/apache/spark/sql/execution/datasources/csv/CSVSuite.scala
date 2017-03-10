@@ -470,10 +470,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val df1 = Seq(
         """You are "beautiful"""",
         """Yes, \"inside"\""",
-        """AA\"BB""",              // 1 escape char anc 1 quote char
-        """AA\\"BB""",             // 2 escape char and 1 quote char
-        """AA\"\"\"\"\"BB""",      // (1 escape char anc 1 quote char) * 5
-        """AA\\"\\"\\"\\"\\"BB"""  // (2 escape char and 1 quote char) * 5
+        """AA\"BB""",                   // 1 escape char and 1 quote char
+        """AA\""BB""",                  // 1 escape char and 2 quote char
+        """AA\\"BB""",                  // 2 escape char and 1 quote char
+        """AA\\""BB""",                 // 2 escape char and 2 quote char
+        """AA\"\"\"\"\"BB""",           // (1 escape char and 1 quote char) * 5
+        """AA\""\""\""\""\""BB""",      // (1 escape char and 2 quote char) * 5
+        """AA\\"\\"\\"\\"\\"BB""",      // (2 escape char and 1 quote char) * 5
+        """AA\\""\\""\\""\\""\\""BB"""  // (2 escape char and 2 quote char) * 5
       ).toDF()
 
       // escapeQuotes should be true by default
