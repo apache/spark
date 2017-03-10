@@ -91,11 +91,9 @@ private[memory] class ExecutionMemoryPool(
   private[memory] def acquireMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      maybeGrowPool: Long => Unit = (additionalSpaceNeeded: Long) => Unit,
-      computeMaxPoolSize: () => Long = () => poolSize): Long = lock.synchronized {
+      maybeGrowPool: Option[Long => Unit] = None,
+      computeMaxPoolSize: Option[() => Long] = None): Long = lock.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
-
-    // TODO: clean up this clunky method signature
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
     // of active tasks, to let other tasks ramp down their memory in calls to `acquireMemory`
@@ -116,14 +114,17 @@ private[memory] class ExecutionMemoryPool(
       // In every iteration of this loop, we should first try to reclaim any borrowed execution
       // space from storage. This is necessary because of the potential race condition where new
       // storage blocks may steal the free execution memory that this task was waiting for.
-      maybeGrowPool(numBytes - memoryFree)
+      maybeGrowPool.map(f => f(numBytes - memoryFree))
 
       // Maximum size the pool would have after potentially growing the pool.
       // This is used to compute the upper bound of how much memory each task can occupy. This
       // must take into account potential free memory as well as the amount this pool currently
       // occupies. Otherwise, we may run into SPARK-12155 where, in unified memory management,
       // we did not take into account space that could have been freed by evicting cached blocks.
-      val maxPoolSize = computeMaxPoolSize()
+      val maxPoolSize = computeMaxPoolSize match {
+        case None => poolSize
+        case Some(func) => func()
+      }
       val maxMemoryPerTask = maxPoolSize / numActiveTasks
       val minMemoryPerTask = poolSize / (2 * numActiveTasks)
 
