@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.util.Properties
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,6 +30,16 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
+/**
+ * A [[TaskContext]] implementation.
+ *
+ * A small note on thread safety. The interrupted, completed, failed and fetchFailed fields are
+ * volatile, this makes sure that updates are always visible across threads. We synchronize on the
+ * context instance when it is marked as completed (or failed) and the relevant callback are
+ * invoked. We also synchronize on the context instance when a callback is added. This ensures
+ * that we cannot add a callback in one thread, while we are invoking those callbacks in another
+ * thread. Other methods are not thread safe.
+ */
 private[spark] class TaskContextImpl(
     val stageId: Int,
     val partitionId: Int,
@@ -61,53 +72,61 @@ private[spark] class TaskContextImpl(
   // hide the exception.  See SPARK-19276
   @volatile private var _fetchFailedException: Option[FetchFailedException] = None
 
+  @GuardedBy("this")
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
-    onCompleteCallbacks += listener
-    this
+    synchronized {
+      onCompleteCallbacks += listener
+      this
+    }
   }
 
+  @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
-    onFailureCallbacks += listener
-    this
+    synchronized {
+      onFailureCallbacks += listener
+      this
+    }
   }
 
   /** Marks the task as failed and triggers the failure listeners. */
+  @GuardedBy("this")
   private[spark] def markTaskFailed(error: Throwable): Unit = {
-    // failure callbacks should only be called once
     if (failed) return
     failed = true
-    val errorMsgs = new ArrayBuffer[String](2)
-    // Process failure callbacks in the reverse order of registration
-    onFailureCallbacks.reverse.foreach { listener =>
-      try {
-        listener.onTaskFailure(this, error)
-      } catch {
-        case e: Throwable =>
-          errorMsgs += e.getMessage
-          logError("Error in TaskFailureListener", e)
-      }
-    }
-    if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs, Option(error))
+    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+      _.onTaskFailure(this, error)
     }
   }
 
   /** Marks the task as completed and triggers the completion listeners. */
+  @GuardedBy("this")
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
-    val errorMsgs = new ArrayBuffer[String](2)
-    // Process complete callbacks in the reverse order of registration
-    onCompleteCallbacks.reverse.foreach { listener =>
-      try {
-        listener.onTaskCompletion(this)
-      } catch {
-        case e: Throwable =>
-          errorMsgs += e.getMessage
-          logError("Error in TaskCompletionListener", e)
-      }
+    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", None) {
+      _.onTaskCompletion(this)
     }
-    if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs)
+  }
+
+  private def invokeListeners[T](
+      listeners: Seq[T],
+      name: String,
+      error: Option[Throwable])(
+      callback: T => Unit): Unit = {
+    val errorMsgs = new ArrayBuffer[String](2)
+    // Process callbacks in the reverse order of registration
+    synchronized {
+      listeners.reverse.foreach { listener =>
+        try {
+          callback(listener)
+        } catch {
+          case e: Throwable =>
+            errorMsgs += e.getMessage
+            logError(s"Error in $name", e)
+        }
+        if (errorMsgs.nonEmpty) {
+          throw new TaskCompletionListenerException(errorMsgs, error)
+        }
+      }
     }
   }
 
