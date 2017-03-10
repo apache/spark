@@ -572,7 +572,7 @@ Kafka's own configurations can be set via `DataStreamReader.option` with `kafka.
 read related parameters, and [Kafka producer config docs](http://kafka.apache.org/documentation/#producerconfigs)
 for write related parameters.
 
-Note that the following Kafka params cannot be set and the Kafka source will throw an exception:
+Note that the following Kafka params cannot be set and the Kafka source or sink will throw an exception:
 
 - **group.id**: Kafka source will create a unique group id for each query automatically.
 - **auto.offset.reset**: Set the source option `startingOffsets` to specify
