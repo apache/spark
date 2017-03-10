@@ -60,7 +60,6 @@ object SimpleAnalyzer extends Analyzer(
  *                        current catalog database.
  * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
  *                        depth of nested views.
- *                        TODO Limit the depth of nested views.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
@@ -598,6 +597,11 @@ class Analyzer(
       case view @ View(desc, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
+          if (AnalysisContext.get.nestedViewLevel > conf.maxNestedViewDepth) {
+            view.failAnalysis(s"The nested level of view ${view.desc.identifier} has exceeded " +
+              s"${conf.maxNestedViewDepth}, terminate the view resolution to avoid further " +
+              "errors.")
+          }
           execute(child)
         }
         view.copy(child = newChild)

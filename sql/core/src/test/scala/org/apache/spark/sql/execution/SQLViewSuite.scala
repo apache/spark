@@ -644,4 +644,22 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         "-> `default`.`view2` -> `default`.`view1`)"))
     }
   }
+
+  test("restrict the nested level of a view") {
+    val viewNames = Array.range(0, 11).map(idx => s"view$idx")
+    withView(viewNames: _*) {
+      sql("CREATE VIEW view0 AS SELECT * FROM jt")
+      Array.range(0, 10).foreach { idx =>
+        sql(s"CREATE VIEW view${idx + 1} AS SELECT * FROM view$idx")
+      }
+
+      withSQLConf("spark.sql.view.maxNestedViewDepth" -> "10") {
+        val e = intercept[AnalysisException] {
+          sql("SELECT * FROM view10")
+        }.getMessage
+        assert(e.contains("The nested level of view `default`.`view0` has exceeded 10, " +
+          "terminate the view resolution to avoid further errors."))
+      }
+    }
+  }
 }
