@@ -22,7 +22,18 @@ dependencies:
     - PYENV_VERSION=3.4.4 pip install numpy
     #- PYENV_VERSION=pypy-4.0.1 pip install numpy
   override:
+    - |
+      if [[ -d build_classes ]]; then
+        # Copy contents into current build directory
+        rsync -a build_classes/ .
+      fi
     - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
+      # Copy all of */target/scala_2.11/classes to build_classes/
+    - >
+      rsync --info=progress2 -a --delete-excluded --prune-empty-dirs --exclude build_classes/ --include '**/target/scala-2.1?/***'
+      --include '**/target/analysis/***' --include '**/' --exclude '*' . build_classes/
+  cache_directories:
+    - "build_classes"
 
 general:
   artifacts:
@@ -47,15 +58,16 @@ test:
             echo "</server></servers></settings>" >> $tmp_settings
 
             ./build/mvn versions:set -DnewVersion=$version
-            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr clean deploy
+            ./build/mvn --settings $tmp_settings -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr deploy
           }
 
           make_dist() {
             dist_name="$1"
             build_flags="$2"
+            shift 2
             dist_version="${version}-${dist_name}"
             file_name="spark-dist-${dist_version}.tgz"
-            ./dev/make-distribution.sh --name $dist_name --tgz $build_flags
+            ./dev/make-distribution.sh --name $dist_name --tgz "$@" $build_flags
             curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/spark-dist/${dist_version}/${file_name}"
           }
 
@@ -67,7 +79,7 @@ test:
             make_dist hadoop-2.8.0-palantir2 "-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
             ;;
           2)
-            make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr"
+            make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr" --clean
             ;;
           esac
       :
