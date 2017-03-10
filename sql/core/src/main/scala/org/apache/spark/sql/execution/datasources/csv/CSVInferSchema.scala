@@ -90,7 +90,9 @@ private[csv] object CSVInferSchema {
           // DecimalTypes have different precisions and scales, so we try to find the common type.
           findTightestCommonType(typeSoFar, tryParseDecimal(field, options)).getOrElse(StringType)
         case DoubleType => tryParseDouble(field, options)
-        case TimestampType => tryParseTimestamp(field, options)
+        case DateType => tryParseDate(field, options)
+        case TimestampType =>
+          findTightestCommonType(typeSoFar, tryParseTimestamp(field, options)).getOrElse(StringType)
         case BooleanType => tryParseBoolean(field, options)
         case StringType => StringType
         case other: DataType =>
@@ -141,16 +143,25 @@ private[csv] object CSVInferSchema {
     if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
       DoubleType
     } else {
+      tryParseDate(field, options)
+    }
+  }
+
+  private def tryParseDate(field: String, options: CSVOptions): DataType = {
+    // This case infers a custom `dateFormat` is set.
+    if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
+      DateType
+    } else {
       tryParseTimestamp(field, options)
     }
   }
 
   private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
-    // This case infers a custom `dataFormat` is set.
+    // This case infers a custom `timestampFormat` is set.
     if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
       TimestampType
     } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-      // We keep this for backwords competibility.
+      // We keep this for backwards compatibility.
       TimestampType
     } else {
       tryParseBoolean(field, options)
@@ -216,6 +227,8 @@ private[csv] object CSVInferSchema {
       } else {
         Some(DecimalType(range + scale, scale))
       }
+    // By design 'TimestampType' (8 bytes) is larger than 'DateType' (4 bytes).
+    case (t1: DateType, t2: TimestampType) => Some(TimestampType)
 
     case _ => None
   }
