@@ -48,13 +48,11 @@ object PythonRunner extends CondaRunner with Logging {
       .orElse(sys.env.get("PYSPARK_PYTHON"))
 
     val pythonExec = maybeConda.map { conda =>
-      val actualBinFile = presetPythonExec.map { exec =>
-        require (!exec.contains("/"), s"It's forbidden to set the PYSPARK python path " +
-          s"to anything but a file name when using conda, but found: $exec")
-        exec
-      }.getOrElse("python")
-
-      conda.condaEnvDir + "/bin/" + actualBinFile
+      presetPythonExec.foreach { exec =>
+        sys.error(
+          s"It's forbidden to set the PYSPARK python path when using conda, but found: $exec")
+      }
+      conda.condaEnvDir + "/bin/python"
     }
       .orElse(presetPythonExec)
       .getOrElse("python")
