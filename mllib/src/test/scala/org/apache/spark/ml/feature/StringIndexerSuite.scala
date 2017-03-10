@@ -122,6 +122,86 @@ class StringIndexerSuite
     assert(output === expected)
   }
 
+  test("StringIndexer with a string input column with NULLs") {
+    val data: Seq[java.lang.String] = Seq("a", "b", "b", null)
+    val data2: Seq[java.lang.String] = Seq("a", "b", null)
+    val expectedSkip = Array(1.0, 0.0)
+    val expectedKeep = Array(1.0, 0.0, 2.0)
+    val df = data.toDF("label")
+    val df2 = data2.toDF("label")
+
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    withClue("StringIndexer should throw error when setHandleValid=error when given NULL values") {
+      intercept[SparkException] {
+        indexer.setHandleInvalid("error")
+        indexer.fit(df).transform(df2).collect()
+      }
+    }
+
+    indexer.setHandleInvalid("skip")
+    val transformedSkip = indexer.fit(df).transform(df2)
+    val attrSkip = Attribute
+      .fromStructField(transformedSkip.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrSkip.values.get === Array("b", "a"))
+    assert(transformedSkip.select("labelIndex").rdd.map { r =>
+      r.getDouble(0)
+    }.collect() === expectedSkip)
+
+    indexer.setHandleInvalid("keep")
+    val transformedKeep = indexer.fit(df).transform(df2)
+    val attrKeep = Attribute
+      .fromStructField(transformedKeep.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrKeep.values.get === Array("b", "a", "__unknown"))
+    assert(transformedKeep.select("labelIndex").rdd.map { r =>
+      r.getDouble(0)
+    }.collect() === expectedKeep)
+  }
+
+  test("StringIndexer with a numeric input column with NULLs") {
+    val data: Seq[Integer] = Seq(1, 2, 2, null)
+    val data2: Seq[Integer] = Seq(1, 2, null)
+    val expectedSkip = Array(1.0, 0.0)
+    val expectedKeep = Array(1.0, 0.0, 2.0)
+    val df = data.toDF("label")
+    val df2 = data2.toDF("label")
+
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    withClue("StringIndexer should throw error when setHandleValid=error when given NULL values") {
+      intercept[SparkException] {
+        indexer.setHandleInvalid("error")
+        indexer.fit(df).transform(df2).collect()
+      }
+    }
+
+    indexer.setHandleInvalid("skip")
+    val transformedSkip = indexer.fit(df).transform(df2)
+    val attrSkip = Attribute
+      .fromStructField(transformedSkip.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrSkip.values.get === Array("2", "1"))
+    assert(transformedSkip.select("labelIndex").rdd.map { r =>
+      r.getDouble(0)
+    }.collect() === expectedSkip)
+
+    indexer.setHandleInvalid("keep")
+    val transformedKeep = indexer.fit(df).transform(df2)
+    val attrKeep = Attribute
+      .fromStructField(transformedKeep.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrKeep.values.get === Array("2", "1", "__unknown"))
+    assert(transformedKeep.select("labelIndex").rdd.map { r =>
+      r.getDouble(0)
+    }.collect() === expectedKeep)
+  }
+
   test("StringIndexerModel should keep silent if the input column does not exist.") {
     val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
       .setInputCol("label")
