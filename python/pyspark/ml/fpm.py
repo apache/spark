@@ -24,28 +24,87 @@ __all__ = ["FPGrowth", "FPGrowthModel"]
 
 
 class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
-    """
+    """Model fitted by FPGrowth.
+
     .. versionadded:: 2.2.0
     """
     @property
     @since("2.2.0")
     def freqItemsets(self):
-        """
+        """DataFrame with two columns:
+        * `items` - Itemset of the same type as the input column.
+        * `freq`  - Frequency of the itemset (`LongType`).
         """
         return self._call_java("freqItemsets")
 
     @property
     @since("2.2.0")
     def associationRules(self):
-        """
-        """
+        """Data with three columns:
+        * `antecedent`  - Array of the same type as the input column.
+        * `consequent`  - Single element array of the same type as the input column.
+        * `confidence`  - Confidence for the rule (`DoubleType`)."""
         return self._call_java("associationRules")
 
 
 class FPGrowth(JavaEstimator, HasFeaturesCol, HasPredictionCol,
                HasSupport, HasConfidence, JavaMLWritable, JavaMLReadable):
-    """
-    A parallel FP-growth algorithm to mine frequent itemsets.
+    """A parallel FP-growth algorithm to mine frequent itemsets
+
+    * Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_
+    * Han et al., Mining frequent patterns without candidate generation [HAN2000]_
+
+    .. [LI2008] http://dx.doi.org/10.1145/1454008.1454027
+    .. [HAN2000] http://dx.doi.org/10.1145/335191.335372
+
+     .. note:: Internally `transform` `collects` and `broadcasts` association rules.
+
+    >>> from pyspark.sql.functions import split
+    >>> data = (spark.read
+    ...     .text("data/mllib/sample_fpgrowth.txt")
+    ...     .select(split("value", "\s+").alias("features")))
+    >>> data.show(truncate=False)
+    +------------------------+
+    |features                |
+    +------------------------+
+    |[r, z, h, k, p]         |
+    |[z, y, x, w, v, u, t, s]|
+    |[s, x, o, n, r]         |
+    |[x, z, y, m, t, s, q, e]|
+    |[z]                     |
+    |[x, z, y, r, q, t, p]   |
+    +------------------------+
+    >>> fp = FPGrowth(minSupport=0.2, minConfidence=0.7)
+    >>> fpm = fp.fit(data)
+    >>> fpm.freqItemsets.show(5)
+    +---------+----+
+    |    items|freq|
+    +---------+----+
+    |      [s]|   3|
+    |   [s, x]|   3|
+    |[s, x, z]|   2|
+    |   [s, z]|   2|
+    |      [r]|   3|
+    +---------+----+
+    only showing top 5 rows
+    >>> fpm.associationRules.show(5)
+    +----------+----------+----------+
+    |antecedent|consequent|confidence|
+    +----------+----------+----------+
+    |    [t, s]|       [y]|       1.0|
+    |    [t, s]|       [x]|       1.0|
+    |    [t, s]|       [z]|       1.0|
+    |       [p]|       [r]|       1.0|
+    |       [p]|       [z]|       1.0|
+    +----------+----------+----------+
+    only showing top 5 rows
+    >>> new_data = spark.createDataFrame([(["t", "s"], )], ["features"])
+    >>> fpm.transform(new_data).show(1, False)
+    +--------+---------------------+
+    |features|prediction           |
+    +--------+---------------------+
+    |[t, s]  |[y, x, z, x, y, x, z]|
+    +--------+---------------------+
 
     .. versionadded:: 2.2.0
     """
@@ -53,6 +112,8 @@ class FPGrowth(JavaEstimator, HasFeaturesCol, HasPredictionCol,
     def __init__(self, minSupport=0.3, minConfidence=0.8, featuresCol="features",
                  predictionCol="prediction", numPartitions=None):
         """
+        __init__(self, minSupport=0.3, minConfidence=0.8, featuresCol="features", \
+                 predictionCol="prediction", numPartitions=None)
         """
         super(FPGrowth, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
@@ -66,6 +127,8 @@ class FPGrowth(JavaEstimator, HasFeaturesCol, HasPredictionCol,
     def setParams(self, minSupport=0.3, minConfidence=0.8, featuresCol="features",
                   predictionCol="prediction", numPartitions=None):
         """
+        setParams(self, minSupport=0.3, minConfidence=0.8, featuresCol="features", \
+                  predictionCol="prediction", numPartitions=None)
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
