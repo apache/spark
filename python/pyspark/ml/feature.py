@@ -2077,8 +2077,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
-                    JavaMLWritable):
+class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
@@ -2098,6 +2097,14 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
+    >>> testData2 = sc.parallelize([Row(id=0, label="a"), Row(id=1, label="d"),
+    ...     Row(id=2, label="e")], 2)
+    >>> dfKeep= spark.createDataFrame(testData2)
+    >>> tdKeep = stringIndexer.setHandleInvalid("keep").fit(stringIndDf).transform(dfKeep)
+    >>> itdKeep = inverter.transform(tdKeep)
+    >>> sorted(set([(i[0], str(i[1])) for i in itdKeep.select(itdKeep.id, itdKeep.label2).collect()]),
+    ...     key=lambda x: x[0])
+    [(0, 'a'), (6, 'd'), (6, 'e')]
     >>> stringIndexerPath = temp_path + "/string-indexer"
     >>> stringIndexer.save(stringIndexerPath)
     >>> loadedIndexer = StringIndexer.load(stringIndexerPath)
@@ -2131,6 +2138,12 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
                             "ordering is assigned an index of 0. Supported options: " +
                             "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
                             typeConverter=TypeConverters.toString)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle unseen labels. " +
+                          "Options are 'skip' (filter out rows with unseen labels), " +
+                          "error (throw an error), or 'keep' (put unseen labels in a special " +
+                          "additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
@@ -2173,6 +2186,20 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
         """
         return self.getOrDefault(self.stringOrderType)
+
+    @since("2.2.0")
+    def setHandleInvalid(self, value):
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("2.2.0")
+    def getHandleInvalid(self):
+        """
+        Gets the value of :py:attr:`handleInvalid` or its default value.
+        """
+        return self.getOrDefault(self.handleInvalid)
 
 
 class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
