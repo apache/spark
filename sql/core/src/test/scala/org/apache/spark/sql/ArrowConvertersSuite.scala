@@ -392,6 +392,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   /**
    * Arrow JSON Format Data Generation
    * Referenced from https://github.com/apache/arrow/blob/master/integration/integration_test.py
+   * TODO: Look into using JSON generation from parquet-vector.jar
    */
 
   private abstract class DataType(name: String, nullable: Boolean) {

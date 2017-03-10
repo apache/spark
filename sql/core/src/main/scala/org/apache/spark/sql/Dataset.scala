@@ -2847,6 +2847,7 @@ class Dataset[T] private[sql](
       val converter = new ArrowConverters
       val payload = converter.interalRowIterToPayload(iter, schema_captured)
       val payloadBytes = ArrowConverters.payloadToByteArray(payload, schema_captured)
+      converter.close()
       Iterator(payloadBytes)
     }
   }
