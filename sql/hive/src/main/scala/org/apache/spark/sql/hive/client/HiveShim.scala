@@ -28,8 +28,10 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
+import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
@@ -81,6 +83,10 @@ private[client] sealed abstract class Shim {
   def getDriverResults(driver: Driver): Seq[String]
 
   def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long
+
+  def alterTable(hive: Hive, tableName: String, table: Table): Unit
+
+  def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit
 
   def createPartitions(
       hive: Hive,
@@ -240,6 +246,18 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       classOf[String],
       classOf[String],
       JBoolean.TYPE)
+  private lazy val alterTableMethod =
+    findMethod(
+      classOf[Hive],
+      "alterTable",
+      classOf[String],
+      classOf[Table])
+  private lazy val alterPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "alterPartitions",
+      classOf[String],
+      classOf[JList[Partition]])
 
   override def setCurrentSessionState(state: SessionState): Unit = {
     // Starting from Hive 0.13, setCurrentSessionState will internally override
@@ -371,6 +389,14 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       throw new UnsupportedOperationException("DROP TABLE ... PURGE")
     }
     hive.dropTable(dbName, tableName, deleteData, ignoreIfNotExists)
+  }
+
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    alterTableMethod.invoke(hive, tableName, table)
+  }
+
+  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
+    alterPartitionsMethod.invoke(hive, tableName, newParts)
   }
 
   override def dropPartition(
@@ -905,4 +931,108 @@ private[client] class Shim_v2_0 extends Shim_v1_2 {
       numDP: JInteger, listBucketingEnabled: JBoolean, JBoolean.FALSE, 0L: JLong)
   }
 
+}
+
+private[client] class Shim_v2_1 extends Shim_v2_0 {
+  private lazy val loadPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "loadPartition",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadTableMethod =
+    findMethod(
+      classOf[Hive],
+      "loadTable",
+      classOf[Path],
+      classOf[String],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JLong.TYPE,
+      JBoolean.TYPE,
+      classOf[AcidUtils.Operation])
+  private lazy val alterTableMethod =
+    findMethod(
+      classOf[Hive],
+      "alterTable",
+      classOf[String],
+      classOf[Table],
+      classOf[EnvironmentContext])
+  private lazy val alterPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "alterPartitions",
+      classOf[String],
+      classOf[JList[Partition]],
+      classOf[EnvironmentContext])
+
+  override def loadPartition(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      isSrcLocal: JBoolean, JBoolean.FALSE, JBoolean.FALSE)
+  }
+
+  override def loadTable(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, isSrcLocal: JBoolean,
+      JBoolean.FALSE, JBoolean.FALSE, JBoolean.FALSE)
+  }
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      listBucketingEnabled: Boolean): Unit = {
+    loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      numDP: JInteger, listBucketingEnabled: JBoolean, JBoolean.FALSE, 0L: JLong, JBoolean.FALSE,
+      AcidUtils.Operation.NOT_ACID)
+  }
+
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    // TODO: Now, always set environmentContext to null. In the future, we should avoid setting
+    // hive-generated stats to -1 when altering tables by using environmentContext. See Hive-12730
+    alterTableMethod.invoke(hive, tableName, table, null)
+  }
+
+  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
+    // TODO: Now, always set environmentContext to null. In the future, we should avoid setting
+    // hive-generated stats to -1 when altering tables by using environmentContext. See Hive-12730
+    alterPartitionsMethod.invoke(hive, tableName, newParts, null)
+  }
 }

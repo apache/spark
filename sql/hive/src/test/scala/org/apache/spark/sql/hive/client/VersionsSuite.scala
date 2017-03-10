@@ -89,7 +89,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0")
+  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1")
 
   private var client: HiveClient = null
 
@@ -101,7 +101,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       hadoopConf.set("test", "success")
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false since 2.0
       // For details, see the JIRA HIVE-6113
-      if (version == "2.0") {
+      if (version == "2.0" || version == "2.1") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
       }
       client = buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
