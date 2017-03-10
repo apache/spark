@@ -221,9 +221,10 @@ class SparkContext(object):
                                   'MODULE$')
 
         packagesSeq = self._conf.get(internal_config.CONDA_BOOTSTRAP_PACKAGES())
-        packagesList = self._jvm.scala.collection.JavaConversions.seqAsJavaList(packagesSeq)
-        # Add the bootstrap packages to the list to be installed on executors
-        self._conda_packages += (pkg for pkg in packagesList)
+        if packagesSeq is not None:
+            packagesList = self._jvm.scala.collection.JavaConversions.seqAsJavaList(packagesSeq)
+            # Add the bootstrap packages to the list to be installed on executors
+            self._conda_packages += (pkg for pkg in packagesList)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
