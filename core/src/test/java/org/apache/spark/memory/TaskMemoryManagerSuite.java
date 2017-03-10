@@ -17,6 +17,7 @@
 
 package org.apache.spark.memory;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -25,9 +26,18 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
 
+  static TaskMemoryManager manager;
+
+  @After
+  public void after() {
+    Assert.assertEquals(0, manager.getMemoryConsumptionForThisTask());
+    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    manager = null;
+  }
+
   @Test
   public void leakedPageMemoryIsDetected() {
-    final TaskMemoryManager manager = new TaskMemoryManager(
+    manager = new TaskMemoryManager(
       new StaticMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MAX_VALUE,
@@ -35,9 +45,10 @@ public class TaskMemoryManagerSuite {
         1),
       0);
     final MemoryConsumer c = new TestMemoryConsumer(manager);
-    manager.allocatePage(4096, c);  // leak memory
+    final MemoryBlock block = manager.allocatePage(4096, c);  // leak memory
     Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
+    manager.freePage(block, c);
   }
 
   @Test
@@ -45,7 +56,7 @@ public class TaskMemoryManagerSuite {
     final SparkConf conf = new SparkConf()
       .set("spark.memory.offHeap.enabled", "true")
       .set("spark.memory.offHeap.size", "1000");
-    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
@@ -58,7 +69,7 @@ public class TaskMemoryManagerSuite {
 
   @Test
   public void encodePageNumberAndOffsetOnHeap() {
-    final TaskMemoryManager manager = new TaskMemoryManager(
+    manager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
@@ -71,7 +82,7 @@ public class TaskMemoryManagerSuite {
   public void cooperativeSpilling() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    manager = new TaskMemoryManager(memoryManager, 0);
 
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
@@ -106,14 +117,13 @@ public class TaskMemoryManagerSuite {
 
     c1.free(0);
     c2.free(100);
-    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test
   public void cooperativeSpilling2() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    manager = new TaskMemoryManager(memoryManager, 0);
 
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
@@ -141,14 +151,13 @@ public class TaskMemoryManagerSuite {
     c1.free(0);
     c2.free(80);
     c3.free(10);
-    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test
   public void shouldNotForceSpillingInDifferentModes() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
-    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    manager = new TaskMemoryManager(memoryManager, 0);
 
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
@@ -170,7 +179,7 @@ public class TaskMemoryManagerSuite {
     final SparkConf conf = new SparkConf()
       .set("spark.unsafe.offHeap", "true")
       .set("spark.memory.offHeap.size", "1000");
-    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
+    manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     Assert.assertSame(MemoryMode.OFF_HEAP, manager.tungstenMemoryMode);
   }
 
