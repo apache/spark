@@ -147,7 +147,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  * @tparam S User-defined type of the state to be stored for each key. Must be encodable into
  *           Spark SQL types (see [[Encoder]] for more details).
- * @since 2.1.1
+ * @since 2.2.0
  */
 @Experimental
 @InterfaceStability.Evolving

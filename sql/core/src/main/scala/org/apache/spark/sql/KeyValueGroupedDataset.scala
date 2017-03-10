@@ -235,7 +235,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param func Function to be called on every group.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -270,7 +270,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param timeout Timeout information for groups that do not receive data for a while
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -307,7 +307,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputEncoder Encoder for the output type.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -338,7 +338,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param timeout Timeout information for groups that do not receive data for a while
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -368,7 +368,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputMode The output mode of the function.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -407,7 +407,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputMode The output mode of the function.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -435,7 +435,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputEncoder Encoder for the output type.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
@@ -470,7 +470,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputEncoder Encoder for the output type.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
-   * @since 2.1.1
+   * @since 2.2.0
    */
   @Experimental
   @InterfaceStability.Evolving
