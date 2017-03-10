@@ -143,8 +143,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.
    *
-   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
-   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
+   * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
+   * default. For JSON (one record per file), set the `wholeFile` option to true.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -261,6 +261,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
    *
    * @since 2.0.0

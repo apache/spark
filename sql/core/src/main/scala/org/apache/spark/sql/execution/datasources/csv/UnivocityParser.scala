@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.io.InputStream
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Locale
@@ -33,10 +34,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[csv] class UnivocityParser(
+class UnivocityParser(
     schema: StructType,
     requiredSchema: StructType,
-    options: CSVOptions) extends Logging {
+    private val options: CSVOptions) extends Logging {
   require(requiredSchema.toSet.subsetOf(schema.toSet),
     "requiredSchema should be the subset of schema.")
 
@@ -53,36 +54,77 @@ private[csv] class UnivocityParser(
 
   private val dataSchema = StructType(schema.filter(_.name != options.columnNameOfCorruptRecord))
 
-  private val valueConverters =
-    dataSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
-
-  private val parser = new CsvParser(options.asParserSettings)
+  private val tokenizer = new CsvParser(options.asParserSettings)
 
   private var numMalformedRecords = 0
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  // This parser loads an `indexArr._1`-th position value in input tokens,
-  // then put the value in `row(indexArr._2)`.
-  private val indexArr: Array[(Int, Int)] = {
-    val fields = if (options.dropMalformed) {
-      // If `dropMalformed` is enabled, then it needs to parse all the values
-      // so that we can decide which row is malformed.
-      requiredSchema ++ schema.filterNot(requiredSchema.contains(_))
-    } else {
-      requiredSchema
-    }
-    // TODO: Revisit this; we need to clean up code here for readability.
-    // See an URL below for related discussions:
-    // https://github.com/apache/spark/pull/16928#discussion_r102636720
-    val fieldsWithIndexes = fields.zipWithIndex
-    corruptFieldIndex.map { case corrFieldIndex =>
-      fieldsWithIndexes.filter { case (_, i) => i != corrFieldIndex }
-    }.getOrElse {
-      fieldsWithIndexes
-    }.map { case (f, i) =>
-      (dataSchema.indexOf(f), i)
-    }.toArray
+  // In `PERMISSIVE` parse mode, we should be able to put the raw malformed row into the field
+  // specified in `columnNameOfCorruptRecord`. The raw input is retrieved by this method.
+  private def getCurrentInput(): String = tokenizer.getContext.currentParsedContent().stripLineEnd
+
+  // This parser loads an `tokenIndexArr`-th position value in input tokens,
+  // then put the value in `row(rowIndexArr)`.
+  //
+  // For example, let's say there is CSV data as below:
+  //
+  //   a,b,c
+  //   1,2,A
+  //
+  // Also, let's say `columnNameOfCorruptRecord` is set to "_unparsed", `header` is `true`
+  // by user and the user selects "c", "b", "_unparsed" and "a" fields. In this case, we need
+  // to map those values below:
+  //
+  //   required schema - ["c", "b", "_unparsed", "a"]
+  //   CSV data schema - ["a", "b", "c"]
+  //   required CSV data schema - ["c", "b", "a"]
+  //
+  // with the input tokens,
+  //
+  //   input tokens - [1, 2, "A"]
+  //
+  // Each input token is placed in each output row's position by mapping these. In this case,
+  //
+  //   output row - ["A", 2, null, 1]
+  //
+  // In more details,
+  // - `valueConverters`, input tokens - CSV data schema
+  //   `valueConverters` keeps the positions of input token indices (by its index) to each
+  //   value's converter (by its value) in an order of CSV data schema. In this case,
+  //   [string->int, string->int, string->string].
+  //
+  // - `tokenIndexArr`, input tokens - required CSV data schema
+  //   `tokenIndexArr` keeps the positions of input token indices (by its index) to reordered
+  //   fields given the required CSV data schema (by its value). In this case, [2, 1, 0].
+  //
+  // - `rowIndexArr`, input tokens - required schema
+  //   `rowIndexArr` keeps the positions of input token indices (by its index) to reordered
+  //   field indices given the required schema (by its value). In this case, [0, 1, 3].
+  private val valueConverters: Array[ValueConverter] =
+    dataSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+
+  // Only used to create both `tokenIndexArr` and `rowIndexArr`. This variable means
+  // the fields that we should try to convert.
+  private val reorderedFields = if (options.dropMalformed) {
+    // If `dropMalformed` is enabled, then it needs to parse all the values
+    // so that we can decide which row is malformed.
+    requiredSchema ++ schema.filterNot(requiredSchema.contains(_))
+  } else {
+    requiredSchema
+  }
+
+  private val tokenIndexArr: Array[Int] = {
+    reorderedFields
+      .filter(_.name != options.columnNameOfCorruptRecord)
+      .map(f => dataSchema.indexOf(f)).toArray
+  }
+
+  private val rowIndexArr: Array[Int] = if (corruptFieldIndex.isDefined) {
+    val corrFieldIndex = corruptFieldIndex.get
+    reorderedFields.indices.filter(_ != corrFieldIndex).toArray
+  } else {
+    reorderedFields.indices.toArray
   }
 
   /**
@@ -188,21 +230,23 @@ private[csv] class UnivocityParser(
   }
 
   /**
-   * Parses a single CSV record (in the form of an array of strings in which
-   * each element represents a column) and turns it into either one resulting row or no row (if the
+   * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
    */
-  def parse(input: String): Option[InternalRow] = {
-    convertWithParseMode(input) { tokens =>
+  def parse(input: String): Option[InternalRow] = convert(tokenizer.parseLine(input))
+
+  private def convert(tokens: Array[String]): Option[InternalRow] = {
+    convertWithParseMode(tokens) { tokens =>
       var i: Int = 0
-      while (i < indexArr.length) {
-        val (pos, rowIdx) = indexArr(i)
+      while (i < tokenIndexArr.length) {
         // It anyway needs to try to parse since it decides if this row is malformed
         // or not after trying to cast in `DROPMALFORMED` mode even if the casted
         // value is not stored in the row.
-        val value = valueConverters(pos).apply(tokens(pos))
+        val from = tokenIndexArr(i)
+        val to = rowIndexArr(i)
+        val value = valueConverters(from).apply(tokens(from))
         if (i < requiredSchema.length) {
-          row(rowIdx) = value
+          row(to) = value
         }
         i += 1
       }
@@ -211,8 +255,7 @@ private[csv] class UnivocityParser(
   }
 
   private def convertWithParseMode(
-      input: String)(convert: Array[String] => InternalRow): Option[InternalRow] = {
-    val tokens = parser.parseLine(input)
+      tokens: Array[String])(convert: Array[String] => InternalRow): Option[InternalRow] = {
     if (options.dropMalformed && dataSchema.length != tokens.length) {
       if (numMalformedRecords < options.maxMalformedLogPerPartition) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")
@@ -251,7 +294,7 @@ private[csv] class UnivocityParser(
       } catch {
         case NonFatal(e) if options.permissive =>
           val row = new GenericInternalRow(requiredSchema.length)
-          corruptFieldIndex.foreach(row(_) = UTF8String.fromString(input))
+          corruptFieldIndex.foreach(row(_) = UTF8String.fromString(getCurrentInput()))
           Some(row)
         case NonFatal(e) if options.dropMalformed =>
           if (numMalformedRecords < options.maxMalformedLogPerPartition) {
@@ -267,5 +310,77 @@ private[csv] class UnivocityParser(
           None
       }
     }
+  }
+}
+
+private[csv] object UnivocityParser {
+
+  /**
+   * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
+   */
+  def tokenizeStream(
+      inputStream: InputStream,
+      shouldDropHeader: Boolean,
+      tokenizer: CsvParser): Iterator[Array[String]] = {
+    convertStream(inputStream, shouldDropHeader, tokenizer)(tokens => tokens)
+  }
+
+  /**
+   * Parses a stream that contains CSV strings and turns it into an iterator of rows.
+   */
+  def parseStream(
+      inputStream: InputStream,
+      shouldDropHeader: Boolean,
+      parser: UnivocityParser): Iterator[InternalRow] = {
+    val tokenizer = parser.tokenizer
+    convertStream(inputStream, shouldDropHeader, tokenizer) { tokens =>
+      parser.convert(tokens)
+    }.flatten
+  }
+
+  private def convertStream[T](
+      inputStream: InputStream,
+      shouldDropHeader: Boolean,
+      tokenizer: CsvParser)(convert: Array[String] => T) = new Iterator[T] {
+    tokenizer.beginParsing(inputStream)
+    private var nextRecord = {
+      if (shouldDropHeader) {
+        tokenizer.parseNext()
+      }
+      tokenizer.parseNext()
+    }
+
+    override def hasNext: Boolean = nextRecord != null
+
+    override def next(): T = {
+      if (!hasNext) {
+        throw new NoSuchElementException("End of stream")
+      }
+      val curRecord = convert(nextRecord)
+      nextRecord = tokenizer.parseNext()
+      curRecord
+    }
+  }
+
+  /**
+   * Parses an iterator that contains CSV strings and turns it into an iterator of rows.
+   */
+  def parseIterator(
+      lines: Iterator[String],
+      shouldDropHeader: Boolean,
+      parser: UnivocityParser): Iterator[InternalRow] = {
+    val options = parser.options
+
+    val linesWithoutHeader = if (shouldDropHeader) {
+      // Note that if there are only comments in the first block, the header would probably
+      // be not dropped.
+      CSVUtils.dropHeaderLine(lines, options)
+    } else {
+      lines
+    }
+
+    val filteredLines: Iterator[String] =
+      CSVUtils.filterCommentAndEmpty(linesWithoutHeader, options)
+    filteredLines.flatMap(line => parser.parse(line))
   }
 }

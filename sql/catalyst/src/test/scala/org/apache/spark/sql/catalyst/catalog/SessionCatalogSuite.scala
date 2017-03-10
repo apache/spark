@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -433,15 +435,15 @@ class SessionCatalogSuite extends PlanTest {
     sessionCatalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
+    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
+      .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
     // Otherwise, we'll first look up a temporary table with the same name
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", tempTable1, None))
+      == SubqueryAlias("tbl1", tempTable1))
     // Then, if that does not exist, look up the relation in the current database
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
-    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", SimpleCatalogRelation(metastoreTable1), None))
+    assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1")).children.head
+      .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
   }
 
   test("look up view relation") {
@@ -454,11 +456,11 @@ class SessionCatalogSuite extends PlanTest {
     val view = View(desc = metadata, output = metadata.schema.toAttributes,
       child = CatalystSqlParser.parsePlan(metadata.viewText.get))
     comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
-      SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+      SubqueryAlias("view1", view))
     // Look up a view using current database of the session catalog.
     sessionCatalog.setCurrentDatabase("db3")
     comparePlans(sessionCatalog.lookupRelation(TableIdentifier("view1")),
-      SubqueryAlias("view1", view, Some(TableIdentifier("view1", Some("db3")))))
+      SubqueryAlias("view1", view))
   }
 
   test("table exists") {
@@ -1194,6 +1196,80 @@ class SessionCatalogSuite extends PlanTest {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[NoSuchDatabaseException] {
       catalog.listFunctions("unknown_db", "func*")
+    }
+  }
+
+  test("clone SessionCatalog - temp views") {
+    val externalCatalog = newEmptyCatalog()
+    val original = new SessionCatalog(externalCatalog)
+    val tempTable1 = Range(1, 10, 1, 10)
+    original.createTempView("copytest1", tempTable1, overrideIfExists = false)
+
+    // check if tables copied over
+    val clone = original.newSessionCatalogWith(
+      SimpleCatalystConf(caseSensitiveAnalysis = true),
+      new Configuration(),
+      new SimpleFunctionRegistry,
+      CatalystSqlParser)
+    assert(original ne clone)
+    assert(clone.getTempView("copytest1") == Some(tempTable1))
+
+    // check if clone and original independent
+    clone.dropTable(TableIdentifier("copytest1"), ignoreIfNotExists = false, purge = false)
+    assert(original.getTempView("copytest1") == Some(tempTable1))
+
+    val tempTable2 = Range(1, 20, 2, 10)
+    original.createTempView("copytest2", tempTable2, overrideIfExists = false)
+    assert(clone.getTempView("copytest2").isEmpty)
+  }
+
+  test("clone SessionCatalog - current db") {
+    val externalCatalog = newEmptyCatalog()
+    val db1 = "db1"
+    val db2 = "db2"
+    val db3 = "db3"
+
+    externalCatalog.createDatabase(newDb(db1), ignoreIfExists = true)
+    externalCatalog.createDatabase(newDb(db2), ignoreIfExists = true)
+    externalCatalog.createDatabase(newDb(db3), ignoreIfExists = true)
+
+    val original = new SessionCatalog(externalCatalog)
+    original.setCurrentDatabase(db1)
+
+    // check if current db copied over
+    val clone = original.newSessionCatalogWith(
+      SimpleCatalystConf(caseSensitiveAnalysis = true),
+      new Configuration(),
+      new SimpleFunctionRegistry,
+      CatalystSqlParser)
+    assert(original ne clone)
+    assert(clone.getCurrentDatabase == db1)
+
+    // check if clone and original independent
+    clone.setCurrentDatabase(db2)
+    assert(original.getCurrentDatabase == db1)
+    original.setCurrentDatabase(db3)
+    assert(clone.getCurrentDatabase == db2)
+  }
+
+  test("SPARK-19737: detect undefined functions without triggering relation resolution") {
+    import org.apache.spark.sql.catalyst.dsl.plans._
+
+    Seq(true, false) foreach { caseSensitive =>
+      val conf = SimpleCatalystConf(caseSensitive)
+      val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
+      val analyzer = new Analyzer(catalog, conf)
+
+      // The analyzer should report the undefined function rather than the undefined table first.
+      val cause = intercept[AnalysisException] {
+        analyzer.execute(
+          UnresolvedRelation(TableIdentifier("undefined_table")).select(
+            UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+          )
+        )
+      }
+
+      assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
     }
   }
 }

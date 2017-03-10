@@ -88,6 +88,13 @@ mockLinesComplexType <-
 complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
+# For test map type and struct type in DataFrame
+mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
+                      "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
+                      "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
+mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+writeLines(mockLinesMapType, mapTypeJsonPath)
+
 test_that("calling sparkRSQL.init returns existing SQL context", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
@@ -465,13 +472,6 @@ test_that("create DataFrame from a data.frame with complex types", {
   expect_identical(ldf[, 1, FALSE], collected[, 1, FALSE])
   expect_equal(ldf$an_envir, collected$an_envir)
 })
-
-# For test map type and struct type in DataFrame
-mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
-                      "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
-                      "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
-mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-writeLines(mockLinesMapType, mapTypeJsonPath)
 
 test_that("Collect DataFrame with complex types", {
   # ArrayType
@@ -898,6 +898,12 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(z)[3], "c")
   names(z)[3] <- "c2"
   expect_equal(names(z)[3], "c2")
+
+  # Test subset assignment
+  colnames(df)[1] <- "col5"
+  expect_equal(colnames(df)[1], "col5")
+  names(df)[2] <- "col6"
+  expect_equal(names(df)[2], "col6")
 })
 
 test_that("head() and first() return the correct data", {
@@ -1331,6 +1337,33 @@ test_that("column functions", {
   df <- createDataFrame(data.frame(x = c(2.5, 3.5)))
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
+
+  # Test to_json(), from_json()
+  df <- read.json(mapTypeJsonPath)
+  j <- collect(select(df, alias(to_json(df$info), "json")))
+  expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
+  df <- as.DataFrame(j)
+  schema <- structType(structField("age", "integer"),
+                       structField("height", "double"))
+  s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
+  expect_equal(ncol(s), 1)
+  expect_equal(nrow(s), 3)
+  expect_is(s[[1]][[1]], "struct")
+  expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+
+  # passing option
+  df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
+  schema2 <- structType(structField("date", "date"))
+  expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
+                        error = function(e) { stop(e) }),
+               paste0(".*(java.lang.NumberFormatException: For input string:).*"))
+  s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
+  expect_is(s[[1]][[1]]$date, "Date")
+  expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
+
+  # check for unparseable
+  df <- as.DataFrame(list(list("a" = "")))
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
 })
 
 test_that("column binary mathfunctions", {
@@ -1816,6 +1849,13 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned2, "SparkDataFrame")
   expect_equal(count(unioned2), 12)
   expect_equal(first(unioned2)$name, "Michael")
+
+  df3 <- df2
+  names(df3)[1] <- "newName"
+  expect_error(rbind(df, df3),
+               "Names of input data frames are different.")
+  expect_error(rbind(df, df2, df3),
+               "Names of input data frames are different.")
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
@@ -2552,8 +2592,8 @@ test_that("coalesce, repartition, numPartitions", {
 
   df2 <- repartition(df1, 10)
   expect_equal(getNumPartitions(df2), 10)
-  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
-  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 7)
   expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
@@ -2861,5 +2901,7 @@ unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
+unlink(complexTypeJsonPath)
+unlink(mapTypeJsonPath)
 
 sparkR.session.stop()

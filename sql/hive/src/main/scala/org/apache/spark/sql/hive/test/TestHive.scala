@@ -30,16 +30,17 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
+import org.apache.spark.sql.{ExperimentalMethods, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -84,7 +85,7 @@ class TestHiveContext(
     new TestHiveContext(sparkSession.newSession())
   }
 
-  override def sessionState: TestHiveSessionState = sparkSession.sessionState
+  override def sessionState: HiveSessionState = sparkSession.sessionState
 
   def setCacheTables(c: Boolean): Unit = {
     sparkSession.setCacheTables(c)
@@ -144,11 +145,35 @@ private[hive] class TestHiveSparkSession(
     existingSharedState.getOrElse(new SharedState(sc))
   }
 
-  // TODO: Let's remove TestHiveSessionState. Otherwise, we are not really testing the reflection
-  // logic based on the setting of CATALOG_IMPLEMENTATION.
   @transient
-  override lazy val sessionState: TestHiveSessionState =
-    new TestHiveSessionState(self)
+  override lazy val sessionState: HiveSessionState = {
+    val testConf =
+      new SQLConf {
+        clear()
+        override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+        override def clear(): Unit = {
+          super.clear()
+          TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
+        }
+      }
+    val queryExecutionCreator = (plan: LogicalPlan) => new TestHiveQueryExecution(this, plan)
+    val initHelper = HiveSessionState(this, testConf)
+    SessionState.mergeSparkConf(testConf, sparkContext.getConf)
+
+    new HiveSessionState(
+      sparkContext,
+      sharedState,
+      testConf,
+      initHelper.experimentalMethods,
+      initHelper.functionRegistry,
+      initHelper.catalog,
+      initHelper.sqlParser,
+      initHelper.metadataHive,
+      initHelper.analyzer,
+      initHelper.streamingQueryManager,
+      queryExecutionCreator,
+      initHelper.plannerCreator)
+  }
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
@@ -439,7 +464,7 @@ private[hive] class TestHiveSparkSession(
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      sessionState.conf.setConfString("fs.default.name", new File(".").toURI.toString)
+      sessionState.conf.setConfString("fs.defaultFS", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       sessionState.metadataHive.runSqlHive("RESET")
@@ -489,26 +514,6 @@ private[hive] class TestHiveQueryExecution(
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.execute(logical)
-  }
-}
-
-private[hive] class TestHiveSessionState(
-    sparkSession: TestHiveSparkSession)
-  extends HiveSessionState(sparkSession) { self =>
-
-  override lazy val conf: SQLConf = {
-    new SQLConf {
-      clear()
-      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-      override def clear(): Unit = {
-        super.clear()
-        TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
-      }
-    }
-  }
-
-  override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
-    new TestHiveQueryExecution(sparkSession, plan)
   }
 }
 

@@ -1,8 +1,8 @@
 set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-set mapred.max.split.size=300;
-set mapred.min.split.size=300;
-set mapred.min.split.size.per.node=300;
-set mapred.min.split.size.per.rack=300;
+set mapreduce.input.fileinputformat.split.maxsize=300;
+set mapreduce.input.fileinputformat.split.minsize=300;
+set mapreduce.input.fileinputformat.split.minsize.per.node=300;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=300;
 set hive.exec.mode.local.auto=true;
 set hive.merge.smallfiles.avgsize=1;
 

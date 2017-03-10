@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.streaming.KeyedStateTimeout
+import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode }
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -321,17 +321,18 @@ case object NoTimeout extends KeyedStateTimeout
 case object ProcessingTimeTimeout extends KeyedStateTimeout
 
 /** Factory for constructing new `MapGroupsWithState` nodes. */
-object MapGroupsWithState {
+object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
       func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
+      outputMode: OutputMode,
+      isMapGroupsWithState: Boolean,
       timeout: KeyedStateTimeout,
       child: LogicalPlan): LogicalPlan = {
-
     val encoder = encoderFor[S]
 
-    val mapped = new MapGroupsWithState(
+    val mapped = new FlatMapGroupsWithState(
       func,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
@@ -339,6 +340,8 @@ object MapGroupsWithState {
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
       encoder.asInstanceOf[ExpressionEncoder[Any]],
+      outputMode,
+      isMapGroupsWithState,
       timeout,
       child)
     CatalystSerde.serialize[U](mapped)
@@ -357,9 +360,11 @@ object MapGroupsWithState {
  * @param dataAttributes used to read the data
  * @param outputObjAttr used to define the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
+ * @param outputMode the output mode of `func`
+ * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
  * @param timeout used to timeout a groups that has not received data in a while
  */
-case class MapGroupsWithState(
+case class FlatMapGroupsWithState(
     func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
@@ -367,8 +372,15 @@ case class MapGroupsWithState(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     stateEncoder: ExpressionEncoder[Any],
+    outputMode: OutputMode,
+    isMapGroupsWithState: Boolean = false,
     timeout: KeyedStateTimeout,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer
+    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+
+  if (isMapGroupsWithState) {
+    assert(outputMode == OutputMode.Update)
+  }
+}
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
 object FlatMapGroupsInR {

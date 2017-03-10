@@ -105,7 +105,7 @@ class IncrementalExecution(
           Some(stateId),
           Some(offsetSeqMetadata.batchWatermarkMs))
 
-      case m: MapGroupsWithStateExec =>
+      case m: FlatMapGroupsWithStateExec =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
         m.copy(stateId = Some(stateId), batchTimestampMs = offsetSeqMetadata.batchTimestampMs)

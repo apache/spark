@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -43,8 +43,10 @@ class FileStreamSource(
 
   private val sourceOptions = new FileStreamOptions(options)
 
+  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+
   private val qualifiedBasePath: Path = {
-    val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val fs = new Path(path).getFileSystem(hadoopConf)
     fs.makeQualified(new Path(path))  // can contains glob patterns
   }
 
@@ -64,23 +66,29 @@ class FileStreamSource(
 
   private val fileSortOrder = if (sourceOptions.latestFirst) {
       logWarning(
-        """'latestFirst' is true. New files will be processed first.
-          |It may affect the watermark value""".stripMargin)
+        """'latestFirst' is true. New files will be processed first, which may affect the watermark
+          |value. In addition, 'maxFileAge' will be ignored.""".stripMargin)
       implicitly[Ordering[Long]].reverse
     } else {
       implicitly[Ordering[Long]]
     }
 
+  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst && maxFilesPerBatch.isDefined) {
+    Long.MaxValue
+  } else {
+    sourceOptions.maxFileAgeMs
+  }
+
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
-  val seenFiles = new SeenFilesMap(sourceOptions.maxFileAgeMs)
+  val seenFiles = new SeenFilesMap(maxFileAgeMs)
 
   metadataLog.allFiles().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = ${sourceOptions.maxFileAgeMs}")
+  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAge = $maxFileAgeMs")
 
   /**
    * Returns the maximum offset that can be retrieved from the source.
@@ -158,13 +166,64 @@ class FileStreamSource(
   }
 
   /**
+   * If the source has a metadata log indicating which files should be read, then we should use it.
+   * Only when user gives a non-glob path that will we figure out whether the source has some
+   * metadata log
+   *
+   * None        means we don't know at the moment
+   * Some(true)  means we know for sure the source DOES have metadata
+   * Some(false) means we know for sure the source DOSE NOT have metadata
+   */
+  @volatile private[sql] var sourceHasMetadata: Option[Boolean] =
+    if (SparkHadoopUtil.get.isGlobPath(new Path(path))) Some(false) else None
+
+  private def allFilesUsingInMemoryFileIndex() = {
+    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
+    val fileIndex = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
+    fileIndex.allFiles()
+  }
+
+  private def allFilesUsingMetadataLogFileIndex() = {
+    // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
+    // non-glob path
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath).allFiles()
+  }
+
+  /**
    * Returns a list of files found, sorted by their timestamp.
    */
   private def fetchAllFiles(): Seq[(String, Long)] = {
     val startTime = System.nanoTime
-    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
-    val catalog = new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(new StructType))
-    val files = catalog.allFiles().sortBy(_.getModificationTime)(fileSortOrder).map { status =>
+
+    var allFiles: Seq[FileStatus] = null
+    sourceHasMetadata match {
+      case None =>
+        if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+          sourceHasMetadata = Some(true)
+          allFiles = allFilesUsingMetadataLogFileIndex()
+        } else {
+          allFiles = allFilesUsingInMemoryFileIndex()
+          if (allFiles.isEmpty) {
+            // we still cannot decide
+          } else {
+            // decide what to use for future rounds
+            // double check whether source has metadata, preventing the extreme corner case that
+            // metadata log and data files are only generated after the previous
+            // `FileStreamSink.hasMetadata` check
+            if (FileStreamSink.hasMetadata(Seq(path), hadoopConf)) {
+              sourceHasMetadata = Some(true)
+              allFiles = allFilesUsingMetadataLogFileIndex()
+            } else {
+              sourceHasMetadata = Some(false)
+              // `allFiles` have already been fetched using InMemoryFileIndex in this round
+            }
+          }
+        }
+      case Some(true) => allFiles = allFilesUsingMetadataLogFileIndex()
+      case Some(false) => allFiles = allFilesUsingInMemoryFileIndex()
+    }
+
+    val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>
       (status.getPath.toUri.toString, status.getModificationTime)
     }
     val endTime = System.nanoTime

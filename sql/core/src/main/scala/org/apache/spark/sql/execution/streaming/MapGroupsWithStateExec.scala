@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalKeyedState, Processin
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.KeyedStateTimeout
+import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode}
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 import org.apache.spark.util.CompletionIterator
 
 /** Physical operator for executing streaming mapGroupsWithState. */
-case class MapGroupsWithStateExec(
+case class FlatMapGroupsWithStateExec(
     func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
@@ -38,6 +38,7 @@ case class MapGroupsWithStateExec(
     outputObjAttr: Attribute,
     stateId: Option[OperatorStateId],
     stateEncoder: ExpressionEncoder[Any],
+    outputMode: OutputMode,
     timeout: KeyedStateTimeout,
     batchTimestampMs: Long,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter {

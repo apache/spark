@@ -402,11 +402,13 @@ object SQLConf {
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
-      .doc("The maximum number of files allowed for listing files at driver side. If the number " +
-        "of detected files exceeds this value during partition discovery, it tries to list the " +
+      .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
+        "of detected paths exceeds this value during partition discovery, it tries to list the " +
         "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
         "LibSVM data sources.")
       .intConf
+      .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
+        "files at driver side must not be negative")
       .createWithDefault(32)
 
   val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =
@@ -666,6 +668,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val JOIN_REORDER_ENABLED =
+    buildConf("spark.sql.cbo.joinReorder.enabled")
+      .doc("Enables join reorder in CBO.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val JOIN_REORDER_DP_THRESHOLD =
+    buildConf("spark.sql.cbo.joinReorder.dp.threshold")
+      .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
+      .intConf
+      .createWithDefault(12)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -674,6 +688,10 @@ object SQLConf {
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
+  }
+
+  object Replaced {
+    val MAPREDUCE_JOB_REDUCES = "mapreduce.job.reduces"
   }
 }
 
@@ -879,6 +897,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
+  override def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
+
+  override def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -996,6 +1018,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def clear(): Unit = {
     settings.clear()
+  }
+
+  override def clone(): SQLConf = {
+    val result = new SQLConf
+    getAllConfs.foreach {
+      case(k, v) => if (v ne null) result.setConfString(k, v)
+    }
+    result
   }
 }
 

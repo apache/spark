@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -54,7 +55,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
   test("success sanity check") {
     val badClient = buildClient(HiveUtils.hiveExecutionVersion, new Configuration())
-    val db = new CatalogDatabase("default", "desc", "loc", Map())
+    val db = new CatalogDatabase("default", "desc", new URI("loc"), Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
@@ -88,7 +89,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2")
+  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0")
 
   private var client: HiveClient = null
 
@@ -98,7 +99,12 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
       System.gc() // Hack to avoid SEGV on some JVM versions.
       val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")
-      client = buildClient(version, hadoopConf)
+      // Hive changed the default of datanucleus.schema.autoCreateAll from true to false since 2.0
+      // For details, see the JIRA HIVE-6113
+      if (version == "2.0") {
+        hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
+      }
+      client = buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
     }
 
     def table(database: String, tableName: String): CatalogTable = {
@@ -120,10 +126,10 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
     // Database related API
     ///////////////////////////////////////////////////////////////////////////
 
-    val tempDatabasePath = Utils.createTempDir().getCanonicalPath
+    val tempDatabasePath = Utils.createTempDir().toURI
 
     test(s"$version: createDatabase") {
-      val defaultDB = CatalogDatabase("default", "desc", "loc", Map())
+      val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Map())
       client.createDatabase(defaultDB, ignoreIfExists = true)
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
@@ -341,7 +347,7 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
-      val newLocation = Utils.createTempDir().getPath()
+      val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions
@@ -652,19 +658,17 @@ class VersionsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton w
 
         val tPath = new Path(spark.sessionState.conf.warehousePath, "t")
         Seq("1").toDF("a").write.saveAsTable("t")
-        val expectedPath = s"file:${tPath.toUri.getPath.stripSuffix("/")}"
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
-        assert(table.location.stripSuffix("/") == expectedPath)
+        assert(table.location == makeQualifiedPath(tPath.toString))
         assert(tPath.getFileSystem(spark.sessionState.newHadoopConf()).exists(tPath))
         checkAnswer(spark.table("t"), Row("1") :: Nil)
 
         val t1Path = new Path(spark.sessionState.conf.warehousePath, "t1")
         spark.sql("create table t1 using parquet as select 2 as a")
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-        val expectedPath1 = s"file:${t1Path.toUri.getPath.stripSuffix("/")}"
 
-        assert(table1.location.stripSuffix("/") == expectedPath1)
+        assert(table1.location == makeQualifiedPath(t1Path.toString))
         assert(t1Path.getFileSystem(spark.sessionState.newHadoopConf()).exists(t1Path))
         checkAnswer(spark.table("t1"), Row(2) :: Nil)
       }

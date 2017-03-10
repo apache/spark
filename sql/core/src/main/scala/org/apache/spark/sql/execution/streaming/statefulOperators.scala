@@ -69,7 +69,7 @@ trait StateStoreWriter extends StatefulOperator {
 }
 
 /** An operator that supports watermark. */
-trait WatermarkSupport extends SparkPlan {
+trait WatermarkSupport extends UnaryExecNode {
 
   /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
@@ -77,8 +77,8 @@ trait WatermarkSupport extends SparkPlan {
   /** The watermark value. */
   def eventTimeWatermark: Option[Long]
 
-  /** Generate a predicate that matches data older than the watermark */
-  lazy val watermarkPredicate: Option[Predicate] = {
+  /** Generate an expression that matches data older than the watermark */
+  lazy val watermarkExpression: Option[Expression] = {
     val optionalWatermarkAttribute =
       keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
 
@@ -97,9 +97,19 @@ trait WatermarkSupport extends SparkPlan {
         }
 
       logInfo(s"Filtering state store on: $evictionExpression")
-      newPredicate(evictionExpression, keyExpressions)
+      evictionExpression
     }
   }
+
+  /** Generate a predicate based on keys that matches data older than the watermark */
+  lazy val watermarkPredicateForKeys: Option[Predicate] =
+    watermarkExpression.map(newPredicate(_, keyExpressions))
+
+  /**
+   * Generate a predicate based on the child output that matches data older than the watermark.
+   */
+  lazy val watermarkPredicate: Option[Predicate] =
+    watermarkExpression.map(newPredicate(_, child.output))
 }
 
 /**
@@ -193,7 +203,7 @@ case class StateStoreSaveExec(
             }
 
             // Assumption: Append mode can be done only when watermark has been specified
-            store.remove(watermarkPredicate.get.eval _)
+            store.remove(watermarkPredicateForKeys.get.eval _)
             store.commit()
 
             numTotalStateRows += store.numKeys()
@@ -216,7 +226,9 @@ case class StateStoreSaveExec(
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
                   // Remove old aggregates if watermark specified
-                  if (watermarkPredicate.nonEmpty) store.remove(watermarkPredicate.get.eval _)
+                  if (watermarkPredicateForKeys.nonEmpty) {
+                    store.remove(watermarkPredicateForKeys.get.eval _)
+                  }
                   store.commit()
                   numTotalStateRows += store.numKeys()
                   false
@@ -244,7 +256,6 @@ case class StateStoreSaveExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
-
 
 /** Physical operator for executing streaming Deduplicate. */
 case class StreamingDeduplicateExec(
@@ -275,7 +286,7 @@ case class StreamingDeduplicateExec(
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
 
       val baseIterator = watermarkPredicate match {
-        case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+        case Some(predicate) => iter.filter(row => !predicate.eval(row))
         case None => iter
       }
 
@@ -295,7 +306,7 @@ case class StreamingDeduplicateExec(
       }
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        watermarkPredicate.foreach(f => store.remove(f.eval _))
+        watermarkPredicateForKeys.foreach(f => store.remove(f.eval _))
         store.commit()
         numTotalStateRows += store.numKeys()
       })

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
+import java.net.URI
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -25,16 +27,88 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+
+// TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
+class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
+  override def afterEach(): Unit = {
+    try {
+      // drop all databases, tables and functions after each test
+      spark.sessionState.catalog.reset()
+    } finally {
+      super.afterEach()
+    }
+  }
+
+  protected override def generateTable(
+      catalog: SessionCatalog,
+      name: TableIdentifier): CatalogTable = {
+    val storage =
+      CatalogStorageFormat(
+        locationUri = Some(catalog.defaultTablePath(name)),
+        inputFormat = Some("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+        outputFormat = Some("org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"),
+        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"),
+        compressed = false,
+        properties = Map("serialization.format" -> "1"))
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
+    CatalogTable(
+      identifier = name,
+      tableType = CatalogTableType.EXTERNAL,
+      storage = storage,
+      schema = new StructType()
+        .add("col1", "int", nullable = true, metadata = metadata)
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "int"),
+      provider = Some("hive"),
+      partitionColumnNames = Seq("a", "b"),
+      createTime = 0L,
+      tracksPartitionsInCatalog = true)
+  }
+
+  protected override def normalizeCatalogTable(table: CatalogTable): CatalogTable = {
+    val nondeterministicProps = Set(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      "COLUMN_STATS_ACCURATE",
+      // The following are hive specific schema parameters which we do not need to match exactly.
+      "numFiles",
+      "numRows",
+      "rawDataSize",
+      "totalSize",
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize"
+    )
+
+    table.copy(
+      createTime = 0L,
+      lastAccessTime = 0L,
+      owner = "",
+      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+      // View texts are checked separately
+      viewText = None
+    )
+  }
+
+}
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
@@ -710,7 +784,7 @@ class HiveDDLSuite
       }
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
-      val dbPath = tmpDir.toURI.toString.stripSuffix("/")
+      val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
       assert(db1 == CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
@@ -747,11 +821,12 @@ class HiveDDLSuite
     sql(s"CREATE DATABASE $dbName")
     val catalog = spark.sessionState.catalog
     val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
+    val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
     val db1 = catalog.getDatabaseMetadata(dbName)
     assert(db1 == CatalogDatabase(
       dbName,
       "",
-      expectedDBLocation,
+      expectedDBUri,
       Map.empty))
     // the database directory was created
     assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
@@ -1584,6 +1659,209 @@ class HiveDDLSuite
         Seq((1, 1, 1, 1)).toDF("a", "b", "c", "d").write.format("hive")
           .partitionBy("d", "b").saveAsTable("t6")
         assert(getTableColumns("t6") == Seq("a", "c", "d", "b"))
+      }
+    }
+  }
+
+  Seq(true, false).foreach { shouldDelete =>
+    val tcName = if (shouldDelete) "non-existent" else "existed"
+    test(s"CTAS for external data source table with a $tcName location") {
+      withTable("t", "t1") {
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t
+                 |USING parquet
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+        }
+        // partition table
+        withTempDir {
+          dir =>
+            if (shouldDelete) {
+              dir.delete()
+            }
+            spark.sql(
+              s"""
+                 |CREATE TABLE t1
+                 |USING parquet
+                 |PARTITIONED BY(a, b)
+                 |LOCATION '$dir'
+                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+               """.stripMargin)
+
+            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+            assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+            val partDir = new File(dir, "a=3")
+            assert(partDir.exists())
+
+            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+        }
+      }
+    }
+
+    test(s"CTAS for external hive table with a $tcName location") {
+      withTable("t", "t1") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTempDir {
+            dir =>
+              if (shouldDelete) {
+                dir.delete()
+              }
+              spark.sql(
+                s"""
+                   |CREATE TABLE t
+                   |USING hive
+                   |LOCATION '$dir'
+                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+                 """.stripMargin)
+              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+              checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+          }
+          // partition table
+          withTempDir {
+            dir =>
+              if (shouldDelete) {
+                dir.delete()
+              }
+              spark.sql(
+                s"""
+                   |CREATE TABLE t1
+                   |USING hive
+                   |PARTITIONED BY(a, b)
+                   |LOCATION '$dir'
+                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+                 """.stripMargin)
+              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+              val partDir = new File(dir, "a=3")
+              assert(partDir.exists())
+
+              checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+          }
+        }
+      }
+    }
+  }
+
+  Seq("parquet", "hive").foreach { datasource =>
+    Seq("a b", "a:b", "a%b", "a,b").foreach { specialChars =>
+      test(s"partition column name of $datasource table containing $specialChars") {
+        withTable("t") {
+          withTempDir { dir =>
+            spark.sql(
+              s"""
+                 |CREATE TABLE t(a string, `$specialChars` string)
+                 |USING $datasource
+                 |PARTITIONED BY(`$specialChars`)
+                 |LOCATION '$dir'
+               """.stripMargin)
+
+            assert(dir.listFiles().isEmpty)
+            spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
+            val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
+            val partFile = new File(dir, partEscaped)
+            assert(partFile.listFiles().length >= 1)
+            checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
+
+            withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+              spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`) SELECT 3, 4")
+              val partEscaped1 = s"${ExternalCatalogUtils.escapePathName(specialChars)}=4"
+              val partFile1 = new File(dir, partEscaped1)
+              assert(partFile1.listFiles().length >= 1)
+              checkAnswer(spark.table("t"), Row("1", "2") :: Row("3", "4") :: Nil)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Seq("a b", "a:b", "a%b").foreach { specialChars =>
+    test(s"hive table: location uri contains $specialChars") {
+      withTable("t") {
+        withTempDir { dir =>
+          val loc = new File(dir, specialChars)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t(a string)
+               |USING hive
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
+          assert(new Path(table.location).toString.contains(specialChars))
+
+          assert(loc.listFiles().isEmpty)
+          if (specialChars != "a:b") {
+            spark.sql("INSERT INTO TABLE t SELECT 1")
+            assert(loc.listFiles().length >= 1)
+            checkAnswer(spark.table("t"), Row("1") :: Nil)
+          } else {
+            val e = intercept[InvocationTargetException] {
+              spark.sql("INSERT INTO TABLE t SELECT 1")
+            }.getTargetException.getMessage
+            assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+          }
+        }
+
+        withTempDir { dir =>
+          val loc = new File(dir, specialChars)
+          loc.mkdir()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1(a string, b string)
+               |USING hive
+               |PARTITIONED BY(b)
+               |LOCATION '$loc'
+             """.stripMargin)
+
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
+          assert(new Path(table.location).toString.contains(specialChars))
+
+          assert(loc.listFiles().isEmpty)
+          if (specialChars != "a:b") {
+            spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+            val partFile = new File(loc, "b=2")
+            assert(partFile.listFiles().length >= 1)
+            checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
+
+            spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+            val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
+            assert(!partFile1.exists())
+            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+            assert(partFile2.listFiles().length >= 1)
+            checkAnswer(spark.table("t1"),
+              Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+          } else {
+            val e = intercept[InvocationTargetException] {
+              spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
+            }.getTargetException.getMessage
+            assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+
+            val e1 = intercept[InvocationTargetException] {
+              spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
+            }.getTargetException.getMessage
+            assert(e1.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+          }
+        }
       }
     }
   }
