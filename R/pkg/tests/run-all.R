@@ -22,6 +22,7 @@ library(SparkR)
 options("warn" = 2)
 
 # Setup global test environment
+sparkHomeFileBefore <- list.files(path = file.path(Sys.getenv("SPARK_HOME"), "R"), all.files = TRUE)
 install.spark()
 
 test_package("SparkR")

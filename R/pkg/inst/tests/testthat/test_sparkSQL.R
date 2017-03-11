@@ -2910,6 +2910,27 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
+compare_list <- function(list1, list2) {
+  # get testthat to show the diff by first making the 2 lists equal in length
+  expect_equal(length(list1), length(list2))
+  l <- max(length(list1), length(list2))
+  length(list1) <- l
+  length(list2) <- l
+  expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
+}
+
+# This should always be the last test in this test file.
+test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  # Check that it is not creating any extra file.
+  # Does not check the tempdir which would be cleaned up after.
+  filesAfter <- list.files(path = file.path(Sys.getenv("SPARK_HOME"), "R"), all.files = TRUE)
+
+  expect_true(length(sparkHomeFileBefore) > 0)
+  compare_list(sparkHomeFileBefore, filesBefore)
+
+  compare_list(filesBefore, filesAfter)
+})
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)

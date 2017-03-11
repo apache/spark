@@ -127,11 +127,11 @@ private[r] object RRDD {
       sparkConf.setExecutorEnv(name.toString, value.toString)
     }
 
-    if (sparkEnvirMap.containsKey("spark.sql.default.derby.dir") &&
+    if (sparkEnvirMap.containsKey("spark.r.sql.default.derby.dir") &&
         System.getProperty("derby.system.home") == null) {
       // This must be set before SparkContext is instantiated.
       System.setProperty("derby.system.home",
-                         sparkEnvirMap.get("spark.sql.default.derby.dir").toString)
+                         sparkEnvirMap.get("spark.r.sql.default.derby.dir").toString)
     }
 
     val jsc = new JavaSparkContext(sparkConf)
