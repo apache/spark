@@ -16,15 +16,23 @@
  */
 package org.apache.spark.api.conda
 
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.{Map => JMap}
 
 import scala.sys.process.Process
 
 import org.apache.spark.internal.Logging
 
-final case class CondaEnvironment(condaEnvDir: String) extends Logging {
+final case class CondaEnvironment(condaEnvDir: Path) extends Logging {
+  def this(condaEnvDir: String) = this(Paths.get(condaEnvDir))
+
+  def envRoot: Path = condaEnvDir.getParent
+
+  def envName: String = condaEnvDir.getFileName.toString
+
   def activatedEnvironment(startEnv: Map[String, String] = Map.empty): Map[String, String] = {
-    val newStartEnv: Seq[(String, String)] = (startEnv + ("CONDA_PREFIX" -> condaEnvDir)).toSeq
+    val newStartEnv = (startEnv + ("CONDA_PREFIX" -> condaEnvDir.toString)).toSeq
     // Activate the conda environment, then capture the environment
     val env0sep = Process(List("bash", "-c",
       s"source $$CONDA_PREFIX/bin/activate $$CONDA_PREFIX && " +

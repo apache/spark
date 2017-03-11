@@ -34,11 +34,11 @@ abstract class CondaRunner extends Logging {
 
     if (CondaEnvironmentManager.isConfigured(sparkConf)) {
       val condaBootstrapDeps = sparkConf.get(CONDA_BOOTSTRAP_PACKAGES)
-      val condaEnvDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), "conda").getAbsolutePath
+      val condaBaseDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), "conda").getAbsolutePath
       val condaEnvironmentManager = CondaEnvironmentManager.fromConf(sparkConf)
-      val environment = condaEnvironmentManager.create(condaEnvDir, condaBootstrapDeps)
+      val environment = condaEnvironmentManager.create(condaBaseDir, condaBootstrapDeps)
 
-      sys.props += CondaEnvironment.CONDA_ENVIRONMENT_PREFIX -> condaEnvDir
+      sys.props += CondaEnvironment.CONDA_ENVIRONMENT_PREFIX -> environment.condaEnvDir.toString
 
       run(args, Some(environment))
     } else {

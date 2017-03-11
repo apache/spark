@@ -16,51 +16,106 @@
  */
 package org.apache.spark.api.conda
 
-import scala.sys.process.Process
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 
+import scala.collection.JavaConverters._
+import scala.sys.process.BasicIO
+import scala.sys.process.Process
+import scala.sys.process.ProcessBuilder
+import scala.sys.process.ProcessIO
+
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CONDA_BINARY_PATH
 import org.apache.spark.internal.config.CONDA_CHANNEL_URLS
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkException
+import org.apache.spark.util.Utils
 
 final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: Seq[String])
     extends Logging {
   require(condaChannelUrls.nonEmpty, "Can't have an empty list of conda channel URLs")
 
-  def create(condaEnvDir: String, bootstrapDeps: Seq[String]): CondaEnvironment = {
+  def create(baseDir: String, bootstrapDeps: Seq[String]): CondaEnvironment = {
     require(bootstrapDeps.nonEmpty, "Expected at least one bootstrap dependency.")
     // Attempt to create environment
+    val name = "conda-env"
+
+    // must link in /tmp to reduce path length in case baseDir is very long...
+    // Don't even try to use java.io.tmpdir - yarn hijacks that
+    val linkedBaseDir = Utils.createTempDir("/tmp", "conda").toPath resolve "real"
+    logInfo(s"Creating symlink $linkedBaseDir -> $baseDir")
+    Files.createSymbolicLink(linkedBaseDir, Paths get baseDir)
+
+    // Expose the symlinked path, through /tmp
+    val condaEnvDir = (linkedBaseDir resolve name).toString
+
+    val condarc = generateCondarc(linkedBaseDir)
+
     val command = Process(
-      List(condaBinaryPath, "create", "-p", condaEnvDir, "-y", "--override-channels")
+      List(condaBinaryPath, "create", "-n", name, "-y", "--override-channels", "-vv")
         ++: condaChannelUrls.flatMap(Iterator("--channel", _))
-        ++: bootstrapDeps)
-    logInfo(s"About to execute: $command")
-    val exitCode = command.!
-    if (exitCode != 0) {
-      throw new SparkException("Attempt to create conda env exited with code: "
-        + f"$exitCode%nCommand was: $command")
-    }
+        ++: bootstrapDeps,
+      None,
+      "CONDARC" -> condarc.toString)
+
+    runOrFail(command, "create conda env")
 
     new CondaEnvironment(condaEnvDir)
   }
 
+  /**
+   * Create a condarc that only exposes package and env directories under the given baseDir,
+   * on top of the from the default pkgs directory inferred from condaBinaryPath.
+   *
+   * The file will be placed directly inside the given `envRoot` dir, and link to `envRoot/pkgs`
+   * as the first package cache.
+   *
+   * This hack is necessary otherwise conda tries to use the homedir for pkgs cache.
+   */
+  def generateCondarc(envRoot: Path): Path = {
+    val condaPkgsPath = Paths.get(condaBinaryPath).getParent.getParent resolve "pkgs"
+    val condarc = envRoot resolve "condarc"
+    val condarcContents =
+      s"""pkgs_dirs:
+         | - $envRoot/pkgs
+         | - $condaPkgsPath
+         |envs_dirs:
+         | - $envRoot
+      """.stripMargin
+    Files.write(condarc, List(condarcContents).asJava)
+    logInfo(f"Using condarc at $condarc:%n$condarcContents")
+    condarc
+  }
+
   def installPackages(condaEnv: CondaEnvironment, deps: String*): Unit = {
     val command = Process(
-      List(condaBinaryPath, "install", "-p", condaEnv.condaEnvDir, "-y", "--override-channels")
+      List(condaBinaryPath, "install", "-n", condaEnv.envName, "-y", "--override-channels")
         ++: condaChannelUrls.flatMap(Iterator("--channel", _))
-        ++: deps)
-    logInfo(s"About to execute: $command")
-    val exitCode = command.!
-    if (exitCode != 0) {
-      throw new SparkException("Attempt to install dependencies in conda env exited with code: "
-        + f"$exitCode%nCommand was: $command")
-    }
+        ++: deps,
+      None,
+      "CONDARC" -> generateCondarc(condaEnv.envRoot).toString)
+    runOrFail(command, s"install dependencies in conda env ${condaEnv.condaEnvDir}")
   }
 
   /** For use from pyspark. */
   def installPackage(condaEnv: CondaEnvironment, dep: String): Unit = {
     installPackages(condaEnv, dep)
+  }
+
+  private[this] def runOrFail(command: ProcessBuilder, description: String): Unit = {
+    logInfo(s"About to execute: $command")
+    val buffer = new StringBuffer
+    val collectErrOutToBuffer = new ProcessIO(
+    BasicIO.input(false),
+    BasicIO.processFully(buffer),
+    BasicIO.processFully(buffer))
+    val exitCode = command.run(collectErrOutToBuffer).exitValue()
+    if (exitCode != 0) {
+      throw new SparkException(s"Attempt to $description exited with code: "
+      + f"$exitCode%nCommand was: $command%nOutput was:%n${buffer.toString}")
+    }
   }
 }
 
