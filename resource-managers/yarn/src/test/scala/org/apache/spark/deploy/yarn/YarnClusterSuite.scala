@@ -356,7 +356,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
       extraEnv = extraEnvVars,
-      extraConf = extraConf)
+      extraConf = extraConf,
+      timeoutDuration = 4.minutes) // give it a bit longer
     checkResult(finalState, result)
   }
 
