@@ -42,7 +42,8 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder(conf)) :: Nil
+        CostBasedJoinReorder(conf),
+        ColumnPruning) :: Nil
   }
 
   /** Set up tables and columns for testing */

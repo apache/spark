@@ -36,16 +36,13 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
-      val ordered = plan transformDown {
+      val result = plan transformDown {
         case j @ Join(_, _, _: InnerLike, _) => reorder(j)
       }
       // After reordering is finished, convert OrderedJoin back to Join
-      val result = ordered transformDown {
+      result transformDown {
         case oj: OrderedJoin => oj.join
       }
-      // Since we don't care about projected attributes during join reordering, we need to prune
-      // columns here.
-      ColumnPruning(result)
     }
   }
 
@@ -75,8 +72,7 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
         val (rightPlans, rightConditions) = extractInnerJoins(right)
         (leftPlans ++ rightPlans, cond.toSet.flatMap(splitConjunctivePredicates) ++
           leftConditions ++ rightConditions)
-      case Project(projectList, j @ Join(_, _, _, _))
-          if projectList.forall(_.isInstanceOf[Attribute]) =>
+      case Project(projectList, j: Join) if projectList.forall(_.isInstanceOf[Attribute]) =>
         extractInnerJoins(j)
       case _ =>
         (Seq(plan), Set())
@@ -88,7 +84,7 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
       val replacedLeft = replaceWithOrderedJoin(left)
       val replacedRight = replaceWithOrderedJoin(right)
       OrderedJoin(j.copy(left = replacedLeft, right = replacedRight))
-    case p @ Project(_, j @ Join(_, _, _, _)) =>
+    case p @ Project(projectList, j: Join) =>
       p.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
@@ -135,34 +131,23 @@ object JoinReorderDP extends PredicateHelper {
 
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
-    val itemIndex = items.zipWithIndex.map(e => (e._2, e._1)).toMap
+    val itemIndex = items.zipWithIndex.map(_.swap).toMap
     val foundPlans = mutable.Buffer[JoinPlanMap](itemIndex.map {
       case (id, item) => Set(id) -> JoinPlan(Set(id), item, cost = 0)
     })
 
-    for (lev <- 1 until items.length) {
+    while (foundPlans.size < items.length && foundPlans.last.size > 1) {
       // Build plans for the next level.
       foundPlans += searchLevel(foundPlans, conf, conditions)
     }
 
     // Find the best plan
-    var level = items.length - 1
-    var found = false
-    var bestJoinPlan: Option[JoinPlan] = None
-    while (!found && level >= 0) {
-      val plans = foundPlans(level)
-      if (plans.nonEmpty) {
-        // There must be only one plan at the last level, which contains all joinable items.
-        assert(plans.size == 1 && plans.head._1.size == level + 1)
-        found = true
-        bestJoinPlan = Some(plans.head._2)
-      }
-      level -= 1
-    }
+    assert(foundPlans.last.size <= 1)
+    val bestJoinPlan = foundPlans.last.headOption
 
     // Put cartesian products (inner join without join condition) at the end of the plan.
-    bestJoinPlan.map { joinPlan =>
-      val itemsNotJoined = itemIndex.keySet -- joinPlan.itemIds
+    bestJoinPlan.map { case (itemIds, joinPlan) =>
+      val itemsNotJoined = itemIndex.keySet -- itemIds
       var completePlan = joinPlan.plan
       itemsNotJoined.foreach { id =>
         completePlan = Join(completePlan, itemIndex(id), Inner, None)
