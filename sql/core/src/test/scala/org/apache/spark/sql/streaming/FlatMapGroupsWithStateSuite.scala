@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.concurrent.ConcurrentHashMap
+
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
@@ -26,11 +28,13 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, KeyedStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StoreUpdate}
-import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.SingleKeyStateStore
+import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
 case class RunningCount(count: Long)
+
+case class Result(key: Long, count: Int)
 
 class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
@@ -292,6 +296,22 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     stateUpdates = state => { state.remove(); state.setTimeoutDuration(2000) },
     priorTimeoutTimestamp = beforeCurrentTimestamp,
     expectedState = None)                                     // state should be removed
+
+  test("StateStoreUpdater - rows are cloned before writing to StateStore") {
+    // function for running count
+    val func = (key: Int, values: Iterator[Int], state: KeyedState[Int]) => {
+      state.update(state.getOption.getOrElse(0) + values.size)
+      Iterator.empty
+    }
+    val store = newStateStore()
+    val plan = newFlatMapGroupsWithStateExec(func)
+    val updater = new plan.StateStoreUpdater(store)
+    val data = Seq(1, 1, 2)
+    val returnIter = updater.updateStateForKeysWithData(data.iterator.map(intToRow))
+    returnIter.size // consume the iterator to force store updates
+    val storeData = store.iterator.map { case (k, v) => (rowToInt(k), rowToInt(v)) }.toSet
+    assert(storeData === Set((1, 2), (2, 1)))
+  }
 
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
@@ -645,36 +665,28 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState: Option[Int],
       expectedTimeoutTimestamp: Long): Unit = {
 
-    val store = newStore()
-    val result = MemoryStream[Int]
-      .toDS
-      .groupByKey(x => x)
-      .flatMapGroupsWithState[Int, Int](mapGroupsFunc, Append, timeout = timeoutType)
-    val mapGroupsSparkPlan = result.logicalPlan.collectFirst {
-      case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
-        FlatMapGroupsWithStateExec(f, k, v, g, d, o, None, s, m, t, currentTimestamp,
-          RDDScanExec(g, null, "rdd"))
-    }.get
-
+    val store = newStateStore()
+    val mapGroupsSparkPlan = newFlatMapGroupsWithStateExec(
+      mapGroupsFunc, timeoutType, currentTimestamp)
     val updater = new mapGroupsSparkPlan.StateStoreUpdater(store)
-
+    val key = intToRow(0)
     // Prepare store with prior state configs
     if (priorState.nonEmpty || priorTimeoutTimestamp != TIMEOUT_TIMESTAMP_NOT_SET) {
       val row = priorState.map(updater.getUpdatedStateRow).getOrElse(updater.createNewStateRow())
       updater.setTimeoutTimestamp(row, priorTimeoutTimestamp)
-      store.put(row.copy())
+      store.put(key, row.copy())
     }
 
     // Call updating function to update state store
     val returnedIter = if (testTimeoutUpdates) {
       updater.updateStateForTimedOutKeys()
     } else {
-      updater.updateStateForKeysWithData(Iterator(singleKeyForStore))
+      updater.updateStateForKeysWithData(Iterator(key))
     }
     returnedIter.size // consumer the iterator to force state updates
 
     // Verify updated state in store
-    val updatedStateRow = store.get
+    val updatedStateRow = store.get(key)
     assert(
       updater.getStateObj(updatedStateRow).map(_.toString.toInt) === expectedState,
       "final state not as expected")
@@ -685,44 +697,60 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  val singleKeyForStore = {
-    val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
-    intProj.apply(new GenericInternalRow(Array[Any](0))).copy()
+  def newFlatMapGroupsWithStateExec(
+      func: (Int, Iterator[Int], KeyedState[Int]) => Iterator[Int],
+      timeoutType: KeyedStateTimeout = KeyedStateTimeout.none,
+      batchTimestampMs: Long = NO_BATCH_PROCESSING_TIMESTAMP): FlatMapGroupsWithStateExec = {
+    MemoryStream[Int]
+      .toDS
+      .groupByKey(x => x)
+      .flatMapGroupsWithState[Int, Int](func, Append, timeout = timeoutType)
+      .logicalPlan.collectFirst {
+        case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
+          FlatMapGroupsWithStateExec(
+            f, k, v, g, d, o, None, s, m, t, currentTimestamp,
+            RDDScanExec(g, null, "rdd"))
+      }.get
   }
 
-  def newStore(): SingleKeyStateStore = new SingleKeyStateStore(singleKeyForStore)
+  def newStateStore(): StateStore = new MemoryStateStore()
+
+  val intProj = UnsafeProjection.create(Array[DataType](IntegerType))
+  def intToRow(i: Int): UnsafeRow = {
+    intProj.apply(new GenericInternalRow(Array[Any](i))).copy()
+  }
+
+  def rowToInt(row: UnsafeRow): Int = row.getInt(0)
 }
 
 object FlatMapGroupsWithStateSuite {
 
   var failInTask = true
 
-  class SingleKeyStateStore(singleKey: UnsafeRow) extends StateStore() {
-    @volatile private var value: UnsafeRow = null
-    def get: Option[UnsafeRow] = Option(value)
-    def put(newValue: UnsafeRow): Unit = { value = newValue }
+  class MemoryStateStore extends StateStore() {
+    import scala.collection.JavaConverters._
+    private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
     override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
-      Option(value).map { v => (singleKey, value) }.iterator
+      map.entrySet.iterator.asScala.map { case e => (e.getKey, e.getValue) }
     }
+
     override def filter(c: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
       iterator.filter { case (k, v) => c(k, v) }
     }
 
-    override def get(key: UnsafeRow): Option[UnsafeRow] = checkKey(key) { Option(value) }
-    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = checkKey(key) { value = newValue }
-    override def remove(key: UnsafeRow): Unit = checkKey(key) { value = null }
-    override def remove(condition: (UnsafeRow) => Boolean): Unit = throwException
+    override def get(key: UnsafeRow): Option[UnsafeRow] = Option(map.get(key))
+    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = map.put(key, newValue)
+    override def remove(key: UnsafeRow): Unit = { map.remove(key) }
+    override def remove(condition: (UnsafeRow) => Boolean): Unit = {
+      iterator.map(_._1).filter(condition).foreach(map.remove)
+    }
     override def commit(): Long = version + 1
     override def abort(): Unit = { }
     override def id: StateStoreId = null
     override def version: Long = 0
-    override def updates(): Iterator[StoreUpdate] = throwException
-    override def numKeys(): Long = Option(value).size
+    override def updates(): Iterator[StoreUpdate] = { throw new UnsupportedOperationException }
+    override def numKeys(): Long = map.size
     override def hasCommitted: Boolean = true
-    private def throwException: Nothing = { throw new UnsupportedOperationException }
-    private def checkKey[T](key: UnsafeRow)(body: => T): T = {
-      require(key.hashCode == singleKey.hashCode, s"$key != $singleKey"); body
-    }
   }
 }

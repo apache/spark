@@ -114,7 +114,7 @@ case class FlatMapGroupsWithStateExec(
     }
   }
 
-  /** Class to update the state for keys */
+  /** Helper class to update the state store */
   class StateStoreUpdater(store: StateStore) {
 
     // Converters for translating input keys, values, output data between rows and Java objects
@@ -184,6 +184,11 @@ case class FlatMapGroupsWithStateExec(
       } else Iterator.empty
     }
 
+    /**
+     * Call the user function on a key's data, update the state store, and return the return data
+     * iterator. Note that the store updating is lazy, that is, the store will be updated only
+     * after the returned iterator is fully consumed.
+     */
     private def callFunctionAndUpdateState(
         keyRow: UnsafeRow,
         valueRowIter: Iterator[InternalRow],
@@ -220,7 +225,7 @@ case class FlatMapGroupsWithStateExec(
 
           // Write state row to store if there is any change worth writing
           if (keyedState.isUpdated || isTimeoutEnabled) {
-            store.put(keyRow, stateRowToWrite.copy())
+            store.put(keyRow.copy(), stateRowToWrite.copy())
             numUpdatedStateRows += 1
           }
         }
