@@ -74,6 +74,36 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |    sc.stop()
     """.stripMargin
 
+  private val TEST_CONDA_PYFILE = """
+    |import mod1, mod2
+    |import sys
+    |from operator import add
+    |
+    |from pyspark import SparkConf , SparkContext
+    |if __name__ == "__main__":
+    |    if len(sys.argv) != 2:
+    |        print >> sys.stderr, "Usage: test.py [result file]"
+    |        exit(-1)
+    |    sc = SparkContext(conf=SparkConf())
+    |
+    |    sc.addCondaPackage('numpy=1.11.1')
+    |    import numpy
+    |
+    |    status = open(sys.argv[1],'w')
+    |
+    |    numpy_multiply = lambda x: numpy.multiply(x, mod1.func() * mod2.func())
+    |
+    |    rdd = sc.parallelize(range(10)).map(numpy_multiply)
+    |    cnt = rdd.count()
+    |    if cnt == 10:
+    |        result = "success"
+    |    else:
+    |        result = "failure"
+    |    status.write(result)
+    |    status.close()
+    |    sc.stop()
+  """.stripMargin
+
   private val TEST_PYMODULE = """
     |def func():
     |    return 42
@@ -137,6 +167,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Python application in yarn-cluster mode") {
     testPySpark(false)
+  }
+
+  test("run Python application within Conda in yarn-client mode") {
+    testCondaPySpark(true)
+  }
+
+  test("run Python application within Conda in yarn-cluster mode") {
+    testCondaPySpark(false)
   }
 
   test("run Python application in yarn-cluster mode using " +
@@ -247,6 +285,55 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
       "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
+
+    val moduleDir =
+      if (clientMode) {
+        // In client-mode, .py files added with --py-files are not visible in the driver.
+        // This is something that the launcher library would have to handle.
+        tempDir
+      } else {
+        val subdir = new File(tempDir, "pyModules")
+        subdir.mkdir()
+        subdir
+      }
+    val pyModule = new File(moduleDir, "mod1.py")
+    Files.write(TEST_PYMODULE, pyModule, StandardCharsets.UTF_8)
+
+    val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
+    val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
+    val result = File.createTempFile("result", null, tempDir)
+
+    val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
+      sparkArgs = Seq("--py-files" -> pyFiles),
+      appArgs = Seq(result.getAbsolutePath()),
+      extraEnv = extraEnvVars,
+      extraConf = extraConf)
+    checkResult(finalState, result)
+  }
+
+  private def testCondaPySpark(
+      clientMode: Boolean,
+      extraEnv: Map[String, String] = Map()): Unit = {
+    val primaryPyFile = new File(tempDir, "test.py")
+    Files.write(TEST_CONDA_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
+
+    // When running tests, let's not assume the user has built the assembly module, which also
+    // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
+    // needed locations.
+    val sparkHome = sys.props("spark.test.home")
+    val pythonPath = Seq(
+      s"$sparkHome/python/lib/py4j-0.10.4-src.zip",
+      s"$sparkHome/python")
+    val extraEnvVars = Map(
+      "REQUESTS_CA_BUNDLE" -> "/Users/dsanduleac/certs/ca-bundle.crt",
+      "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
+
+    val extraConf: Map[String, String] = Map(
+      "spark.conda.binaryPath" -> (sys.props("user.home") + "/miniconda/bin/conda"),
+      "spark.conda.channelUrls" -> "https://repo.continuum.io/pkgs/free",
+      "spark.conda.bootstrapPackages" -> "python=3.5"
+    )
 
     val moduleDir =
       if (clientMode) {
