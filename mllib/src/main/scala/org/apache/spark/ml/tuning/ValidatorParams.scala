@@ -40,21 +40,28 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
    *
    * @group param
    */
-  val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
+  val estimators: Param[Array[Estimator[_]]] =
+    new Param(this, "estimators", "estimators for selection")
 
   /** @group getParam */
-  def getEstimator: Estimator[_] = $(estimator)
+  def getEstimator: Estimator[_] = $(estimators).head
+
+  /** @group getParam */
+  def getEstimators: Array[Estimator[_]] = $(estimators)
 
   /**
    * param for estimator param maps
    *
    * @group param
    */
-  val estimatorParamMaps: Param[Array[ParamMap]] =
-    new Param(this, "estimatorParamMaps", "param maps for the estimator")
+  val estimatorsParamMaps: Param[Array[Array[ParamMap]]] =
+    new Param(this, "estimatorsParamMaps", "param maps for the estimators")
 
   /** @group getParam */
-  def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
+  def getEstimatorParamMaps: Array[ParamMap] = $(estimatorsParamMaps).head
+
+  /** @group getParam */
+  def getEstimatorsParamMaps: Array[Array[ParamMap]] = $(estimatorsParamMaps)
 
   /**
    * param for the evaluator used to select hyper-parameters that maximize the validated metric
@@ -67,30 +74,49 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
 
+  protected def getModelToEstIndex: Array[Int] =
+    $(estimatorsParamMaps).map(_.length).zipWithIndex.flatMap(idx => List.fill(idx._1)(idx._2))
+
+  protected def getModelCount: Int = $(estimatorsParamMaps).flatten.length
+
   protected def transformSchemaImpl(schema: StructType): StructType = {
-    require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
-    val firstEstimatorParamMap = $(estimatorParamMaps).head
-    val est = $(estimator)
-    for (paramMap <- $(estimatorParamMaps).tail) {
-      est.copy(paramMap).transformSchema(schema)
+    def transformSchemaIdx(schema: StructType, idx: Int): StructType = {
+      require($(estimatorsParamMaps)(idx).nonEmpty,
+        s"Validator requires non-empty estimatorParamMaps")
+      val firstEstimatorParamMap = $(estimatorsParamMaps)(idx).head
+      val est = $(estimators)(idx)
+      for (paramMap <- $(estimatorsParamMaps)(idx).tail) {
+        est.copy(paramMap).transformSchema(schema)
+      }
+      est.copy(firstEstimatorParamMap).transformSchema(schema)
     }
-    est.copy(firstEstimatorParamMap).transformSchema(schema)
+
+    require($(estimators).length == $(estimatorsParamMaps).length,
+      s"Number of estimators must match number of estimatorParamMaps")
+    $(estimators).indices.map(idx => transformSchemaIdx(schema, idx))
+      .foldLeft(schema)((acc, curr) => acc.merge(curr))
   }
 
   /**
    * Instrumentation logging for tuning params including the inner estimator and evaluator info.
    */
-  protected def logTuningParams(instrumentation: Instrumentation[_]): Unit = {
-    instrumentation.logNamedValue("estimator", $(estimator).getClass.getCanonicalName)
+  protected def logTuningParams(instrumentation: Instrumentation[_], idx: Int = 0): Unit = {
+    instrumentation.logNamedValue("estimator", $(estimators).length match {
+      case len if len > idx => $(estimators)(idx).getClass.getCanonicalName
+      case _ => $(estimators).getClass.getCanonicalName
+    })
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
-    instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
+    instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorsParamMaps).length match {
+      case len if len > idx => $(estimatorsParamMaps)(idx).length
+      case _ => 0
+    })
   }
 }
 
 private[ml] object ValidatorParams {
   /**
-   * Check that [[ValidatorParams.evaluator]] and [[ValidatorParams.estimator]] are Writable.
-   * This does not check [[ValidatorParams.estimatorParamMaps]].
+   * Check that [[ValidatorParams.evaluator]] and [[ValidatorParams.estimators]] are Writable.
+   * This does not check [[ValidatorParams.estimatorsParamMaps]].
    */
   def validateParams(instance: ValidatorParams): Unit = {
     def checkElement(elem: Params, name: String): Unit = elem match {
@@ -101,15 +127,17 @@ private[ml] object ValidatorParams {
           s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
     }
     checkElement(instance.getEvaluator, "evaluator")
-    checkElement(instance.getEstimator, "estimator")
+    instance.getEstimators.foreach(checkElement(_, "estimator"))
     // Check to make sure all Params apply to this estimator.  Throw an error if any do not.
     // Extraneous Params would cause problems when loading the estimatorParamMaps.
     val uidToInstance: Map[String, Params] = MetaAlgorithmReadWrite.getUidMap(instance)
-    instance.getEstimatorParamMaps.foreach { case pMap: ParamMap =>
-      pMap.toSeq.foreach { case ParamPair(p, v) =>
-        require(uidToInstance.contains(p.parent), s"ValidatorParams save requires all Params in" +
-          s" estimatorParamMaps to apply to this ValidatorParams, its Estimator, or its" +
-          s" Evaluator. An extraneous Param was found: $p")
+    instance.getEstimatorsParamMaps.foreach {
+      _.foreach { case pMap: ParamMap =>
+        pMap.toSeq.foreach { case ParamPair(p, v) =>
+          require(uidToInstance.contains(p.parent), s"ValidatorParams save requires all Params in" +
+            s" estimatorParamMaps to apply to this ValidatorParams, its Estimator, or its" +
+            s" Evaluator. An extraneous Param was found: $p")
+        }
       }
     }
   }
@@ -126,13 +154,17 @@ private[ml] object ValidatorParams {
       extraMetadata: Option[JObject] = None): Unit = {
     import org.json4s.JsonDSL._
 
-    val estimatorParamMapsJson = compact(render(
-      instance.getEstimatorParamMaps.map { case paramMap =>
-        paramMap.toSeq.map { case ParamPair(p, v) =>
-          Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
-        }
-      }.toSeq
-    ))
+    val estimatorsParamMapsJson =
+      instance.getEstimatorsParamMaps.zipWithIndex.map { case (paramMaps, idx) =>
+        val json = compact(render(
+          paramMaps.map { case paramMap =>
+            paramMap.toSeq.map { case ParamPair(p, v) =>
+              Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
+            }
+          }.toSeq
+        ))
+        indexKeyName("estimatorParamMaps", idx) -> parse(json)
+      }
 
     val validatorSpecificParams = instance match {
       case cv: CrossValidatorParams =>
@@ -145,16 +177,19 @@ private[ml] object ValidatorParams {
           instance.getClass.getCanonicalName)
     }
 
-    val jsonParams = validatorSpecificParams ++ List(
-      "estimatorParamMaps" -> parse(estimatorParamMapsJson),
+    val jsonParams = validatorSpecificParams ++ estimatorsParamMapsJson ++ List(
+      "estimatorNumber" -> parse(instance.getEstimators.length.toString),
       "seed" -> parse(instance.seed.jsonEncode(instance.getSeed)))
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 
     val evaluatorPath = new Path(path, "evaluator").toString
     instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
-    val estimatorPath = new Path(path, "estimator").toString
-    instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
+
+    instance.getEstimators.zipWithIndex.foreach { case(est, idx) =>
+      val estimatorPath = new Path(path, indexKeyName("estimator", idx)).toString
+      est.asInstanceOf[MLWritable].save(estimatorPath)
+    }
   }
 
   /**
@@ -165,21 +200,28 @@ private[ml] object ValidatorParams {
   def loadImpl[M <: Model[M]](
       path: String,
       sc: SparkContext,
-      expectedClassName: String): (Metadata, Estimator[M], Evaluator, Array[ParamMap]) = {
+      expectedClassName: String):
+  (Metadata, Array[Estimator[_]], Evaluator, Array[Array[ParamMap]]) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
 
     implicit val format = DefaultFormats
     val evaluatorPath = new Path(path, "evaluator").toString
     val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
-    val estimatorPath = new Path(path, "estimator").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
 
-    val uidToParams = Map(evaluator.uid -> evaluator) ++ MetaAlgorithmReadWrite.getUidMap(estimator)
+    // backwards compatible if missing, assumes 1 estimator
+    val estimatorNumber = (metadata.params \ "estimatorNumber").extractOrElse[String]("1").toInt
+    val estimators: Array[Estimator[_]] = (0 until estimatorNumber).map { idx =>
+      val estimatorPath = new Path(path, indexKeyName("estimator", idx)).toString
+      DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
+    }.toArray
 
-    val estimatorParamMaps: Array[ParamMap] =
-      (metadata.params \ "estimatorParamMaps").extract[Seq[Seq[Map[String, String]]]].map {
-        pMap =>
+    val uidToParams = Map(evaluator.uid -> evaluator) ++
+      estimators.flatMap(MetaAlgorithmReadWrite.getUidMap)
+
+    val estimatorsParamsMaps: Array[Array[ParamMap]] = (0 until estimatorNumber).map { idx =>
+      (metadata.params \ indexKeyName("estimatorParamMaps", idx))
+        .extract[Seq[Seq[Map[String, String]]]].map { pMap =>
           val paramPairs = pMap.map { case pInfo: Map[String, String] =>
             val est = uidToParams(pInfo("parent"))
             val param = est.getParam(pInfo("name"))
@@ -188,7 +230,13 @@ private[ml] object ValidatorParams {
           }
           ParamMap(paramPairs: _*)
       }.toArray
+    }.toArray
 
-    (metadata, estimator, evaluator, estimatorParamMaps)
+    (metadata, estimators, evaluator, estimatorsParamsMaps)
+  }
+
+  private def indexKeyName(name: String, idx: Int): String = idx match {
+    case idx if idx == 0 => name  // backwards compatible name for head
+    case idx => name + idx.toString
   }
 }

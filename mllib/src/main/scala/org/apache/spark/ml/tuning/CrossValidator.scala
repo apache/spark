@@ -73,11 +73,19 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("1.2.0")
-  def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
+  def setEstimator(value: Estimator[_]): this.type = setEstimators(Array(value))
 
   /** @group setParam */
   @Since("1.2.0")
-  def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
+  def setEstimatorParamMaps(value: Array[ParamMap]): this.type =
+  setEstimatorsParamMaps(Array(value))
+
+  /** @group setParam */
+  def setEstimators(value: Array[Estimator[_]]): this.type = set(estimators, value)
+
+  /** @group setParam */
+  def setEstimatorsParamMaps(value: Array[Array[ParamMap]]): this.type =
+    set(estimatorsParamMaps, value)
 
   /** @group setParam */
   @Since("1.2.0")
@@ -96,15 +104,15 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sparkSession = dataset.sparkSession
-    val est = $(estimator)
+    val ests = $(estimators)
     val eval = $(evaluator)
-    val epm = $(estimatorParamMaps)
-    val numModels = epm.length
-    val metrics = new Array[Double](epm.length)
+    val epms = $(estimatorsParamMaps).flatten
+    val metrics = new Array[Double](getModelCount)
+    val modelToEstIndex = getModelToEstIndex
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(numFolds, seed)
-    logTuningParams(instr)
+    ests.indices.foreach(logTuningParams(instr, _))
 
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
@@ -112,26 +120,30 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       // multi-model training
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
-      val models = est.fit(trainingDataset, epm).asInstanceOf[Seq[Model[_]]]
+      val models = ests.zip($(estimatorsParamMaps))
+        .flatMap(estEpm => estEpm._1.fit(trainingDataset, estEpm._2).asInstanceOf[Seq[Model[_]]])
       trainingDataset.unpersist()
       var i = 0
-      while (i < numModels) {
+      while (i < getModelCount) {
         // TODO: duplicate evaluator to take extra params from input
-        val metric = eval.evaluate(models(i).transform(validationDataset, epm(i)))
-        logDebug(s"Got metric $metric for model trained with ${epm(i)}.")
+        val metric = eval.evaluate(models(i).transform(validationDataset, epms(i)))
+        logDebug(s"Got metric $metric for model trained with " +
+          s"${ests(modelToEstIndex(i))} and parameters ${epms(i)}.")
         metrics(i) += metric
         i += 1
       }
       validationDataset.unpersist()
     }
-    f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
+    f2jBLAS.dscal(getModelCount, 1.0 / $(numFolds), metrics, 1)
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
-    logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
+    logInfo(s"Best estimator:\n${ests(modelToEstIndex(bestIndex))}")
+    logInfo(s"Best set of parameters:\n${epms(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
-    val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    val bestModel = ests(modelToEstIndex(bestIndex))
+      .fit(dataset, epms(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
@@ -142,8 +154,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidator = {
     val copied = defaultCopy(extra).asInstanceOf[CrossValidator]
-    if (copied.isDefined(estimator)) {
-      copied.setEstimator(copied.getEstimator.copy(extra))
+    if (copied.isDefined(estimators)) {
+      copied.setEstimators(copied.getEstimators.map(_.copy(extra)))
     }
     if (copied.isDefined(evaluator)) {
       copied.setEvaluator(copied.getEvaluator.copy(extra))
@@ -183,14 +195,14 @@ object CrossValidator extends MLReadable[CrossValidator] {
     override def load(path: String): CrossValidator = {
       implicit val format = DefaultFormats
 
-      val (metadata, estimator, evaluator, estimatorParamMaps) =
+      val (metadata, estimators, evaluator, estimatorsParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val seed = (metadata.params \ "seed").extract[Long]
       new CrossValidator(metadata.uid)
-        .setEstimator(estimator)
+        .setEstimators(estimators)
         .setEvaluator(evaluator)
-        .setEstimatorParamMaps(estimatorParamMaps)
+        .setEstimatorsParamMaps(estimatorsParamMaps)
         .setNumFolds(numFolds)
         .setSeed(seed)
     }
@@ -273,7 +285,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
     override def load(path: String): CrossValidatorModel = {
       implicit val format = DefaultFormats
 
-      val (metadata, estimator, evaluator, estimatorParamMaps) =
+      val (metadata, estimators, evaluator, estimatorsParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
       val seed = (metadata.params \ "seed").extract[Long]
@@ -281,9 +293,9 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
       val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
-      model.set(model.estimator, estimator)
+      model.set(model.estimators, estimators)
         .set(model.evaluator, evaluator)
-        .set(model.estimatorParamMaps, estimatorParamMaps)
+        .set(model.estimatorsParamMaps, estimatorsParamMaps)
         .set(model.numFolds, numFolds)
         .set(model.seed, seed)
     }

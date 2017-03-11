@@ -375,7 +375,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * 4. Otherwise, `this` and `that` are considered as conflicting schemas and an exception would be
    *    thrown.
    */
-  private[sql] def merge(that: StructType): StructType =
+  private[spark] def merge(that: StructType): StructType =
     StructType.merge(this, that).asInstanceOf[StructType]
 
   override private[spark] def asNullable: StructType = {
