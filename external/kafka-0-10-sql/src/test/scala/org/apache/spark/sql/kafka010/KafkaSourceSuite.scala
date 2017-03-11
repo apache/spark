@@ -37,6 +37,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.util.Utils
@@ -364,16 +365,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
         "failOnDataLoss" -> failOnDataLoss.toString)
     }
 
-    test(s"assign from specific offsets (topic with uppercase characters) " +
-      s"(failOnDataLoss: $failOnDataLoss)") {
-      val topic = newTopic().toUpperCase
-      testFromSpecificOffsets(
-        topic,
-        failOnDataLoss = failOnDataLoss,
-        "assign" -> assignString(topic, 0 to 4),
-        "failOnDataLoss" -> failOnDataLoss.toString)
-    }
-
     test(s"subscribing topic by name from latest offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromLatestOffsets(
@@ -394,12 +385,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
     test(s"subscribing topic by name from specific offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
-      testFromSpecificOffsets(topic, failOnDataLoss = failOnDataLoss, "subscribe" -> topic)
-    }
-
-    test(s"subscribing topic (with uppercase characters) by name from specific offsets " +
-      s"(failOnDataLoss: $failOnDataLoss)") {
-      val topic = newTopic().toUpperCase
       testFromSpecificOffsets(topic, failOnDataLoss = failOnDataLoss, "subscribe" -> topic)
     }
 
@@ -425,16 +410,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
 
     test(s"subscribing topic by pattern from specific offsets (failOnDataLoss: $failOnDataLoss)") {
       val topicPrefix = newTopic()
-      val topic = topicPrefix + "-suffix"
-      testFromSpecificOffsets(
-        topic,
-        failOnDataLoss = failOnDataLoss,
-        "subscribePattern" -> s"$topicPrefix-.*")
-    }
-
-    test(s"subscribing topic (with uppercase characters) by pattern from specific offsets " +
-      s"(failOnDataLoss: $failOnDataLoss)") {
-      val topicPrefix = newTopic().toUpperCase
       val topic = topicPrefix + "-suffix"
       testFromSpecificOffsets(
         topic,
@@ -630,6 +605,36 @@ class KafkaSourceSuite extends KafkaSourceTest {
     query.stop()
     // `failOnDataLoss` is `false`, we should not fail the query
     assert(query.exception.isEmpty)
+  }
+
+  for((optionKey, optionValue, answer) <- Seq(
+    (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
+    (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
+    (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
+      SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
+    test(s"test offsets containing uppercase characters (${answer.getClass.getSimpleName})") {
+      val offset = getKafkaOffsetRangeLimit(
+        Map(optionKey -> optionValue),
+        optionKey,
+        answer
+      )
+
+      assert(offset == answer)
+    }
+  }
+
+  for((optionKey, answer) <- Seq(
+    (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
+    (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
+    test(s"test offsets with default (${answer.getClass.getSimpleName})") {
+      val offset = getKafkaOffsetRangeLimit(
+        Map.empty,
+        optionKey,
+        answer
+      )
+
+      assert(offset == answer)
+    }
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
