@@ -714,20 +714,6 @@ class TypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("type coercion for Stack") {
-    val rule = TypeCoercion.StackCoercion
-
-    ruleTest(rule,
-      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal(null))),
-      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal.create(null, IntegerType))))
-    ruleTest(rule,
-      Stack(Seq(Literal(3), Literal(1.0), Literal(null), Literal(3.0))),
-      Stack(Seq(Literal(3), Literal(1.0), Literal.create(null, DoubleType), Literal(3.0))))
-    ruleTest(rule,
-      Stack(Seq(Literal(3), Literal(null), Literal("2"), Literal("3"))),
-      Stack(Seq(Literal(3), Literal.create(null, StringType), Literal("2"), Literal("3"))))
-  }
-
   test("BooleanEquality type cast") {
     val be = TypeCoercion.BooleanEquality
     // Use something more than a literal to avoid triggering the simplification rules.
