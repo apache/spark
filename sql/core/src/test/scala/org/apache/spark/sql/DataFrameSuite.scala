@@ -1701,4 +1701,5 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e3.message.contains(
         "Cannot have map type columns in DataFrame which calls set operations"))
     }
+  }
 }
