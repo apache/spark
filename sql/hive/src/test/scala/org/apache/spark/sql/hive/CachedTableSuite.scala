@@ -195,10 +195,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
-    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
-    checkAnswer(
-      table("refreshTable"),
-      table("src").collect())
+    sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
+    checkAnswer(table("refreshTable"), table("src"))
     // Cache the table.
     sql("CACHE TABLE refreshTable")
     assertCached(table("refreshTable"))
