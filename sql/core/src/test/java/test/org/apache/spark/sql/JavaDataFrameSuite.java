@@ -448,10 +448,11 @@ public class JavaDataFrameSuite {
     }
   }
 
+  // Checks a simple case for DataFrame here and put exhaustive tests for the issue
+  // of circular references in `JavaDatasetSuite`.
   @Test(expected = UnsupportedOperationException.class)
   public void testCircularReferenceBean() {
     CircularReference1Bean bean = new CircularReference1Bean();
-    bean.setChild(new CircularReference2Bean());
     spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
   }
 }

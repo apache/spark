@@ -105,17 +105,17 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
 
       case _ if typeToken.isArray =>
-        val (dataType, nullable) = inferDataType(typeToken.getComponentType)
+        val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)
         (ArrayType(dataType, nullable), true)
 
       case _ if iterableType.isAssignableFrom(typeToken) =>
-        val (dataType, nullable) = inferDataType(elementType(typeToken))
+        val (dataType, nullable) = inferDataType(elementType(typeToken), seenTypeSet)
         (ArrayType(dataType, nullable), true)
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
-        val (keyDataType, _) = inferDataType(keyType)
-        val (valueDataType, nullable) = inferDataType(valueType)
+        val (keyDataType, _) = inferDataType(keyType, seenTypeSet)
+        val (valueDataType, nullable) = inferDataType(valueType, seenTypeSet)
         (MapType(keyDataType, valueDataType, nullable), true)
 
       case other =>
@@ -124,16 +124,39 @@ object JavaTypeInference {
         val properties = getJavaBeanReadableProperties(other)
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
-          if (seenTypeSet.contains(returnType.getRawType)) {
-            throw new UnsupportedOperationException(
-              "Cannot have circular references in bean class, but got the circular reference of " +
-                s"class ${returnType.getRawType}")
+          val types = extractRawTypes(returnType)
+          types.foreach { tpe =>
+            if (other == tpe || seenTypeSet.contains(tpe)) {
+              throw new UnsupportedOperationException(
+                "Cannot have circular references in bean class, but got the circular reference " +
+                  s"of class $tpe")
+            }
           }
-          val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
+          val (dataType, nullable) = inferDataType(returnType, seenTypeSet ++ types)
           new StructField(property.getName, dataType, nullable)
         }
         (new StructType(fields), true)
     }
+  }
+
+  private def isBuiltInType(typeToken: TypeToken[_]): Boolean = typeToken.getRawType match {
+      case c: Class[_] if c.getCanonicalName.startsWith("java.") => true
+      case _ => false
+  }
+
+  private def extractRawTypes(typeToken: TypeToken[_]): Seq[Class[_]] = {
+    val tokens = typeToken match {
+      case _ if typeToken.isArray =>
+        typeToken.getComponentType :: Nil
+      case _ if iterableType.isAssignableFrom(typeToken) =>
+        elementType(typeToken) :: Nil
+      case _ if mapType.isAssignableFrom(typeToken) =>
+        val (keyType, valueType) = mapKeyValueType(typeToken)
+        keyType :: valueType :: Nil
+      case t =>
+        t :: Nil
+    }
+    tokens.filterNot(isBuiltInType).map(_.getRawType)
   }
 
   def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
