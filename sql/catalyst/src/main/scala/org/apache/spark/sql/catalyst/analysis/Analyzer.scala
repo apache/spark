@@ -117,6 +117,8 @@ class Analyzer(
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveBroadcastHints(conf),
       ResolveHints.RemoveAllHints),
+    Batch("Simple Sanity Check", Once,
+      LookupFunctions),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -146,7 +148,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      ResolveInlineTables ::
+      ResolveInlineTables(conf) ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -596,7 +598,7 @@ class Analyzer(
           execute(child)
         }
         view.copy(child = newChild)
-      case p @ SubqueryAlias(_, view: View, _) =>
+      case p @ SubqueryAlias(_, view: View) =>
         val newChild = resolveRelation(view)
         p.copy(child = newChild)
       case _ => plan
@@ -604,7 +606,11 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+        lookupTableFromCatalog(u).canonicalized match {
+          case v: View =>
+            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+          case other => i.copy(table = other)
+        }
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
@@ -1035,6 +1041,25 @@ class Analyzer(
           case other => resolved
         }
       }
+    }
+  }
+
+  /**
+   * Checks whether a function identifier referenced by an [[UnresolvedFunction]] is defined in the
+   * function registry. Note that this rule doesn't try to resolve the [[UnresolvedFunction]]. It
+   * only performs simple existence check according to the function identifier to quickly identify
+   * undefined functions without triggering relation resolution, which may incur potentially
+   * expensive partition/schema discovery process in some cases.
+   *
+   * @see [[ResolveFunctions]]
+   * @see https://issues.apache.org/jira/browse/SPARK-19737
+   */
+  object LookupFunctions extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+      case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
+        withPosition(f) {
+          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
+        }
     }
   }
 
@@ -2338,7 +2363,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child, _) => child
+    case SubqueryAlias(_, child) => child
   }
 }
 

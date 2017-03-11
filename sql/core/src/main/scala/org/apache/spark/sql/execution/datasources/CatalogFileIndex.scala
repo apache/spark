@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -46,7 +48,7 @@ class CatalogFileIndex(
   assert(table.identifier.database.isDefined,
     "The table identifier must be qualified in CatalogFileIndex")
 
-  private val baseLocation: Option[String] = table.storage.locationUri
+  private val baseLocation: Option[URI] = table.storage.locationUri
 
   override def partitionSchema: StructType = table.partitionSchema
 
@@ -72,7 +74,8 @@ class CatalogFileIndex(
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
         PartitionPath(
-          p.toRow(partitionSchema), path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+          p.toRow(partitionSchema, sparkSession.sessionState.conf.sessionLocalTimeZone),
+          path.makeQualified(fs.getUri, fs.getWorkingDirectory))
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       new PrunedInMemoryFileIndex(
