@@ -313,11 +313,6 @@ private[kafka010] class KafkaSource(
     sqlContext.internalCreateDataFrame(rdd, schema)
   }
 
-  override def commit(end: Offset): Unit = {
-    super.commit(end)
-    currentPartitionOffsets = Some(KafkaSourceOffset.getPartitionOffsets(end))
-  }
-
   /** Stop this source and free any resources it has allocated. */
   override def stop(): Unit = synchronized {
     kafkaReader.close()

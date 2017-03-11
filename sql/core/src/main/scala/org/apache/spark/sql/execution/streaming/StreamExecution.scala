@@ -291,7 +291,6 @@ class StreamExecution(
               finishTrigger(dataAvailable)
               if (dataAvailable) {
                 // We'll increase currentBatchId after we complete processing current batch's data
-                commitLog.add(currentBatchId, None)
                 currentBatchId += 1
               } else {
                 currentStatus = currentStatus.copy(isDataAvailable = false)
@@ -381,55 +380,66 @@ class StreamExecution(
    *  - currentBatchId
    *  - committedOffsets
    *  - availableOffsets
+   *  The basic structure of this method is as follows:
+   *
+   *  Identify (from the offset log) the offsets used to run the last batch
+   *  IF a last batch exists THEN
+   *    Set the next batch to that last batch
+   *    Check the commit log to see which batch was committed last
+   *    IF the last batch was committed THEN
+   *      Call getBatch using the last batch start and end offsets
+   *      Setup for a new batch i.e., start = last batch end, and identify new end
+   *    DONE
+   *  ELSE
+   *    Identify a brand new batch
+   *  DONE
    */
   private def populateStartOffsets(): Unit = {
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
+        availableOffsets = nextOffsets.toStreamProgress(sources)
+        offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
+        if (batchId > 0) {
+          // We have committed at least one batch
+          offsetLog.get(batchId - 1).foreach { lastOffsets =>
+            committedOffsets = lastOffsets.toStreamProgress(sources)
+            logDebug(s"Resuming with committed offsets: $committedOffsets")
+          }
+        }
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1
          */
         currentBatchId = commitLog.getLatest() match {
-          case Some((committedBatchId, metadata))
+          case Some((committedBatchId, _))
             if batchId == committedBatchId => committedBatchId + 1
           case _ => batchId
         }
-        if (currentBatchId > 0) {
-          /* We have successfully committed at least one batch, the most recent
-           * being the batch at: (currentBatchId - 1). Use that batch to initialize
-           * committedOffsets.
-           */
-          offsetLog.get(currentBatchId - 1).foreach {
-            case lastOffsets =>
-              committedOffsets = lastOffsets.toStreamProgress(sources)
-              logDebug(s"Resuming with committed offsets: $committedOffsets")
-              /* Make a call a call to commit for each source and committed offset.
-               * This will allows sources to re-initialize their state about what
-               * offsets we consider committed.
-               */
-              committedOffsets.foreach {
-                case (source, committedOffset) =>
-                  logDebug(s"Initializing offset retrieval from $source " +
-                    s"at offset $committedOffset")
-                  source.commit(committedOffset)
-              }
-          }
-        }
-        logInfo(s"Resuming streaming query, starting with batch $currentBatchId")
-        if (currentBatchId == batchId) {
-          /* The last batch was not successfully committed so we need to reprocess
-           * it be using the offsets in the offset log i.e., nextOffsets
-           */
-          availableOffsets = nextOffsets.toStreamProgress(sources)
-          offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
-          logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
-            s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
-        } else {
+        if (batchId < currentBatchId) {
           /* The last batch was successfully committed, so we can safely process a
-           * new next batch.
+           * new next batch but first:
+           * Make a call a call to getBatch using the offsets from previous batch.
+           * because certain sources (e.g., KafkaSource) assume on restart the last
+           * batch will be executed before getOffset is called again.
            */
+          availableOffsets.foreach {
+            case (source, end)
+              if committedOffsets.get(source).map(_ != end).getOrElse(true) =>
+              val start = committedOffsets.get(source)
+              logDebug(s"Initializing offset retrieval from $source " +
+                s"at start $start end $end")
+              source.getBatch(start, end)
+            case _ =>
+          }
+          // Move committed offsets to the last offsets of the last batch
+          offsetLog.get(currentBatchId - 1).foreach { lastOffsets =>
+            committedOffsets = lastOffsets.toStreamProgress(sources)
+          }
+          // Construct a new batch be recomputing availableOffsets
           constructNextBatch()
         }
+        logDebug(s"Resuming with committed offsets $committedOffsets " +
+          s"and available offsets $availableOffsets")
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
@@ -600,6 +610,8 @@ class StreamExecution(
     reportTimeTaken("addBatch") {
       sink.addBatch(currentBatchId, nextBatch)
     }
+    logDebug(s"Commit log write ${currentBatchId}")
+    commitLog.add(currentBatchId, None)
 
     awaitBatchLock.lock()
     try {
