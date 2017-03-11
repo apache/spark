@@ -1663,43 +1663,73 @@ class HiveDDLSuite
     }
   }
 
+  test("create hive table with a non-existing location") {
+    withTable("t", "t1") {
+      withTempPath { dir =>
+        spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+        assert(dir.exists())
+
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+      // partition table
+      withTempPath { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a int, b int)
+             |USING hive
+             |PARTITIONED BY(a)
+             |LOCATION '$dir'
+           """.stripMargin)
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
+
+        val partDir = new File(dir, "a=1")
+        assert(partDir.exists())
+
+        checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
+
   Seq(true, false).foreach { shouldDelete =>
-    val tcName = if (shouldDelete) "non-existent" else "existed"
-    test(s"CTAS for external data source table with a $tcName location") {
+    val tcName = if (shouldDelete) "non-existing" else "existed"
+
+    test(s"CTAS for external hive table with a $tcName location") {
       withTable("t", "t1") {
-        withTempDir {
-          dir =>
-            if (shouldDelete) {
-              dir.delete()
-            }
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTempDir { dir =>
+            if (shouldDelete) dir.delete()
             spark.sql(
               s"""
                  |CREATE TABLE t
-                 |USING parquet
+                 |USING hive
                  |LOCATION '$dir'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
-
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
             assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
-        }
-        // partition table
-        withTempDir {
-          dir =>
-            if (shouldDelete) {
-              dir.delete()
-            }
+          }
+          // partition table
+          withTempDir { dir =>
+            if (shouldDelete) dir.delete()
             spark.sql(
               s"""
                  |CREATE TABLE t1
-                 |USING parquet
+                 |USING hive
                  |PARTITIONED BY(a, b)
                  |LOCATION '$dir'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
-
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
             assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
@@ -1707,51 +1737,6 @@ class HiveDDLSuite
             assert(partDir.exists())
 
             checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
-        }
-      }
-    }
-
-    test(s"CTAS for external hive table with a $tcName location") {
-      withTable("t", "t1") {
-        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-          withTempDir {
-            dir =>
-              if (shouldDelete) {
-                dir.delete()
-              }
-              spark.sql(
-                s"""
-                   |CREATE TABLE t
-                   |USING hive
-                   |LOCATION '$dir'
-                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-                 """.stripMargin)
-              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
-
-              checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
-          }
-          // partition table
-          withTempDir {
-            dir =>
-              if (shouldDelete) {
-                dir.delete()
-              }
-              spark.sql(
-                s"""
-                   |CREATE TABLE t1
-                   |USING hive
-                   |PARTITIONED BY(a, b)
-                   |LOCATION '$dir'
-                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-                 """.stripMargin)
-              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
-
-              val partDir = new File(dir, "a=3")
-              assert(partDir.exists())
-
-              checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
           }
         }
       }
