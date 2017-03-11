@@ -50,7 +50,6 @@ object SessionCatalog {
 class SessionCatalog(
     externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf,
     hadoopConf: Configuration,
@@ -66,16 +65,19 @@ class SessionCatalog(
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
-      DummyFunctionResourceLoader,
       functionRegistry,
       conf,
       new Configuration(),
       CatalystSqlParser)
+    functionResourceLoader = DummyFunctionResourceLoader
   }
 
   // For testing only.
   def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
+    this(
+      externalCatalog,
+      new SimpleFunctionRegistry,
+      SimpleCatalystConf(caseSensitiveAnalysis = true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
@@ -88,6 +90,8 @@ class SessionCatalog(
   // the corresponding item in the current database.
   @GuardedBy("this")
   protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
+
+  @volatile var functionResourceLoader: FunctionResourceLoader = _
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -255,7 +259,19 @@ class SessionCatalog(
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     validateName(table)
-    val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+
+    val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
+      && !tableDefinition.storage.locationUri.get.isAbsolute) {
+      // make the location of the table qualified.
+      val qualifiedTableLocation =
+        makeQualifiedPath(tableDefinition.storage.locationUri.get)
+      tableDefinition.copy(
+        storage = tableDefinition.storage.copy(locationUri = Some(qualifiedTableLocation)),
+        identifier = TableIdentifier(table, Some(db)))
+    } else {
+      tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    }
+
     requireDbExists(db)
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
@@ -578,7 +594,7 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, viewDef, None)
+          SubqueryAlias(table, viewDef)
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -591,17 +607,17 @@ class SessionCatalog(
             desc = metadata,
             output = metadata.schema.toAttributes,
             child = parser.parsePlan(viewText))
-          SubqueryAlias(table, child, Some(name.copy(table = table, database = Some(db))))
+          SubqueryAlias(table, child)
         } else {
           val tableRelation = CatalogRelation(
             metadata,
             // we assume all the columns are nullable.
             metadata.dataSchema.asNullable.toAttributes,
             metadata.partitionSchema.asNullable.toAttributes)
-          SubqueryAlias(table, tableRelation, None)
+          SubqueryAlias(table, tableRelation)
         }
       } else {
-        SubqueryAlias(table, tempTables(table), None)
+        SubqueryAlias(table, tempTables(table))
       }
     }
   }
@@ -987,6 +1003,9 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    if (functionResourceLoader == null) {
+      throw new IllegalStateException("functionResourceLoader has not yet been initialized")
+    }
     resources.foreach(functionResourceLoader.loadResource)
   }
 
@@ -1182,4 +1201,29 @@ class SessionCatalog(
     }
   }
 
+  /**
+   * Create a new [[SessionCatalog]] with the provided parameters. `externalCatalog` and
+   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
+   */
+  def newSessionCatalogWith(
+      conf: CatalystConf,
+      hadoopConf: Configuration,
+      functionRegistry: FunctionRegistry,
+      parser: ParserInterface): SessionCatalog = {
+    val catalog = new SessionCatalog(
+      externalCatalog,
+      globalTempViewManager,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
+
+    synchronized {
+      catalog.currentDb = currentDb
+      // copy over temporary tables
+      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    }
+
+    catalog
+  }
 }
