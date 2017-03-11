@@ -2067,7 +2067,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         // partition table
         withTempDir { dir =>
           if (shouldDelete) dir.delete()
-
           spark.sql(
             s"""
                |CREATE TABLE t1

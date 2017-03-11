@@ -1707,7 +1707,6 @@ class HiveDDLSuite
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
           withTempDir { dir =>
             if (shouldDelete) dir.delete()
-
             spark.sql(
               s"""
                  |CREATE TABLE t
@@ -1723,7 +1722,6 @@ class HiveDDLSuite
           // partition table
           withTempDir { dir =>
             if (shouldDelete) dir.delete()
-            
             spark.sql(
               s"""
                  |CREATE TABLE t1
