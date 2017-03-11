@@ -159,7 +159,7 @@ class FPGrowth @Since("2.2.0") (
       StructField("items", dataset.schema($(featuresCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
     val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
-    copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
+    copyValues(new FPGrowthModel(uid, frequentItems, data.count())).setParent(this)
   }
 
   @Since("2.2.0")
@@ -189,7 +189,8 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 @Experimental
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
-    @transient val freqItemsets: DataFrame)
+    @transient val freqItemsets: DataFrame,
+    val numTotalRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -211,7 +212,7 @@ class FPGrowthModel private[ml] (
    */
   @Since("2.2.0")
   @transient lazy val associationRules: DataFrame = {
-    AssociationRules.getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
+    AssociationRules.getAssociationRulesFromFP(freqItemsets, "items", "freq", numTotalRecords, $(minConfidence))
   }
 
   /**
@@ -319,6 +320,7 @@ private[fpm] object AssociationRules {
         dataset: Dataset[_],
         itemsCol: String,
         freqCol: String,
+        numTotalRecords: Long,
         minConfidence: Double): DataFrame = {
 
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
@@ -326,13 +328,16 @@ private[fpm] object AssociationRules {
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
       .run(freqItemSetRdd)
-      .map(r => Row(r.antecedent, r.consequent, r.confidence))
+      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.freqUnion / numTotalRecords))
+
+
 
     val dt = dataset.schema(itemsCol).dataType
     val schema = StructType(Seq(
       StructField("antecedent", dt, nullable = false),
       StructField("consequent", dt, nullable = false),
-      StructField("confidence", DoubleType, nullable = false)))
+      StructField("confidence", DoubleType, nullable = false),
+      StructField("support", DoubleType, nullable = false)))
     val rules = dataset.sparkSession.createDataFrame(rows, schema)
     rules
   }

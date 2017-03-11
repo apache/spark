@@ -106,7 +106,7 @@ object AssociationRules {
   class Rule[Item] private[fpm] (
       @Since("1.5.0") val antecedent: Array[Item],
       @Since("1.5.0") val consequent: Array[Item],
-      freqUnion: Double,
+      private[spark] val freqUnion: Double,
       freqAntecedent: Double) extends Serializable {
 
     /**
