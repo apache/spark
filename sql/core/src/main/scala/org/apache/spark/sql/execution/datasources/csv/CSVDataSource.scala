@@ -54,10 +54,21 @@ abstract class CSVDataSource extends Serializable {
   /**
    * Infers the schema from `inputPaths` files.
    */
-  def infer(
+  final def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType]
+      parsedOptions: CSVOptions): Option[StructType] = {
+    if (inputPaths.nonEmpty) {
+      Some(inferSchema(sparkSession, inputPaths, parsedOptions))
+    } else {
+      None
+    }
+  }
+
+  protected def inferSchema(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: CSVOptions): StructType
 
   /**
    * Generates a header from the given row which is null-safe and duplicate-safe.
@@ -128,13 +139,13 @@ object TextInputCSVDataSource extends CSVDataSource {
     UnivocityParser.parseIterator(lines, shouldDropHeader, parser)
   }
 
-  override def infer(
+  override def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType] = {
+      parsedOptions: CSVOptions): StructType = {
     val csv = createBaseDataset(sparkSession, inputPaths, parsedOptions)
     val maybeFirstLine = CSVUtils.filterCommentAndEmpty(csv, parsedOptions).take(1).headOption
-    Some(inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions))
+    inferFromDataset(sparkSession, csv, maybeFirstLine, parsedOptions)
   }
 
   /**
@@ -199,10 +210,10 @@ object WholeFileCSVDataSource extends CSVDataSource {
       parser)
   }
 
-  override def infer(
+  override def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType] = {
+      parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     csv.flatMap { lines =>
       UnivocityParser.tokenizeStream(
@@ -221,10 +232,10 @@ object WholeFileCSVDataSource extends CSVDataSource {
             parsedOptions.headerFlag,
             new CsvParser(parsedOptions.asParserSettings))
         }
-        Some(CSVInferSchema.infer(tokenRDD, header, parsedOptions))
+        CSVInferSchema.infer(tokenRDD, header, parsedOptions)
       case None =>
         // If the first row could not be read, just return the empty schema.
-        Some(StructType(Nil))
+        StructType(Nil)
     }
   }
 
