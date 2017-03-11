@@ -122,7 +122,8 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')""".stripMargin)
       sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
-      assert(getPathOption("src") == Some("/tmp/path2"))
+      assert(getPathOption("src") ==
+        Some(CatalogUtils.URIToString(makeQualifiedPath("/tmp/path2"))))
     }
 
     withTable("src", "src2") {

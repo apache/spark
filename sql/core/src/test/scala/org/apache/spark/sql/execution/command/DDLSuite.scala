@@ -1187,7 +1187,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       // if (isUsingHiveMetastore) {
       //  assert(storageFormat.properties.get("path") === expected)
       // }
-      assert(storageFormat.locationUri === Some(expected))
+      assert(storageFormat.locationUri ===
+        Some(makeQualifiedPath(CatalogUtils.URIToString(expected))))
     }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
@@ -1201,7 +1202,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     verifyLocation(new URI("/swanky/steak/place"))
     // set table partition location without explicitly specifying database
     sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
-    verifyLocation(new URI("vienna"), Some(partSpec))
+    val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tab1"))
+    val viennaPartPath = new Path(new Path(table. location), "vienna")
+    verifyLocation(CatalogUtils.stringToURI(viennaPartPath.toString), Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
@@ -1357,13 +1360,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
     assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
-    val partitionLocation = if (isUsingHiveMetastore) {
-      val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
-      assert(tableLocation.isDefined)
-      makeQualifiedPath(new Path(tableLocation.get.toString, "paris").toString)
-    } else {
-      new URI("paris")
-    }
+
+    val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
+    assert(tableLocation.isDefined)
+    val partitionLocation = makeQualifiedPath(
+      new Path(tableLocation.get.toString, "paris").toString)
 
     assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option(partitionLocation))
     assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
@@ -1929,7 +1930,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == new URI(newDir))
+        assert(table1.location == makeQualifiedPath(newDir))
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -2180,6 +2181,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
+        spark.sql(s"ALTER TABLE t SET LOCATION '$dir'")
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location.toString.startsWith("file:/"))
+      }
+
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
         spark.sql(
           s"""
              |CREATE TABLE t1(a string, b string)
@@ -2189,6 +2197,37 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location.toString.startsWith("file:/"))
+      }
+    }
+  }
+
+  test("the qualified path of a partition is stored in the catalog") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a STRING, b STRING) USING parquet PARTITIONED BY(b) LOCATION '$dir'
+           """.stripMargin)
+        spark.sql("INSERT INTO TABLE t PARTITION(b=1) SELECT 2")
+        val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "1"))
+        assert(part.storage.locationUri.contains(
+          makeQualifiedPath(new File(dir, "b=1").getAbsolutePath)))
+        assert(part.storage.locationUri.get.toString.startsWith("file:/"))
+      }
+      withTempDir { dir =>
+        spark.sql(s"ALTER TABLE t PARTITION(b=1) SET LOCATION '$dir'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "1"))
+        assert(part.storage.locationUri.contains(makeQualifiedPath(dir.getAbsolutePath)))
+        assert(part.storage.locationUri.get.toString.startsWith("file:/"))
+      }
+
+      withTempDir { dir =>
+        spark.sql(s"ALTER TABLE t ADD PARTITION(b=2) LOCATION '$dir'")
+        val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "2"))
+        assert(part.storage.locationUri.contains(makeQualifiedPath(dir.getAbsolutePath)))
+        assert(part.storage.locationUri.get.toString.startsWith("file:/"))
       }
     }
   }
