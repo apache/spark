@@ -1686,4 +1686,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
     assert(df.filter($"array1" === $"array2").count() == 1)
   }
+
+  test("SPARK-19893: cannot run set operations with map type") {
+    val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
+    val e = intercept[AnalysisException](df.intersect(df))
+    assert(e.message.contains(
+      "Cannot have map type columns in DataFrame which calls set operations"))
+    val e2 = intercept[AnalysisException](df.except(df))
+    assert(e2.message.contains(
+      "Cannot have map type columns in DataFrame which calls set operations"))
+    withTempView("v") {
+      df.createOrReplaceTempView("v")
+      val e3 = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v"))
+      assert(e3.message.contains(
+        "Cannot have map type columns in DataFrame which calls set operations"))
+    }
 }

@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -44,6 +43,16 @@ trait CheckAnalysis extends PredicateHelper {
     exprs.flatMap(_.collect {
       case e: Generator => e
     }).length > 1
+  }
+
+  protected def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
+  protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasMapType(a.dataType))
+    case _ => None
   }
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
@@ -171,7 +180,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case f @ Filter(condition, child) =>
+          case Filter(condition, _) =>
             splitConjunctivePredicates(condition).foreach {
               case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
@@ -363,6 +372,14 @@ trait CheckAnalysis extends PredicateHelper {
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
+
+          // TODO: although map type is not orderable, technically map type should be able to be
+          // used in equality comparison, remove this type check once we support it.
+          case o if mapColumnInSetOperation(o).isDefined =>
+            val mapCol = mapColumnInSetOperation(o).get
+            failAnalysis("Cannot have map type columns in DataFrame which calls " +
+              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
+              "is " + mapCol.dataType.simpleString)
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
