@@ -596,7 +596,7 @@ class Word2VecModel private[spark] (
 
     var j = 0
     while (j < numWords) {
-      pq += Tuple2(wordList(j), cosineVector(j))
+      pq += Tuple2(wordList(j), cosineVec(j))
       j += 1
     }
 
