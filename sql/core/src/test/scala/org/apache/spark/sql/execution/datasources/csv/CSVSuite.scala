@@ -1115,12 +1115,4 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(df2.schema === schema)
   }
 
-  test("Consistent exception message in schema inference when the path is an empty directory") {
-    withTempDir { dir =>
-      val message = intercept[AnalysisException] {
-        spark.read.csv(dir.getAbsolutePath)
-      }.getMessage
-      assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
-    }
-  }
 }
