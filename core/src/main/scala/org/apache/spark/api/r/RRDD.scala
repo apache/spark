@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.r
 
-import java.util.{Map => JMap}
 import java.io.File
+import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
