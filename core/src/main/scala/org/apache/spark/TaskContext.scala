@@ -134,13 +134,13 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
-   * Adds a listener to be executed on task failure. Adding a listener to an already failed task,
+   * Adds a listener to be executed on task failure. Adding a listener to an already failed task
    * will result in that listener being called immediately.
    */
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /**
-   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task,
+   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task
    * will result in that listener being called immediately.
    */
   def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
