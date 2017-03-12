@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.fpm
 
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
@@ -190,7 +191,7 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
 class FPGrowthModel private[ml] (
     @Since("2.2.0") override val uid: String,
     @transient val freqItemsets: DataFrame,
-    val numTotalRecords: Long)
+    val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
   /** @group setParam */
@@ -212,7 +213,8 @@ class FPGrowthModel private[ml] (
    */
   @Since("2.2.0")
   @transient lazy val associationRules: DataFrame = {
-    AssociationRules.getAssociationRulesFromFP(freqItemsets, "items", "freq", numTotalRecords, $(minConfidence))
+    AssociationRules.getAssociationRulesFromFP(
+      freqItemsets, "items", "freq", numTrainingRecords, $(minConfidence))
   }
 
   /**
@@ -260,7 +262,7 @@ class FPGrowthModel private[ml] (
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
-    val copied = new FPGrowthModel(uid, freqItemsets)
+    val copied = new FPGrowthModel(uid, freqItemsets, numTrainingRecords)
     copyValues(copied, extra).setParent(this.parent)
   }
 
@@ -282,7 +284,8 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
   class FPGrowthModelWriter(instance: FPGrowthModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val extraMetadata = "numTrainingRecords" -> instance.numTrainingRecords
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
       instance.freqItemsets.write.parquet(dataPath)
     }
@@ -295,9 +298,11 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
 
     override def load(path: String): FPGrowthModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      implicit val format = DefaultFormats
+      val numTrainingRecords = (metadata.metadata \ "numTrainingRecords").extract[Long]
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
-      val model = new FPGrowthModel(metadata.uid, frequentItems)
+      val model = new FPGrowthModel(metadata.uid, frequentItems, numTrainingRecords)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
@@ -312,25 +317,24 @@ private[fpm] object AssociationRules {
    *                algorithms like [[FPGrowth]].
    * @param itemsCol column name for frequent itemsets
    * @param freqCol column name for frequent itemsets count
+   * @param numTrainingRecords count of training Dataset
    * @param minConfidence minimum confidence for the result association rules
    * @return a DataFrame("antecedent", "consequent", "confidence") containing the association
    *         rules.
    */
   def getAssociationRulesFromFP[T: ClassTag](
-        dataset: Dataset[_],
-        itemsCol: String,
-        freqCol: String,
-        numTotalRecords: Long,
-        minConfidence: Double): DataFrame = {
+      dataset: Dataset[_],
+      itemsCol: String,
+      freqCol: String,
+      numTrainingRecords: Long,
+      minConfidence: Double): DataFrame = {
 
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
       .map(row => new FreqItemset(row.getSeq[T](0).toArray, row.getLong(1)))
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
       .run(freqItemSetRdd)
-      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.freqUnion / numTotalRecords))
-
-
+      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.freqUnion / numTrainingRecords))
 
     val dt = dataset.schema(itemsCol).dataType
     val schema = StructType(Seq(
