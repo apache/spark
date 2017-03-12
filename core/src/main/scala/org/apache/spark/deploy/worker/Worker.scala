@@ -62,7 +62,7 @@ private[deploy] class Worker(
   private val forwordMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
 
-  // A separated thread to clean up the workDir and the finished application.
+  // A separated thread to clean up the workDir and the directories of finished applications.
   // Used to provide the implicit parameter of `Future` methods.
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
