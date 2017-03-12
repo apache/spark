@@ -32,7 +32,7 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite with Matchers with Mo
     val containerInfo = MesosSchedulerBackendUtil.containerInfo(conf)
     val params = containerInfo.getDocker.getParametersList
 
-    assert(params.length == 0)
+    assert(params.size() == 0)
   }
 
   test("ContainerInfo parses docker parameters") {
