@@ -89,16 +89,7 @@ private[csv] class CSVOptions(
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
   val escapeQuoteEscaping = getChar("escapeQuoteEscaping", '\u0000')
-  val unescapedQuoteHandling = parameters.get("unescapedQuoteHandling") match {
-    case None => UnescapedQuoteHandling.STOP_AT_DELIMITER // default
-    case Some("STOP_AT_CLOSING_QUOTE") => UnescapedQuoteHandling.STOP_AT_CLOSING_QUOTE
-    case Some("STOP_AT_DELIMITER") => UnescapedQuoteHandling.STOP_AT_DELIMITER
-    case Some("SKIP_VALUE") => UnescapedQuoteHandling.SKIP_VALUE
-    case Some("RAISE_ERROR") => UnescapedQuoteHandling.RAISE_ERROR
-    case Some(x) =>
-      logWarning(s"$x is not a valid unescapedQuoteHandling option. Using STOP_AT_DELIMITER.")
-      UnescapedQuoteHandling.STOP_AT_DELIMITER
-  }
+  val escapeUnquotedValues = getBool("escapeUnquotedValues", false)
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -170,6 +161,7 @@ private[csv] class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings.setEscapeUnquotedValues(escapeUnquotedValues)
     writerSettings
   }
 
@@ -188,7 +180,8 @@ private[csv] class CSVOptions(
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
-    settings.setUnescapedQuoteHandling(unescapedQuoteHandling)
+    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings.setEscapeUnquotedValues(escapeUnquotedValues)
     settings
   }
 }
