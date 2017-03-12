@@ -295,7 +295,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Out of range for both Hive and Spark
     // Hive throws an exception. Spark overflows and returns wrong output
-    // checkHiveHashForIntervalType("interval 9999999999 day", -4767228)
+    // checkHiveHashForIntervalType("interval 9999999999 second", 0)
 
     // ----- MINUTE -----
 
@@ -312,7 +312,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Out of range for both Hive and Spark
     // Hive throws an exception. Spark overflows and returns wrong output
-    // checkHiveHashForIntervalType("interval 9999999999 day", -4767228)
+    // checkHiveHashForIntervalType("interval 9999999999 minute", 0)
 
     // ----- HOUR -----
 
@@ -329,7 +329,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Out of range for both Hive and Spark
     // Hive throws an exception. Spark overflows and returns wrong output
-    // checkHiveHashForIntervalType("interval 9999999999 day", -4767228)
+    // checkHiveHashForIntervalType("interval 9999999999 hour", 0)
 
     // ----- DAY -----
 
@@ -351,7 +351,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Out of range for both Hive and Spark
     // Hive throws an exception. Spark overflows and returns wrong output
-    // checkHiveHashForIntervalType("interval 9999999999 day", -4767228)
+    // checkHiveHashForIntervalType("interval 9999999999 day", 0)
 
     // ----- MIX -----
 
