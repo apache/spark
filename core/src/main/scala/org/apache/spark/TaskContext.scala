@@ -106,7 +106,7 @@ abstract class TaskContext extends Serializable {
   /**
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation. Adding a listener
-   * to an already completed task, will result in that listeners being called immediately.
+   * to an already completed task will result in that listeners being called immediately.
    * Operations defined in the listener must be idempotent, as `onTaskCompletion` can be called
    * multiple times.
    *
@@ -119,7 +119,7 @@ abstract class TaskContext extends Serializable {
   /**
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation. Adding a listener
-   * to an already completed task, will result in that listeners being called immediately.
+   * to an already completed task will result in that listeners being called immediately.
    * Operations defined in the listener must be idempotent, as `onTaskCompletion` can be called
    * multiple times.
    *
