@@ -100,16 +100,16 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   /**
-   * Parse a comma-delimited list of arbitrary parameters, each of which
+   * Parse a list of docker parameters, each of which
    * takes the form key=value
    */
-  def parseParamsSpec(params: String): List[Parameter] = {
-    params.split(",").map(_.split("=")).flatMap { kv: Array[String] =>
+  private def parseParamsSpec(params: String): List[Parameter] = {
+    params.split(",").map(_.split("=")).flatMap { spec: Array[String] =>
       val param: Parameter.Builder = Parameter.newBuilder()
-      kv match {
+      spec match {
         case Array(key, value) =>
           Some(param.setKey(key).setValue(value))
-        case kv =>
+        case spec =>
           logWarning(s"Unable to parse arbitary parameters: $params. "
             + "Expected form: \"key=value(, ...)\"")
           None
@@ -141,7 +141,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .getOrElse(List.empty)
 
       val params = conf
-        .getOption("spark.mesos.executor.docker.params")
+        .getOption("spark.mesos.executor.docker.parameters")
         .map(parseParamsSpec)
         .getOrElse(List.empty)
 

@@ -24,32 +24,30 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class MesosSchedulerBackendUtilSuite extends SparkFunSuite with Matchers with MockitoSugar {
 
-  test("Parse arbitrary parameter to pass into docker containerizer") {
-    val parsed = MesosSchedulerBackendUtil.parseParamsSpec("a=1,b=2,c=3")
-    parsed(0).getKey shouldBe "a"
-    parsed(0).getValue shouldBe "1"
-    parsed(1).getKey shouldBe "b"
-    parsed(1).getValue shouldBe "2"
-    parsed(2).getKey shouldBe "c"
-    parsed(2).getValue shouldBe "3"
-
-    val invalid = MesosSchedulerBackendUtil.parseParamsSpec("a,b")
-    invalid.length shouldBe 0
-  }
-
-  test("ContainerInfo contains parsed arbitrary parameters") {
+  test("ContainerInfo fails to parse invalid docker parameters") {
     val conf = new SparkConf()
-    conf.set("spark.mesos.executor.docker.params", "a=1,b=2,c=3")
+    conf.set("spark.mesos.executor.docker.parameters", "a,b")
     conf.set("spark.mesos.executor.docker.image", "test")
 
     val containerInfo = MesosSchedulerBackendUtil.containerInfo(conf)
     val params = containerInfo.getDocker.getParametersList
-    params.size() shouldBe 3
-    params.get(0).getKey shouldBe "a"
-    params.get(0).getValue shouldBe "1"
-    params.get(1).getKey shouldBe "b"
-    params.get(1).getValue shouldBe "2"
-    params.get(2).getKey shouldBe "c"
-    params.get(2).getValue shouldBe "3"
+
+    assert(params.length == 0)
+  }
+
+  test("ContainerInfo parses docker parameters") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.executor.docker.parameters", "a=1,b=2,c=3")
+    conf.set("spark.mesos.executor.docker.image", "test")
+
+    val containerInfo = MesosSchedulerBackendUtil.containerInfo(conf)
+    val params = containerInfo.getDocker.getParametersList
+    assert(params.size() == 3)
+    assert(params.get(0).getKey == "a")
+    assert(params.get(0).getValue == "1")
+    assert(params.get(1).getKey == "b")
+    assert(params.get(1).getValue == "2")
+    assert(params.get(2).getKey == "c")
+    assert(params.get(2).getValue == "3")
   }
 }
