@@ -24,7 +24,7 @@ class CapturedException(Exception):
         self.stackTrace = stackTrace
 
     def __str__(self):
-        return repr(self.desc)
+        return str(self.desc)
 
 
 class AnalysisException(CapturedException):
