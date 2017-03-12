@@ -33,12 +33,11 @@ import org.apache.spark.util._
 /**
  * A [[TaskContext]] implementation.
  *
- * A small note on thread safety. The interrupted, completed, failed and fetchFailed fields are
- * volatile, this makes sure that updates are always visible across threads. We synchronize on the
- * context instance when it is marked as completed (or failed) and the relevant callback are
- * invoked. We also synchronize on the context instance when a callback is added. This ensures
- * that we cannot add a callback in one thread, while we are invoking those callbacks in another
- * thread. Other methods are not thread safe.
+ * A small note on thread safety. The interrupted & fetchFailed fields are volatile, this makes
+ * sure that updates are always visible across threads. The complete and failed flags and their
+ * callbacks are protected by synchronizing on the context instance. For instance, this ensures
+ * that you cannot add a completion listeners in one thread while we are completing (and calling
+ * the listeners) in another thread. Other state is not thread safe.
  */
 private[spark] class TaskContextImpl(
     val stageId: Int,
@@ -63,10 +62,10 @@ private[spark] class TaskContextImpl(
   @volatile private var interrupted: Boolean = false
 
   // Whether the task has completed.
-  @volatile private var completed: Boolean = false
+  private var completed: Boolean = false
 
   // Whether the task has failed.
-  @volatile private var failed: Boolean = false
+  private var failed: Boolean = false
 
   // Throwable that caused the task to fail
   private var failure: Throwable = _
@@ -76,25 +75,23 @@ private[spark] class TaskContextImpl(
   @volatile private var _fetchFailedException: Option[FetchFailedException] = None
 
   @GuardedBy("this")
-  override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
-    synchronized {
-      if (completed) {
-        listener.onTaskCompletion(this)
-      }
-      // Always add the listener because it is legal to call them multiple times.
-      onCompleteCallbacks += listener
+  override def addTaskCompletionListener(listener: TaskCompletionListener)
+      : this.type = synchronized {
+    if (completed) {
+      listener.onTaskCompletion(this)
     }
+    // Always add the listener because it is legal to call them multiple times.
+    onCompleteCallbacks += listener
     this
   }
 
   @GuardedBy("this")
-  override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
-    synchronized {
-      if (failed) {
-        listener.onTaskFailure(this, failure)
-      } else {
-        onFailureCallbacks += listener
-      }
+  override def addTaskFailureListener(listener: TaskFailureListener)
+      : this.type = synchronized {
+    if (failed) {
+      listener.onTaskFailure(this, failure)
+    } else {
+      onFailureCallbacks += listener
     }
     this
   }
@@ -103,8 +100,8 @@ private[spark] class TaskContextImpl(
   @GuardedBy("this")
   private[spark] def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return
-    failure = error
     failed = true
+    failure = error
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
     }
@@ -145,7 +142,8 @@ private[spark] class TaskContextImpl(
     interrupted = true
   }
 
-  override def isCompleted(): Boolean = completed
+  @GuardedBy("this")
+  override def isCompleted(): Boolean = synchronized(completed)
 
   override def isRunningLocally(): Boolean = false
 
