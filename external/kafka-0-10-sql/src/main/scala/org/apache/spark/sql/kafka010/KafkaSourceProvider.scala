@@ -124,18 +124,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         .toMap
 
     val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit) match {
-        case earliest @ EarliestOffsetRangeLimit => earliest
-        case specific @ SpecificOffsetRangeLimit(_) => specific
-        case _ => EarliestOffsetRangeLimit
-      }
+      caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+    assert(startingRelationOffsets != LatestOffsetRangeLimit)
 
     val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
-      ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit) match {
-        case latest @ LatestOffsetRangeLimit => latest
-        case specific @ SpecificOffsetRangeLimit(_) => specific
-        case _ => LatestOffsetRangeLimit
-      }
+      ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+    assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy(caseInsensitiveParams),
@@ -389,8 +383,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       case LatestOffsetRangeLimit =>
         throw new IllegalArgumentException("starting offset can't be latest " +
           "for batch queries on Kafka")
-      case specific: SpecificOffsetRangeLimit =>
-        specific.partitionOffsets.foreach {
+      case SpecificOffsetRangeLimit(partitionOffsets) =>
+        partitionOffsets.foreach {
           case (tp, off) if off == KafkaOffsetRangeLimit.LATEST =>
             throw new IllegalArgumentException(s"startingOffsets for $tp can't " +
               "be latest for batch queries on Kafka")
@@ -404,8 +398,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
       case LatestOffsetRangeLimit => // good to go
-      case specific: SpecificOffsetRangeLimit =>
-        specific.partitionOffsets.foreach {
+      case SpecificOffsetRangeLimit(partitionOffsets) =>
+        partitionOffsets.foreach {
           case (tp, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
             throw new IllegalArgumentException(s"ending offset for $tp can't be " +
               "earliest for batch queries on Kafka")

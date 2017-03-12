@@ -607,33 +607,21 @@ class KafkaSourceSuite extends KafkaSourceTest {
     assert(query.exception.isEmpty)
   }
 
-  for((optionKey, optionValue, answer) <- Seq(
-    (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
-    (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
-    (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
-      SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
-    test(s"test offsets containing uppercase characters (${answer.getClass.getSimpleName})") {
-      val offset = getKafkaOffsetRangeLimit(
-        Map(optionKey -> optionValue),
-        optionKey,
-        answer
-      )
-
-      assert(offset == answer)
+  test("test to get offsets from case insensitive parameters") {
+    for ((optionKey, optionValue, answer) <- Seq(
+      (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
+      (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
+      (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
+        SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
+      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      assert(offset === answer)
     }
-  }
 
-  for((optionKey, answer) <- Seq(
-    (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
-    (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
-    test(s"test offsets with default (${answer.getClass.getSimpleName})") {
-      val offset = getKafkaOffsetRangeLimit(
-        Map.empty,
-        optionKey,
-        answer
-      )
-
-      assert(offset == answer)
+    for ((optionKey, answer) <- Seq(
+      (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
+      (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
+      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      assert(offset === answer)
     }
   }
 
