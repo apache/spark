@@ -52,12 +52,14 @@ summary.treeEnsemble <- function(model) {
   numFeatures <- callJMethod(jobj, "numFeatures")
   features <-  callJMethod(jobj, "features")
   featureImportances <- callJMethod(callJMethod(jobj, "featureImportances"), "toString")
+  maxDepth <- callJMethod(jobj, "maxDepth")
   numTrees <- callJMethod(jobj, "numTrees")
   treeWeights <- callJMethod(jobj, "treeWeights")
   list(formula = formula,
        numFeatures = numFeatures,
        features = features,
        featureImportances = featureImportances,
+       maxDepth = maxDepth,
        numTrees = numTrees,
        treeWeights = treeWeights,
        jobj = jobj)
@@ -70,6 +72,7 @@ print.summary.treeEnsemble <- function(x) {
   cat("\nNumber of features: ", x$numFeatures)
   cat("\nFeatures: ", unlist(x$features))
   cat("\nFeature importances: ", x$featureImportances)
+  cat("\nMax Depth: ", x$maxDepth)
   cat("\nNumber of trees: ", x$numTrees)
   cat("\nTree weights: ", unlist(x$treeWeights))
 
@@ -197,8 +200,8 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
-#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
-#'         and \code{treeWeights} (tree weights).
+#'         \code{featureImportances} (feature importances), \code{maxDepth} (max depth of trees),
+#'         \code{numTrees} (number of trees), and \code{treeWeights} (tree weights).
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
 #' @export
@@ -403,8 +406,8 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
-#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
-#'         and \code{treeWeights} (tree weights).
+#'         \code{featureImportances} (feature importances), \code{maxDepth} (max depth of trees),
+#'         \code{numTrees} (number of trees), and \code{treeWeights} (tree weights).
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
 #' @export

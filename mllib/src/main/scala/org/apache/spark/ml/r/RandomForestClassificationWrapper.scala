@@ -44,6 +44,7 @@ private[r] class RandomForestClassifierWrapper private (
   lazy val featureImportances: Vector = rfcModel.featureImportances
   lazy val numTrees: Int = rfcModel.getNumTrees
   lazy val treeWeights: Array[Double] = rfcModel.treeWeights
+  lazy val maxDepth: Int = rfcModel.getMaxDepth
 
   def summary: String = rfcModel.toDebugString
 
