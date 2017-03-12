@@ -30,13 +30,13 @@ class MeanPercentileRankMetrics (
 
   def meanPercentileRank: Double = {
 
-    def rank_ui = udf((recs: Seq[Long], item: Long) => {
-      val l_i = recs.indexOf(item)
+    def rank = udf((predicted: Seq[Any], actual: Any) => {
+      val l_i = predicted.indexOf(actual)
 
       if (l_i == -1) {
         1
       } else {
-        l_i.toDouble / recs.size
+        l_i.toDouble / predicted.size
       }
     }, DoubleType)
 
@@ -45,8 +45,8 @@ class MeanPercentileRankMetrics (
     val labelColumn: Column = predictionAndObservations.col(labelCol)
 
     val rankSum: Double = predictionAndObservations
-      .withColumn("rank_ui", rank_ui(predictionColumn, labelColumn))
-      .agg(sum("rank_ui")).first().getDouble(0)
+      .withColumn("rank", rank(predictionColumn, labelColumn))
+      .agg(sum("rank")).first().getDouble(0)
 
     rankSum / R_prime
   }

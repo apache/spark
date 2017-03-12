@@ -24,14 +24,23 @@ class MeanPercentileRankMetricsSuite extends SparkFunSuite with MLlibTestSparkCo
 
   import testImplicits._
 
-  test("Mean Percentile Rank metrics") {
+  test("Mean Percentile Rank metrics : Long type") {
     val predictionAndLabels = Seq(
         (111216304L, Array(111216304L)),
         (108848657L, Array.empty[Long])
       ).toDF(Seq("label", "prediction"): _*)
-    predictionAndLabels.show()
     val mpr = new MeanPercentileRankMetrics(predictionAndLabels, "prediction", "label")
-    print(mpr.meanPercentileRank)
+    assert(mpr.meanPercentileRank === 0.5)
+  }
+
+  test("Mean Percentile Rank metrics : String type") {
+    val predictionAndLabels = Seq(
+        ("item1", Array("item2", "item1")),
+        ("item2", Array("item1")),
+        ("item3", Array("item3", "item1", "item2"))
+      ).toDF(Seq("label", "prediction"): _*)
+    val mpr = new MeanPercentileRankMetrics(predictionAndLabels, "prediction", "label")
+    assert(mpr.meanPercentileRank === 0.5)
   }
 
 }
