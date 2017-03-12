@@ -89,7 +89,6 @@ private[csv] class CSVOptions(
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
   val escapeQuoteEscaping = getChar("escapeQuoteEscaping", '\u0000')
-  val escapeUnquotedValues = getBool("escapeUnquotedValues", false)
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -139,6 +138,8 @@ private[csv] class CSVOptions(
   val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
 
   val escapeQuotes = getBool("escapeQuotes", true)
+
+  val escapeUnquotedValues = getBool("escapeUnquotedValues", false)
 
   val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
 

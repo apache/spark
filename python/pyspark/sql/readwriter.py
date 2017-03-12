@@ -697,7 +697,8 @@ class DataFrameWriter(OptionUtils):
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
-            timestampFormat=None, timeZone=None, escapeQuoteEscaping=None):
+            timestampFormat=None, timeZone=None, escapeQuoteEscaping=None,
+            escapeUnquotedValues=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -741,6 +742,8 @@ class DataFrameWriter(OptionUtils):
                          If None is set, it uses the default value, session local timezone.
         :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
                                     character. If None is set, it uses the default value, ``\0``.
+        :param escapeUnquotedValues: processes escape sequences in unquoted values. If None is set,
+                                     it uses the default value, ``false``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -748,7 +751,8 @@ class DataFrameWriter(OptionUtils):
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
                        nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
                        dateFormat=dateFormat, timestampFormat=timestampFormat, timeZone=timeZone,
-                       escapeQuoteEscaping=escapeQuoteEscaping)
+                       escapeQuoteEscaping=escapeQuoteEscaping,
+                       escapeUnquotedValues=escapeUnquotedValues)
         self._jwrite.csv(path)
 
     @since(1.5)
