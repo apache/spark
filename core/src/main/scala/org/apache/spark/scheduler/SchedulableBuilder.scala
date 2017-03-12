@@ -191,7 +191,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
           DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
         rootPool.addSchedulable(parentPool)
-        logInfo(("An Unconfigured pool is found. It is built with default configuration. " +
+        logWarning(("An Unconfigured pool is found. It is built with default configuration. " +
           "This can happen when the file that pools are read from isn't set, or when that file " +
           "doesn't contain the pool name specified by spark.scheduler.pool. " +
           "Created pool: %s, schedulingMode: %s, minShare: %d, weight: %d").format(
