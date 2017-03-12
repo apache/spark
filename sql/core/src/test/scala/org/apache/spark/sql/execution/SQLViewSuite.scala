@@ -172,7 +172,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       var e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $viewName SELECT 1")
       }.getMessage
-      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+      assert(e.contains("Inserting into a view is not allowed. View: `default`.`testview`"))
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
@@ -609,12 +609,39 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  // TODO: Check for cyclic view references on ALTER VIEW.
-  ignore("correctly handle a cyclic view reference") {
-    withView("view1", "view2") {
+  test("correctly handle a cyclic view reference") {
+    withView("view1", "view2", "view3") {
       sql("CREATE VIEW view1 AS SELECT * FROM jt")
       sql("CREATE VIEW view2 AS SELECT * FROM view1")
-      intercept[AnalysisException](sql("ALTER VIEW view1 AS SELECT * FROM view2"))
+      sql("CREATE VIEW view3 AS SELECT * FROM view2")
+
+      // Detect cyclic view reference on ALTER VIEW.
+      val e1 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM view2")
+      }.getMessage
+      assert(e1.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect the most left cycle when there exists multiple cyclic view references.
+      val e2 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM view3 JOIN view2")
+      }.getMessage
+      assert(e2.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view3` -> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect cyclic view reference on CREATE OR REPLACE VIEW.
+      val e3 = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE VIEW view1 AS SELECT * FROM view2")
+      }.getMessage
+      assert(e3.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
+
+      // Detect cyclic view reference from subqueries.
+      val e4 = intercept[AnalysisException] {
+        sql("ALTER VIEW view1 AS SELECT * FROM jt WHERE EXISTS (SELECT 1 FROM view2)")
+      }.getMessage
+      assert(e4.contains("Recursive view `default`.`view1` detected (cycle: `default`.`view1` " +
+        "-> `default`.`view2` -> `default`.`view1`)"))
     }
   }
 }

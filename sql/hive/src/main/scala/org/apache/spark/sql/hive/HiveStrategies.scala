@@ -133,7 +133,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       } else if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
         try {
           val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(new URI(table.location))
+          val tablePath = new Path(table.location)
           val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
           fs.getContentSummary(tablePath).getLength
         } catch {
