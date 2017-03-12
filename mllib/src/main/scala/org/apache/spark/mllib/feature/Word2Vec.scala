@@ -570,7 +570,7 @@ class Word2VecModel private[spark] (
     require(num > 0, "Number of similar words should > 0")
 
     val fVector = vector.toArray.map(_.toFloat)
-    val cosineVec = new Array[Float](numWords) // default value is 0.0f
+    val cosineVec = new Array[Float](numWords)
     val alpha: Float = 1
     val beta: Float = 0
     // Normalize input vector before blas.sgemv to avoid Inf value
@@ -584,8 +584,8 @@ class Word2VecModel private[spark] (
     var i = 0
     while (i < numWords) {
       val norm = wordVecNorms(i)
-      if (norm == 0.0) {
-        cosineVec(i) = 0
+      if (norm == 0.0f) {
+        cosineVec(i) = 0.0f
       } else {
         cosineVec(i) /= norm
       }
