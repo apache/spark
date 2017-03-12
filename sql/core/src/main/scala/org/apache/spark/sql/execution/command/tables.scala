@@ -42,7 +42,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
- * A command to create a MANAGED table with the same definition of the given existing table.
+ * A command to create a table with the same definition of the given existing table.
  * In the target table definition, the table comment is always empty but the column comments
  * are identical to the ones defined in the source table.
  *
@@ -52,12 +52,13 @@ import org.apache.spark.util.Utils
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name
+ *   LIKE [other_db_name.]existing_table_name [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -70,12 +71,16 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
+    // If the location is specified, we create an external table internally.
+    // Otherwise create a managed table.
+    val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
+
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
-        tableType = CatalogTableType.MANAGED,
-        // We are creating a new managed table, which should not have custom table location.
-        storage = sourceTableDesc.storage.copy(locationUri = None),
+        tableType = tblType,
+        storage = sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_))),
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
@@ -111,10 +116,12 @@ case class CreateTableLikeCommand(
  *   [AS select_statement];
  * }}}
  */
-case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
+case class CreateTableCommand(
+    table: CatalogTable,
+    ignoreIfExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.createTable(table, ifNotExists)
+    sparkSession.sessionState.catalog.createTable(table, ignoreIfExists)
     Seq.empty[Row]
   }
 }
@@ -263,8 +270,8 @@ case class LoadDataCommand(
         } else {
           // Follow Hive's behavior:
           // If no schema or authority is provided with non-local inpath,
-          // we will use hadoop configuration "fs.default.name".
-          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.default.name")
+          // we will use hadoop configuration "fs.defaultFS".
+          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
           val defaultFS = if (defaultFSConf == null) {
             new URI("")
           } else {
@@ -306,7 +313,6 @@ case class LoadDataCommand(
         loadPath.toString,
         partition.get,
         isOverwrite,
-        holdDDLTime = false,
         inheritTableSpecs = true,
         isSrcLocal = isLocal)
     } else {
@@ -314,7 +320,6 @@ case class LoadDataCommand(
         targetTable.identifier,
         loadPath.toString,
         isOverwrite,
-        holdDDLTime = false,
         isSrcLocal = isLocal)
     }
 
@@ -450,7 +455,7 @@ case class DescribeTableCommand(
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
-        describeSchema(catalog.lookupRelation(metadata.identifier).schema, result)
+        describeSchema(sparkSession.table(metadata.identifier).schema, result)
       } else {
         describeSchema(metadata.schema, result)
       }
@@ -491,7 +496,8 @@ case class DescribeTableCommand(
     append(buffer, "Owner:", table.owner, "")
     append(buffer, "Create Time:", new Date(table.createTime).toString, "")
     append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Location:", table.storage.locationUri.map(CatalogUtils.URIToString(_))
+      .getOrElse(""), "")
     append(buffer, "Table Type:", table.tableType.name, "")
     table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
 
@@ -528,8 +534,10 @@ case class DescribeTableCommand(
   private def describeViewInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# View Information", "", "")
-    append(buffer, "View Original Text:", metadata.viewOriginalText.getOrElse(""), "")
-    append(buffer, "View Expanded Text:", metadata.viewText.getOrElse(""), "")
+    append(buffer, "View Text:", metadata.viewText.getOrElse(""), "")
+    append(buffer, "View Default Database:", metadata.viewDefaultDatabase.getOrElse(""), "")
+    append(buffer, "View Query Output Columns:",
+      metadata.viewQueryColumnNames.mkString("[", ", ", "]"), "")
   }
 
   private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -581,7 +589,8 @@ case class DescribeTableCommand(
     append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
     append(buffer, "Database:", table.database, "")
     append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Location:", partition.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Location:", partition.storage.locationUri.map(CatalogUtils.URIToString(_))
+      .getOrElse(""), "")
     append(buffer, "Partition Parameters:", "", "")
     partition.parameters.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
@@ -947,7 +956,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         // when the table creation DDL contains the PATH option.
         None
       } else {
-        Some(s"path '${escapeSingleQuotedString(location)}'")
+        Some(s"path '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'")
       }
     }
 

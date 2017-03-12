@@ -43,6 +43,7 @@ private[spark] object UIData {
     var shuffleWriteRecords : Long = 0
     var memoryBytesSpilled : Long = 0
     var diskBytesSpilled : Long = 0
+    var isBlacklisted : Int = 0
   }
 
   class JobUIData(
@@ -92,6 +93,7 @@ private[spark] object UIData {
     var shuffleWriteRecords: Long = _
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
+    var isBlacklisted: Int = _
 
     var schedulingPool: String = ""
     var description: Option[String] = None
@@ -126,6 +128,14 @@ private[spark] object UIData {
 
     def updateTaskMetrics(metrics: Option[TaskMetrics]): Unit = {
       _metrics = TaskUIData.toTaskMetricsUIData(metrics)
+    }
+
+    def taskDuration: Option[Long] = {
+      if (taskInfo.status == "RUNNING") {
+        Some(_taskInfo.timeRunning(System.currentTimeMillis))
+      } else {
+        _metrics.map(_.executorRunTime)
+      }
     }
   }
 
@@ -175,6 +185,7 @@ private[spark] object UIData {
       })
       newTaskInfo.finishTime = taskInfo.finishTime
       newTaskInfo.failed = taskInfo.failed
+      newTaskInfo.killed = taskInfo.killed
       newTaskInfo
     }
   }

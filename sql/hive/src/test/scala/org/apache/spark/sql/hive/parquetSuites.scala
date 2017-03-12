@@ -21,8 +21,8 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -307,13 +307,11 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin)
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
-      df.queryExecution.sparkPlan match {
-        case ExecutedCommandExec(cmd: InsertIntoHadoopFsRelationCommand) =>
+      df.queryExecution.analyzed match {
+        case cmd: InsertIntoHadoopFsRelationCommand =>
           assert(cmd.catalogTable.map(_.identifier.table) === Some("test_insert_parquet"))
         case o => fail("test_insert_parquet should be converted to a " +
-          s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSourceCommand].getCanonicalName} should have been SparkPlan. " +
-          s"However, found a ${o.toString} ")
+          s"${classOf[HadoopFsRelation ].getCanonicalName}. However, found a ${o.toString}")
       }
 
       checkAnswer(
@@ -338,13 +336,11 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin)
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
-      df.queryExecution.sparkPlan match {
-        case ExecutedCommandExec(cmd: InsertIntoHadoopFsRelationCommand) =>
+      df.queryExecution.analyzed match {
+        case cmd: InsertIntoHadoopFsRelationCommand =>
           assert(cmd.catalogTable.map(_.identifier.table) === Some("test_insert_parquet"))
         case o => fail("test_insert_parquet should be converted to a " +
-          s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSourceCommand].getCanonicalName} should have been SparkPlan." +
-          s"However, found a ${o.toString} ")
+          s"${classOf[HadoopFsRelation ].getCanonicalName}. However, found a ${o.toString}")
       }
 
       checkAnswer(
@@ -457,7 +453,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       sessionState.catalog.getCachedDataSourceTable(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) => // OK
+        case LogicalRelation(_: HadoopFsRelation, _, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
@@ -612,7 +608,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("Explicitly added partitions should be readable after load") {
     withTable("test_added_partitions") {
       withTempDir { src =>
-        val newPartitionDir = src.getCanonicalPath
+        val newPartitionDir = src.toURI.toString
         spark.range(2).selectExpr("cast(id as string)").toDF("a").write
           .mode("overwrite")
           .parquet(newPartitionDir)
@@ -645,7 +641,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("Non-partitioned table readable after load") {
     withTable("tab") {
       withTempDir { src =>
-        val newPartitionDir = src.getCanonicalPath
+        val newPartitionDir = src.toURI.toString
         spark.range(2).selectExpr("cast(id as string)").toDF("a").write
           .mode("overwrite")
           .parquet(newPartitionDir)
@@ -810,7 +806,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
               }
             } else {
               queryExecution.analyzed.collectFirst {
-                case _: MetastoreRelation =>
+                case _: CatalogRelation =>
               }.getOrElse {
                 fail(s"Expecting no conversion from parquet to data sources, " +
                   s"but got:\n$queryExecution")

@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -29,7 +30,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -133,7 +133,7 @@ public class ExternalShuffleIntegrationSuite {
 
     final Semaphore requestsRemaining = new Semaphore(0);
 
-    ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false, false);
+    ExternalShuffleClient client = new ExternalShuffleClient(clientConf, null, false);
     client.init(APP_ID);
     client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
       new BlockFetchingListener() {
@@ -173,7 +173,7 @@ public class ExternalShuffleIntegrationSuite {
     FetchResult exec0Fetch = fetchBlocks("exec-0", new String[] { "shuffle_0_0_0" });
     assertEquals(Sets.newHashSet("shuffle_0_0_0"), exec0Fetch.successBlocks);
     assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Lists.newArrayList(exec0Blocks[0]));
+    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks[0]));
     exec0Fetch.releaseBuffers();
   }
 
@@ -185,7 +185,7 @@ public class ExternalShuffleIntegrationSuite {
     assertEquals(Sets.newHashSet("shuffle_0_0_0", "shuffle_0_0_1", "shuffle_0_0_2"),
       exec0Fetch.successBlocks);
     assertTrue(exec0Fetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(exec0Fetch.buffers, Lists.newArrayList(exec0Blocks));
+    assertBufferListsEqual(exec0Fetch.buffers, Arrays.asList(exec0Blocks));
     exec0Fetch.releaseBuffers();
   }
 
@@ -241,15 +241,15 @@ public class ExternalShuffleIntegrationSuite {
     assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
   }
 
-  private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
-      throws IOException {
-    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, false);
+  private static void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
+      throws IOException, InterruptedException {
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false);
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);
   }
 
-  private void assertBufferListsEqual(List<ManagedBuffer> list0, List<byte[]> list1)
+  private static void assertBufferListsEqual(List<ManagedBuffer> list0, List<byte[]> list1)
     throws Exception {
     assertEquals(list0.size(), list1.size());
     for (int i = 0; i < list0.size(); i ++) {
@@ -257,7 +257,8 @@ public class ExternalShuffleIntegrationSuite {
     }
   }
 
-  private void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1) throws Exception {
+  private static void assertBuffersEqual(ManagedBuffer buffer0, ManagedBuffer buffer1)
+      throws Exception {
     ByteBuffer nio0 = buffer0.nioByteBuffer();
     ByteBuffer nio1 = buffer1.nioByteBuffer();
 

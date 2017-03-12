@@ -21,13 +21,19 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 
-class StatsEstimationTestBase extends SparkFunSuite {
+trait StatsEstimationTestBase extends SparkFunSuite {
 
   /** Enable stats estimation based on CBO. */
   protected val conf = SimpleCatalystConf(caseSensitiveAnalysis = true, cboEnabled = true)
+
+  def getColSize(attribute: Attribute, colStat: ColumnStat): Long = attribute.dataType match {
+    // For UTF8String: base + offset + numBytes
+    case StringType => colStat.avgLen + 8 + 4
+    case _ => colStat.avgLen
+  }
 
   def attr(colName: String): AttributeReference = AttributeReference(colName, IntegerType)()
 
@@ -42,14 +48,15 @@ class StatsEstimationTestBase extends SparkFunSuite {
 /**
  * This class is used for unit-testing. It's a logical plan whose output and stats are passed in.
  */
-protected case class StatsTestPlan(
+case class StatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
-    attributeStats: AttributeMap[ColumnStat]) extends LeafNode {
+    attributeStats: AttributeMap[ColumnStat],
+    size: Option[BigInt] = None) extends LeafNode {
   override def output: Seq[Attribute] = outputList
   override def computeStats(conf: CatalystConf): Statistics = Statistics(
-    // sizeInBytes in stats of StatsTestPlan is useless in cbo estimation, we just use a fake value
-    sizeInBytes = Int.MaxValue,
+    // If sizeInBytes is useless in testing, we just use a fake value
+    sizeInBytes = size.getOrElse(Int.MaxValue),
     rowCount = Some(rowCount),
     attributeStats = attributeStats)
 }

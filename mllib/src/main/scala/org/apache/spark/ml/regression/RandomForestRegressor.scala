@@ -122,7 +122,9 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
+    instr.logParams(labelCol, featuresCol, predictionCol, impurity, numTrees,
+      featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
+      minInstancesPerNode, seed, subsamplingRate, cacheNodeIds, checkpointInterval)
 
     val trees = RandomForest
       .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))

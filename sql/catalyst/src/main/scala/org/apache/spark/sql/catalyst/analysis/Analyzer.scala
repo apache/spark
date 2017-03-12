@@ -106,7 +106,19 @@ class Analyzer(
    */
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  /**
+   * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
+   * in an individual batch. This batch is to run right after the normal resolution batch and
+   * execute its rules in one pass.
+   */
+  val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
   lazy val batches: Seq[Batch] = Seq(
+    Batch("Hints", fixedPoint,
+      new ResolveHints.ResolveBroadcastHints(conf),
+      ResolveHints.RemoveAllHints),
+    Batch("Simple Sanity Check", Once,
+      LookupFunctions),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -136,9 +148,10 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      ResolveInlineTables ::
+      ResolveInlineTables(conf) ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
     Batch("View", Once,
       AliasViewChild(conf)),
     Batch("Nondeterministic", Once,
@@ -147,6 +160,8 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    Batch("ResolveTimeZone", Once,
+      ResolveTimeZone),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -167,12 +182,8 @@ class Analyzer(
     def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
       plan transformDown {
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
-            .map(_._2).map { relation =>
-              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
-              withAlias.getOrElse(relation)
-            }
-          substituted.getOrElse(u)
+          cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
+            .map(_._2).getOrElse(u)
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
@@ -213,9 +224,10 @@ class Analyzer(
           expr.transformUp { case u @ UnresolvedAlias(child, optGenAliasFunc) =>
             child match {
               case ne: NamedExpression => ne
+              case go @ GeneratorOuter(g: Generator) if g.resolved => MultiAlias(go, Nil)
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
-              case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
+              case c @ Cast(ne: NamedExpression, _, _) => Alias(c, ne.name)()
               case e: ExtractValue => Alias(e, toPrettySQL(e))()
               case e if optGenAliasFunc.isDefined =>
                 Alias(child, optGenAliasFunc.get.apply(e))()
@@ -565,9 +577,9 @@ class Analyzer(
     //     |- view2 (defaultDatabase = db2)
     //        |- view3 (defaultDatabase = db3)
     //   |- view4 (defaultDatabase = db4)
-    // In this case, the view `view1` is a nested view, it directly references `table2`、`view2`
+    // In this case, the view `view1` is a nested view, it directly references `table2`, `view2`
     // and `view4`, the view `view2` references `view3`. On resolving the table, we look up the
-    // relations `table2`、`view2`、`view4` using the default database `db1`, and look up the
+    // relations `table2`, `view2`, `view4` using the default database `db1`, and look up the
     // relation `view3` using the default database `db2`.
     //
     // Note this is compatible with the views defined by older versions of Spark(before 2.2), which
@@ -586,7 +598,7 @@ class Analyzer(
           execute(child)
         }
         view.copy(child = newChild)
-      case p @ SubqueryAlias(_, view: View, _) =>
+      case p @ SubqueryAlias(_, view: View) =>
         val newChild = resolveRelation(view)
         p.copy(child = newChild)
       case _ => plan
@@ -594,7 +606,11 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+        lookupTableFromCatalog(u).canonicalized match {
+          case v: View =>
+            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+          case other => i.copy(table = other)
+        }
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
@@ -607,13 +623,18 @@ class Analyzer(
     private def lookupTableFromCatalog(
         u: UnresolvedRelation,
         defaultDatabase: Option[String] = None): LogicalPlan = {
+      val tableIdentWithDb = u.tableIdentifier.copy(
+        database = u.tableIdentifier.database.orElse(defaultDatabase))
       try {
-        val tableIdentWithDb = u.tableIdentifier.copy(
-          database = u.tableIdentifier.database.orElse(defaultDatabase))
-        catalog.lookupRelation(tableIdentWithDb, u.alias)
+        catalog.lookupRelation(tableIdentWithDb)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"Table or view not found: ${u.tableName}")
+          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}")
+        // If the database is defined and that database is not found, throw an AnalysisException.
+        // Note that if the database is not defined, it is possible we are looking up a temp view.
+        case e: NoSuchDatabaseException =>
+          u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
+            s"database ${e.db} doesn't exsits.")
       }
     }
 
@@ -1020,6 +1041,25 @@ class Analyzer(
           case other => resolved
         }
       }
+    }
+  }
+
+  /**
+   * Checks whether a function identifier referenced by an [[UnresolvedFunction]] is defined in the
+   * function registry. Note that this rule doesn't try to resolve the [[UnresolvedFunction]]. It
+   * only performs simple existence check according to the function identifier to quickly identify
+   * undefined functions without triggering relation resolution, which may incur potentially
+   * expensive partition/schema discovery process in some cases.
+   *
+   * @see [[ResolveFunctions]]
+   * @see https://issues.apache.org/jira/browse/SPARK-19737
+   */
+  object LookupFunctions extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+      case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
+        withPosition(f) {
+          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
+        }
     }
   }
 
@@ -1619,11 +1659,18 @@ class Analyzer(
       case _ => expr
     }
 
-    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
-      def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
+      /**
+       * Extracts a [[Generator]] expression, any names assigned by aliases to the outputs
+       * and the outer flag. The outer flag is used when joining the generator output.
+       * @param e the [[Expression]]
+       * @return (the [[Generator]], seq of output names, outer flag)
+       */
+      def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
+        case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
+        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some(g, names, true)
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names, false)
         case _ => None
       }
     }
@@ -1644,7 +1691,7 @@ class Analyzer(
         var resolvedGenerator: Generate = null
 
         val newProjectList = projectList.flatMap {
-          case AliasedGenerator(generator, names) if generator.childrenResolved =>
+          case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
             // It's a sanity check, this should not happen as the previous case will throw
             // exception earlier.
             assert(resolvedGenerator == null, "More than one generator found in SELECT.")
@@ -1653,7 +1700,7 @@ class Analyzer(
               Generate(
                 generator,
                 join = projectList.size > 1, // Only join if there are other expressions in SELECT.
-                outer = false,
+                outer = outer,
                 qualifier = None,
                 generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                 child)
@@ -2053,7 +2100,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -2296,6 +2343,18 @@ class Analyzer(
       }
     }
   }
+
+  /**
+   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * time zone.
+   */
+  object ResolveTimeZone extends Rule[LogicalPlan] {
+
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
+      case e: TimeZoneAwareExpression if e.timeZoneId.isEmpty =>
+        e.withTimeZone(conf.sessionLocalTimeZone)
+    }
+  }
 }
 
 /**
@@ -2304,7 +2363,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child, _) => child
+    case SubqueryAlias(_, child) => child
   }
 }
 

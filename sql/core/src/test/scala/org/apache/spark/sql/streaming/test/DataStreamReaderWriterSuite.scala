@@ -24,8 +24,7 @@ import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-import org.scalatest.PrivateMethodTester.PrivateMethod
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
@@ -107,7 +106,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
-class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with PrivateMethodTester {
+class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -390,42 +389,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
 
-  test("supported strings in outputMode(string)") {
-    val outputModeMethod = PrivateMethod[OutputMode]('outputMode)
-
-    def testMode(outputMode: String, expected: OutputMode): Unit = {
-      val df = spark.readStream
-        .format("org.apache.spark.sql.streaming.test")
-        .load()
-      val w = df.writeStream
-      w.outputMode(outputMode)
-      val setOutputMode = w invokePrivate outputModeMethod()
-      assert(setOutputMode === expected)
-    }
-
-    testMode("append", OutputMode.Append)
-    testMode("Append", OutputMode.Append)
-    testMode("complete", OutputMode.Complete)
-    testMode("Complete", OutputMode.Complete)
-    testMode("update", OutputMode.Update)
-    testMode("Update", OutputMode.Update)
-  }
-
-  test("unsupported strings in outputMode(string)") {
-    def testMode(outputMode: String): Unit = {
-      val acceptedModes = Seq("append", "update", "complete")
-      val df = spark.readStream
-        .format("org.apache.spark.sql.streaming.test")
-        .load()
-      val w = df.writeStream
-      val e = intercept[IllegalArgumentException](w.outputMode(outputMode))
-      (Seq("output mode", "unknown", outputMode) ++ acceptedModes).foreach { s =>
-        assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-      }
-    }
-    testMode("Xyz")
-  }
-
   test("check foreach() catches null writers") {
     val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
@@ -669,5 +632,31 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter with Pr
           s"${checkpointPath.listFiles().toList} has 0 or more than 1 files ")
       }
     }
+  }
+
+  test("temp checkpoint dir should be deleted if a query is stopped without errors") {
+    import testImplicits._
+    val query = MemoryStream[Int].toDS.writeStream.format("console").start()
+    val checkpointDir = new Path(
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+    val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
+    assert(fs.exists(checkpointDir))
+    query.stop()
+    assert(!fs.exists(checkpointDir))
+  }
+
+  testQuietly("temp checkpoint dir should not be deleted if a query is stopped with an error") {
+    import testImplicits._
+    val input = MemoryStream[Int]
+    val query = input.toDS.map(_ / 0).writeStream.format("console").start()
+    val checkpointDir = new Path(
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+    val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
+    assert(fs.exists(checkpointDir))
+    input.addData(1)
+    intercept[StreamingQueryException] {
+      query.awaitTermination()
+    }
+    assert(fs.exists(checkpointDir))
   }
 }

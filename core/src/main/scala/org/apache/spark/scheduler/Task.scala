@@ -17,19 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
-
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util._
 
 /**
@@ -46,7 +41,6 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
@@ -138,6 +132,8 @@ private[spark] abstract class Task[T](
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
+        // Though we unset the ThreadLocal here, the context member variable itself is still queried
+        // directly in the TaskRunner to check for FetchFailedExceptions.
         TaskContext.unset()
       }
     }
@@ -157,7 +153,7 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient protected var context: TaskContextImpl = _
+  @transient var context: TaskContextImpl = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _

@@ -60,7 +60,7 @@ object DateTimeUtils {
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
-  @transient lazy val defaultTimeZone = TimeZone.getDefault
+  def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
   // Reuse the Calendar object in each thread as it is expensive to create in each method call.
   private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
@@ -69,18 +69,17 @@ object DateTimeUtils {
     }
   }
 
-  // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
-  private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
-    override protected def initialValue: TimeZone = {
-      Calendar.getInstance.getTimeZone
-    }
-  }
-
   // `SimpleDateFormat` is not thread-safe.
-  val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
+  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
+  }
+
+  def getThreadLocalTimestampFormat(timeZone: TimeZone): DateFormat = {
+    val sdf = threadLocalTimestampFormat.get()
+    sdf.setTimeZone(timeZone)
+    sdf
   }
 
   // `SimpleDateFormat` is not thread-safe.
@@ -90,28 +89,58 @@ object DateTimeUtils {
     }
   }
 
+  def getThreadLocalDateFormat(): DateFormat = {
+    val sdf = threadLocalDateFormat.get()
+    sdf.setTimeZone(defaultTimeZone())
+    sdf
+  }
+
+  def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
+    val sdf = new SimpleDateFormat(formatString, Locale.US)
+    sdf.setTimeZone(timeZone)
+    // Enable strict parsing, if the input date/format is invalid, it will throw an exception.
+    // e.g. to parse invalid date '2016-13-12', or '2016-01-12' with  invalid format 'yyyy-aa-dd',
+    // an exception will be throwed.
+    sdf.setLenient(false)
+    sdf
+  }
+
   // we should use the exact day as Int, for example, (year, month, day) -> day
   def millisToDays(millisUtc: Long): SQLDate = {
+    millisToDays(millisUtc, defaultTimeZone())
+  }
+
+  def millisToDays(millisUtc: Long, timeZone: TimeZone): SQLDate = {
     // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
-    val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    val millisLocal = millisUtc + timeZone.getOffset(millisUtc)
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
+    daysToMillis(days, defaultTimeZone())
+  }
+
+  def daysToMillis(days: SQLDate, timeZone: TimeZone): Long = {
     val millisLocal = days.toLong * MILLIS_PER_DAY
-    millisLocal - getOffsetFromLocalMillis(millisLocal, threadLocalLocalTimeZone.get())
+    millisLocal - getOffsetFromLocalMillis(millisLocal, timeZone)
   }
 
   def dateToString(days: SQLDate): String =
-    threadLocalDateFormat.get.format(toJavaDate(days))
+    getThreadLocalDateFormat.format(toJavaDate(days))
 
   // Converts Timestamp to string according to Hive TimestampWritable convention.
   def timestampToString(us: SQLTimestamp): String = {
+    timestampToString(us, defaultTimeZone())
+  }
+
+  // Converts Timestamp to string according to Hive TimestampWritable convention.
+  def timestampToString(us: SQLTimestamp, timeZone: TimeZone): String = {
     val ts = toJavaTimestamp(us)
     val timestampString = ts.toString
-    val formatted = threadLocalTimestampFormat.get.format(ts)
+    val timestampFormat = getThreadLocalTimestampFormat(timeZone)
+    val formatted = timestampFormat.format(ts)
 
     if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
       formatted + timestampString.substring(19)
@@ -233,10 +262,14 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
   def stringToTimestamp(s: UTF8String): Option[SQLTimestamp] = {
+    stringToTimestamp(s, defaultTimeZone())
+  }
+
+  def stringToTimestamp(s: UTF8String, timeZone: TimeZone): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
-    var timeZone: Option[Byte] = None
+    var tz: Option[Byte] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
@@ -289,12 +322,12 @@ object DateTimeUtils {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
-            timeZone = Some(43)
+            tz = Some(43)
           } else if (b == '-' || b == '+') {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
-            timeZone = Some(b)
+            tz = Some(b)
           } else if (b == '.' && i == 5) {
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
@@ -349,11 +382,11 @@ object DateTimeUtils {
       return None
     }
 
-    val c = if (timeZone.isEmpty) {
-      Calendar.getInstance()
+    val c = if (tz.isEmpty) {
+      Calendar.getInstance(timeZone)
     } else {
       Calendar.getInstance(
-        TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+        TimeZone.getTimeZone(f"GMT${tz.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
     c.set(Calendar.MILLISECOND, 0)
 
@@ -452,7 +485,11 @@ object DateTimeUtils {
   }
 
   private def localTimestamp(microsec: SQLTimestamp): SQLTimestamp = {
-    absoluteMicroSecond(microsec) + defaultTimeZone.getOffset(microsec / 1000) * 1000L
+    localTimestamp(microsec, defaultTimeZone())
+  }
+
+  private def localTimestamp(microsec: SQLTimestamp, timeZone: TimeZone): SQLTimestamp = {
+    absoluteMicroSecond(microsec) + timeZone.getOffset(microsec / 1000) * 1000L
   }
 
   /**
@@ -460,6 +497,13 @@ object DateTimeUtils {
    */
   def getHours(microsec: SQLTimestamp): Int = {
     ((localTimestamp(microsec) / MICROS_PER_SECOND / 3600) % 24).toInt
+  }
+
+  /**
+   * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
+   */
+  def getHours(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
+    ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND / 3600) % 24).toInt
   }
 
   /**
@@ -471,11 +515,27 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns the minute value of a given timestamp value. The timestamp is expressed in
+   * microseconds.
+   */
+  def getMinutes(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
+    ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND / 60) % 60).toInt
+  }
+
+  /**
    * Returns the second value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
   def getSeconds(microsec: SQLTimestamp): Int = {
     ((localTimestamp(microsec) / MICROS_PER_SECOND) % 60).toInt
+  }
+
+  /**
+   * Returns the second value of a given timestamp value. The timestamp is expressed in
+   * microseconds.
+   */
+  def getSeconds(microsec: SQLTimestamp, timeZone: TimeZone): Int = {
+    ((localTimestamp(microsec, timeZone) / MICROS_PER_SECOND) % 60).toInt
   }
 
   private[this] def isLeapYear(year: Int): Boolean = {
@@ -742,9 +802,23 @@ object DateTimeUtils {
    * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
    */
   def timestampAddInterval(start: SQLTimestamp, months: Int, microseconds: Long): SQLTimestamp = {
-    val days = millisToDays(start / 1000L)
+    timestampAddInterval(start, months, microseconds, defaultTimeZone())
+  }
+
+  /**
+   * Add timestamp and full interval.
+   * Returns a timestamp value, expressed in microseconds since 1.1.1970 00:00:00.
+   */
+  def timestampAddInterval(
+      start: SQLTimestamp,
+      months: Int,
+      microseconds: Long,
+      timeZone: TimeZone): SQLTimestamp = {
+    val days = millisToDays(start / 1000L, timeZone)
     val newDays = dateAddMonths(days, months)
-    daysToMillis(newDays) * 1000L + start - daysToMillis(days) * 1000L + microseconds
+    start +
+      daysToMillis(newDays, timeZone) * 1000L - daysToMillis(days, timeZone) * 1000L +
+      microseconds
   }
 
   /**
@@ -758,10 +832,24 @@ object DateTimeUtils {
    * 8 digits.
    */
   def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp): Double = {
+    monthsBetween(time1, time2, defaultTimeZone())
+  }
+
+  /**
+   * Returns number of months between time1 and time2. time1 and time2 are expressed in
+   * microseconds since 1.1.1970.
+   *
+   * If time1 and time2 having the same day of month, or both are the last day of month,
+   * it returns an integer (time under a day will be ignored).
+   *
+   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * 8 digits.
+   */
+  def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp, timeZone: TimeZone): Double = {
     val millis1 = time1 / 1000L
     val millis2 = time2 / 1000L
-    val date1 = millisToDays(millis1)
-    val date2 = millisToDays(millis2)
+    val date1 = millisToDays(millis1, timeZone)
+    val date2 = millisToDays(millis2, timeZone)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
     val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
 
@@ -772,8 +860,8 @@ object DateTimeUtils {
       return (months1 - months2).toDouble
     }
     // milliseconds is enough for 8 digits precision on the right side
-    val timeInDay1 = millis1 - daysToMillis(date1)
-    val timeInDay2 = millis2 - daysToMillis(date2)
+    val timeInDay1 = millis1 - daysToMillis(date1, timeZone)
+    val timeInDay2 = millis2 - daysToMillis(date2, timeZone)
     val timesBetween = (timeInDay1 - timeInDay2).toDouble / MILLIS_PER_DAY
     val diff = (months1 - months2).toDouble + (dayInMonth1 - dayInMonth2 + timesBetween) / 31.0
     // rounding to 8 digits
@@ -896,7 +984,7 @@ object DateTimeUtils {
    */
   def convertTz(ts: SQLTimestamp, fromZone: TimeZone, toZone: TimeZone): SQLTimestamp = {
     // We always use local timezone to parse or format a timestamp
-    val localZone = threadLocalLocalTimeZone.get()
+    val localZone = defaultTimeZone()
     val utcTs = if (fromZone.getID == localZone.getID) {
       ts
     } else {
@@ -907,9 +995,9 @@ object DateTimeUtils {
     if (toZone.getID == localZone.getID) {
       utcTs
     } else {
-      val localTs2 = utcTs + toZone.getOffset(utcTs / 1000L) * 1000L  // in toZone
+      val localTs = utcTs + toZone.getOffset(utcTs / 1000L) * 1000L  // in toZone
       // treat it as local timezone, convert to UTC (we could get the expected human time back)
-      localTs2 - getOffsetFromLocalMillis(localTs2 / 1000L, localZone) * 1000L
+      localTs - getOffsetFromLocalMillis(localTs / 1000L, localZone) * 1000L
     }
   }
 
@@ -934,7 +1022,6 @@ object DateTimeUtils {
    */
   private[util] def resetThreadLocals(): Unit = {
     threadLocalGmtCalendar.remove()
-    threadLocalLocalTimeZone.remove()
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
   }

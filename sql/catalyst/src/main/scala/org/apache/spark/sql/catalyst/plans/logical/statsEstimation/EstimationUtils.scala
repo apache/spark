@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import scala.math.BigDecimal.RoundingMode
+
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.types.{DataType, StringType}
 
 
 object EstimationUtils {
@@ -28,6 +30,20 @@ object EstimationUtils {
   /** Check if each plan has rowCount in its statistics. */
   def rowCountsExist(conf: CatalystConf, plans: LogicalPlan*): Boolean =
     plans.forall(_.stats(conf).rowCount.isDefined)
+
+  /** Check if each attribute has column stat in the corresponding statistics. */
+  def columnStatsExist(statsAndAttr: (Statistics, Attribute)*): Boolean = {
+    statsAndAttr.forall { case (stats, attr) =>
+      stats.attributeStats.contains(attr)
+    }
+  }
+
+  def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
+    ColumnStat(distinctCount = 0, min = None, max = None, nullCount = rowCount,
+      avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
+  }
+
+  def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
 
   /** Get column stats for output attributes. */
   def getOutputMap(inputMap: AttributeMap[ColumnStat], output: Seq[Attribute])
@@ -37,8 +53,8 @@ object EstimationUtils {
 
   def getOutputSize(
       attributes: Seq[Attribute],
-      attrStats: AttributeMap[ColumnStat],
-      outputRowCount: BigInt): BigInt = {
+      outputRowCount: BigInt,
+      attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
     // We assign a generic overhead for a Row object, the actual overhead is different for different
     // Row format.
     val sizePerRow = 8 + attributes.map { attr =>

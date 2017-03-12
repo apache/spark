@@ -36,6 +36,10 @@ object MimaExcludes {
 
   // Exclude rules for 2.2.x
   lazy val v22excludes = v21excludes ++ Seq(
+    // [SPARK-19652][UI] Do auth checks for REST API access.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.withSparkUI"),
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.status.api.v1.UIRootFromServletContext"),
+
     // [SPARK-18663][SQL] Simplify CountMinSketch aggregate implementation
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.CountMinSketch.toByteArray"),
 
@@ -46,7 +50,21 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.streaming.scheduler.StreamingListener.onStreamingStarted"),
 
     // [SPARK-19148][SQL] do not expose the external table concept in Catalog
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createTable")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createTable"),
+
+    // [SPARK-14272][ML] Add logLikelihood in GaussianMixtureSummary
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.clustering.GaussianMixtureSummary.this"),
+
+    // [SPARK-19267] Fetch Failure handling robust to user error handling
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.setFetchFailed"),
+
+    // [SPARK-19069] [CORE] Expose task 'status' and 'duration' in spark history server REST API.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$10"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$11"),
+
+    // [SPARK-17161] Removing Python-friendly constructors not needed
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.this")
   )
 
   // Exclude rules for 2.1.x
@@ -896,6 +914,10 @@ object MimaExcludes {
     ) ++ Seq(
       // [SPARK-17163] Unify logistic regression interface. Private constructor has new signature.
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.this")
+    ) ++ Seq(
+      // [SPARK-17498] StringIndexer enhancement for handling unseen labels
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.StringIndexer"),
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.feature.StringIndexerModel")
     ) ++ Seq(
       // [SPARK-17365][Core] Remove/Kill multiple executors together to reduce RPC call time
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkContext")

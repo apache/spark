@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -52,7 +54,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
   private def analyzeCreateTable(sql: String): CatalogTable = {
     TestHive.sessionState.analyzer.execute(parser.parsePlan(sql)).collect {
-      case CreateTable(tableDesc, mode, _) => tableDesc
+      case CreateTableCommand(tableDesc, _) => tableDesc
     }.head
   }
 
@@ -70,12 +72,13 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.identifier.database == Some("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
     assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -101,12 +104,13 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.identifier.database == Some("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri == Some(new URI("/user/external/page_view")))
     assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     // TODO will be SQLText
     assert(desc.comment == Some("This is the staging page view table"))
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
@@ -125,7 +129,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
@@ -161,7 +166,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.storage.locationUri == None)
     assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -304,7 +310,8 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
     assert(desc.storage.inputFormat ==
       Some("org.apache.hadoop.mapred.TextInputFormat"))
@@ -333,7 +340,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
     val (desc, _) = extractTableDesc(query)
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.storage.locationUri == Some("/path/to/nowhere"))
+    assert(desc.storage.locationUri == Some(new URI("/path/to/nowhere")))
   }
 
   test("create table - if not exists") {
@@ -462,8 +469,9 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
-    assert(desc.viewOriginalText.isEmpty)
-    assert(desc.storage.locationUri == Some("/path/to/mercury"))
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.locationUri == Some(new URI("/path/to/mercury")))
     assert(desc.storage.inputFormat == Some("winput"))
     assert(desc.storage.outputFormat == Some("wowput"))
     assert(desc.storage.serde == Some("org.apache.poof.serde.Baff"))
@@ -518,24 +526,48 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
 
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
-    val (target, source, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target, source, location, exists) = parser.parsePlan(v1).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists == false)
     assert(target.database.isEmpty)
     assert(target.table == "table1")
     assert(source.database.isEmpty)
     assert(source.table == "table2")
+    assert(location.isEmpty)
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
-    val (target2, source2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
+    val (target2, source2, location2, exists2) = parser.parsePlan(v2).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
     }.head
     assert(exists2)
     assert(target2.database.isEmpty)
     assert(target2.table == "table1")
     assert(source2.database.isEmpty)
     assert(source2.table == "table2")
+    assert(location2.isEmpty)
+
+    val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
+    val (target3, source3, location3, exists3) = parser.parsePlan(v3).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    }.head
+    assert(!exists3)
+    assert(target3.database.isEmpty)
+    assert(target3.table == "table1")
+    assert(source3.database.isEmpty)
+    assert(source3.table == "table2")
+    assert(location3 == Some("/spark/warehouse"))
+
+    val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2  LOCATION '/spark/warehouse'"
+    val (target4, source4, location4, exists4) = parser.parsePlan(v4).collect {
+      case CreateTableLikeCommand(t, s, l, allowExisting) => (t, s, l, allowExisting)
+    }.head
+    assert(exists4)
+    assert(target4.database.isEmpty)
+    assert(target4.table == "table1")
+    assert(source4.database.isEmpty)
+    assert(source4.table == "table2")
+    assert(location4 == Some("/spark/warehouse"))
   }
 
   test("load data") {
@@ -614,7 +646,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
       .add("id", "int")
       .add("name", "string", nullable = true, comment = "blabla"))
     assert(table.provider == Some(DDLUtils.HIVE_PROVIDER))
-    assert(table.storage.locationUri == Some("/tmp/file"))
+    assert(table.storage.locationUri == Some(new URI("/tmp/file")))
     assert(table.storage.properties == Map("my_prop" -> "1"))
     assert(table.comment == Some("BLABLA"))
 

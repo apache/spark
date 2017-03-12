@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -85,7 +85,7 @@ case class DataSource(
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo: SourceInfo = sourceSchema()
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+  private val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
@@ -104,20 +104,15 @@ case class DataSource(
    *     dataTypes in `userSpecifiedSchema`. All subsequent triggers for this stream will re-use
    *     this information, therefore calls to this method should be very cheap, i.e. there won't
    *     be any further inference in any triggers.
-   *   4. `df.saveAsTable(tableThatExisted)`: In this case, we call this method to resolve the
-   *     existing table's partitioning scheme. This is achieved by not providing
-   *     `userSpecifiedSchema`. For this case, we add the boolean `justPartitioning` for an early
-   *     exit, if we don't care about the schema of the original table.
    *
    * @param format the file format object for this DataSource
-   * @param justPartitioning Whether to exit early and provide just the schema partitioning.
+   * @param fileStatusCache the shared cache for file statuses to speed up listing
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
-   *         columns. If `justPartitioning` is `true`, then the dataSchema will be provided as
-   *         `null`.
+   *         columns.
    */
   private def getOrInferFileFormatSchema(
       format: FileFormat,
-      justPartitioning: Boolean = false): (StructType, StructType) = {
+      fileStatusCache: FileStatusCache = NoopCache): (StructType, StructType) = {
     // the operations below are expensive therefore try not to do them if we don't need to, e.g.,
     // in streaming mode, we have already inferred and registered partition columns, we will
     // never have to materialize the lazy val below
@@ -130,7 +125,7 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      new InMemoryFileIndex(sparkSession, globbedPaths, options, None)
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
@@ -174,9 +169,7 @@ case class DataSource(
         StructType(partitionFields)
       }
     }
-    if (justPartitioning) {
-      return (null, partitionSchema)
-    }
+
     val dataSchema = userSpecifiedSchema.map { schema =>
       val equality = sparkSession.sessionState.conf.resolver
       StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
@@ -290,28 +283,6 @@ case class DataSource(
   }
 
   /**
-   * Returns true if there is a single path that has a metadata log indicating which files should
-   * be read.
-   */
-  def hasMetadata(path: Seq[String]): Boolean = {
-    path match {
-      case Seq(singlePath) =>
-        try {
-          val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-          val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
-          val res = fs.exists(metadataPath)
-          res
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Error while looking for metadata directory.")
-            false
-        }
-      case _ => false
-    }
-  }
-
-  /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
    *
@@ -341,7 +312,9 @@ case class DataSource(
       // We are reading from the results of a streaming query. Load files from the metadata log
       // instead of listing them using HDFS APIs.
       case (format: FileFormat, _)
-          if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
+          if FileStreamSink.hasMetadata(
+            caseInsensitiveOptions.get("path").toSeq ++ paths,
+            sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
@@ -384,7 +357,8 @@ case class DataSource(
           globPath
         }.toArray
 
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
+        val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
@@ -394,7 +368,8 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
-          new InMemoryFileIndex(sparkSession, globbedPaths, options, Some(partitionSchema))
+          new InMemoryFileIndex(
+            sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
         }
 
         HadoopFsRelation(
@@ -433,26 +408,6 @@ case class DataSource(
 
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
-
-    // If we are appending to a table that already exists, make sure the partitioning matches
-    // up.  If we fail to load the table for whatever reason, ignore the check.
-    if (mode == SaveMode.Append) {
-      val existingPartitionColumns = Try {
-        getOrInferFileFormatSchema(format, justPartitioning = true)._2.fieldNames.toList
-      }.getOrElse(Seq.empty[String])
-      // TODO: Case sensitivity.
-      val sameColumns =
-        existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
-      if (existingPartitionColumns.nonEmpty && !sameColumns) {
-        throw new AnalysisException(
-          s"""Requested partitioning does not match existing partitioning.
-             |Existing partitioning columns:
-             |  ${existingPartitionColumns.mkString(", ")}
-             |Requested partitioning columns:
-             |  ${partitionColumns.mkString(", ")}
-             |""".stripMargin)
-      }
-    }
 
     // SPARK-17230: Resolve the partition columns so InsertIntoHadoopFsRelationCommand does
     // not need to have the query as child, to avoid to analyze an optimized query,
@@ -640,8 +595,9 @@ object DataSource {
    * [[CatalogStorageFormat]]. Note that, the `path` option is removed from options after this.
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
-    val path = new CaseInsensitiveMap(options).get("path")
+    val path = CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
-    CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
+    CatalogStorageFormat.empty.copy(
+      locationUri = path.map(CatalogUtils.stringToURI(_)), properties = optionsWithoutPath)
   }
 }

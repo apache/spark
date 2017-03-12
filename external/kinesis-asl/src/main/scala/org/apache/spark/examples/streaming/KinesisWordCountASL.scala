@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.util.Random
 
-import com.amazonaws.auth.{BasicAWSCredentials, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
@@ -127,7 +127,7 @@ object KinesisWordCountASL extends Logging {
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
     // DynamoDB of the same region as the Kinesis stream
-    val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
+    val regionName = KinesisExampleUtils.getRegionNameByEndpoint(endpointUrl)
 
     // Setup the SparkConfig and StreamingContext
     val sparkConfig = new SparkConf().setAppName("KinesisWordCountASL")

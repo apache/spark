@@ -34,7 +34,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
- * Helper methods to load, save and pre-process data used in ML Lib.
+ * Helper methods to load, save and pre-process data used in MLLib.
  */
 @Since("0.8.0")
 object MLUtils extends Logging {

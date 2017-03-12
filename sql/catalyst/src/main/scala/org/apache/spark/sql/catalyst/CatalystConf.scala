@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.util.TimeZone
+
 import org.apache.spark.sql.catalyst.analysis._
 
 /**
@@ -32,9 +34,13 @@ trait CatalystConf {
   def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
 
+  def tableRelationCacheSize: Int
+
   def runSQLonFile: Boolean
 
   def warehousePath: String
+
+  def sessionLocalTimeZone: String
 
   /** If true, cartesian products between relations will be allowed for all
    * join types(inner, (left|right|full) outer).
@@ -54,6 +60,14 @@ trait CatalystConf {
    * Enables CBO for estimation of plan statistics when set true.
    */
   def cboEnabled: Boolean
+
+  /** Enables join reorder in CBO. */
+  def joinReorderEnabled: Boolean
+
+  /** The maximum number of joined nodes allowed in the dynamic programming algorithm. */
+  def joinReorderDPThreshold: Int
+
+  override def clone(): CatalystConf = throw new CloneNotSupportedException()
 }
 
 
@@ -65,8 +79,15 @@ case class SimpleCatalystConf(
     optimizerMaxIterations: Int = 100,
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
+    tableRelationCacheSize: Int = 1000,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,
-    warehousePath: String = "/user/hive/warehouse")
-  extends CatalystConf
+    joinReorderEnabled: Boolean = false,
+    joinReorderDPThreshold: Int = 12,
+    warehousePath: String = "/user/hive/warehouse",
+    sessionLocalTimeZone: String = TimeZone.getDefault().getID)
+  extends CatalystConf {
+
+  override def clone(): SimpleCatalystConf = this.copy()
+}
