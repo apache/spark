@@ -539,7 +539,7 @@ spark = SparkSession. ...
 
 # Read text from socket 
 socketDF = spark \
-    .readStream() \
+    .readStream \
     .format("socket") \
     .option("host", "localhost") \
     .option("port", 9999) \
@@ -552,7 +552,7 @@ socketDF.printSchema()
 # Read all the csv files written atomically in a directory
 userSchema = StructType().add("name", "string").add("age", "integer")
 csvDF = spark \
-    .readStream() \
+    .readStream \
     .option("sep", ";") \
     .schema(userSchema) \
     .csv("/path/to/directory")  # Equivalent to format("csv").load("/path/to/directory")
@@ -971,7 +971,7 @@ Here is the compatibility matrix.
         <br/><br/>
         Update mode uses watermark to drop old aggregation state.
         <br/><br/>
-        Complete mode does drop not old aggregation state since by definition this mode
+        Complete mode does not drop old aggregation state since by definition this mode
         preserves all data in the Result Table.
     </td>    
   </tr>
@@ -1052,10 +1052,18 @@ Here are the details of all the sinks in Spark.
     <td>Append</td>
     <td>
         <code>path</code>: path to the output directory, must be specified.
+        <br/>
         <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
         <br/>
-        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files(default: false)
-        <br/><br/>
+        <code>latestFirst</code>: whether to processs the latest new files first, useful when there is a large backlog of files (default: false)
+        <br/>
+        <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
+        <br/>
+        · "file:///dataset.txt"<br/>
+        · "s3://a/dataset.txt"<br/>
+        · "s3n://a/b/dataset.txt"<br/>
+        · "s3a://a/b/c/dataset.txt"<br/>
+        <br/>
         For file-format-specific options, see the related methods in DataFrameWriter
         (<a href="api/scala/index.html#org.apache.spark.sql.DataFrameWriter">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>).
         E.g. for "parquet" format options see <code>DataFrameWriter.parquet()</code>
@@ -1193,13 +1201,13 @@ noAggDF = deviceDataDf.select("device").where("signal > 10")
 
 # Print new data to console
 noAggDF \
-    .writeStream() \
+    .writeStream \
     .format("console") \
     .start()
 
 # Write new data to Parquet files
 noAggDF \
-    .writeStream() \
+    .writeStream \
     .format("parquet") \
     .option("checkpointLocation", "path/to/checkpoint/dir") \
     .option("path", "path/to/destination/dir") \
@@ -1210,14 +1218,14 @@ aggDF = df.groupBy("device").count()
 
 # Print updated aggregations to console
 aggDF \
-    .writeStream() \
+    .writeStream \
     .outputMode("complete") \
     .format("console") \
     .start()
 
 # Have all the aggregates in an in memory table. The query name will be the table name
 aggDF \
-    .writeStream() \
+    .writeStream \
     .queryName("aggregates") \
     .outputMode("complete") \
     .format("memory") \
@@ -1305,7 +1313,7 @@ query.lastProgress();    // the most recent progress update of this streaming qu
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-query = df.writeStream().format("console").start()   # get the query object
+query = df.writeStream.format("console").start()   # get the query object
 
 query.id()          # get the unique identifier of the running query that persists across restarts from checkpoint data
 
@@ -1650,7 +1658,7 @@ aggDF
 
 {% highlight python %}
 aggDF \
-    .writeStream() \
+    .writeStream \
     .outputMode("complete") \
     .option("checkpointLocation", "path/to/HDFS/dir") \
     .format("memory") \

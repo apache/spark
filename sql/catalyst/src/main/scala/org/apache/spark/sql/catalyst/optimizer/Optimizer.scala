@@ -118,6 +118,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCreateMapOps) ::
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
+    Batch("Join Reorder", Once,
+      CostBasedJoinReorder(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates(conf)) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -562,27 +564,23 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
- * by keeping only the one.
- * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
- * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
- * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
- *    [[RepartitionByExpression]] with the expression and last number of partition.
+ * Combines adjacent [[RepartitionOperation]] operators
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // Case 1
-    case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
-      Repartition(numPartitions, shuffle, child)
-    // Case 2
-    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
-      RepartitionByExpression(exprs, child, numPartitions)
-    // Case 3
-    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
-      r.copy(numPartitions = numPartitions)
-    // Case 3
-    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
-      RepartitionByExpression(exprs, child, numPartitions)
+    // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
+    // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
+    //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
+    //   otherwise, keep unchanged.
+    // 2) In the other cases, returns the top node with the child's child
+    case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
+      case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
+      case _ => r.copy(child = child.child)
+    }
+    // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
+    // we can remove the child.
+    case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
+      r.copy(child = child.child)
   }
 }
 
