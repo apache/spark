@@ -34,10 +34,11 @@ import org.apache.spark.util._
  * A [[TaskContext]] implementation.
  *
  * A small note on thread safety. The interrupted & fetchFailed fields are volatile, this makes
- * sure that updates are always visible across threads. The complete and failed flags and their
- * callbacks are protected by synchronizing on the context instance. For instance, this ensures
- * that you cannot add a completion listeners in one thread while we are completing (and calling
- * the listeners) in another thread. Other state is not thread safe.
+ * sure that updates are always visible across threads. The complete & failed flags and their
+ * callbacks are protected by locking on the context instance. For instance, this ensures
+ * that you cannot add a completion listener in one thread while we are completing (and calling
+ * the completion listeners) in another thread. Other state is immutable, however the exposed
+ * [[TaskMetrics]] & [[MetricsSystem]] objects are not thread safe.
  */
 private[spark] class TaskContextImpl(
     val stageId: Int,
