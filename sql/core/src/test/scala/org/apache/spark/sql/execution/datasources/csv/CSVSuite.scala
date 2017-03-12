@@ -465,7 +465,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("save csv with quote escaping enabled, using char to escape quote-escape") {
+  test("save csv with quote escaping, using char to escape quote-escape") {
     withTempPath { path =>
       val df1 = Seq(
         """You are "beautiful"""",
@@ -486,6 +486,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("quote", "\"")
         .option("escape", "\\")
         .option("escapeQuoteEscaping", "\"")
+        .option("unescapedQuoteHandling", "STOP_AT_DELIMITER")
         .save(path.getAbsolutePath)
 
       val df2 = spark.read
@@ -493,6 +494,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("quote", "\"")
         .option("escape", "\\")
         .option("escapeQuoteEscaping", "\"")
+        .option("unescapedQuoteHandling", "STOP_AT_DELIMITER")
         .load(path.getAbsolutePath)
 
       checkAnswer(df1, df2)
