@@ -3,13 +3,12 @@ machine:
     version: oraclejdk8
   post:
     - sudo apt-get --assume-yes install r-base r-base-dev
-    - pyenv global 2.7.11 3.4.4 #pypy-4.0.1
-    - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-    - bash miniconda.sh -b -p $HOME/miniconda
-    - $CONDA_BIN config --set always_yes yes --set changeps1 no
-    - $CONDA_BIN update -q conda
-      # Useful for debugging any issues with conda
-    - $CONDA_BIN info -a
+    - pyenv install miniconda3-latest --skip-existing
+    - ln -s $(pyenv root)/versions/miniconda3-latest ~/miniconda
+    - 'pyenv versions | grep -q miniconda3-latest/envs/python2 || $CONDA_BIN create -y -n python2 python==2.7.11 numpy'
+    - 'pyenv versions | grep -q miniconda3-latest/envs/python3 || $CONDA_BIN create -y -n python3 python==3.4.4 numpy'
+    - pyenv global miniconda3-latest/envs/python2 miniconda3-latest/envs/python3 #pypy-4.0.1
+    - pyenv rehash
   environment:
     TERM: dumb
     R_HOME: /usr/lib/R
@@ -24,10 +23,6 @@ checkout:
     - echo "host=api.bintray.com" >> .credentials
 
 dependencies:
-  pre:
-    - PYENV_VERSION=2.7.11 pip install numpy
-    - PYENV_VERSION=3.4.4 pip install numpy
-    #- PYENV_VERSION=pypy-4.0.1 pip install numpy
   override:
     - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
   cache_directories:
