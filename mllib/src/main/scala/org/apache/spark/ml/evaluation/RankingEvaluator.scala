@@ -113,7 +113,7 @@ final class RankingEvaluator @Since("2.2.0")(@Since("2.2.0") override val uid: S
       .withColumn("topAtk", coalesce(col("topAtk"), mapToEmptyArray_()))
       .select($(labelCol), "topAtk")
 
-    val metrics = new MeanPercentileRankMetrics(predictionAndLabels, "topAtk", $(labelCol))
+    val metrics = new RankingMetrics(predictionAndLabels, "topAtk", $(labelCol))
     val metric = $(metricName) match {
       case "mpr" => metrics.meanPercentileRank
     }
