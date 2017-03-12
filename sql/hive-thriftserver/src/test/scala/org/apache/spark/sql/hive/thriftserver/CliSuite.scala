@@ -283,4 +283,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SET conf3;" -> "conftest"
     )
   }
+
+  test("apply hivevar from cli command") {
+    val sqlFile = Thread.currentThread().getContextClassLoader.getResource("TestSQL.sql")
+    runCliWithin(2.minute, Seq("--hivevar", "today=2017-3-13", "-f",
+      sqlFile.getFile))(s"" -> "today=2017-3-13")
+  }
 }

@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.thriftserver.server
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
@@ -50,6 +52,8 @@ private[thriftserver] class SparkSQLOperationManager()
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       s" initialized or had already closed.")
     val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+    parentSession.getSessionState.getHiveVariables.asScala.foreach(kv =>
+      sqlContext.conf.setConfString(kv._1, kv._2))
     val runInBackground = async && sessionState.hiveThriftServerAsync
     val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
       runInBackground)(sqlContext, sessionToActivePool)
