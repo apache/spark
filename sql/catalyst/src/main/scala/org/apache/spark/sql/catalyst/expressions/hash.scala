@@ -436,6 +436,10 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
+  /**
+   * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
+   * of input `value`.
+   */
   def hash(value: Any, dataType: DataType, seed: Long): Long = {
     value match {
       case null => seed
