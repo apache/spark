@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.util
 
@@ -94,6 +95,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     try {
       body
     } catch {
+      // Since we are using shim, the exceptions thrown by the underlying method of
+      // Method.invoke() are wrapped by InvocationTargetException
+      case i: InvocationTargetException if isClientException(i.getCause) =>
+        val e = i.getCause
+        throw new AnalysisException(
+          e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
       case NonFatal(e) if isClientException(e) =>
         throw new AnalysisException(
           e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
