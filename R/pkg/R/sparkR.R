@@ -390,8 +390,8 @@ sparkR.session <- function(
     deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
   }
 
-  if (!exists("spark.r.sql.default.derby.dir", envir = sparkConfigMap)) {
-    sparkConfigMap[["spark.r.sql.default.derby.dir"]] <- tempdir()
+  if (!exists("spark.r.sql.derby.temp.dir", envir = sparkConfigMap)) {
+    sparkConfigMap[["spark.r.sql.derby.temp.dir"]] <- tempdir()
   }
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {

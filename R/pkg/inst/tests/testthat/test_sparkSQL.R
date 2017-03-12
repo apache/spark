@@ -60,7 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
-filesBefore <- list.files(path = file.path(Sys.getenv("SPARK_HOME"), "R"), all.files = TRUE)
+filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
@@ -2923,12 +2923,15 @@ compare_list <- function(list1, list2) {
 test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
   # Check that it is not creating any extra file.
   # Does not check the tempdir which would be cleaned up after.
-  filesAfter <- list.files(path = file.path(Sys.getenv("SPARK_HOME"), "R"), all.files = TRUE)
+  filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
 
-  expect_true(length(sparkHomeFileBefore) > 0)
-  compare_list(sparkHomeFileBefore, filesBefore)
-
-  compare_list(filesBefore, filesAfter)
+  expect_true(length(sparkRFilesBefore) > 0)
+  # first, ensure derby.log is not there
+  expect_false("derby.log" %in% filesAfter)
+  # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
 })
 
 unlink(parquetPath)

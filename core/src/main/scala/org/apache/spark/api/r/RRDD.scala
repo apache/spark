@@ -18,6 +18,7 @@
 package org.apache.spark.api.r
 
 import java.util.{Map => JMap}
+import java.io.File
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -127,11 +128,12 @@ private[r] object RRDD {
       sparkConf.setExecutorEnv(name.toString, value.toString)
     }
 
-    if (sparkEnvirMap.containsKey("spark.r.sql.default.derby.dir") &&
-        System.getProperty("derby.system.home") == null) {
+    if (sparkEnvirMap.containsKey("spark.r.sql.derby.temp.dir") &&
+        System.getProperty("derby.stream.error.file") == null) {
       // This must be set before SparkContext is instantiated.
-      System.setProperty("derby.system.home",
-                         sparkEnvirMap.get("spark.r.sql.default.derby.dir").toString)
+      System.setProperty("derby.stream.error.file",
+                         Seq(sparkEnvirMap.get("spark.r.sql.derby.temp.dir").toString, "derby.log")
+                         .mkString(File.separator))
     }
 
     val jsc = new JavaSparkContext(sparkConf)
