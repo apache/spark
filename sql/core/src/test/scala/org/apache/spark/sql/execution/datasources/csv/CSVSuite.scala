@@ -470,7 +470,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // when a string to be quoted ends with the escape character, escapeQuoteEscaping is required
       val df1 = Seq(
         """You are "beautiful"""",
-        """Yes, \in the inside\"""  // ends with the escape character '\'
+        """Yes, \in the inside\"""  // ends with the escape character '\\'
       ).toDF()
 
       // escapeQuotes is true by default
@@ -503,7 +503,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // escape character s '\\' by default
       df1.coalesce(1).write
         .format("csv")
-        .option("escapeQuoteEscaping", "\\")    // required to handle the last '\' of test strings
+        .option("escapeQuoteEscaping", "\\")    // required to handle the last '\\' of test strings
         .option("escapeUnquotedValues", "true") // without this setting, test fails
         .save(path.getAbsolutePath)
 
@@ -512,16 +512,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("escapeQuoteEscaping", "\\")
         .load(path.getAbsolutePath)
-
-      // scalastyle:off println
-      df1.show()
-      spark.read
-        .format("text")
-        .load(path.getAbsolutePath)
-        .collect()
-        .map(_.getString(0)).foreach(println)
-       df2.show()
-      // scalastyle:on println
 
       checkAnswer(df1, df2)
     }
