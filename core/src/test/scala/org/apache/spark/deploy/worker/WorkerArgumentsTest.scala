@@ -56,4 +56,13 @@ class WorkerArgumentsTest extends SparkFunSuite {
 
   }
 
+  test("Expression test - Memory correctly set from args with MB appended to memory value") {
+    val conf = new SparkConf
+    val args = Array("-m", "!10000MB", "spark://localhost:0000  ")
+
+    val workerArgs = new WorkerArguments(args, conf)
+    assert(workerArgs.memory === 10000)
+
+  }
+
 }
