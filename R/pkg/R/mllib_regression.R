@@ -56,9 +56,11 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'               \code{Gamma}, \code{poisson} and \code{tweedie}.
 #'
 #'               Note that there are two ways to specify the tweedie family.
-#'               a) Set \code{family = "tweedie"} and specify the var.power and link.power
-#'               b) When package \code{statmod} is loaded, the tweedie family is specified using the
-#'               family definition therein, i.e., \code{tweedie(var.power, link.power)}.
+#'               \itemize{
+#'                \item Set \code{family = "tweedie"} and specify the var.power and link.power;
+#'                \item When package \code{statmod} is loaded, the tweedie family is specified using the
+#'                family definition therein, i.e., \code{tweedie(var.power, link.power)}.
+#'               }
 #' @param tol positive convergence tolerance of iterations.
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
