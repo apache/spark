@@ -16,11 +16,10 @@
  */
 package org.apache.spark.api.conda
 
+import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.{Map => JMap}
-
-import scala.sys.process.Process
 
 import org.apache.spark.internal.Logging
 
@@ -32,15 +31,16 @@ final case class CondaEnvironment(condaEnvDir: Path) extends Logging {
   def envName: String = condaEnvDir.getFileName.toString
 
   def activatedEnvironment(startEnv: Map[String, String] = Map.empty): Map[String, String] = {
-    val newStartEnv = (startEnv + ("CONDA_PREFIX" -> condaEnvDir.toString)).toSeq
-    // Activate the conda environment, then capture the environment
-    val env0sep = Process(List("bash", "-c",
-      s"source $$CONDA_PREFIX/bin/activate $$CONDA_PREFIX && env -0"),
-      None, newStartEnv: _*).!!
-    env0sep.split('\u0000').iterator.filter(_.trim.nonEmpty).map(_.split("=", 2) match {
-      case Array(k, v) => (k, v)
-      case arr => sys.error(s"Unparseable env var: ${arr.toSeq}")
-    }).toMap
+    require(!startEnv.contains("PATH"),
+      s"It's not allowed to define PATH in the startEnv, but found: ${startEnv("PATH")}")
+    import collection.JavaConverters._
+    val newVars = System.getenv().asScala.toIterator ++ startEnv ++ List(
+      "CONDA_PREFIX" -> condaEnvDir.toString,
+      "CONDA_DEFAULT_ENV" -> condaEnvDir.toString,
+      "PATH" -> ((condaEnvDir resolve "bin").toString +
+        sys.env.get("PATH").map(File.pathSeparator + _).getOrElse(""))
+    )
+    newVars.toMap
   }
 
   /**
