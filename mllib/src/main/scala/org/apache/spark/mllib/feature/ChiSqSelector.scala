@@ -299,7 +299,7 @@ private[spark] object ChiSqSelector {
   private[spark] val Percentile: String = "percentile"
 
   /** String name for `fpr` selector type. */
-  private[spark] val FPR: String = "fpr"
+  val FPR: String = "fpr"
 
   /** String name for `fdr` selector type. */
   private[spark] val FDR: String = "fdr"
