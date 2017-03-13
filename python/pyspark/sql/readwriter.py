@@ -529,8 +529,8 @@ class DataFrameWriter(OptionUtils):
         """Adds an output option for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format timestamps
-                in the JSON/CSV datasources or parttion values.
+            * ``timeZone``: sets the string that indicates a timezone to be used to format
+                timestamps in the JSON/CSV datasources or parttion values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
@@ -541,8 +541,8 @@ class DataFrameWriter(OptionUtils):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format timestamps
-                in the JSON/CSV datasources or parttion values.
+            * ``timeZone``: sets the string that indicates a timezone to be used to format\
+                timestamps in the JSON/CSV datasources or parttion values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:
