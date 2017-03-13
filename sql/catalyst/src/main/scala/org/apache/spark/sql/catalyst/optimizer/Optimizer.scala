@@ -606,11 +606,18 @@ object CollapseWindow extends Rule[LogicalPlan] {
  */
 case class InferFiltersFromConstraints(conf: CatalystConf)
     extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = if (conf.constraintPropagationEnabled) {
+    inferFilters(plan)
+  } else {
+    plan
+  }
+
+
+  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
       val constraintEnabled = conf.constraintPropagationEnabled
-      val newFilters = filter.getConstraints(constraintEnabled) --
-        (child.getConstraints(constraintEnabled) ++ splitConjunctivePredicates(condition))
+      val newFilters = filter.constraints --
+        (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {
         Filter(And(newFilters.reduce(And), condition), child)
       } else {
@@ -620,13 +627,11 @@ case class InferFiltersFromConstraints(conf: CatalystConf)
     case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
-      val constraintEnabled = conf.constraintPropagationEnabled
-      val constraints = join.getConstraints(constraintEnabled).filter { c =>
+      val constraints = join.constraints.filter { c =>
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
       }
       // Remove those constraints that are already enforced by either the left or the right child
-      val additionalConstraints = constraints --
-        (left.getConstraints(constraintEnabled) ++ right.getConstraints(constraintEnabled))
+      val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
         case Some(condition) =>
           val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)

@@ -193,7 +193,7 @@ object SQLConf {
   val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
     .internal()
     .doc("When true, the query optimizer will use constraint propagation in query plans to " +
-         "perform optimization. Constraint propagation can be computation expensive for long " +
+         "perform optimization. Constraint propagation can be computation expensive for large " +
          "query plans. For such queries, disable this flag to get around this issue. Default " +
          "is enabled")
     .booleanConf
