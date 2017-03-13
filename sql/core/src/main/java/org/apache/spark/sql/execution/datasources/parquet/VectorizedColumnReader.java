@@ -104,7 +104,7 @@ public class VectorizedColumnReader {
     // The conf is sometimes null in tests.
     String tzString =
         conf == null ? null : conf.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY());
-    if (tzString == null || tzString == "") {
+    if (tzString == null || tzString.isEmpty()) {
       storageTz = localTz;
     } else {
       storageTz = TimeZone.getTimeZone(tzString);

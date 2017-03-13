@@ -330,19 +330,6 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     }
   }
 
-  test("SPARK-12297: join after change in timezone") {
-    import spark.implicits._
-    val originalTsStrings = Seq(
-      "2015-12-31 23:50:59.123",
-      "2015-12-31 22:49:59.123",
-      "2016-01-01 00:39:59.123",
-      "2016-01-01 01:29:59.123"
-    )
-    val rawData = spark.createDataset(
-      originalTsStrings.map { x => java.sql.Timestamp.valueOf(x) })
-
-  }
-
   test("SPARK-12297: exception on bad timezone") {
     val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
     val badTzException = intercept[AnalysisException] {
@@ -356,5 +343,4 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     }
     assert(badTzException.getMessage.contains("Blart Versenwald III"))
   }
-
 }
