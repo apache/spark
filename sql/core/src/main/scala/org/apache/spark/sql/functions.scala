@@ -2549,6 +2549,13 @@ object functions {
    * @since 1.5.0
    */
   def dayofyear(e: Column): Column = withExpr { DayOfYear(e.expr) }
+  
+/**
+   * Extracts the day of the week as an string from a given timestamp.
+   * @group datetime_funcs
+   * @since 2.1.0
+   */
+  def dayofweek (e: Column) : Column = withExpr {FromUnixTime(UnixTimestamp(e.expr, Literal("MM/dd/yyyy")), "EEEE")}
 
   /**
    * Extracts the hours as an integer from a given date/timestamp/string.
