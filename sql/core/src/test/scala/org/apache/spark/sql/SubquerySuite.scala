@@ -825,4 +825,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         Row(1) :: Row(0) :: Nil)
     }
   }
+
+  test("SPARK-19933 Do not eliminate top-level aliases in sub-queries") {
+    withTempView("t1", "t2") {
+      spark.range(4).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t1)"),
+        Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      spark.range(2).createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t2)"),
+        Row(0) :: Row(1) :: Nil)
+    }
+  }
 }
