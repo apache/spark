@@ -30,6 +30,7 @@ import org.apache.spark.api.conda.CondaEnvironment
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.util.RedirectThread
 import org.apache.spark.util.Utils
 
 /**
@@ -99,12 +100,14 @@ object PythonRunner extends CondaRunner with Logging {
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
-    builder.redirectOutput(Redirect.INHERIT)
-    builder.redirectError(Redirect.INHERIT)
+
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
+    builder.redirectErrorStream(true)
     try {
       logInfo(s"About to start python process: ${builder.command()}")
       val process = builder.start()
+
+      new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
       val exitCode = process.waitFor()
       if (exitCode != 0) {
