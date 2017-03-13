@@ -1862,7 +1862,6 @@ class HiveDDLSuite
     }
   }
 
-
   test("create table for managed hive table with a created location throw an exception") {
     withTable("t", "t1", "t2", "t3") {
       val warehousePath = spark.sharedState.warehousePath

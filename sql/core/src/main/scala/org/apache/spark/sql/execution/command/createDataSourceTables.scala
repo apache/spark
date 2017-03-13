@@ -163,7 +163,7 @@ case class CreateDataSourceTableAsSelectCommand(
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
-      // we have check the table/path exists above before saveDataIntoTable, here we
+      // we have checked the table/path exists above before saveDataIntoTable, here we
       // set ignoreIfExists to true
       sessionState.catalog.createTable(newTable, ignoreIfExists = true)
 
