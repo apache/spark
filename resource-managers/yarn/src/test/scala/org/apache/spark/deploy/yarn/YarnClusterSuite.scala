@@ -86,7 +86,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |        exit(-1)
     |    sc = SparkContext(conf=SparkConf())
     |
-    |    sc.addCondaPackage('numpy=1.11.1')
+    |    sc.addCondaPackages('numpy=1.11.1')
     |    import numpy
     |
     |    status = open(sys.argv[1],'w')

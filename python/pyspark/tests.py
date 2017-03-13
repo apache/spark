@@ -2063,7 +2063,7 @@ class SparkSubmitTests(unittest.TestCase):
                     |from pyspark import SparkContext
                     |
                     |sc = SparkContext()
-                    |sc.addCondaPackage('numpy=1.11.1')
+                    |sc.addCondaPackages('numpy=1.11.1')
                     |
                     |# Ensure numpy is accessible on the driver
                     |import numpy

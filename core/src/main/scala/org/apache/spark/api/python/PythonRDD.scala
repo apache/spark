@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
 
 import org.apache.spark._
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
@@ -72,7 +73,7 @@ private[spark] case class PythonFunction(
     command: Array[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
-    condaPackages: JList[String],
+    condaSetupInstructions: Option[CondaSetupInstructions],
     pythonExec: Option[String],
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
@@ -123,7 +124,7 @@ private[spark] class PythonRunner(
   }
   private[this] val pythonExec = firstFunc.pythonExec
   private[this] val pythonVer = firstFunc.pythonVer
-  private[this] val condaPackages = firstFunc.condaPackages.asScala.toList
+  private[this] val condaInstructions = firstFunc.condaSetupInstructions
 
   // TODO: support accumulator in multiple UDF
   private[this] val accumulator = firstFunc.accumulator
@@ -135,7 +136,7 @@ private[spark] class PythonRunner(
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
 
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars, condaPackages)
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars, condaInstructions)
     // Whether the worker is released into the idle pool
     @volatile var released = false
 
@@ -215,7 +216,7 @@ private[spark] class PythonRunner(
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
                 if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars, condaPackages, worker)
+                  env.releasePythonWorker(pythonExec, envVars, condaInstructions, worker)
                   released = true
                 }
               }
@@ -381,7 +382,7 @@ private[spark] class PythonRunner(
       if (!context.isCompleted) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars, condaPackages, worker)
+          env.destroyPythonWorker(pythonExec, envVars, condaInstructions, worker)
         } catch {
           case e: Exception =>
             logError("Exception when trying to kill worker", e)

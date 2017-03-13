@@ -2371,8 +2371,8 @@ def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     command = (func, profiler, deserializer, serializer)
     pickled_command, broadcast_vars = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), sc.environment, sc._python_includes,
-                                  sc._conda_packages, sc.pythonExec, sc.pythonVer, broadcast_vars,
-                                  sc._javaAccumulator)
+                                  sc._build_conda_instructions(), sc.pythonExec, sc.pythonVer,
+                                  broadcast_vars, sc._javaAccumulator)
 
 
 class PipelinedRDD(RDD):

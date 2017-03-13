@@ -42,8 +42,10 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.conda.CondaEnvironment
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.deploy.{CondaRunner, LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -215,6 +217,10 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+
+  private[this] val _condaEnvironment: Option[CondaEnvironment] =
+    CondaRunner.condaEnvironment
+
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -1850,6 +1856,30 @@ class SparkContext(config: SparkConf) extends Logging {
    * Returns a list of jar files that are added to resources.
    */
   def listJars(): Seq[String] = addedJars.keySet.toSeq
+
+  private[spark] def hasCondaEnvironment: Boolean = _condaEnvironment.isDefined
+
+  private[spark] def condaEnvironment(): CondaEnvironment = {
+    _condaEnvironment.getOrElse(sys.error("A conda environment was not set up."))
+  }
+
+  /**
+   * Add a set of conda packages (identified by <a href="
+   * https://conda.io/docs/spec.html#build-version-spec">package match specification</a>
+   * for all tasks to be executed on this SparkContext in the future.
+   */
+  def addCondaPackages(packages: Seq[String], withDeps: Boolean): Unit = {
+    condaEnvironment().installPackages(packages, withDeps)
+  }
+
+  def addCondaChannel(url: String): Unit = {
+    condaEnvironment().addChannel(url)
+  }
+
+  private[spark] def buildCondaInstructions(): Option[CondaSetupInstructions] = {
+    _condaEnvironment.map(_.buildSetupInstructions)
+  }
+
 
   /**
    * When stopping SparkContext inside Spark components, it's easy to cause dead-lock since Spark

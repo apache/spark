@@ -71,8 +71,6 @@ class SparkContext(object):
     _active_spark_context = None
     _lock = RLock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
-    _conda_packages = None
-    _conda_environ = None
 
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
@@ -210,21 +208,6 @@ class SparkContext(object):
         self._python_includes = list()
         for path in (pyFiles or []):
             self.addPyFile(path)
-
-        conda_env = self._jvm.CondaEnvironment.fromSystemProperty()
-        if conda_env.isDefined():
-            self._conda_environ = conda_env.get()
-            self._conda_env_manager = self._jvm.CondaEnvironmentManager.fromConf(self._conf._jconf)
-
-        self._conda_packages = list()
-        internal_config = getattr(getattr(self._jvm.org.apache.spark.internal.config, 'package$'),
-                                  'MODULE$')
-
-        packagesSeq = self._conf.get(internal_config.CONDA_BOOTSTRAP_PACKAGES())
-        if packagesSeq is not None:
-            packagesList = self._jvm.scala.collection.JavaConversions.seqAsJavaList(packagesSeq)
-            # Add the bootstrap packages to the list to be installed on executors
-            self._conda_packages += (pkg for pkg in packagesList)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
@@ -854,17 +837,19 @@ class SparkContext(object):
             import importlib
             importlib.invalidate_caches()
 
-    def addCondaPackage(self, packageMatchSpecification):
+    def addCondaPackages(self, *packages, withDeps=True):
         """
         Add a conda `package match specification
         <https://conda.io/docs/spec.html#build-version-spec>`_ for all tasks to be executed on
         this SparkContext in the future.
         """
-        if self._conda_environ is None:
-            raise Exception("There is no conda environment set up on the driver")
-        # If the user calls this method, we should install the deps as well.
-        self._conda_env_manager.installPackage(self._conda_environ, packageMatchSpecification, False)
-        self._conda_packages.append(packageMatchSpecification)
+        self._jsc.addCondaPackages(packages, withDeps)
+
+    def addCondaChannel(self, url):
+        self._jsc.sc().addCondaChannel(url)
+
+    def _build_conda_instructions(self):
+        return self._jsc.sc().buildCondaInstructions()
 
     def setCheckpointDir(self, dirName):
         """

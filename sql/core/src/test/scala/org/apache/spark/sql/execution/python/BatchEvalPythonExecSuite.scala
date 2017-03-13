@@ -99,7 +99,7 @@ class DummyUDF extends PythonFunction(
   command = Array[Byte](),
   envVars = Map("" -> "").asJava,
   pythonIncludes = ArrayBuffer("").asJava,
-  condaPackages = ArrayBuffer("").asJava,
+  condaSetupInstructions = None,
   pythonExec = None,
   pythonVer = "",
   broadcastVars = null,

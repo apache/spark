@@ -38,7 +38,9 @@ abstract class CondaRunner extends Logging {
       val condaEnvironmentManager = CondaEnvironmentManager.fromConf(sparkConf)
       val environment = condaEnvironmentManager.create(condaBaseDir, condaBootstrapDeps)
 
-      sys.props += CondaEnvironment.CONDA_ENVIRONMENT_PREFIX -> environment.condaEnvDir.toString
+      // Save this as a global in order for SparkContext to be able to access it later, in case we
+      // are shelling out, but providing a bridge back into this JVM.
+      CondaRunner.condaEnvironment = Some(environment)
 
       run(args, Some(environment))
     } else {
@@ -47,4 +49,8 @@ abstract class CondaRunner extends Logging {
   }
 
   def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit
+}
+
+object CondaRunner {
+  private[spark] var condaEnvironment: Option[CondaEnvironment] = None
 }

@@ -18,17 +18,32 @@ package org.apache.spark.api.conda
 
 import java.io.File
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.{Map => JMap}
 
+import scala.collection.mutable
+
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
+import org.apache.spark.api.conda.CondaEnvironment.PackageRequests
 import org.apache.spark.internal.Logging
 
-final case class CondaEnvironment(condaEnvDir: Path) extends Logging {
-  def this(condaEnvDir: String) = this(Paths.get(condaEnvDir))
+/**
+ * A stateful class that describes a Conda environment and also keeps track of packages that have
+ * been added, as well as additional channels.
+ *
+ * @param rootPath  The root path under which envs/ and pkgs/ are located.
+ * @param envName   The name of the environment.
+ */
+final class CondaEnvironment(val manager: CondaEnvironmentManager,
+                             val rootPath: Path,
+                             val envName: String,
+                             bootstrapPackages: Seq[String],
+                             bootstrapChannels: Seq[String]) extends Logging {
 
-  def envRoot: Path = condaEnvDir.getParent
+  private[this] var packages = mutable.Buffer(
+    PackageRequests(bootstrapPackages, withDependencies = true))
+  private[this] var channels = bootstrapChannels.toBuffer
 
-  def envName: String = condaEnvDir.getFileName.toString
+  val condaEnvDir: Path = rootPath resolve "envs" resolve envName
 
   def activatedEnvironment(startEnv: Map[String, String] = Map.empty): Map[String, String] = {
     require(!startEnv.contains("PATH"),
@@ -43,6 +58,23 @@ final case class CondaEnvironment(condaEnvDir: Path) extends Logging {
     newVars.toMap
   }
 
+  def addChannel(url: String): Unit = {
+    channels += url
+  }
+
+  def installPackages(packages: Seq[String],
+                      withDeps: Boolean): Unit = {
+    manager.runCondaProcess(rootPath,
+      List("install", "-n", envName, "-y", "--override-channels", "--no-update-deps")
+        ::: (if (withDeps) Nil else List("--no-deps"))
+        ::: channels.iterator.flatMap(Iterator("--channel", _)).toList
+        ::: "--" :: packages.toList,
+      description = s"install dependencies in conda env $condaEnvDir"
+    )
+
+    this.packages += PackageRequests(packages, withDependencies = withDeps)
+  }
+
   /**
    * Clears the given java environment and replaces all variables with the environment
    * produced after calling `activate` inside this conda environment.
@@ -53,13 +85,19 @@ final case class CondaEnvironment(condaEnvDir: Path) extends Logging {
     activatedEnv.foreach { case (k, v) => env.put(k, v) }
     logDebug(s"Initialised environment from conda: $activatedEnv")
   }
+
+  /**
+   * This is for sending the instructions to the executors so they can replicate the same steps.
+   */
+  def buildSetupInstructions: CondaSetupInstructions = {
+    CondaSetupInstructions(packages.toList, channels.toList)
+  }
 }
 
 object CondaEnvironment {
-  private[spark] val CONDA_ENVIRONMENT_PREFIX = "spark.conda.environmentPrefix"
+  case class PackageRequests(packageSpecs: Seq[String], withDependencies: Boolean)
 
-  /** Returns the environment if one was already set up in this JVM */
-  def fromSystemProperty(): Option[CondaEnvironment] = {
-    sys.props.get(CONDA_ENVIRONMENT_PREFIX).map(new CondaEnvironment(_))
+  case class CondaSetupInstructions(packages: Seq[PackageRequests], channels: Seq[String]) {
+    require(channels.nonEmpty)
   }
 }

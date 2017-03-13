@@ -26,13 +26,16 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
+import org.apache.spark.api.conda.CondaEnvironment.PackageRequests
 import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CONDA_BOOTSTRAP_PACKAGES
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
                                          requestedEnvVars: Map[String, String],
-                                         condaPackages: List[String])
+                                         condaInstructions: Option[CondaSetupInstructions])
   extends Logging {
 
   import PythonWorkerFactory._
@@ -55,7 +58,9 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
 
   private[this] val condaEnv = {
     // Set up conda environment if there are any conda packages requested
-    if (condaPackages.nonEmpty) {
+    condaInstructions.map { instructions =>
+      val condaPackages = instructions.packages
+
       val env = SparkEnv.get
       val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
       val envDir = {
@@ -65,10 +70,14 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
         val dirId = hash % localDirs.length
         Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
       }
-      val condaEnvironment = condaEnvManager.create(envDir, condaPackages)
-      Some(condaEnvironment)
-    } else {
-      None
+      val condaBootstrapPackages = env.conf.get(CONDA_BOOTSTRAP_PACKAGES)
+      val condaEnvironment = condaEnvManager.create(envDir, condaBootstrapPackages)
+      // Now install as per the instructions
+      condaPackages.foreach {
+        case PackageRequests(pkgs, withDeps) =>
+          condaEnvironment.installPackages(pkgs, withDeps)
+      }
+      condaEnvironment
     }
   }
 
