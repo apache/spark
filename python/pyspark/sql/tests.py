@@ -1158,6 +1158,24 @@ class SQLTests(ReusedPySparkTestCase):
         cov = df.stat.cov("a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
+    def test_every_any(self):
+        from pyspark.sql import functions
+        data = [
+            Row(key="a", value=False),
+            Row(key="a", value=True),
+            Row(key="a", value=False),
+            Row(key="b", value=True),
+            Row(key="b", value=True),
+            Row(key="c", value=False),
+            Row(key="d", value=True),
+            Row(key="d", value=None)
+        ]
+        df = self.sc.parallelize(data).toDF()
+        df2 = df.select(functions.every(df.value).alias('a'),
+                        functions.any(df.value).alias('b'),
+                        functions.some(df.value).alias('c'))
+        self.assertEqual([Row(a=False, b=True, c=True)], df2.collect())
+
     def test_crosstab(self):
         df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
         ct = df.stat.crosstab("a", "b").collect()
@@ -2630,6 +2648,68 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         expected = [("one", 3), ("two", 2)]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_window_functions_every_any(self):
+        df = self.spark.createDataFrame([
+            ("a", False),
+            ("a", True),
+            ("a", False),
+            ("b", True),
+            ("b", True),
+            ("c", False),
+            ("d", True),
+            ("d", lit(None))
+        ], ["key", "value"])
+        w = Window.partitionBy("key").orderBy("value")
+        from pyspark.sql import functions as F
+        sel = df.select(df.key,
+                        df.value,
+                        F.every().over(w),
+                        F.any().over(w),
+                        F.some().over(w))
+        rs = sel.collect()
+        expected = [
+            ("a", False, False, True, True),
+            ("a", False, False, True, True),
+            ("a", True, False, True, True),
+            ("b", True, True, True, True),
+            ("b", True, True, True, True),
+            ("c", False, False, False, False),
+            ("d", True, False, True, True),
+            ("d", None, False, True, True)
+        ]
+        self.assertEqual(rs, expected)
+
+    def test_window_functions_every_any_without_partitionBy(self):
+        df = self.spark.createDataFrame([
+            ("a", False),
+            ("a", True),
+            ("a", False),
+            ("b", True),
+            ("b", True),
+            ("c", False),
+            ("d", True),
+            ("d", lit(None))
+        ], ["key", "value"])
+        w = Window.orderBy("value").rowsBetween(Window.unboundedPreceding, 0)
+        from pyspark.sql import functions as F
+        sel = df.select(df.key,
+                        df.value,
+                        F.every().over(w),
+                        F.any().over(w),
+                        F.some().over(w))
+        rs = sel.collect()
+        expected = [
+            ("a", False, False, False, False),
+            ("a", False, False, False, False),
+            ("a", True, False, True, True),
+            ("b", True, True, True, True),
+            ("b", True, True, True, True),
+            ("c", False, False, False, False),
+            ("d", True, False, True, True),
+            ("d", None, False, True, True)
+        ]
+        self.assertEqual(rs, expected)
 
     def test_collect_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
