@@ -54,7 +54,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val parsedOptions =
       new CSVOptions(options, sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    CSVDataSource(parsedOptions).infer(sparkSession, files, parsedOptions)
+    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
   override def prepareWrite(

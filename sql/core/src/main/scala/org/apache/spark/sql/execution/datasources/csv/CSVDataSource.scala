@@ -54,18 +54,18 @@ abstract class CSVDataSource extends Serializable {
   /**
    * Infers the schema from `inputPaths` files.
    */
-  final def infer(
+  final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
-      Some(inferSchema(sparkSession, inputPaths, parsedOptions))
+      Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
       None
     }
   }
 
-  protected def inferSchema(
+  protected def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType
@@ -139,7 +139,7 @@ object TextInputCSVDataSource extends CSVDataSource {
     UnivocityParser.parseIterator(lines, shouldDropHeader, parser)
   }
 
-  override def inferSchema(
+  override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
@@ -210,7 +210,7 @@ object WholeFileCSVDataSource extends CSVDataSource {
       parser)
   }
 
-  override def inferSchema(
+  override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
