@@ -315,7 +315,7 @@ object PageRank extends Logging {
     // version of Pregel
     def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
-      val newPR = oldPR + (1.0 - resetProb) * msgSum
+      val newPR = oldPR + (1.0 - resetProb) * msgSum + resetProb
       (newPR, newPR - oldPR)
     }
 
