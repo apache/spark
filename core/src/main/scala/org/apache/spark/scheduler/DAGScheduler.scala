@@ -1508,7 +1508,7 @@ class DAGScheduler(
         } else {
           // This is the only job that uses this stage, so fail the stage if it is running.
           val stage = stageIdToStage(stageId)
-          if (runningStages.contains(stage)) {
+          if (runningStages.contains(stage) || failedStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
               taskScheduler.cancelTasks(stageId, shouldInterruptThread)
               markStageAsFinished(stage, Some(failureReason))
