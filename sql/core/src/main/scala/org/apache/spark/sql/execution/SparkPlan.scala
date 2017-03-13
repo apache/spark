@@ -22,6 +22,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
+import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.JaninoRuntimeException
 
 import org.apache.spark.{broadcast, SparkEnv}
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The base class for physical operators.
@@ -355,22 +356,27 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }
 
+  private def genInterpretedPredicate(
+      expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate = {
+    val str = expression.toString
+    val logMessage = if (str.length > 256) {
+      str.substring(0, 256 - 3) + "..."
+    } else {
+      str
+    }
+    logWarning(s"Codegen disabled for this expression:\n $logMessage")
+    InterpretedPredicate.create(expression, inputSchema)
+  }
+
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): GenPredicate = {
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case e: JaninoRuntimeException =>
-        val str = expression.toString
-        val logMessage = if (str.length > 256) {
-          str.substring(0, 256 - 3) + "..."
-        } else {
-          str
-        }
-        logWarning(s"Codegen disabled for this expression:\n $logMessage")
-        InterpretedPredicate.create(expression, inputSchema)
-      case e: Exception =>
-        throw e
+      case e: JaninoRuntimeException if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+        genInterpretedPredicate(expression, inputSchema)
+      case e: CompileException if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+        genInterpretedPredicate(expression, inputSchema)
     }
   }
 

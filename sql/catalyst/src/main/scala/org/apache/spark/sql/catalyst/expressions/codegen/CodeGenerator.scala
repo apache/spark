@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, JaninoRuntimeException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
@@ -969,6 +970,10 @@ object CodeGenerator extends Logging {
         val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
         throw new JaninoRuntimeException(msg, e)
+      case e: CompileException =>
+        val msg = s"failed to compile: $e\n$formatted"
+        logError(msg, e)
+        throw new CompileException(msg, e.asInstanceOf[CompileException].getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
   }

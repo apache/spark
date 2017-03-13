@@ -376,7 +376,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case e: JaninoRuntimeException if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+      case e: Exception if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
