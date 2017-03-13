@@ -83,6 +83,18 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_OAUTH_TOKEN =
+    ConfigBuilder("spark.kubernetes.submit.oauthToken")
+      .doc("""
+          | OAuth token to use when authenticating against the
+          | against the Kubernetes API server. Note that unlike
+          | the other authentication options, this should be the
+          | exact string value of the token to use for the
+          | authentication.
+        """.stripMargin)
+      .stringConf
+      .createOptional
+
   private[spark] val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder("spark.kubernetes.submit.serviceAccountName")
       .doc("""

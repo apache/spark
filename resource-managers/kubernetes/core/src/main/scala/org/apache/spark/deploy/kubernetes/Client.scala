@@ -21,6 +21,7 @@ import java.security.SecureRandom
 import java.util.ServiceLoader
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
+import com.google.common.base.Charsets
 import com.google.common.io.Files
 import com.google.common.util.concurrent.SettableFuture
 import io.fabric8.kubernetes.api.model._
@@ -130,6 +131,11 @@ private[spark] class Client(
     }
     sparkConf.get(KUBERNETES_CLIENT_CERT_FILE).foreach {
       f => k8ConfBuilder = k8ConfBuilder.withClientCertFile(f)
+    }
+    sparkConf.get(KUBERNETES_OAUTH_TOKEN).foreach { token =>
+      k8ConfBuilder = k8ConfBuilder.withOauthToken(token)
+      // Remove the oauth token from Spark conf so that its doesn't appear in the Spark UI.
+      sparkConf.set(KUBERNETES_OAUTH_TOKEN, "<present_but_redacted>")
     }
 
     val k8ClientConfig = k8ConfBuilder.build
