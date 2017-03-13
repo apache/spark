@@ -143,9 +143,6 @@ private[yarn] class ExecutorRunnable(
     sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
-    sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
-      javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
-    }
     sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
@@ -227,11 +224,6 @@ private[yarn] class ExecutorRunnable(
       // This assumes each executor environment variable set here is a path
       // This is kept for backward compatibility and consistency with hadoop
       YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
-    }
-
-    // Keep this for backwards compatibility but users should move to the config
-    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
-      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
     }
 
     // lookup appropriate http scheme for container log urls

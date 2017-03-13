@@ -667,7 +667,7 @@ private[spark] class TaskSetManager(
    */
   def handleTaskGettingResult(tid: Long): Unit = {
     val info = taskInfos(tid)
-    info.markGettingResult()
+    info.markGettingResult(clock.getTimeMillis())
     sched.dagScheduler.taskGettingResult(info)
   }
 
@@ -695,7 +695,7 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
-    info.markFinished(TaskState.FINISHED)
+    info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
     removeRunningTask(tid)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -739,7 +739,7 @@ private[spark] class TaskSetManager(
       return
     }
     removeRunningTask(tid)
-    info.markFinished(state)
+    info.markFinished(state, clock.getTimeMillis())
     val index = info.index
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty

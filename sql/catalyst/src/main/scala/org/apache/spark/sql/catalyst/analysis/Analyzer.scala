@@ -598,7 +598,7 @@ class Analyzer(
           execute(child)
         }
         view.copy(child = newChild)
-      case p @ SubqueryAlias(_, view: View, _) =>
+      case p @ SubqueryAlias(_, view: View) =>
         val newChild = resolveRelation(view)
         p.copy(child = newChild)
       case _ => plan
@@ -606,7 +606,11 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+        lookupTableFromCatalog(u).canonicalized match {
+          case v: View =>
+            u.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+          case other => i.copy(table = other)
+        }
       case u: UnresolvedRelation => resolveRelation(u)
     }
 
@@ -2359,7 +2363,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child, _) => child
+    case SubqueryAlias(_, child) => child
   }
 }
 
