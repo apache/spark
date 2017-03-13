@@ -21,6 +21,9 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
@@ -390,4 +393,23 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("InMemoryTableScanExec should return currect output ordering and partitioning") {
+    val ds1 = Seq((0, 0), (1, 1)).toDS
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
+    val ds2 = Seq((0, 0), (1, 1)).toDS
+      .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
+    val joined = ds1.joinWith(ds2, ds1("_1") === ds2("_1"))
+
+    val inMemoryScans = joined.queryExecution.executedPlan.collect {
+      case m: InMemoryTableScanExec => m
+    }
+    inMemoryScans.foreach { inMemoryScan =>
+      val sortedAttrs = AttributeSet(inMemoryScan.outputOrdering.flatMap(_.references))
+      assert(sortedAttrs.subsetOf(inMemoryScan.outputSet))
+
+      val partitionedAttrs =
+        inMemoryScan.outputPartitioning.asInstanceOf[HashPartitioning].references
+      assert(partitionedAttrs.subsetOf(inMemoryScan.outputSet))
+    }
+  }
 }

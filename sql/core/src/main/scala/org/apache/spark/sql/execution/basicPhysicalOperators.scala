@@ -78,42 +78,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  /**
-   * If there are any `CreateNamedStructLike` expressions in the projection, keep value expressions
-   * and corresponding extractors. We will use those extractors to rewrite `outputPartitioning` and
-   * `outputOrdering`.
-   */
-  private lazy val valExprsAndExtractors = projectList.collect {
-    case a @ Alias(ns: CreateNamedStructLike, _) => (a.toAttribute, ns)
-  }.flatMap { case (attr, ns) =>
-    ns.valExprs.zipWithIndex.map { case (valExpr, ordinal) =>
-      (valExpr, GetStructField(attr, ordinal, Some(ns.names(ordinal).toString)))
-    }
-  }
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def outputOrdering: Seq[SortOrder] = {
-    child.outputOrdering.map { sortOrder =>
-      val newSortExpr = sortOrder.child.transform {
-        case required: Expression =>
-          val found = valExprsAndExtractors.find(_._1.semanticEquals(required))
-          found.map(_._2).getOrElse(required)
-      }
-      SortOrder(newSortExpr, sortOrder.direction, sortOrder.nullOrdering)
-    }
-  }
-
-  override def outputPartitioning: Partitioning = {
-    child.outputPartitioning match {
-      case HashPartitioning(requiredClustering, numPartitions) =>
-        val newRequiredClustering = requiredClustering.map(_.transform {
-          case required: Expression =>
-            val found = valExprsAndExtractors.find(_._1.semanticEquals(required))
-            found.map(_._2).getOrElse(required)
-        })
-        HashPartitioning(newRequiredClustering, numPartitions)
-      case _ => child.outputPartitioning
-    }
-  }
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 
