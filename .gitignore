@@ -14,6 +14,7 @@
 .ensime_cache/
 .ensime_lucene
 .generated-mima*
+.history
 .idea/
 .idea_modules/
 .project
