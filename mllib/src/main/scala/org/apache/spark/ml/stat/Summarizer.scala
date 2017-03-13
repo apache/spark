@@ -17,11 +17,16 @@
 
 package org.apache.spark.ml.stat
 
-import scala.collection.mutable
+import org.apache.spark.SparkException
 
+import scala.collection.mutable
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
@@ -210,6 +215,132 @@ object SummaryBuilderImpl extends Logging {
   private val metricsWithOrder = Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1, ComputeCount,
     ComputeTotalWeightSum, ComputeWeightSquareSum, ComputeWeightSum, ComputeNNZ, ComputeMax,
     ComputeMin).zipWithIndex
+
+  /**
+   * The buffer that contains all the summary statistics. If the value is null, it is considered
+   * to be not required.
+   *
+   * If it is required but the size of the vectors (n) is not yet know, it is initialized to
+   * an empty array.
+   */
+  private case class Buffer private (
+    var n: Int = -1,
+    var mean: Array[Double] = null,
+    var m2n: Array[Double] = null,
+    var m2: Array[Double] = null,
+    var l1: Array[Double] = null,
+    var totalCount: Long = 0,
+    var totalWeightSum: Double = 0.0,
+    var weightSquareSum: Array[Double] = null,
+    var weightSum: Array[Double] = null,
+    var nnz: Array[Long] = null,
+    var max: Array[Double] = null,
+    var min: Array[Double] = null)
+
+  object Buffer {
+    // Recursive function, but the number of cases is really small.
+    def fromMetrics(requested: Seq[ComputeMetrics]): Buffer = {
+      if (requested.isEmpty) {
+        new Buffer()
+      } else {
+        val b = fromMetrics(requested.tail)
+        requested.head match {
+          case ComputeMean => b.copy(mean = Array.empty)
+          case ComputeM2n => b.copy(m2n = Array.empty)
+          case ComputeM2 => b.copy(m2 = Array.empty)
+          case ComputeL1 => b.copy(l1 = Array.empty)
+          case ComputeWeightSquareSum => b.copy(weightSquareSum = Array.empty)
+          case ComputeWeightSum => b.copy(weightSum = Array.empty)
+          case ComputeNNZ => b.copy(nnz = Array.empty)
+          case ComputeMax => b.copy(max = Array.empty)
+          case ComputeMin => b.copy(min = Array.empty)
+          case _ => b // These cases are already being computed
+        }
+      }
+    }
+
+    def bufferSchema: StructType = {
+      // TODO: there is room for optimization here: we could take as argument the initialized
+      // start buffer and only attempt to compute the fields we know will be requested.
+      val fields = metricsWithOrder.map { case (m, _) =>
+        // TODO(thunterdb) this could be merged with the types above so that there is no confusion
+        // when adding other types later, and with the initialization below.
+        val tpe = m match {
+          case ComputeCount => LongType
+          case ComputeTotalWeightSum => DoubleType
+          case ComputeWeightSquareSum => DoubleType
+          case _ => ArrayType(DoubleType, containsNull = false)
+        }
+        StructField(m.toString, tpe, nullable = true)
+      }
+      val n = StructField("n", IntegerType, nullable = false)
+      StructType(n +: fields)
+    }
+
+    def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
+      ???
+    }
+
+    @throws[SparkException]("When the buffers are not compatible")
+    def mergeBuffers(buffer: Buffer, other: Buffer): Buffer = {
+      ???
+    }
+
+
+  }
+
+  private case class MetricsAggregate(
+      requested: Seq[Metrics],
+      startBuffer: Buffer,
+      child: Expression)
+    extends TypedImperativeAggregate[Buffer] {
+
+    override def eval(buff: Buffer): Buffer = Buffer
+
+    override def children: Seq[Expression] = child :: Nil
+
+    override def update(buff: Buffer, row: InternalRow): Buffer = {
+      val v = row.get(0, SQLDataTypes.VectorType).asInstanceOf[Vector]
+
+      val w = row.numFields match {
+        case 1 => 1.0
+        case 2 => row.getDouble(1)
+        case x => throw new SparkException(s"Expected 1 or 2 fields, got $x fields.")
+      }
+      Buffer.updateInPlace(buff, v, w)
+      buff
+    }
+
+    override def merge(buff: Buffer, other: Buffer): Buffer = {
+      Buffer.mergeBuffers(buff, other)
+    }
+
+    override def nullable: Boolean = false
+
+    // Make a copy of the start buffer so that the current aggregator can be safely copied around.
+    override def createAggregationBuffer(): Buffer = startBuffer.copy()
+
+    override def serialize(buff: Buffer): Array[Byte] = {
+      val array = new GenericArrayData(buff.productIterator.toArray)
+      projection.apply(InternalRow.apply(array)).getBytes
+    }
+
+    override def deserialize(bytes: Array[Byte]): Buffer = {
+      val buffer = createAggregationBuffer()
+      row.pointTo(bytes, bytes.length)
+      row.getArray(0).foreach(child.dataType, (_, x: Any) => buffer += x)
+      buffer
+    }
+
+
+
+    private lazy val projection = UnsafeProjection.create(
+      Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
+    private lazy val row = new UnsafeRow(1)
+
+
+  }
+
 
 
   private class MetricsUDAF(
