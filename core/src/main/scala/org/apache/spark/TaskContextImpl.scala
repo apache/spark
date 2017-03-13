@@ -80,9 +80,9 @@ private[spark] class TaskContextImpl(
       : this.type = synchronized {
     if (completed) {
       listener.onTaskCompletion(this)
+    } else {
+      onCompleteCallbacks += listener
     }
-    // Always add the listener because it is legal to call them multiple times.
-    onCompleteCallbacks += listener
     this
   }
 
@@ -111,6 +111,7 @@ private[spark] class TaskContextImpl(
   /** Marks the task as completed and triggers the completion listeners. */
   @GuardedBy("this")
   private[spark] def markTaskCompleted(): Unit = synchronized {
+    if (completed) return
     completed = true
     invokeListeners(onCompleteCallbacks, "TaskCompletionListener", None) {
       _.onTaskCompletion(this)

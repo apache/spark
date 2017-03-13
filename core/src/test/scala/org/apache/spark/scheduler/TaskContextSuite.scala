@@ -235,7 +235,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.addTaskCompletionListener(_ => invocations += 1)
     assert(invocations == 1)
     context.markTaskCompleted()
-    assert(invocations == 2)
+    assert(invocations == 1)
   }
 
   test("immediately call a failure listener if the context has failed") {
@@ -251,6 +251,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(lastError == error)
     assert(invocations == 1)
     context.markTaskFailed(error)
+    assert(lastError == error)
     assert(invocations == 1)
   }
 }
