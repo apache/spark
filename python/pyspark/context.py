@@ -53,7 +53,7 @@ __all__ = ['SparkContext']
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS = {
     "spark.serializer.objectStreamReset": 100,
-    "spark.rdd.compress": True,
+    "spark.rdd.compress": True
 }
 
 
@@ -732,6 +732,10 @@ class SparkContext(object):
                                              valueClass, keyConverter, valueConverter,
                                              jconf, batchSize)
         return RDD(jrdd, self)
+
+    def esRDD(self, resource, query):
+        es_rdd = self._jvm.PythonRDD.esRDD(self._jsc, resource, query)
+        return RDD(es_rdd, self)
 
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)

@@ -41,6 +41,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util._
 
 
+import org.elasticsearch.spark.rdd.api.java.JavaEsSpark
+
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
@@ -507,6 +509,11 @@ private[spark] object PythonRDD extends Logging {
     }
 
     iter.foreach(write)
+  }
+
+  def esRDD(sc: JavaSparkContext, resource: String, query: String) = {
+    val rdd = JavaEsSpark.esRDD(sc, resource, query).rdd
+    JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(rdd.asInstanceOf[RDD[(Any, Any)]], 0))
   }
 
   /**

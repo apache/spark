@@ -179,7 +179,6 @@ class JavaSparkContext(val sc: SparkContext)
     sc.textFile(path, minPartitions)
 
 
-
   /**
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
