@@ -496,8 +496,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
   test("from UTC timestamp") {
     def test(utc: String, tz: String, expected: String): Unit = {
-      assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
-        === expected)
+      DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+        assert(toJavaTimestamp(fromUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
+          === expected)
+      }
     }
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
       DateTimeTestUtils.withDefaultTimeZone(tz) {
@@ -519,9 +521,11 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("to UTC timestamp") {
-    def test(utc: String, tz: String, expected: String): Unit = {
-      assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(utc)), tz)).toString
-        === expected)
+    def test(ts: String, tz: String, expected: String): Unit = {
+      DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone(tz)) {
+        assert(toJavaTimestamp(toUTCTime(fromJavaTimestamp(Timestamp.valueOf(ts)), tz)).toString
+          === expected)
+      }
     }
 
     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
