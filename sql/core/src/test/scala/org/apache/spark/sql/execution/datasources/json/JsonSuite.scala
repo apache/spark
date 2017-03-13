@@ -1767,7 +1767,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       timestampsWithFormat.write
         .format("json")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -1785,7 +1785,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val readBack = spark.read
         .schema(customSchema)
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .json(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)

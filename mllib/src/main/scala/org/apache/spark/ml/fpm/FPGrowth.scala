@@ -56,7 +56,7 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   def getMinSupport: Double = $(minSupport)
 
   /**
-   * Number of partitions (positive) used by parallel FP-growth. By default the param is not set,
+   * Number of partitions ( &gt;= 1) used by parallel FP-growth. By default the param is not set,
    * and partition number of the input dataset is used.
    * @group expertParam
    */
