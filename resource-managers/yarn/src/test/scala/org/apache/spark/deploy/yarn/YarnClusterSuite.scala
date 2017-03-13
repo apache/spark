@@ -330,7 +330,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
     val extraConf: Map[String, String] = Map(
-      "spark.conda.binaryPath" -> (sys.props("user.home") + "/miniconda/bin/conda"),
+      "spark.conda.binaryPath" -> sys.env("CONDA_BIN"),
       "spark.conda.channelUrls" -> "https://repo.continuum.io/pkgs/free",
       "spark.conda.bootstrapPackages" -> "python=3.5"
     )

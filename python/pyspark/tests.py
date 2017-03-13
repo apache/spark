@@ -2078,7 +2078,7 @@ class SparkSubmitTests(unittest.TestCase):
             |spark.conda.binaryPath        {}
             |spark.conda.channelUrls       https://repo.continuum.io/pkgs/free
             |spark.conda.bootstrapPackages python=3.5
-        """.format(os.path.expanduser("~/miniconda/bin/conda")))
+        """.format(os.environ["CONDA_BIN"]))
         proc = subprocess.Popen([self.sparkSubmit,
                                  "--properties-file", props,
                                  script], stdout=subprocess.PIPE)
