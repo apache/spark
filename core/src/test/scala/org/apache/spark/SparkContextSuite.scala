@@ -40,7 +40,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
-    val conf = new SparkConf().setAppName("test").setMaster("local")
+    val conf = new SparkConf().setAppName("test")
       .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
     val envBefore = SparkEnv.get
