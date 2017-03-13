@@ -505,6 +505,21 @@ object DenseMatrix {
   }
 
   /**
+    * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
+    * 
+    * @param numRows number of rows of the matrix
+    * @param numCols number of columns of the matrix
+    * @return DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
+    */
+  @Since("2.0.0")
+  def rand(numRows: Int, numCols: Int): DenseMatrix = {
+    require(numRows.toLong * numCols <= Int.MaxValue,
+      s"$numRows x $numCols dense matrix is too large to allocate")
+    val rng=new Random()
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
+  }
+  
+  /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
