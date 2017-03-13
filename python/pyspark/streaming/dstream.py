@@ -349,6 +349,24 @@ class DStream(object):
             numPartitions = self._sc.defaultParallelism
         return self.transformWith(lambda a, b: a.cogroup(b, numPartitions), other)
 
+    def disjunction(self, other, numPartitions=None):
+        """
+        Returns a new DStream by applying 'disjunction' between RDDs of this
+        DStream and `other` DStream.
+        """
+        if numPartitions is None:
+            numPartitions = self._sc.defaultParallelism
+        return self.transformWith(lambda a, b: a.disjunction(b, numPartitions), other)
+
+    def difference(self, other, numPartitions=None):
+        """
+        Returns a new DStream by applying 'difference' between RDDs of this
+        DStream and `other` DStream.
+        """
+        if numPartitions is None:
+            numPartitions = self._sc.defaultParallelism
+        return self.transformWith(lambda a, b: a.difference(b, numPartitions), other)
+
     def join(self, other, numPartitions=None):
         """
         Return a new DStream by applying 'join' between RDDs of this DStream and
