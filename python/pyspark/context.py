@@ -75,8 +75,9 @@ class SparkContext(object):
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-                 environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
-                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
+                 requirementsFile=None, environment=None, batchSize=0,
+                 serializer=PickleSerializer(), conf=None, gateway=None,
+                 jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -88,6 +89,8 @@ class SparkContext(object):
         :param pyFiles: Collection of .zip or .py files to send to the cluster
                and add to PYTHONPATH.  These can be paths on the local file
                system or HDFS, HTTP, HTTPS, or FTP URLs.
+        :param requirementsFile: Pip requirements file to send dependencies
+               to the cluster and add to PYTHONPATH.
         :param environment: A dictionary of environment variables to set on
                worker nodes.
         :param batchSize: The number of Python objects represented as a single
@@ -114,15 +117,15 @@ class SparkContext(object):
         self._callsite = first_spark_call() or CallSite(None, None, None)
         SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
-            self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf, jsc, profiler_cls)
+            self._do_init(master, appName, sparkHome, pyFiles, requirementsFile, environment,
+                    batchSize, serializer, conf, jsc, profiler_cls)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
-    def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf, jsc, profiler_cls):
+    def _do_init(self, master, appName, sparkHome, pyFiles, requirementsFile, environment,
+                batchSize, serializer, conf, jsc, profiler_cls):
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
@@ -208,6 +211,10 @@ class SparkContext(object):
         self._python_includes = list()
         for path in (pyFiles or []):
             self.addPyFile(path)
+
+        # Deplpoy code dependencies from requirements file in the constructor
+        if requirementsFile:
+            self.addRequirementsFile(requirementsFile)
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
@@ -836,6 +843,34 @@ class SparkContext(object):
         if sys.version > '3':
             import importlib
             importlib.invalidate_caches()
+
+    def addRequirementsFile(self, path):
+        """
+        Add a pip requirements file to distribute dependencies for all tasks
+        on thie SparkContext in the future. An ImportError will be thrown if
+        a module in the file can't be downloaded.
+        See https://pip.pypa.io/en/latest/user_guide.html#requirements-files
+        """
+        import importlib
+        import pip
+        import tarfile
+        import tempfile
+        import uuid
+        tar_dir = tempfile.mkdtemp()
+        for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
+            if not req.check_if_exists():
+                pip.main(['install', req.req.__str__()])
+            try:
+                mod = importlib.import_module(req.name)
+            finally:
+                shutil.rmtree(tar_dir)
+            mod_path = mod.__path__[0]
+            tar_path = os.path.join(tar_dir, req.name+'.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            tar.add(mod_path, arcname=os.path.basename(mod_path))
+            tar.close()
+            self.addPyFile(tar_path)
+        shutil.rmtree(tar_dir)
 
     def setCheckpointDir(self, dirName):
         """
