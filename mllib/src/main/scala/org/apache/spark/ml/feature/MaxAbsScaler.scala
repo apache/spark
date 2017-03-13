@@ -155,7 +155,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = new Data(instance.maxAbs)
+      val data = Data(instance.maxAbs)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
