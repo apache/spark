@@ -574,7 +574,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   }
 
   private def getEscapedString(str: String): String = {
-    s""""${str.replaceAll("\"", "\\\"")}""""
+    s""""${str.replace("\"", "\\\"")}""""
   }
 
   override def getPartitionsByFilter(
