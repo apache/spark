@@ -35,8 +35,7 @@ final case class CondaEnvironment(condaEnvDir: Path) extends Logging {
     val newStartEnv = (startEnv + ("CONDA_PREFIX" -> condaEnvDir.toString)).toSeq
     // Activate the conda environment, then capture the environment
     val env0sep = Process(List("bash", "-c",
-      s"source $$CONDA_PREFIX/bin/activate $$CONDA_PREFIX && " +
-        "/usr/local/opt/coreutils/libexec/gnubin/env -0"),
+      s"source $$CONDA_PREFIX/bin/activate $$CONDA_PREFIX && env -0"),
       None, newStartEnv: _*).!!
     env0sep.split('\u0000').iterator.filter(_.trim.nonEmpty).map(_.split("=", 2) match {
       case Array(k, v) => (k, v)
