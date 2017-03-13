@@ -76,6 +76,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     this
   }
 
+  val propertiesUrl = 
+    Utils.getContextOrSparkClassLoader.getResource("spark-defaults.conf")
+
+  Option(propertiesUrl).foreach { fileUrl =>
+    Utils.getPropertiesFromFile(fileUrl.getPath()).foreach { case (k, v) =>
+      if (k.startsWith("spark.")) {
+        settings(k) = v
+      }
+    }
+  }
+
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
     set(key, value, false)
