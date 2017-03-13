@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 
 import scala.collection.mutable
 
@@ -125,8 +125,8 @@ class FileScanRDD(
         try {
           readFunction(currentFile)
         } catch {
-          case e: java.io.FileNotFoundException =>
-            throw new java.io.FileNotFoundException(
+          case e: FileNotFoundException =>
+            throw new FileNotFoundException(
               e.getMessage + "\n" +
                 "It is possible the underlying files have been updated. " +
                 "You can explicitly invalidate the cache in Spark by " +
@@ -161,9 +161,10 @@ class FileScanRDD(
                   }
                 } catch {
                   // Throw FileNotFoundException even `ignoreCorruptFiles` is true
-                  case e: java.io.FileNotFoundException => throw e
+                  case e: FileNotFoundException => throw e
                   case e @ (_: RuntimeException | _: IOException) =>
-                    logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
+                    logWarning(
+                      s"Skipped the rest of the content in the corrupted file: $currentFile", e)
                     finished = true
                     null
                 }
