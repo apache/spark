@@ -89,29 +89,29 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight python %}
 
 # Subscribe to 1 topic
-ds1 = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("subscribe", "topic1")
+ds1 = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
   .load()
 ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to multiple topics
-ds2 = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("subscribe", "topic1,topic2")
+ds2 = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1,topic2") \
   .load()
 ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern
-ds3 = spark
-  .readStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("subscribePattern", "topic.*")
+ds3 = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribePattern", "topic.*") \
   .load()
 ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
