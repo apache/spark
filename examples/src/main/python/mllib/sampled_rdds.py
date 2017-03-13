@@ -33,7 +33,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         datapath = sys.argv[1]
     else:
-        datapath = 'data/mllib/sample_binary_classification_data.txt'
+        datapath = '../../../../../data/mllib/sample_binary_classification_data.txt'
 
     sc = SparkContext(appName="PythonSampledRDDs")
 
