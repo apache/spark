@@ -34,12 +34,16 @@ if __name__ == "__main__":
 
     data = sc.textFile("data/mllib/sample_linear_regression_data.txt")
     parsedData = data.map(parsePoint)
+    
+    
+    # split the data into two sets for training and testing
+    (trainingData, testData) = parsedData.randomSplit([0.7, 0.3])
 
-    # Build the model
-    model = LinearRegressionWithSGD.train(parsedData)
+    # Build the model with training set
+    model = LinearRegressionWithSGD.train(trainingData)
 
-    # Get predictions
-    valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.label))
+    # Get predictions for the test set
+    valuesAndPreds = testData.map(lambda p: (float(model.predict(p.features)), p.label))
 
     # Instantiate metrics object
     metrics = RegressionMetrics(valuesAndPreds)
