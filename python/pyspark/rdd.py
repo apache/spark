@@ -1813,7 +1813,7 @@ class RDD(object):
 
         >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> def add(a, b): return a + str(b)
-        >>> sorted(x.combineByKey(str, add, add).collect())
+        >>> x.combineByKey(str, add, add).collect()
         [('a', '11'), ('b', '1')]
         """
         if numPartitions is None:
