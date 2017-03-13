@@ -28,7 +28,6 @@ from tempfile import NamedTemporaryFile
 
 from py4j.protocol import Py4JError
 
-from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
