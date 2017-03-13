@@ -117,10 +117,12 @@ private[spark] object RandomForest extends Logging {
     timer.start("findSplits")
     val splits = findSplits(retaggedInput, metadata, seed)
     timer.stop("findSplits")
-    logDebug("numBins: feature: number of bins")
-    logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
-      s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
-    }.mkString("\n"))
+    if (log.isDebugEnabled) {
+      logDebug("numBins: feature: number of bins")
+      logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
+        s"\t$featureIndex\t${metadata.numBins(featureIndex)}"
+      }.mkString("\n"))
+    }
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
