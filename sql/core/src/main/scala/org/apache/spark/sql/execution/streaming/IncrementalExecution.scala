@@ -45,6 +45,7 @@ class IncrementalExecution(
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
     sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
+    sparkSession.sessionState.planner.StreamingDeduplicationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.
@@ -93,11 +94,20 @@ class IncrementalExecution(
               keys,
               Some(stateId),
               child) :: Nil))
-      case MapGroupsWithStateExec(
+      case StreamingDeduplicateExec(keys, child, None, None) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+
+        StreamingDeduplicateExec(
+          keys,
+          child,
+          Some(stateId),
+          Some(currentEventTimeWatermark))
+      case FlatMapGroupsWithStateExec(
              f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
-        MapGroupsWithStateExec(
+        FlatMapGroupsWithStateExec(
           f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
     }
   }

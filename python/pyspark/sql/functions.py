@@ -20,6 +20,7 @@ A collections of builtin functions
 """
 import math
 import sys
+import functools
 
 if sys.version < "3":
     from itertools import imap as map
@@ -1772,11 +1773,11 @@ def json_tuple(col, *fields):
 @since(2.1)
 def from_json(col, schema, options={}):
     """
-    Parses a column containing a JSON string into a [[StructType]] with the
-    specified schema. Returns `null`, in the case of an unparseable string.
+    Parses a column containing a JSON string into a [[StructType]] or [[ArrayType]]
+    with the specified schema. Returns `null`, in the case of an unparseable string.
 
     :param col: string column in json format
-    :param schema: a StructType to use when parsing the json column
+    :param schema: a StructType or ArrayType to use when parsing the json column
     :param options: options to control parsing. accepts the same options as the json datasource
 
     >>> from pyspark.sql.types import *
@@ -1785,6 +1786,11 @@ def from_json(col, schema, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
     [Row(json=Row(a=1))]
+    >>> data = [(1, '''[{"a": 1}]''')]
+    >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=[Row(a=1)])]
     """
 
     sc = SparkContext._active_spark_context
@@ -1864,6 +1870,11 @@ class UserDefinedFunction(object):
     .. versionadded:: 1.3
     """
     def __init__(self, func, returnType, name=None):
+        if not callable(func):
+            raise TypeError(
+                "Not a function or callable (__call__ is not defined): "
+                "{0}".format(type(func)))
+
         self.func = func
         self.returnType = (
             returnType if isinstance(returnType, DataType)
@@ -1903,22 +1914,57 @@ class UserDefinedFunction(object):
 
 
 @since(1.3)
-def udf(f, returnType=StringType()):
+def udf(f=None, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
         duplicate invocations may be eliminated or the function may even be invoked more times than
         it is present in the query.
 
-    :param f: python function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object or data type string.
+    :param f: python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
-    >>> df.select(slen(df.name).alias('slen')).collect()
-    [Row(slen=5), Row(slen=3)]
+    >>> @udf
+    ... def to_upper(s):
+    ...     if s is not None:
+    ...         return s.upper()
+    ...
+    >>> @udf(returnType=IntegerType())
+    ... def add_one(x):
+    ...     if x is not None:
+    ...         return x + 1
+    ...
+    >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+    >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")).show()
+    +----------+--------------+------------+
+    |slen(name)|to_upper(name)|add_one(age)|
+    +----------+--------------+------------+
+    |         8|      JOHN DOE|          22|
+    +----------+--------------+------------+
     """
-    return UserDefinedFunction(f, returnType)
+    def _udf(f, returnType=StringType()):
+        udf_obj = UserDefinedFunction(f, returnType)
+
+        @functools.wraps(f)
+        def wrapper(*args):
+            return udf_obj(*args)
+
+        wrapper.func = udf_obj.func
+        wrapper.returnType = udf_obj.returnType
+
+        return wrapper
+
+    # decorator @udf, @udf() or @udf(dataType())
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type)
+    else:
+        return _udf(f=f, returnType=returnType)
+
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
-import java.sql.{Date => JDate, Timestamp => JTimestamp}
+import java.util.TimeZone
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -31,7 +31,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -91,10 +93,19 @@ object PartitioningUtils {
   private[datasources] def parsePartitions(
       paths: Seq[Path],
       typeInference: Boolean,
-      basePaths: Set[Path]): PartitionSpec = {
+      basePaths: Set[Path],
+      timeZoneId: String): PartitionSpec = {
+    parsePartitions(paths, typeInference, basePaths, TimeZone.getTimeZone(timeZoneId))
+  }
+
+  private[datasources] def parsePartitions(
+      paths: Seq[Path],
+      typeInference: Boolean,
+      basePaths: Set[Path],
+      timeZone: TimeZone): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
-      parsePartition(path, typeInference, basePaths)
+      parsePartition(path, typeInference, basePaths, timeZone)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -173,7 +184,8 @@ object PartitioningUtils {
   private[datasources] def parsePartition(
       path: Path,
       typeInference: Boolean,
-      basePaths: Set[Path]): (Option[PartitionValues], Option[Path]) = {
+      basePaths: Set[Path],
+      timeZone: TimeZone): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
@@ -194,7 +206,7 @@ object PartitioningUtils {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
-          parsePartitionColumn(currentPath.getName, typeInference)
+          parsePartitionColumn(currentPath.getName, typeInference, timeZone)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -226,7 +238,8 @@ object PartitioningUtils {
 
   private def parsePartitionColumn(
       columnSpec: String,
-      typeInference: Boolean): Option[(String, Literal)] = {
+      typeInference: Boolean,
+      timeZone: TimeZone): Option[(String, Literal)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
       None
@@ -237,7 +250,7 @@ object PartitioningUtils {
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
       assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
 
-      val literal = inferPartitionColumnValue(rawColumnValue, typeInference)
+      val literal = inferPartitionColumnValue(rawColumnValue, typeInference, timeZone)
       Some(columnName -> literal)
     }
   }
@@ -370,7 +383,8 @@ object PartitioningUtils {
    */
   private[datasources] def inferPartitionColumnValue(
       raw: String,
-      typeInference: Boolean): Literal = {
+      typeInference: Boolean,
+      timeZone: TimeZone): Literal = {
     val decimalTry = Try {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new JBigDecimal(raw)
@@ -390,8 +404,16 @@ object PartitioningUtils {
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
         // Then falls back to date/timestamp types
-        .orElse(Try(Literal(JDate.valueOf(raw))))
-        .orElse(Try(Literal(JTimestamp.valueOf(unescapePathName(raw)))))
+        .orElse(Try(
+          Literal.create(
+            DateTimeUtils.getThreadLocalTimestampFormat(timeZone)
+              .parse(unescapePathName(raw)).getTime * 1000L,
+            TimestampType)))
+        .orElse(Try(
+          Literal.create(
+            DateTimeUtils.millisToDays(
+              DateTimeUtils.getThreadLocalDateFormat.parse(raw).getTime),
+            DateType)))
         // Then falls back to string
         .getOrElse {
           if (raw == DEFAULT_PARTITION_NAME) {

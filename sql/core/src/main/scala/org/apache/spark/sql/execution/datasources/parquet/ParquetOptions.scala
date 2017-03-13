@@ -26,14 +26,14 @@ import org.apache.spark.sql.internal.SQLConf
  * Options for the Parquet data source.
  */
 private[parquet] class ParquetOptions(
-    @transient private val parameters: CaseInsensitiveMap,
+    @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
 
   import ParquetOptions._
 
   def this(parameters: Map[String, String], sqlConf: SQLConf) =
-    this(new CaseInsensitiveMap(parameters), sqlConf)
+    this(CaseInsensitiveMap(parameters), sqlConf)
 
   /**
    * Compression codec to use. By default use the value specified in SQLConf.

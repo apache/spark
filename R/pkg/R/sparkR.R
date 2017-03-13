@@ -588,13 +588,11 @@ processSparkPackages <- function(packages) {
 sparkCheckInstall <- function(sparkHome, master, deployMode) {
   if (!isSparkRShell()) {
     if (!is.na(file.info(sparkHome)$isdir)) {
-      msg <- paste0("Spark package found in SPARK_HOME: ", sparkHome)
-      message(msg)
+      message("Spark package found in SPARK_HOME: ", sparkHome)
       NULL
     } else {
       if (interactive() || isMasterLocal(master)) {
-        msg <- paste0("Spark not found in SPARK_HOME: ", sparkHome)
-        message(msg)
+        message("Spark not found in SPARK_HOME: ", sparkHome)
         packageLocalDir <- install.spark()
         packageLocalDir
       } else if (isClientMode(master) || deployMode == "client") {

@@ -2,13 +2,13 @@ set datanucleus.cache.collections=false;
 set hive.stats.autogather=false;
 set hive.exec.dynamic.partition=true;
 set hive.exec.dynamic.partition.mode=nonstrict;
-set mapred.min.split.size=256;
-set mapred.min.split.size.per.node=256;
-set mapred.min.split.size.per.rack=256;
-set mapred.max.split.size=256;
+set mapreduce.input.fileinputformat.split.minsize=256;
+set mapreduce.input.fileinputformat.split.minsize.per.node=256;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=256;
+set mapreduce.input.fileinputformat.split.maxsize=256;
 
 -- INCLUDE_HADOOP_MAJOR_VERSIONS(0.23)
--- This test uses mapred.max.split.size/mapred.max.split.size for controlling
+-- This test uses mapreduce.input.fileinputformat.split.maxsize/mapred.max.split.size for controlling
 -- number of input splits.
 -- stats_partscan_1.q is the same test with this but has different result.
 

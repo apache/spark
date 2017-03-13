@@ -25,9 +25,9 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
@@ -211,14 +211,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     assertNotBucketed("save")
-    val dataSource = DataSource(
-      df.sparkSession,
-      className = source,
-      partitionColumns = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec,
-      options = extraOptions.toMap)
 
-    dataSource.write(mode, df)
+    runCommand(df.sparkSession, "save") {
+      SaveIntoDataSourceCommand(
+        query = df.logicalPlan,
+        provider = source,
+        partitionColumns = partitioningColumns.getOrElse(Nil),
+        options = extraOptions.toMap,
+        mode = mode)
+    }
   }
 
   /**
@@ -261,25 +262,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
-    df.sparkSession.sessionState.executePlan(
+    runCommand(df.sparkSession, "insertInto") {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
         partition = Map.empty[String, Option[String]],
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
-        ifNotExists = false)).toRdd
-  }
-
-  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
-    cols.map(normalize(_, "Partition"))
-  }
-
-  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
-    cols.map(normalize(_, "Bucketing"))
-  }
-
-  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
-    cols.map(normalize(_, "Sorting"))
+        ifNotExists = false)
+    }
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
@@ -287,33 +277,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       require(numBuckets.isDefined, "sortBy must be used together with bucketBy")
     }
 
-    for {
-      n <- numBuckets
-    } yield {
-      require(n > 0 && n < 100000, "Bucket number must be greater than 0 and less than 100000.")
-
-      // partitionBy columns cannot be used in bucketBy
-      if (normalizedParCols.nonEmpty &&
-        normalizedBucketColNames.get.toSet.intersect(normalizedParCols.get.toSet).nonEmpty) {
-          throw new AnalysisException(
-            s"bucketBy columns '${bucketColumnNames.get.mkString(", ")}' should not be part of " +
-            s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
-      }
-
-      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
+    numBuckets.map { n =>
+      BucketSpec(n, bucketColumnNames.get, sortColumnNames.getOrElse(Nil))
     }
-  }
-
-  /**
-   * The given column name may not be equal to any of the existing column names if we were in
-   * case-insensitive context. Normalize the given column name to the real one so that we don't
-   * need to care about case sensitivity afterwards.
-   */
-  private def normalize(columnName: String, columnType: String): String = {
-    val validColumnNames = df.logicalPlan.output.map(_.name)
-    validColumnNames.find(df.sparkSession.sessionState.analyzer.resolver(_, columnName))
-      .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
-        s"existing columns (${validColumnNames.mkString(", ")})"))
   }
 
   private def assertNotBucketed(operation: String): Unit = {
@@ -383,8 +349,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
           case LogicalRelation(src: BaseRelation, _, _) => src
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable) =>
-            relation.catalogTable.identifier
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) =>
+            relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
@@ -394,8 +360,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           // check hive table relation when overwrite mode
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.catalogTable)
-            && srcRelations.contains(relation.catalogTable.identifier) =>
+          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta)
+            && srcRelations.contains(relation.tableMeta.identifier) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK
@@ -426,10 +392,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       schema = new StructType,
       provider = Some(source),
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec
-    )
-    df.sparkSession.sessionState.executePlan(
-      CreateTable(tableDesc, mode, Some(df.logicalPlan))).toRdd
+      bucketSpec = getBucketSpec)
+
+    runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
 
   /**
@@ -492,6 +457,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -598,12 +565,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 2.0.0
    */
   def csv(path: String): Unit = {
     format("csv").save(path)
+  }
+
+  /**
+   * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
+   * user-registered callback functions.
+   */
+  private def runCommand(session: SparkSession, name: String)(command: LogicalPlan): Unit = {
+    val qe = session.sessionState.executePlan(command)
+    try {
+      val start = System.nanoTime()
+      // call `QueryExecution.toRDD` to trigger the execution of commands.
+      qe.toRdd
+      val end = System.nanoTime()
+      session.listenerManager.onSuccess(name, qe, end - start)
+    } catch {
+      case e: Exception =>
+        session.listenerManager.onFailure(name, qe, e)
+        throw e
+    }
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

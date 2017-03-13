@@ -63,7 +63,7 @@ set hive.merge.mapredfiles=true;
 set hive.merge.smallfiles.avgsize=200;
 set hive.exec.compress.output=false;
 set hive.exec.dynamic.partition=true;
-set mapred.reduce.tasks=2;
+set mapreduce.job.reduces=2;
 
 -- Tests dynamic partitions where bucketing/sorting can be inferred, but some partitions are
 -- merged and some are moved.  Currently neither should be bucketed or sorted, in the future,

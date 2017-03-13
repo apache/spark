@@ -365,6 +365,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
     val taskContext = ctx.freshName("taskContext")
     ctx.addMutableState("TaskContext", taskContext, s"$taskContext = TaskContext.get();")
+    val inputMetrics = ctx.freshName("inputMetrics")
+    ctx.addMutableState("InputMetrics", inputMetrics,
+        s"$inputMetrics = $taskContext.taskMetrics().inputMetrics();")
 
     // In order to periodically update the metrics without inflicting performance penalty, this
     // operator produces elements in batches. After a batch is complete, the metrics are updated
@@ -384,8 +387,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // How many values should be generated in the next batch.
     val nextBatchTodo = ctx.freshName("nextBatchTodo")
 
-    // The default size of a batch.
-    val batchSize = 1000L
+    // The default size of a batch, which must be positive integer
+    val batchSize = 1000
 
     ctx.addNewFunction("initRange",
       s"""
@@ -431,6 +434,15 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val input = ctx.freshName("input")
     // Right now, Range is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+
+    val localIdx = ctx.freshName("localIdx")
+    val localEnd = ctx.freshName("localEnd")
+    val range = ctx.freshName("range")
+    val shouldStop = if (isShouldStopRequired) {
+      s"if (shouldStop()) { $number = $value + ${step}L; return; }"
+    } else {
+      "// shouldStop check is eliminated"
+    }
     s"""
       | // initialize Range
       | if (!$initTerm) {
@@ -439,11 +451,15 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | }
       |
       | while (true) {
-      |   while ($number != $batchEnd) {
-      |     long $value = $number;
-      |     $number += ${step}L;
-      |     ${consume(ctx, Seq(ev))}
-      |     if (shouldStop()) return;
+      |   long $range = $batchEnd - $number;
+      |   if ($range != 0L) {
+      |     int $localEnd = (int)($range / ${step}L);
+      |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
+      |       long $value = ((long)$localIdx * ${step}L) + $number;
+      |       ${consume(ctx, Seq(ev))}
+      |       $shouldStop
+      |     }
+      |     $number = $batchEnd;
       |   }
       |
       |   if ($taskContext.isInterrupted()) {
@@ -460,7 +476,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       |     if ($nextBatchTodo == 0) break;
       |   }
       |   $numOutput.add($nextBatchTodo);
-      |   $numGenerated.add($nextBatchTodo);
+      |   $inputMetrics.incRecordsRead($nextBatchTodo);
       |
       |   $batchEnd += $nextBatchTodo * ${step}L;
       | }
@@ -469,7 +485,6 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val numGeneratedRows = longMetric("numGeneratedRows")
     sqlContext
       .sparkContext
       .parallelize(0 until numSlices, numSlices)
@@ -488,10 +503,12 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         val safePartitionEnd = getSafeMargin(partitionEnd)
         val rowSize = UnsafeRow.calculateBitSetWidthInBytes(1) + LongType.defaultSize
         val unsafeRow = UnsafeRow.createFromByteArray(rowSize, 1)
+        val taskContext = TaskContext.get()
 
         val iter = new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
           private[this] var overflow: Boolean = false
+          private[this] val inputMetrics = taskContext.taskMetrics().inputMetrics
 
           override def hasNext =
             if (!overflow) {
@@ -513,12 +530,12 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
             }
 
             numOutputRows += 1
-            numGeneratedRows += 1
+            inputMetrics.incRecordsRead(1)
             unsafeRow.setLong(0, ret)
             unsafeRow
           }
         }
-        new InterruptibleIterator(TaskContext.get(), iter)
+        new InterruptibleIterator(taskContext, iter)
       }
   }
 
@@ -541,7 +558,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * Physical plan for returning a new RDD that has exactly `numPartitions` partitions.
  * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
  * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
- * the 100 new partitions will claim 10 of the current partitions.
+ * the 100 new partitions will claim 10 of the current partitions.  If a larger number of partitions
+ * is requested, it will stay at the current number of partitions.
+ *
+ * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+ * this may result in your computation taking place on fewer nodes than
+ * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+ * you see ShuffleExchange. This will add a shuffle step, but means the
+ * current upstream partitions will be executed in parallel (per whatever
+ * the current partitioning is).
  */
 case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
