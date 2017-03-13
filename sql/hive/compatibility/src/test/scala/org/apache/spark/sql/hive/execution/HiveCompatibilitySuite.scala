@@ -756,6 +756,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input28",
     "input2_limit",
     "input40",
+    "input46",
     "input41",
     "input49",
     "input4_cb_delim",
