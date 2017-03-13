@@ -79,6 +79,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     visitSparkDataType(ctx.dataType)
   }
 
+  override def visitSingleColumnName(
+      ctx: SingleColumnNameContext): UnresolvedAttribute = withOrigin(ctx) {
+    UnresolvedAttribute(ctx.qualifiedName().identifier().asScala.map(_.getText))
+  }
+
   /* ********************************************************************************************
    * Plan parsing
    * ******************************************************************************************** */

@@ -60,6 +60,10 @@ singleDataType
     : dataType EOF
     ;
 
+singleColumnName
+    : qualifiedName EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
