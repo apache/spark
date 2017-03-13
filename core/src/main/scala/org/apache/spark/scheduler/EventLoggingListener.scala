@@ -75,6 +75,10 @@ private[spark] class EventLoggingListener(
     CompressionCodec.getShortName(c.getClass.getName)
   }
 
+  if (!fileSystem.exists(new Path(logBaseDir)) && !fileSystem.mkdirs(new Path(logBaseDir))) {
+    throw new IllegalStateException(s"Couldn't create $logBaseDir.")
+  }
+
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
