@@ -541,7 +541,7 @@ class DataFrameWriter(OptionUtils):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format\
+            * ``timeZone``: sets the string that indicates a timezone to be used to format
                 timestamps in the JSON/CSV datasources or parttion values.
                 If it isn't set, it uses the default value, session local timezone.
         """
