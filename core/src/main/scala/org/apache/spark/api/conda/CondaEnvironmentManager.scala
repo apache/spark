@@ -39,11 +39,11 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
 
   def create(baseDir: String, bootstrapDeps: Seq[String]): CondaEnvironment = {
     require(bootstrapDeps.nonEmpty, "Expected at least one bootstrap dependency.")
-    // Attempt to create environment
     val name = "conda-env"
 
     // must link in /tmp to reduce path length in case baseDir is very long...
-    // Don't even try to use java.io.tmpdir - yarn hijacks that
+    // If baseDir path is too long, this breaks conda's 220 character limit for binary replacement.
+    // Don't even try to use java.io.tmpdir - yarn sets this to a very long path
     val linkedBaseDir = Utils.createTempDir("/tmp", "conda").toPath resolve "real"
     logInfo(s"Creating symlink $linkedBaseDir -> $baseDir")
     Files.createSymbolicLink(linkedBaseDir, Paths get baseDir)
@@ -53,12 +53,14 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
 
     val condarc = generateCondarc(linkedBaseDir)
 
+    // Attempt to create environment
     val command = Process(
       List(condaBinaryPath, "create", "-n", name, "-y", "--override-channels", "-vv")
         ++: condaChannelUrls.flatMap(Iterator("--channel", _))
         ++: bootstrapDeps,
       None,
-      "CONDARC" -> condarc.toString)
+      "CONDARC" -> condarc.toString,
+      "HOME" -> (linkedBaseDir resolve "home").toString)
 
     runOrFail(command, "create conda env")
 
@@ -82,7 +84,7 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
          | - $envRoot/pkgs
          | - $condaPkgsPath
          |envs_dirs:
-         | - $envRoot
+         | - $envRoot/
       """.stripMargin
     Files.write(condarc, List(condarcContents).asJava)
     logInfo(f"Using condarc at $condarc:%n$condarcContents")
@@ -95,7 +97,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
         ++: condaChannelUrls.flatMap(Iterator("--channel", _))
         ++: deps,
       None,
-      "CONDARC" -> generateCondarc(condaEnv.envRoot).toString)
+      "CONDARC" -> generateCondarc(condaEnv.envRoot).toString,
+      "HOME" -> (condaEnv.envRoot resolve "home").toString)
     runOrFail(command, s"install dependencies in conda env ${condaEnv.condaEnvDir}")
   }
 
