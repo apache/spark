@@ -1011,6 +1011,26 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("show table extended ... partition") {
+    withTable("showtbl") {
+      sql(
+        """
+          |CREATE TABLE showtbl(a String, b Int, c String, d String)
+          |USING parquet
+          |PARTITIONED BY (c, d)
+        """.stripMargin)
+      sql("ALTER TABLE showtbl ADD PARTITION (c='Us', d=1)")
+      val df = sql("SHOW TABLE EXTENDED LIKE 'showtbl' PARTITION(c='Us', d=1)")
+      assert(df.count() == 1)
+      assert(df.schema ==
+        StructType(StructField("database", StringType, false) ::
+          StructField("tableName", StringType, false) ::
+          StructField("isTemporary", BooleanType, false) ::
+          StructField("information", StringType, false) :: Nil))
+      assert(df.head().getString(1) == "showtbl")
+    }
+  }
+
   test("show databases") {
     sql("CREATE DATABASE showdb2B")
     sql("CREATE DATABASE showdb1A")

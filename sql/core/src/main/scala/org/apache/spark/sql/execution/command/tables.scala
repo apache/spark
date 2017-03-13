@@ -649,12 +649,12 @@ case class ShowTablesCommand(
       val tables =
         tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
       tables.map { tableIdent =>
-        val database = tableIdent.database.getOrElse("")
+        val database = tableIdent.database.getOrElse(db)
         val tableName = tableIdent.table
         val isTemp = catalog.isTemporaryTable(tableIdent)
         if (isExtended) {
           val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
-          Row(database, tableName, isTemp, s"${information}\n")
+          Row(database, tableName, isTemp, s"$information\n")
         } else {
           Row(database, tableName, isTemp)
         }
@@ -664,14 +664,14 @@ case class ShowTablesCommand(
       //
       // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
       // should have been thrown by the sql parser.
-      val tableIdentifier = TableIdentifier(tableIdentifierPattern.get, Some(db))
-      val table = catalog.getTableMetadata(tableIdentifier).identifier
-      val partition = catalog.getPartition(tableIdentifier, partitionSpec.get)
+      val tableIdent = TableIdentifier(tableIdentifierPattern.get, Some(db))
+      val table = catalog.getTableMetadata(tableIdent).identifier
+      val partition = catalog.getPartition(tableIdent, partitionSpec.get)
       val database = table.database.getOrElse("")
       val tableName = table.table
       val isTemp = catalog.isTemporaryTable(table)
       val information = partition.toString
-      Seq(Row(database, tableName, isTemp, information))
+      Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
   }
 }

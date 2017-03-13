@@ -127,13 +127,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             .map(s => String.format(s"%-20s", s))
             .mkString("\t")
       }
-    // SHOW TABLES in Hive only output table names, while ours outputs database, table name, isTemp.
-    case command@ ExecutedCommandExec(showTables: ShowTablesCommand) =>
-      if (showTables.isExtended) {
-        command.executeCollect().map(_.getString(3))
-      } else {
-        command.executeCollect().map(_.getString(1))
-      }
+    // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
+    case command @ ExecutedCommandExec(showTables: ShowTablesCommand) =>
+      command.executeCollect().map(_.getString(1))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
       // We need the types so we can output struct field names
