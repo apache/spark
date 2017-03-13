@@ -30,6 +30,7 @@ import pickle
 import functools
 import time
 import datetime
+import traceback
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -2390,7 +2391,7 @@ class TypesTest(unittest.TestCase):
                 (None, StructType([]))]:
             _verify_type(obj, data_type, nullable=True)
             msg = "_verify_type(%s, %s, nullable=True)" % (obj, data_type)
-            self.assertIsTrue(True, msg)
+            self.assertTrue(True, msg)
 
     def test_verify_type_not_nullable(self):
         import array
@@ -2398,105 +2399,129 @@ class TypesTest(unittest.TestCase):
         import decimal
 
         MyStructType = StructType([
-            StuctField('s', StringType(), nullable=False),
+            StructField('s', StringType(), nullable=False),
             StructField('i', IntegerType(), nullable=True)])
 
-        class MyDictObj:
-            def __init__(self, s, i):
-                self.__dict__ = {'s': s, 'i': i}
+        class MyObj:
+            def __init__(self, **ka):
+                for k, v in ka.items():
+                    setattr(self, k, v)
 
-        # exp: None for success, Exception subclass for error
-        for obj, data_type, exp in [
-                # Strings (match anything but None)
-                ("", StringType(), None),
-                (1, StringType(), None),
-                (1.0, StringType(), None),
-                ([], StringType(), None),
-                ({}, StringType(), None),
-                (None, StringType(), ValueError),   # Only None test
+        # obj, data_type, exception (None for success or Exception subclass for error)
+        spec = [
+            # Strings (match anything but None)
+            ("", StringType(), None),
+            (u"", StringType(), None),
+            (1, StringType(), None),
+            (1.0, StringType(), None),
+            ([], StringType(), None),
+            ({}, StringType(), None),
+            (None, StringType(), ValueError),   # Only None test
 
-                # UDT
-                (ExamplePoint(1.0, 2.0), ExamplePointUDT(), None),
-                (ExamplePoint(1.0, 2.0), PythonOnlyUDT(), ValueError),
+            # UDT
+            (ExamplePoint(1.0, 2.0), ExamplePointUDT(), None),
+            (ExamplePoint(1.0, 2.0), PythonOnlyUDT(), ValueError),
 
-                # Boolean
-                (True, BooleanType(), None),
-                (1, BooleanType(), TypeError),
-                ("True", BooleanType(), TypeError),
-                ([1], BooleanType(), TypeError),
+            # Boolean
+            (True, BooleanType(), None),
+            (1, BooleanType(), TypeError),
+            ("True", BooleanType(), TypeError),
+            ([1], BooleanType(), TypeError),
 
-                # Bytes
-                (-(2**7) - 1, ByteType(), ValueError)
-                (-(2**7), ByteType(), None),
-                (2**7 - 1 , ByteType(), None),
-                (2**7, ByteType(), ValueError)
-                ("1", ByteType(), TypeError),
-                (1.0, ByteType(), TypeError),
+            # Bytes
+            (-(2**7) - 1, ByteType(), ValueError),
+            (-(2**7), ByteType(), None),
+            (2**7 - 1, ByteType(), None),
+            (2**7, ByteType(), ValueError),
+            ("1", ByteType(), TypeError),
+            (1.0, ByteType(), TypeError),
 
-                # Shorts
-                (-(2**15) - 1, ShortType(), ValueError),
-                (-(2**15), ShortType(), None),
-                (2**17 - 1, ShortType(), None),
-                (2**17, ShortType(), ValueError),
+            # Shorts
+            (-(2**15) - 1, ShortType(), ValueError),
+            (-(2**15), ShortType(), None),
+            (2**15 - 1, ShortType(), None),
+            (2**15, ShortType(), ValueError),
 
-                # Integer
-                (-(2**31) - 1, IntegerType(), ValueError),
-                (-(2**31), IntegerType(), None),
-                (2**31 - 1, IntegerType(), None),
-                (2**31, IntegerType(), ValueError),
+            # Integer
+            (-(2**31) - 1, IntegerType(), ValueError),
+            (-(2**31), IntegerType(), None),
+            (2**31 - 1, IntegerType(), None),
+            (2**31, IntegerType(), ValueError),
 
-                # Long
-                (2**64, LongType(), None),
+            # Long
+            (2**64, LongType(), None),
 
-                # Float & Double
-                (1.0, FloatType(), None),
-                (1, FloatType(), TypeError),
-                (1.0, DoubleType(), None),
-                (1, DoubleType(), TypeError),
+            # Float & Double
+            (1.0, FloatType(), None),
+            (1, FloatType(), TypeError),
+            (1.0, DoubleType(), None),
+            (1, DoubleType(), TypeError),
 
-                # Decimal
-                (decimal.Decimal("1.0"), DecimalType(), None),
+            # Decimal
+            (decimal.Decimal("1.0"), DecimalType(), None),
+            (1.0, DecimalType(), TypeError),
+            (1, DecimalType(), TypeError),
+            ("1.0", DecimalType(), TypeError),
 
-                # TODO: Finish tests
+            # Binary
+            (bytearray([1, 2]), BinaryType(), None),
+            (1, BinaryType(), TypeError),
 
-                # String
-                ("string", StringType(), None),
-                (u"unicode", UnicodeType(), None),
+            # Date/Time
+            (datetime.date(2000, 1, 2), DateType(), None),
+            (datetime.datetime(2000, 1, 2, 3, 4), DateType(), None),
+            ("2000-01-02", DateType(), TypeError),
+            (datetime.datetime(2000, 1, 2, 3, 4), TimestampType(), None),
+            (946811040, TimestampType(), TypeError),
 
-                # Binary
-                (bytearray([1, 2]), BinaryType(), None),
+            # Array
+            ([], ArrayType(IntegerType()), None),
+            (["1", None], ArrayType(StringType(), containsNull=True), None),
+            ([1, 2], ArrayType(IntegerType()), None),
+            ([1, "2"], ArrayType(IntegerType()), TypeError),
+            ((1, 2), ArrayType(IntegerType()), None),
+            (array.array('h', [1, 2]), ArrayType(IntegerType()), None),
 
-                # Date/Time
-                (datetime.date(2000, 1, 2), DateType(), None),
-                (datetime.datetime(2000, 1, 2, 3, 4), DateType(), None),
-                (datetime.datetime(2000, 1, 2, 3, 4), TimestampType(), None),
+            # Map
+            ({}, MapType(StringType(), IntegerType()), None),
+            ({"a": 1}, MapType(StringType(), IntegerType()), None),
+            ({"a": 1}, MapType(IntegerType(), IntegerType()), TypeError),
+            ({"a": "1"}, MapType(StringType(), IntegerType()), TypeError),
+            ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=True), None),
 
-                # Array
-                ([], ArrayType(IntegerType()), None),
-                (["1", None], ArrayType(StringType(), containsNull=True), None),
-                ([1, 2], ArrayType(IntegerType()), None),
-                ((1, 2), ArrayType(IntegerType()), None),
-                (array.array('h', [1, 2]), ArrayType(IntegerType()), None),
+            # Struct
+            ({"s": "a", "i": 1}, MyStructType, None),
+            ({"s": "a", "i": None}, MyStructType, None),
+            ({"s": "a"}, MyStructType, None),
+            ({"s": "a", "f": 1.0}, MyStructType, None),     # Extra fields OK
+            ({"s": "a", "i": "1"}, MyStructType, TypeError),
+            (Row(s="a", i=1), MyStructType, None),
+            (Row(s="a", i=None), MyStructType, None),
+            (Row(s="a", i=1, f=1.0), MyStructType, None),   # Extra fields OK
+            (Row(s="a"), MyStructType, ValueError),     # Row can't have missing field
+            (Row(s="a", i="1"), MyStructType, TypeError),
+            (["a", 1], MyStructType, None),
+            (["a", None], MyStructType, None),
+            (["a"], MyStructType, ValueError),
+            (["a", "1"], MyStructType, TypeError),
+            (("a", 1), MyStructType, None),
+            (MyObj(s="a", i=1), MyStructType, None),
+            (MyObj(s="a", i=None), MyStructType, None),
+            (MyObj(s="a"), MyStructType, None),
+            (MyObj(s="a", i="1"), MyStructType, TypeError),
+        ]
 
-                # Map
-                ({}, MapType(StringType(), InetgerType()), None),
-                ({"a": 1}, MapType(StringType(), IntegerType()), None),
-                ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=True), None),
-
-                # Struct
-                ({'s': 'a', 'i': 1}, MyStructType, None),
-                ({'s': 'a'}, MyStructType, None),
-                (['a', 1], MyStructType, None),
-                (('a', 1), MyStructType, None),
-                (Row(s=a, i=1), MyStructType, None),
-                (MyDictObj(s=1, i=1), MyStructType, None),
-        ]:
+        for obj, data_type, exp in spec:
             msg = "_verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
             if exp is None:
-                _verify_type(obj, data_type, nullable=False)
-                self.assertIsTrue(True, msg)
+                try:
+                    _verify_type(obj, data_type, nullable=False)
+                except Exception as e:
+                    traceback.print_exc()
+                    self.fail(msg)
+                self.assertTrue(True, msg)
             else:
-                with self.assertRaises(exp, msg):
+                with self.assertRaises(exp, msg=msg):
                     _verify_type(obj, data_type, nullable=False)
 
 
