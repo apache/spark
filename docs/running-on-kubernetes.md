@@ -223,6 +223,14 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.submit.oauthToken</code></td>
+  <td>(none)</td>
+  <td>
+    OAuth token to use when authenticating against the against the Kubernetes API server. Note that unlike the other
+    authentication options, this should be the exact string value of the token to use for the authentication.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.submit.serviceAccountName</code></td>
   <td><code>default</code></td>
   <td>
