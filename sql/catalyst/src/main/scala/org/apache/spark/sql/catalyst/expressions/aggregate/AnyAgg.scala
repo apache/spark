@@ -36,7 +36,7 @@ case class AnyAgg(child: Expression) extends DeclarativeAggregate with ImplicitC
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForBooleanExpr(child.dataType, "function some")
+    TypeUtils.checkForBooleanExpr(child.dataType, "function any")
 
   private lazy val some = AttributeReference("some", BooleanType)()
   private lazy val emptySet = AttributeReference("emptySet", BooleanType)()

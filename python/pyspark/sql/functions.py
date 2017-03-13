@@ -229,7 +229,7 @@ for _name, _doc in _functions_1_6.items():
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_2.items():
-    globals()[_name] = since(2.1)(_create_function(_name, _doc))
+    globals()[_name] = since(2.2)(_create_function(_name, _doc))
 del _name, _doc
 
 

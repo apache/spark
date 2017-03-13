@@ -469,35 +469,36 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("every") {
-    val nullStr: String = null
-    val df = Seq(
-      ("a", 0, nullStr),
-      ("a", 1, "x"),
-      ("a", 2, "y"),
-      ("a", 3, "z"),
-      ("a", 4, nullStr),
-      ("b", 1, nullStr),
-      ("b", 2, nullStr)).
-      toDF("key", "order", "value")
-    val window = Window.partitionBy($"key").orderBy($"order")
+  test("every/any/some") {
+    val df = Seq[(String, java.lang.Boolean)](
+      ("a", false),
+      ("a", true),
+      ("a", false),
+      ("b", true),
+      ("b", true),
+      ("c", false),
+      ("d", true),
+      ("d", null)
+    ).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy(s"value")
+      .rowsBetween(Long.MinValue, Long.MaxValue)
     checkAnswer(
       df.select(
         $"key",
-        $"order",
-        first($"value").over(window),
-        first($"value", ignoreNulls = false).over(window),
-        first($"value", ignoreNulls = true).over(window),
-        last($"value").over(window),
-        last($"value", ignoreNulls = false).over(window),
-        last($"value", ignoreNulls = true).over(window)),
+        $"value",
+        every($"value").over(window),
+        any($"value").over(window),
+        some($"value").over(window)),
       Seq(
-        Row("a", 0, null, null, null, null, null, null),
-        Row("a", 1, null, null, "x", "x", "x", "x"),
-        Row("a", 2, null, null, "x", "y", "y", "y"),
-        Row("a", 3, null, null, "x", "z", "z", "z"),
-        Row("a", 4, null, null, "x", null, null, "z"),
-        Row("b", 1, null, null, null, null, null, null),
-        Row("b", 2, null, null, null, null, null, null)))
+        Row("a", false, false, true, true),
+        Row("a", false, false, true, true),
+        Row("a", true, false, true, true),
+        Row("b", true, true, true, true),
+        Row("b", true, true, true, true),
+        Row("c", false, false, false, false),
+        Row("d", true, false, true, true),
+        Row("d", null, false, true, true)
+      )
+    )
   }
 }
