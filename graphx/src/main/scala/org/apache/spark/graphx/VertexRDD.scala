@@ -69,6 +69,18 @@ abstract class VertexRDD[VD](
     firstParent[ShippableVertexPartition[VD]].iterator(part, context).next().iterator
   }
 
+  override def checkpoint() {
+    partitionsRDD.checkpoint()
+  }
+
+  override def getCheckpointFile: Option[String] = {
+    partitionsRDD.getCheckpointFile
+  }
+
+  override def isCheckpointed: Boolean = {
+    partitionsRDD.isCheckpointed
+  }
+
   /**
    * Construct a new VertexRDD that is indexed by only the visible vertices. The resulting
    * VertexRDD will be based on a different index and can no longer be quickly joined with this
