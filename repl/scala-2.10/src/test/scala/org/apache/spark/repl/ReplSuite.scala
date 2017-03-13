@@ -70,6 +70,11 @@ class ReplSuite extends SparkFunSuite {
       "Interpreter output did not contain '" + message + "':\n" + output)
   }
 
+  def assertContains(message: String, output: String,expectedCount: Int) {
+    assert(output.split(message).length >= expectedCount,
+      "Interpreter output did not contain " + expectedCount + " '" + message + "':\n" + output)
+  }
+
   def assertDoesNotContain(message: String, output: String) {
     val isContain = output.contains(message)
     assert(!isContain,
@@ -114,6 +119,17 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res1: Long = 55", output)
+  }
+
+  test("replay command") {
+    val output = runInterpreter("local",
+      """
+        |sc.parallelize(1 to 10).collect().reduceLeft(_+_)
+        |:replay
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("res0: Int = 55", output,2)
   }
 
   test("external vars") {
