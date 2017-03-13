@@ -145,9 +145,10 @@ private[spark] class DirectKafkaInputDStream[K, V](
         }
         val totalLag = lagPerPartition.values.sum
 
+        val effectiveRate = if (rate >= 0) rate else backpressureInitialRate
+
         lagPerPartition.map { case (tp, lag) =>
           val maxRateLimitPerPartition = ppc.maxRatePerPartition(tp)
-          val effectiveRate = if (rate >= 0) rate else backpressureInitialRate
           val estimateRate = Math.round(lag / totalLag.toFloat * effectiveRate)
           val backpressureRate =
             if (estimateRate > maxRateLimitPerPartition && maxRateLimitPerPartition > 0) {
