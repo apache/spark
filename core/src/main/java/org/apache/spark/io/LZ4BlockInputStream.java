@@ -1,9 +1,12 @@
 /*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -11,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.io;
+
 package org.apache.spark.io;
 
 import java.io.EOFException;
@@ -34,8 +39,6 @@ import net.jpountz.xxhash.XXHashFactory;
  * This is based on net.jpountz.lz4.LZ4BlockInputStream
  *
  * changes: https://github.com/davies/lz4-java/commit/cc1fa940ac57cc66a0b937300f805d37e2bf8411
- *
- * TODO: merge this into upstream
  */
 public final class LZ4BlockInputStream extends FilterInputStream {
 
