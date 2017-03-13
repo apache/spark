@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -33,7 +33,7 @@ object InterpretedPredicate {
   def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
-class InterpretedPredicate(expression: Expression) extends GenPredicate {
+class InterpretedPredicate(expression: Expression) extends BasePredicate {
   def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
 }
 
