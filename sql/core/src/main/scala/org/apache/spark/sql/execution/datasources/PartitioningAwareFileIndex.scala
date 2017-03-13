@@ -61,7 +61,8 @@ abstract class PartitioningAwareFileIndex(
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
   override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
-    val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
+    val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty ||
+        partitionSpec().partitions.isEmpty) {
       PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
