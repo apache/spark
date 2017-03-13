@@ -400,6 +400,20 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskMetrics.foreach { m =>
         val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.metrics)
         updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
+
+        if (m.shuffleWriteMetrics.averageBlockSize == 0) {
+          logInfo(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
+            s"the block sizes in MapStatus are accurate, distribution is:")
+        } else {
+          logInfo(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
+            s"the block sizes in MapStatus are inaccurate(average=" +
+              s"${m.shuffleWriteMetrics.averageBlockSize}, " +
+            s"max=${m.shuffleWriteMetrics.maxBlockSize}), distribution is:")
+        }
+        val ranges = List[String]("[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)", "[1m, 10m)",
+          "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g")
+        logDebug(ranges.map("%11s".format(_)).mkString(" "))
+        logDebug(m.shuffleWriteMetrics.blockSizeDistribution.map("%11d".format(_)).mkString(" "))
       }
 
       val taskData = stageData.taskData.getOrElseUpdate(info.taskId, TaskUIData(info, None))

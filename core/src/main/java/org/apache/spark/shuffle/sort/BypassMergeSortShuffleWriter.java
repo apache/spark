@@ -39,6 +39,7 @@ import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.scheduler.HighlyCompressedMapStatus;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.Serializer;
@@ -169,6 +170,18 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+
+    long maxBlockSize = 0L;
+    for (long partitionLength: partitionLengths) {
+      writeMetrics.incBlockSizeDistribution(partitionLength);
+      if (partitionLength > maxBlockSize) {
+        maxBlockSize = partitionLength;
+      }
+    }
+    if (mapStatus instanceof HighlyCompressedMapStatus) {
+      writeMetrics.setAverageBlockSize(((HighlyCompressedMapStatus) mapStatus).getAvgSize());
+      writeMetrics.setMaxBlockSize(maxBlockSize);
+    }
   }
 
   @VisibleForTesting

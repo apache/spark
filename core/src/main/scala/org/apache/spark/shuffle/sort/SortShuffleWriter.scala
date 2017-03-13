@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.sort
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.scheduler.{HighlyCompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
@@ -72,6 +72,12 @@ private[spark] class SortShuffleWriter[K, V, C](
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+      partitionLengths.foreach(writeMetrics.incBlockSizeDistribution(_))
+      if (mapStatus.isInstanceOf[HighlyCompressedMapStatus]) {
+        writeMetrics.setAverageBlockSize(
+          mapStatus.asInstanceOf[HighlyCompressedMapStatus].getAvgSize());
+        writeMetrics.setMaxBlockSize(partitionLengths.max)
+      }
     } finally {
       if (tmp.exists() && !tmp.delete()) {
         logError(s"Error while deleting temp file ${tmp.getAbsolutePath}")

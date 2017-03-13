@@ -44,6 +44,7 @@ import org.apache.commons.io.output.CloseShieldOutputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
+import org.apache.spark.scheduler.HighlyCompressedMapStatus;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.SerializationStream;
@@ -228,6 +229,17 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    long maxBlockSize = 0L;
+    for (long partitionLength: partitionLengths) {
+      writeMetrics.incBlockSizeDistribution(partitionLength);
+      if (partitionLength > maxBlockSize) {
+        maxBlockSize = partitionLength;
+      }
+    }
+    if (mapStatus instanceof HighlyCompressedMapStatus) {
+      writeMetrics.setAverageBlockSize(((HighlyCompressedMapStatus) mapStatus).getAvgSize());
+      writeMetrics.setMaxBlockSize(maxBlockSize);
+    }
   }
 
   @VisibleForTesting

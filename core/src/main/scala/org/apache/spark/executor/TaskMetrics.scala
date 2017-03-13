@@ -221,11 +221,20 @@ class TaskMetrics private[spark] () extends Serializable {
     shuffleWrite.BYTES_WRITTEN -> shuffleWriteMetrics._bytesWritten,
     shuffleWrite.RECORDS_WRITTEN -> shuffleWriteMetrics._recordsWritten,
     shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
+    shuffleWrite.AVERAGE_BLOCK_SIZE -> shuffleWriteMetrics._averageBlockSize,
+    shuffleWrite.MAX_BLOCK_SIZE -> shuffleWriteMetrics._maxBlockSize,
     input.BYTES_READ -> inputMetrics._bytesRead,
     input.RECORDS_READ -> inputMetrics._recordsRead,
     output.BYTES_WRITTEN -> outputMetrics._bytesWritten,
     output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
-  ) ++ testAccum.map(TEST_ACCUM -> _)
+  ) ++ testAccum.map(TEST_ACCUM -> _) ++ blockSizeDistributionAccums
+
+  def blockSizeDistributionAccums(): Map[String, AccumulatorV2[_, _]] = {
+    shuffleWriteMetrics._blockSizeDistribution.zipWithIndex.map {
+      case (accum, index) =>
+        (shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX + index, accum)
+    }.toMap
+  }
 
   @transient private[spark] lazy val internalAccums: Seq[AccumulatorV2[_, _]] =
     nameToAccums.values.toIndexedSeq
