@@ -41,16 +41,18 @@ object RRunner extends CondaRunner {
 
     // Time to wait for SparkR backend to initialize in seconds
     val backendTimeout = sys.env.getOrElse("SPARKR_BACKEND_TIMEOUT", "120").toInt
-    val rCommand = maybeConda.map(_.condaEnvDir + "/bin/r").getOrElse {
-      // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
-      // but kept here for backward compatibility.
-      var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
-      cmd = sys.props.getOrElse("spark.r.command", cmd)
-      if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
-        cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
+    val rCommand = maybeConda
+      .map(_ => sys.error("RRunner doesn't support running from a Conda environment yet."))
+      .getOrElse {
+        // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+        // but kept here for backward compatibility.
+        var cmd = sys.props.getOrElse("spark.sparkr.r.command", "Rscript")
+        cmd = sys.props.getOrElse("spark.r.command", cmd)
+        if (sys.props.getOrElse("spark.submit.deployMode", "client") == "client") {
+          cmd = sys.props.getOrElse("spark.r.driver.command", cmd)
+        }
+        cmd
       }
-      cmd
-    }
 
     //  Connection timeout set by R process on its connection to RBackend in seconds.
     val backendConnectionTimeout = sys.props.getOrElse(
