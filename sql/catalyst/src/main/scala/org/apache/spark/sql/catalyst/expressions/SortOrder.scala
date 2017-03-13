@@ -75,6 +75,9 @@ case class SortOrder(child: Expression, direction: SortDirection, nullOrdering: 
   override def sql: String = child.sql + " " + direction.sql + " " + nullOrdering.sql
 
   def isAscending: Boolean = direction == Ascending
+
+  def semanticEquals(other: SortOrder): Boolean =
+    (direction == other.direction) && child.semanticEquals(other.child)
 }
 
 object SortOrder {
