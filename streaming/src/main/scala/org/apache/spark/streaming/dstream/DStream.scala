@@ -20,7 +20,7 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, Set}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
@@ -927,6 +927,21 @@ abstract class DStream[T: ClassTag] (
     }
     this.foreachRDD(saveFunc, displayInnerRDDOps = false)
   }
+
+  /**
+   * Save filenames of Dstream to a set provided in the argument
+   * by parsing the .toDebugString output of RDD and searching 
+   * for the pattern ":/" ( as in file:/, hdfs:/ etc.)
+   * The set `x` should be mutable for the method to function.
+   */
+  def generateFileList(x:Set[String]) : Unit = { 
+    this.foreachRDD{ rdd  => {
+        if(rdd.count > 0){
+          val files = rdd.toDebugString.stripMargin.split("\n").filter(_.contains(":/"))
+          for(ms <- files) x += ms.split(" ")(2)
+        }
+      }
+  } }
 
   /**
    * Register this streaming as an output stream. This would ensure that RDDs of this
