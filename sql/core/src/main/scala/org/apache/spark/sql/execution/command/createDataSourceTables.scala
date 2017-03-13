@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
@@ -155,6 +154,8 @@ case class CreateDataSourceTableAsSelectCommand(
       } else {
         table.storage.locationUri
       }
+
+      sparkSession.sessionState.catalog.checkTableOrPathExists(table, ignoreIfExists = false)
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
       val newTable = table.copy(
@@ -163,7 +164,9 @@ case class CreateDataSourceTableAsSelectCommand(
         // the schema of df). It is important since the nullability may be changed by the relation
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
-      sessionState.catalog.createTable(newTable, ignoreIfExists = false)
+      // we have check the table/path exists above before saveDataIntoTable, here we
+      // set ignoreIfExists to true
+      sessionState.catalog.createTable(newTable, ignoreIfExists = true)
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
