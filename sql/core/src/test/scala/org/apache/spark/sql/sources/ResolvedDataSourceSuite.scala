@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrameReaderWriterOptions}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 
@@ -27,7 +27,8 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
     DataSource(
       sparkSession = null,
       className = name,
-      options = Map("timeZone" -> DateTimeUtils.defaultTimeZone().getID)).providingClass
+      options = Map(DataFrameReaderWriterOptions.TIMEZONE -> DateTimeUtils.defaultTimeZone().getID)
+    ).providingClass
 
   test("jdbc") {
     assert(

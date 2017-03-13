@@ -708,10 +708,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     withTempPath { dir =>
-      df.write.option("timeZone", "GMT")
+      df.write.option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option("timeZone", "GMT").load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -749,10 +750,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     withTempPath { dir =>
-      df.write.option("timeZone", "GMT")
+      df.write.option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option("timeZone", "GMT").load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 

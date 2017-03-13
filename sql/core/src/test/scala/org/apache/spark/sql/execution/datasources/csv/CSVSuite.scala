@@ -28,7 +28,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, regexp_replace}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -912,7 +912,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("header", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
         .save(timestampsWithFormatPath)
 
       // This will load back the timestamps as string.
@@ -934,7 +934,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .option("inferSchema", "true")
         .option("timestampFormat", "yyyy/MM/dd HH:mm")
-        .option("timeZone", "GMT")
+        .option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
         .load(timestampsWithFormatPath)
 
       checkAnswer(readBack, timestampsWithFormat)
