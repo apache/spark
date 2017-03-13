@@ -43,23 +43,23 @@ class FiltersSuite extends SparkFunSuite with Logging {
 
   filterTest("string filter",
     (a("stringcol", StringType) > Literal("test")) :: Nil,
-    "stringcol > \"test\"")
+    "(stringcol > \"test\")")
 
   filterTest("string filter backwards",
     (Literal("test") > a("stringcol", StringType)) :: Nil,
-    "\"test\" > stringcol")
+    "(\"test\" > stringcol)")
 
   filterTest("int filter",
     (a("intcol", IntegerType) === Literal(1)) :: Nil,
-    "intcol = 1")
+    "(intcol = 1)")
 
   filterTest("int filter backwards",
     (Literal(1) === a("intcol", IntegerType)) :: Nil,
-    "1 = intcol")
+    "(1 = intcol)")
 
   filterTest("int and string filter",
     (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", IntegerType)) :: Nil,
-    "1 = intcol and \"a\" = strcol")
+    "(1 = intcol) and (\"a\" = strcol)")
 
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
@@ -68,7 +68,7 @@ class FiltersSuite extends SparkFunSuite with Logging {
   filterTest("SPARK-19912 String literals should be escaped for Hive metastore partition pruning",
     (a("stringcol", StringType) === Literal("p1\" and q=\"q1")) ::
       (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
-    """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
+    """(stringcol = 'p1" and q="q1') and ('p2" and q="q2' = stringcol)""")
 
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {

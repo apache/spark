@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
@@ -589,18 +590,34 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
-    filters.collect {
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
-        s"${a.name} ${op.symbol} $v"
-      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
-        s"$v ${op.symbol} ${a.name}"
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
-          if !varcharKeys.contains(a.name) =>
-        s"""${a.name} ${op.symbol} ${quoteStringLiteral(v.toString)}"""
-      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
-          if !varcharKeys.contains(a.name) =>
-        s"""${quoteStringLiteral(v.toString)} ${op.symbol} ${a.name}"""
-    }.mkString(" and ")
+    def isFoldable(expr: Expression): Boolean =
+      (expr.dataType.isInstanceOf[IntegralType] || expr.dataType.isInstanceOf[StringType]) &&
+      expr.foldable &&
+      expr.deterministic
+
+    def convertFoldable(expr: Expression): String = expr.dataType match {
+      case _: IntegralType => expr.eval(null).toString
+      case _: StringType => quoteStringLiteral(expr.eval(null).toString)
+    }
+
+    def convert(filter: Expression): String =
+      filter match {
+        case In(a: Attribute, exprs) if exprs.forall(isFoldable) =>
+          val or = exprs.map(expr => s"${a.name} = ${convertFoldable(expr)}").reduce(_ + " or " + _)
+          "(" + or + ")"
+        case op @ BinaryComparison(a: Attribute, expr2)
+            if !varcharKeys.contains(a.name) && isFoldable(expr2) =>
+          s"(${a.name} ${op.symbol} ${convertFoldable(expr2)})"
+        case op @ BinaryComparison(expr1, a: Attribute)
+            if !varcharKeys.contains(a.name) && isFoldable(expr1) =>
+          s"(${convertFoldable(expr1)} ${op.symbol} ${a.name})"
+        case op @ And(expr1, expr2) =>
+          s"(${convert(expr1)} and ${convert(expr2)})"
+        case op @ Or(expr1, expr2) =>
+          s"(${convert(expr1)} or ${convert(expr2)})"
+      }
+
+    filters.flatMap(f => Try(convert(f)).toOption).mkString(" and ")
   }
 
   private def quoteStringLiteral(str: String): String = {
