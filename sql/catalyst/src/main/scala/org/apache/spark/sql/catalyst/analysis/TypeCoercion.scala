@@ -54,6 +54,7 @@ object TypeCoercion {
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
+      StackCoercion ::
       Division ::
       PropagateTypes ::
       ImplicitTypeCasts ::
@@ -645,6 +646,22 @@ object TypeCoercion {
         If(Literal.create(null, BooleanType), left, right)
       case If(pred, left, right) if pred.dataType == NullType =>
         If(Cast(pred, BooleanType), left, right)
+    }
+  }
+
+  /**
+   * Coerces NullTypes of a Stack function to the corresponding column types.
+   */
+  object StackCoercion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case s @ Stack(children) if s.childrenResolved =>
+        val schema = s.elementSchema
+        Stack(children.zipWithIndex.map {
+          case (e, 0) => e
+          case (Literal(null, NullType), index: Int) =>
+            Literal.create(null, schema.fields((index - 1) % schema.length).dataType)
+          case (e, _) => e
+        })
     }
   }
 
