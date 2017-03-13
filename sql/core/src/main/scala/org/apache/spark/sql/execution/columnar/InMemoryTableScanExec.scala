@@ -41,6 +41,11 @@ case class InMemoryTableScanExec(
 
   override def output: Seq[Attribute] = attributes
 
+  private def updateAttribute(expr: Expression, attrMap: AttributeMap[Attribute]): Expression =
+    expr.transform {
+      case attr: Attribute if attrMap.contains(attr) => attrMap.get(attr).get
+    }
+
   // The cached version does not change the outputPartitioning of the original SparkPlan.
   // But the cached version could alias output, so we need to replace output.
   override def outputPartitioning: Partitioning = {
@@ -48,11 +53,7 @@ case class InMemoryTableScanExec(
       relation.child.output.zip(output)
     )
     relation.child.outputPartitioning match {
-      case HashPartitioning(expressions, numPartitions) =>
-        val newExprs = expressions.map(_.transform {
-          case attr: Attribute if attrMap.contains(attr) => attrMap.get(attr).get
-        })
-        HashPartitioning(newExprs, numPartitions)
+      case h: HashPartitioning => updateAttribute(h, attrMap).asInstanceOf[HashPartitioning]
       case _ => relation.child.outputPartitioning
     }
   }
@@ -63,12 +64,7 @@ case class InMemoryTableScanExec(
     val attrMap = AttributeMap(
       relation.child.output.zip(output)
     )
-    relation.child.outputOrdering.map { sortOrder =>
-      val newSortExpr = sortOrder.child.transform {
-        case attr: Attribute if attrMap.contains(attr) => attrMap.get(attr).get
-      }
-      SortOrder(newSortExpr, sortOrder.direction, sortOrder.nullOrdering)
-    }
+    relation.child.outputOrdering.map(updateAttribute(_, attrMap).asInstanceOf[SortOrder])
   }
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
