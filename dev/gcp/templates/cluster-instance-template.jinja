@@ -1,0 +1,64 @@
+# cluster-instance.jinja
+#
+# Copyright (C) 2013-2015, Levyx, Inc.
+#
+#  NOTICE:  All information contained herein is, and remains the property of
+#  Levyx, Inc.  The intellectual and technical concepts contained herein are
+#  proprietary to Levyx, Inc. and may be covered by U.S. and Foreign Patents,
+#  patents in process, and are protected by trade secret or copyright law.
+#  Dissemination of this information or reproduction of this material is
+#  strictly forbidden unless prior written permission is obtained from Levyx,
+#  Inc.  Access to the source code contained herein is hereby forbidden to
+#  anyone except current Levyx, Inc. employees, managers or contractors who
+#  have executed Confidentiality and Non-disclosure agreements explicitly
+#  covering such access.
+#
+
+{% set image = properties["instanceImage"] %}
+{% set network = properties["instanceNetwork"] %}
+{% set zone = properties["instanceZone"] %}
+{% set bootDiskType = properties["instanceBootDiskType"] %}
+{% set machineType = properties["instanceMachineType"] %}
+{% set numSSDs = properties["instanceNumSSDs"] %}
+{% set projectName = properties["projectName"] %}
+{% set startupScript = properties["startupScript"] %}
+
+resources:
+- type: compute.v1.instance
+  name: {{ env["name"] }}
+  properties:
+    network: $(ref.{{ network }}.selfLink)
+    zone: {{ zone }}
+    machineType: zones/{{ zone }}/machineTypes/{{ machineType }}
+    canIPForward: true
+
+    networkInterfaces:
+    - network: $(ref.{{ network }}.selfLink)
+      accessConfigs:
+      - name: External NAT
+        type: ONE_TO_ONE_NAT
+
+    disks:
+    - deviceName: boot
+      type: PERSISTENT
+      diskType: {{ bootDiskType }}
+      diskSizeGb: 10
+      boot: true
+      autoDelete: true
+      initializeParams:
+        sourceImage: "{{ image }}"
+
+
+    {% for i in range(0,numSSDs) %}
+    - type: SCRATCH
+      interface: SCSI
+      mode: READ_WRITE
+      autoDelete: true
+      initializeParams:
+        diskType: zones/us-central1-c/diskTypes/local-ssd
+    {% endfor %}
+
+    metadata:
+      items:
+      - key: startup-script
+        value: {{startupScript}}

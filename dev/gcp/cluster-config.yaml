@@ -1,0 +1,20 @@
+
+imports:
+  - path: templates/cluster-instance-template.jinja
+  - path: templates/cluster-setup-template.jinja
+  - path: templates/cluster-network-template.jinja
+  - path: templates/cluster-firewall-template.jinja
+resources:
+  - name: shahram
+    type: templates/cluster-setup-template.jinja
+    properties:
+      # package: levyxspark
+      projectName: shared-cluster-0
+
+      instanceImage: global/images/levyx-spark-dev-img
+      instanceMachineType: n1-standard-16
+      instanceNumSSDs: 1
+      instanceZone: us-central1-c
+      instanceBootDiskType: pd-standard-1
+      numSlaves: 0
+      startupScript: "# nothing"
