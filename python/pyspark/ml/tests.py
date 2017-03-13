@@ -405,6 +405,58 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
 
+    @staticmethod
+    def check_params(test_self, py_stage, check_params_exist=True):
+        """
+        Checks common requirements for Params.params:
+          - set of params exist in Java and Python and are ordered by names
+          - param parent has the same UID as the object's UID
+          - default param value from Java matches value in Python
+        """
+        py_stage_str = "%s %s" % (type(py_stage), py_stage)
+        if not hasattr(py_stage, "_to_java"):
+            return
+        java_stage = py_stage._to_java()
+        if java_stage is None:
+            return
+        test_self.assertEqual(py_stage.uid, java_stage.uid(), msg=py_stage_str)
+        if check_params_exist:
+            param_names = [p.name for p in py_stage.params]
+            java_params = list(java_stage.params())
+            java_param_names = [jp.name() for jp in java_params]
+            test_self.assertEqual(
+                param_names, sorted(java_param_names),
+                "Param list in Python does not match Java for %s:\nJava = %s\nPython = %s"
+                % (py_stage_str, java_param_names, param_names))
+        for p in py_stage.params:
+            test_self.assertEqual(p.parent, py_stage.uid)
+            java_param = java_stage.getParam(p.name)
+            py_has_default = py_stage.hasDefault(p)
+            java_has_default = java_stage.hasDefault(java_param)
+            test_self.assertEqual(py_has_default, java_has_default,
+                                  "Default value mismatch of param %s for Params %s"
+                                  % (p.name, str(py_stage)))
+            if py_has_default:
+                if p.name == "seed":
+                    continue  # Random seeds between Spark and PySpark are different
+                java_default = _java2py(test_self.sc,
+                                        java_stage.clear(java_param).getOrDefault(java_param))
+                py_stage._clear(p)
+                py_default = py_stage.getOrDefault(p)
+                test_self.assertEqual(
+                    java_default, py_default,
+                    "Java default %s != python default %s of param %s for Params %s"
+                    % (str(java_default), str(py_default), p.name, str(py_stage)))
+        '''
+        test_self.assertTrue(isinstance(obj, Params))
+        params = obj.params
+        paramNames = [p.name for p in params]
+        test_self.assertEqual(paramNames, sorted(paramNames))
+        for p in params:
+            test_self.assertEqual(p.parent, obj.uid)
+            test_self.assertEqual(obj.getParam(p.name), p)
+        '''
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
@@ -461,6 +513,8 @@ class FeatureTests(SparkSessionTestCase):
                          "Model should inherit the UID from its parent estimator.")
         output = idf0m.transform(dataset)
         self.assertIsNotNone(output.head().idf)
+        # Test that parameters transferred to Python Model
+        ParamTests.check_params(self, idf0m)
 
     def test_ngram(self):
         dataset = self.spark.createDataFrame([
@@ -1271,31 +1325,6 @@ class DefaultValuesTests(PySparkTestCase):
     Test :py:class:`JavaParams` classes to see if their default Param values match
     those in their Scala counterparts.
     """
-
-    def check_params(self, py_stage):
-        if not hasattr(py_stage, "_to_java"):
-            return
-        java_stage = py_stage._to_java()
-        if java_stage is None:
-            return
-        for p in py_stage.params:
-            java_param = java_stage.getParam(p.name)
-            py_has_default = py_stage.hasDefault(p)
-            java_has_default = java_stage.hasDefault(java_param)
-            self.assertEqual(py_has_default, java_has_default,
-                             "Default value mismatch of param %s for Params %s"
-                             % (p.name, str(py_stage)))
-            if py_has_default:
-                if p.name == "seed":
-                    return  # Random seeds between Spark and PySpark are different
-                java_default =\
-                    _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
-                py_stage._clear(p)
-                py_default = py_stage.getOrDefault(p)
-                self.assertEqual(java_default, py_default,
-                                 "Java default %s != python default %s of param %s for Params %s"
-                                 % (str(java_default), str(py_default), p.name, str(py_stage)))
-
     def test_java_params(self):
         import pyspark.ml.feature
         import pyspark.ml.classification
@@ -1309,7 +1338,7 @@ class DefaultValuesTests(PySparkTestCase):
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and issubclass(cls, JavaParams)\
                         and not inspect.isabstract(cls):
-                    self.check_params(cls())
+                    ParamTests.check_params(self, cls(), check_params_exist=False)
 
 
 def _squared_distance(a, b):
