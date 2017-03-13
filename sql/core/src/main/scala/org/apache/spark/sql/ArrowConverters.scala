@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 
 /**
  * ArrowReader requires a seekable byte channel.
- * NOTE - this is taken from test org.apache.arrow.vector.file, see about moving to public util pkg
+ * TODO: This is available in arrow-vector now with ARROW-615, to be included in 0.2.1 release
  */
 private[sql] class ByteArrayReadableSeekableByteChannel(var byteArray: Array[Byte])
   extends SeekableByteChannel {
