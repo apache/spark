@@ -55,6 +55,7 @@ public class XXH64Suite {
   public void testKnownIntegerInputs() {
     Assert.assertEquals(0x9256E58AA397AEF1L, hasher.hashInt(TEST_INT));
     Assert.assertEquals(0x9D5FFDFB928AB4BL, XXH64.hashInt(TEST_INT, PRIME));
+    fail("No exception was thrown");
   }
 
   @Test
