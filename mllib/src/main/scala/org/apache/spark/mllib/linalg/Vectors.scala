@@ -752,6 +752,26 @@ class SparseVector @Since("1.0.0") (
   require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
     s"which exceeds the specified vector size ${size}.")
 
+  lazy val sortedIndicesAndValues: (Array[Int], Array[Double]) = {
+    def isSorted(array: Array[Int]): Boolean = {
+      var index = 1
+      while (index < array.length) {
+        if (array(index - 1) > array(index)) {
+          return false
+        }
+        index += 1
+      }
+      true
+    }
+    
+    if (isSorted(this.indices)) {
+        (this.indices, this.values)
+      } else {
+        val (indices, values) = this.indices.zip(this.values).sortBy(_._1).unzip
+        (indices.toArray, values.toArray)
+      }
+  }
+    
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
 

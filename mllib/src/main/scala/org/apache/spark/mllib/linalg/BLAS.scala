@@ -150,10 +150,9 @@ private[spark] object BLAS extends Serializable with Logging {
    * dot(x, y)
    */
   private def dot(x: SparseVector, y: SparseVector): Double = {
-    val xValues = x.values
-    val xIndices = x.indices
-    val yValues = y.values
-    val yIndices = y.indices
+    
+    val (xIndices, xValues) = (x.sortedIndicesAndValues._1, x.sortedIndicesAndValues._2)
+    val (yIndices, yValues) = (y.sortedIndicesAndValues._1, y.sortedIndicesAndValues._2)
     val nnzx = xIndices.length
     val nnzy = yIndices.length
 
@@ -617,8 +616,8 @@ private[spark] object BLAS extends Serializable with Logging {
       x: SparseVector,
       beta: Double,
       y: DenseVector): Unit = {
-    val xValues = x.values
-    val xIndices = x.indices
+   
+    val (xIndices, xValues) = (x.sortedIndicesAndValues._1, x.sortedIndicesAndValues._2)
     val xNnz = xIndices.length
 
     val yValues = y.values
