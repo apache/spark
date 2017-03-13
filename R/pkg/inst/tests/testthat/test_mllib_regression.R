@@ -79,7 +79,7 @@ test_that("spark.glm and predict", {
 
   # tweedie family
   model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
-                     family = "tweedie", variancePower = 1.2, linkPower = 0.0)
+                     family = "tweedie", var.power = 1.2, link.power = 0.0)
   prediction <- predict(model, training)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
   vals <- collect(select(prediction, "prediction"))
@@ -269,7 +269,7 @@ test_that("glm and predict", {
 
   # tweedie family
   model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training,
-               family = "tweedie", variancePower = 1.2, linkPower = 0.0)
+               family = "tweedie", var.power = 1.2, link.power = 0.0)
   prediction <- predict(model, training)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
   vals <- collect(select(prediction, "prediction"))
