@@ -325,7 +325,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       s"$sparkHome/python/lib/py4j-0.10.4-src.zip",
       s"$sparkHome/python")
     val extraEnvVars = Map(
-      "REQUESTS_CA_BUNDLE" -> "/Users/dsanduleac/certs/ca-bundle.crt",
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
       "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
 
