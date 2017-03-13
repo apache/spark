@@ -862,7 +862,8 @@ class SparkContext(object):
         """
         if self._conda_environ is None:
             raise Exception("There is no conda environment set up on the driver")
-        self._conda_env_manager.installPackage(self._conda_environ, packageMatchSpecification)
+        # If the user calls this method, we should install the deps as well.
+        self._conda_env_manager.installPackage(self._conda_environ, packageMatchSpecification, False)
         self._conda_packages.append(packageMatchSpecification)
 
     def setCheckpointDir(self, dirName):

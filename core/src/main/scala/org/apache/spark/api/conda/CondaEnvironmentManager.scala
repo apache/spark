@@ -37,8 +37,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
     extends Logging {
   require(condaChannelUrls.nonEmpty, "Can't have an empty list of conda channel URLs")
 
-  def create(baseDir: String, bootstrapDeps: Seq[String]): CondaEnvironment = {
-    require(bootstrapDeps.nonEmpty, "Expected at least one bootstrap dependency.")
+  def create(baseDir: String, bootstrapPackages: Seq[String]): CondaEnvironment = {
+    require(bootstrapPackages.nonEmpty, "Expected at least one bootstrap package.")
     val name = "conda-env"
 
     // must link in /tmp to reduce path length in case baseDir is very long...
@@ -49,62 +49,77 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
     Files.createSymbolicLink(linkedBaseDir, Paths get baseDir)
 
     // Expose the symlinked path, through /tmp
-    val condaEnvDir = (linkedBaseDir resolve name).toString
+    val condaEnvDir = (linkedBaseDir resolve "envs" resolve name).toString
 
     val condarc = generateCondarc(linkedBaseDir)
 
     // Attempt to create environment
-    val command = Process(
-      List(condaBinaryPath, "create", "-n", name, "-y", "--override-channels", "-vv")
-        ++: condaChannelUrls.flatMap(Iterator("--channel", _))
-        ++: bootstrapDeps,
-      None,
-      "CONDARC" -> condarc.toString,
-      "HOME" -> (linkedBaseDir resolve "home").toString)
-
+    val command = makeCondaProcess(
+      linkedBaseDir,
+      List("create", "-n", name, "-y", "--override-channels", "-vv",
+        "--no-default-packages")
+        ::: condaChannelUrls.flatMap(Iterator("--channel", _)).toList
+        ::: "--" :: bootstrapPackages.toList
+    )
     runOrFail(command, "create conda env")
 
     new CondaEnvironment(condaEnvDir)
   }
 
+  def installPackages(condaEnv: CondaEnvironment,
+                      packages: Seq[String],
+                      noDeps: Boolean = true): Unit = {
+    val command = makeCondaProcess(condaEnv.envRoot.getParent,
+      List("install", "-n", condaEnv.envName, "-y", "--override-channels",
+        "--no-update-deps")
+        ::: (if (noDeps) List("--no-deps") else Nil)
+        ::: condaChannelUrls.flatMap(Iterator("--channel", _)).toList
+        ::: "--" :: packages.toList
+    )
+    runOrFail(command, s"install dependencies in conda env ${condaEnv.condaEnvDir}")
+  }
+
+  /** For use from pyspark. */
+  def installPackage(condaEnv: CondaEnvironment, dep: String, noDeps: Boolean): Unit = {
+    installPackages(condaEnv, List(dep), noDeps)
+  }
+
   /**
-   * Create a condarc that only exposes package and env directories under the given baseDir,
+   * Create a condarc that only exposes package and env directories under the given baseRoot,
    * on top of the from the default pkgs directory inferred from condaBinaryPath.
    *
-   * The file will be placed directly inside the given `envRoot` dir, and link to `envRoot/pkgs`
+   * The file will be placed directly inside the given `baseRoot` dir, and link to `baseRoot/pkgs`
    * as the first package cache.
    *
    * This hack is necessary otherwise conda tries to use the homedir for pkgs cache.
    */
-  def generateCondarc(envRoot: Path): Path = {
+  private[this] def generateCondarc(baseRoot: Path): Path = {
     val condaPkgsPath = Paths.get(condaBinaryPath).getParent.getParent resolve "pkgs"
-    val condarc = envRoot resolve "condarc"
+    val condarc = baseRoot resolve "condarc"
     val condarcContents =
       s"""pkgs_dirs:
-         | - $envRoot/pkgs
+         | - $baseRoot/pkgs
          | - $condaPkgsPath
          |envs_dirs:
-         | - $envRoot/
+         | - $baseRoot/envs
       """.stripMargin
     Files.write(condarc, List(condarcContents).asJava)
     logInfo(f"Using condarc at $condarc:%n$condarcContents")
     condarc
   }
 
-  def installPackages(condaEnv: CondaEnvironment, deps: String*): Unit = {
-    val command = Process(
-      List(condaBinaryPath, "install", "-n", condaEnv.envName, "-y", "--override-channels")
-        ++: condaChannelUrls.flatMap(Iterator("--channel", _))
-        ++: deps,
-      None,
-      "CONDARC" -> generateCondarc(condaEnv.envRoot).toString,
-      "HOME" -> (condaEnv.envRoot resolve "home").toString)
-    runOrFail(command, s"install dependencies in conda env ${condaEnv.condaEnvDir}")
-  }
+  private[this] def makeCondaProcess(baseRoot: Path, args: List[String]): ProcessBuilder = {
+    val condarc = generateCondarc(baseRoot)
+    val fakeHomeDir = baseRoot resolve "home"
+    // Attempt to create fake home dir
+    Files.createDirectories(fakeHomeDir)
 
-  /** For use from pyspark. */
-  def installPackage(condaEnv: CondaEnvironment, dep: String): Unit = {
-    installPackages(condaEnv, dep)
+    Process(
+      condaBinaryPath :: args,
+      None,
+      "CONDARC" -> condarc.toString,
+      "HOME" -> fakeHomeDir.toString
+    )
   }
 
   private[this] def runOrFail(command: ProcessBuilder, description: String): Unit = {
