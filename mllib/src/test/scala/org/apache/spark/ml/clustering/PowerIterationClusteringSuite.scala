@@ -19,8 +19,7 @@ package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -39,7 +38,6 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     super.beforeAll()
 
     data = PowerIterationClusteringSuite.generatePICData(spark, r1, r2, n1, n2)
-    malData = PowerIterationClusteringSuite.generateMalFormatData(spark)
   }
 
   test("default parameters") {
@@ -87,17 +85,11 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setMaxIter(40)
     val result = model.transform(data)
 
-    val thrownData = intercept[SparkException] {
-      model.transform(malData)
-    }
-
-    assert(thrownData.getMessage().contains("The number of elements in each row must be 3"))
-
     val predictions = Array.fill(2)(mutable.Set.empty[Long])
     result.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions(cluster) += id
     }
-    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
+    assert(predictions.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
 
     val result2 = new PowerIterationClustering()
       .setK(2)
@@ -108,7 +100,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     result2.select("id", "prediction").collect().foreach {
       case Row(id: Long, cluster: Integer) => predictions2(cluster) += id
     }
-    assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
+    assert(predictions2.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
 
     val expectedColumns = Array("id", "prediction")
     expectedColumns.foreach { column =>
@@ -130,6 +122,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
 object PowerIterationClusteringSuite {
 
+  case class TestRow2(id: Long, neighbor: Array[Long], weight: Array[Double])
   /** Generates a circle of points. */
   private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
     Array.tabulate(n) { i =>
@@ -149,24 +142,22 @@ object PowerIterationClusteringSuite {
     // Generate two circles following the example in the PIC paper.
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)
-    val similarities = for (i <- 1 until n; j <- 0 until i) yield {
-      (i.toLong, j.toLong, sim(points(i), points(j)))
-    }
-    val sc = spark.sparkContext
-    val rdd = sc.parallelize(similarities)
-      .map{case (i: Long, j: Long, sim: Double) => Vectors.dense(Array(i, j, sim))}
-      .map(v => TestRow(v))
-    spark.createDataFrame(rdd)
-  }
 
-  def generateMalFormatData(spark: SparkSession): DataFrame = {
-    val data = for (i <- 1 until 2; j <- 0 until i) yield {
-      (i.toLong, j.toLong, 0.01, (i + j).toLong)
+    val similarities = for (i <- 1 until n) yield {
+      val neighbor = for (j <- 0 until i) yield {
+        j.toLong
+      }
+      val weight = for (j <- 0 until i) yield {
+        sim(points(i), points(j))
+      }
+      (i.toLong, neighbor.toArray, weight.toArray)
     }
+
     val sc = spark.sparkContext
-    val rdd = sc.parallelize(data)
-      .map{case (i: Long, j: Long, sim: Double, k: Long) => Vectors.dense(Array(i, j, sim, k))}
-      .map(v => TestRow(v))
+
+    val rdd = sc.parallelize(similarities).map{
+      case (id: Long, nbr: Array[Long], weight: Array[Double]) =>
+      TestRow2(id, nbr, weight)}
     spark.createDataFrame(rdd)
   }
 
