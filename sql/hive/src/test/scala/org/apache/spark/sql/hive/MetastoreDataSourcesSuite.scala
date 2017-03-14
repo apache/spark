@@ -27,6 +27,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -510,9 +511,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("create external table") {
     withTempPath { tempPath =>
       withTable("savedJsonTable", "createdJsonTable") {
-        val df = read.json(sparkContext.parallelize((1 to 10).map { i =>
+        val df = read.json((1 to 10).map { i =>
           s"""{ "a": $i, "b": "str$i" }"""
-        }))
+        }.toDS())
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           df.write
@@ -747,6 +748,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = new StructType,
+        provider = Some("json"),
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -1009,7 +1011,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("not_skip_hive_metadata"),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          locationUri = Some(tempPath.getCanonicalPath),
+          locationUri = Some(tempPath.toURI),
           properties = Map("skipHiveMetadata" -> "false")
         ),
         schema = schema,
@@ -1275,6 +1277,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = new StructType,
+        provider = Some("json"),
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
@@ -1308,6 +1311,49 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("Infer schema for Hive serde tables") {
+    val tableName = "tab1"
+    val avroSchema =
+      """{
+        |  "name": "test_record",
+        |  "type": "record",
+        |  "fields": [ {
+        |    "name": "f0",
+        |    "type": "int"
+        |  }]
+        |}
+      """.stripMargin
+
+    Seq(true, false).foreach { isPartitioned =>
+      withTable(tableName) {
+        val partitionClause = if (isPartitioned) "PARTITIONED BY (ds STRING)" else ""
+        // Creates the (non-)partitioned Avro table
+        val plan = sql(
+          s"""
+             |CREATE TABLE $tableName
+             |$partitionClause
+             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+             |STORED AS
+             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+             |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
+           """.stripMargin
+        ).queryExecution.analyzed
+
+        assert(plan.isInstanceOf[CreateTableCommand] &&
+          plan.asInstanceOf[CreateTableCommand].table.dataSchema.nonEmpty)
+
+        if (isPartitioned) {
+          sql(s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1")
+          checkAnswer(spark.table(tableName), Row(1, "a"))
+        } else {
+          sql(s"INSERT OVERWRITE TABLE $tableName SELECT 1")
+          checkAnswer(spark.table(tableName), Row(1))
+        }
+      }
+    }
+  }
+
   private def withDebugMode(f: => Unit): Unit = {
     val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
     try {
@@ -1329,6 +1375,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             properties = Map("path" -> path.getAbsolutePath)
           ),
           schema = new StructType(),
+          provider = Some("parquet"),
           properties = Map(
             HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)

@@ -150,6 +150,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     MyLabeledPoint(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
     MyLabeledPoint(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))).toDF()
 
+  private lazy val pointsRDD2 = Seq(
+    MyLabeledPoint(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
+    MyLabeledPoint(0.0, new UDT.MyDenseVector(Array(0.3, 3.0)))).toDF()
+
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
@@ -217,8 +221,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       StructField("vec", new UDT.MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = sparkContext.parallelize(data)
-    val jsonRDD = spark.read.schema(schema).json(stringRDD)
+    val jsonRDD = spark.read.schema(schema).json(data.toDS())
     checkAnswer(
       jsonRDD,
       Row(1, new UDT.MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
@@ -238,8 +241,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       StructField("vec", new UDT.MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = sparkContext.parallelize(data)
-    val jsonDataset = spark.read.schema(schema).json(stringRDD)
+    val jsonDataset = spark.read.schema(schema).json(data.toDS())
       .as[(Int, UDT.MyDenseVector)]
     checkDataset(
       jsonDataset,
@@ -297,4 +299,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     sql("SELECT doOtherUDF(doSubTypeUDF(42))")
   }
 
+  test("except on UDT") {
+    checkAnswer(
+      pointsRDD.except(pointsRDD2),
+      Seq(Row(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))))
+  }
 }

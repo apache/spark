@@ -37,8 +37,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.OutputMetrics
-import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol, SparkHadoopMapReduceWriter, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.{SparkHadoopMapReduceWriter, SparkHadoopWriterUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -999,7 +998,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
     val jobConfiguration = job.getConfiguration
-    jobConfiguration.set("mapred.output.dir", path)
+    jobConfiguration.set("mapreduce.output.fileoutputformat.outputdir", path)
     saveAsNewAPIHadoopDataset(jobConfiguration)
   }
 
@@ -1040,10 +1039,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     conf.setOutputFormat(outputFormatClass)
     for (c <- codec) {
       hadoopConf.setCompressMapOutput(true)
-      hadoopConf.set("mapred.output.compress", "true")
+      hadoopConf.set("mapreduce.output.fileoutputformat.compress", "true")
       hadoopConf.setMapOutputCompressorClass(c)
-      hadoopConf.set("mapred.output.compression.codec", c.getCanonicalName)
-      hadoopConf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
+      hadoopConf.set("mapreduce.output.fileoutputformat.compress.codec", c.getCanonicalName)
+      hadoopConf.set("mapreduce.output.fileoutputformat.compress.type",
+        CompressionType.BLOCK.toString)
     }
 
     // Use configured output committer if already set
@@ -1126,8 +1126,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
-      val outputMetricsAndBytesWrittenCallback: Option[(OutputMetrics, () => Long)] =
-        SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
+      val (outputMetrics, callback) = SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
 
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
@@ -1139,16 +1138,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
 
           // Update bytes written metric every few records
-          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(
-            outputMetricsAndBytesWrittenCallback, recordsWritten)
+          SparkHadoopWriterUtils.maybeUpdateOutputMetrics(outputMetrics, callback, recordsWritten)
           recordsWritten += 1
         }
       }(finallyBlock = writer.close())
       writer.commit()
-      outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
-      }
+      outputMetrics.setBytesWritten(callback())
+      outputMetrics.setRecordsWritten(recordsWritten)
     }
 
     self.context.runJob(self, writeToFile)

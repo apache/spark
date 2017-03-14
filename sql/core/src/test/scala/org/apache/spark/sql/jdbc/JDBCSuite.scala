@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -74,26 +75,26 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE foobar
+        |CREATE OR REPLACE TEMPORARY VIEW foobar
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE fetchtwo
+        |CREATE OR REPLACE TEMPORARY VIEW fetchtwo
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         ${JDBCOptions.JDBC_BATCH_FETCH_SIZE} '2')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE parts
+        |CREATE OR REPLACE TEMPORARY VIEW parts
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
       + "d SMALLINT, e BIGINT)").executeUpdate()
@@ -104,10 +105,10 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE inttypes
+        |CREATE OR REPLACE TEMPORARY VIEW inttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.INTTYPES', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.strtypes (a BINARY(20), b VARCHAR(20), "
       + "c VARCHAR_IGNORECASE(20), d CHAR(20), e BLOB, f CLOB)").executeUpdate()
@@ -121,10 +122,10 @@ class JDBCSuite extends SparkFunSuite
     stmt.executeUpdate()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE strtypes
+        |CREATE OR REPLACE TEMPORARY VIEW strtypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP)"
         ).executeUpdate()
@@ -135,10 +136,10 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE timetypes
+        |CREATE OR REPLACE TEMPORARY VIEW timetypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
 
     conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
@@ -150,27 +151,27 @@ class JDBCSuite extends SparkFunSuite
     conn.commit()
     sql(
       s"""
-        |CREATE TEMPORARY TABLE flttypes
+        |CREATE OR REPLACE TEMPORARY VIEW flttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement(
       s"""
         |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
         |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
         |m DOUBLE, n REAL, o DECIMAL(38, 18))
-      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.prepareStatement("insert into test.nulltypes values ("
       + "null, null, null, null, null, null, null, null, null, "
       + "null, null, null, null, null, null)").executeUpdate()
     conn.commit()
     sql(
       s"""
-         |CREATE TEMPORARY TABLE nulltypes
+         |CREATE OR REPLACE TEMPORARY VIEW nulltypes
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement(
       "create table test.emp(name TEXT(32) NOT NULL," +
@@ -197,11 +198,11 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-         |CREATE TEMPORARY TABLE nullparts
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
-         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '3')
-      """.stripMargin.replaceAll("\n", " "))
+        |CREATE OR REPLACE TEMPORARY VIEW nullparts
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
+        |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement(
       """create table test."mixedCaseCols" ("Name" TEXT(32), "Id" INTEGER NOT NULL)""")
@@ -213,10 +214,10 @@ class JDBCSuite extends SparkFunSuite
 
     sql(
       s"""
-         |CREATE TEMPORARY TABLE mixedCaseCols
-         |USING org.apache.spark.sql.jdbc
-         |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+        |CREATE OR REPLACE TEMPORARY VIEW mixedCaseCols
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST."mixedCaseCols"', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
@@ -370,11 +371,11 @@ class JDBCSuite extends SparkFunSuite
     // Regression test for bug SPARK-7345
     sql(
       s"""
-        |CREATE TEMPORARY TABLE renamed
+        |CREATE OR REPLACE TEMPORARY VIEW renamed
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)',
         |user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
 
     val df = sql("SELECT * FROM renamed")
     assert(df.schema.fields.size == 2)
@@ -588,11 +589,11 @@ class JDBCSuite extends SparkFunSuite
   test("SQL query as table name") {
     sql(
       s"""
-        |CREATE TEMPORARY TABLE hack
+        |CREATE OR REPLACE TEMPORARY VIEW hack
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable '(SELECT B, B*B FROM TEST.FLTTYPES)',
         |         user 'testUser', password 'testPass')
-      """.stripMargin.replaceAll("\n", " "))
+       """.stripMargin.replaceAll("\n", " "))
     val rows = sql("SELECT * FROM hack").collect()
     assert(rows(0).getDouble(0) === 1.00000011920928955) // Yes, I meant ==.
     // For some reason, H2 computes this square incorrectly...
@@ -605,11 +606,11 @@ class JDBCSuite extends SparkFunSuite
     intercept[JdbcSQLException] {
       sql(
         s"""
-          |CREATE TEMPORARY TABLE abc
+          |CREATE OR REPLACE TEMPORARY VIEW abc
           |USING org.apache.spark.sql.jdbc
           |OPTIONS (url '$url', dbtable '(SELECT _ROWID_ FROM test.people)',
           |         user 'testUser', password 'testPass')
-        """.stripMargin.replaceAll("\n", " "))
+         """.stripMargin.replaceAll("\n", " "))
     }
   }
 
@@ -898,7 +899,7 @@ class JDBCSuite extends SparkFunSuite
       "dbtable" -> "t1",
       "numPartitions" -> "10")
     assert(new JDBCOptions(parameters).asConnectionProperties.isEmpty)
-    assert(new JDBCOptions(new CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
+    assert(new JDBCOptions(CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
@@ -914,5 +915,59 @@ class JDBCSuite extends SparkFunSuite
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
     }.getMessage
     assert(e2.contains("User specified schema not supported with `jdbc`"))
+  }
+
+  test("Checking metrics correctness with JDBC") {
+    val foobarCnt = spark.table("foobar").count()
+    val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
+    assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
+  }
+
+  test("SPARK-19318: Connection properties keys should be case-sensitive.") {
+    def testJdbcOptions(options: JDBCOptions): Unit = {
+      // Spark JDBC data source options are case-insensitive
+      assert(options.table == "t1")
+      // When we convert it to properties, it should be case-sensitive.
+      assert(options.asProperties.size == 3)
+      assert(options.asProperties.get("customkey") == null)
+      assert(options.asProperties.get("customKey") == "a-value")
+      assert(options.asConnectionProperties.size == 1)
+      assert(options.asConnectionProperties.get("customkey") == null)
+      assert(options.asConnectionProperties.get("customKey") == "a-value")
+    }
+
+    val parameters = Map("url" -> url, "dbTAblE" -> "t1", "customKey" -> "a-value")
+    testJdbcOptions(new JDBCOptions(parameters))
+    testJdbcOptions(new JDBCOptions(CaseInsensitiveMap(parameters)))
+    // test add/remove key-value from the case-insensitive map
+    var modifiedParameters = CaseInsensitiveMap(Map.empty) ++ parameters
+    testJdbcOptions(new JDBCOptions(modifiedParameters))
+    modifiedParameters -= "dbtable"
+    assert(modifiedParameters.get("dbTAblE").isEmpty)
+    modifiedParameters -= "customkey"
+    assert(modifiedParameters.get("customKey").isEmpty)
+    modifiedParameters += ("customKey" -> "a-value")
+    modifiedParameters += ("dbTable" -> "t1")
+    testJdbcOptions(new JDBCOptions(modifiedParameters))
+    assert ((modifiedParameters -- parameters.keys).size == 0)
+  }
+
+  test("SPARK-19318: jdbc data source options should be treated case-insensitive.") {
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("DbTaBle", "TEST.PEOPLE")
+      .load()
+    assert(df.count() == 3)
+
+    withTempView("people_view") {
+      sql(
+        s"""
+          |CREATE TEMPORARY VIEW people_view
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
+        """.stripMargin.replaceAll("\n", " "))
+
+      assert(sql("select * from people_view").count() == 3)
+    }
   }
 }

@@ -209,6 +209,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    assertEqual("foo(a as x, b as e)", 'foo.function('a as 'x, 'b as 'e))
   }
 
   test("window function expressions") {
@@ -278,6 +279,7 @@ class ExpressionParserSuite extends PlanTest {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
     assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
   }
 
   test("scalar sub-query") {
@@ -298,6 +300,8 @@ class ExpressionParserSuite extends PlanTest {
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
+    assertEqual("case when (1) + case when a > b then c else d end then f else g end",
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
   }
 
   test("dereference") {

@@ -44,6 +44,9 @@ library(SparkR)
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
 
+```{r, include=FALSE}
+install.spark()
+```
 ```{r, message=FALSE, results="hide"}
 sparkR.session()
 ```
@@ -466,6 +469,8 @@ SparkR supports the following machine learning models and algorithms.
 
 #### Classification
 
+* Linear Support Vector Machine (SVM) Classifier
+
 * Logistic Regression
 
 * Multilayer Perceptron (MLP)
@@ -487,6 +492,8 @@ SparkR supports the following machine learning models and algorithms.
 * Random Forest
 
 #### Clustering
+
+* Bisecting $k$-means
 
 * Gaussian Mixture Model (GMM)
 
@@ -527,6 +534,26 @@ head(carsDF_test)
 
 ### Models and Algorithms
 
+#### Linear Support Vector Machine (SVM) Classifier
+
+[Linear Support Vector Machine (SVM)](https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM) classifier is an SVM classifier with linear kernels.
+This is a binary classifier. We use a simple example to show how to use `spark.svmLinear`
+for binary classification.
+
+```{r}
+# load training data and create a DataFrame
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+# fit a Linear SVM classifier model
+model <- spark.svmLinear(training,  Survived ~ ., regParam = 0.01, maxIter = 10)
+summary(model)
+```
+
+Predict values on training data
+```{r}
+prediction <- predict(model, training)
+```
+
 #### Logistic Regression
 
 [Logistic regression](https://en.wikipedia.org/wiki/Logistic_regression) is a widely-used model when the response is categorical. It can be seen as a special case of the [Generalized Linear Predictive Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
@@ -538,11 +565,10 @@ We use a simple example to demonstrate `spark.logit` usage. In general, there ar
 and 3). Obtain the coefficient matrix of the fitted model using `summary` and use the model for prediction with `predict`.
 
 Binomial logistic regression
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
-# Create a DataFrame containing two classes
-training <- df[df$Species %in% c("versicolor", "virginica"), ]
-model <- spark.logit(training, Species ~ ., regParam = 0.00042)
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+model <- spark.logit(training, Survived ~ ., regParam = 0.04741301)
 summary(model)
 ```
 
@@ -552,10 +578,11 @@ fitted <- predict(model, training)
 ```
 
 Multinomial logistic regression against three classes
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
 # Note in this case, Spark infers it is multinomial logistic regression, so family = "multinomial" is optional.
-model <- spark.logit(df, Species ~ ., regParam = 0.056)
+model <- spark.logit(training, Class ~ ., regParam = 0.07815179)
 summary(model)
 ```
 
@@ -582,11 +609,12 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 `spark.mlp` requires at least two columns in `data`: one named `"label"` and the other one `"features"`. The `"features"` column should be in libSVM-format.
 
-We use iris data set to show how to use `spark.mlp` in classification.
-```{r, warning=FALSE}
-df <- createDataFrame(iris)
+We use Titanic data set to show how to use `spark.mlp` in classification.
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
 # fit a Multilayer Perceptron Classification Model
-model <- spark.mlp(df, Species ~ ., blockSize = 128, layers = c(4, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c(0, 0, 0, 0, 0, 5, 5, 5, 5, 5, 9, 9, 9, 9, 9))
+model <- spark.mlp(training, Survived ~ Age + Sex, blockSize = 128, layers = c(2, 3), solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1, initialWeights = c( 0, 0, 0, 5, 5, 5, 9, 9, 9))
 ```
 
 To avoid lengthy display, we only present partial results of the model summary. You can check the full result from your sparkR shell.
@@ -603,7 +631,7 @@ options(ops)
 ```
 ```{r}
 # make predictions use the fitted model
-predictions <- predict(model, df)
+predictions <- predict(model, training)
 head(select(predictions, predictions$prediction))
 ```
 
@@ -644,6 +672,7 @@ gaussian | identity, log, inverse
 binomial | logit, probit, cloglog (complementary log-log)
 poisson | log, identity, sqrt
 gamma | inverse, identity, log
+tweedie | power link function
 
 There are three ways to specify the `family` argument.
 
@@ -651,7 +680,11 @@ There are three ways to specify the `family` argument.
 
 * Family function, e.g. `family = binomial`.
 
-* Result returned by a family function, e.g. `family = poisson(link = log)`
+* Result returned by a family function, e.g. `family = poisson(link = log)`.
+
+* Note that there are two ways to specify the tweedie family:
+  a) Set `family = "tweedie"` and specify the `var.power` and `link.power`
+  b) When package `statmod` is loaded, the tweedie family is specified using the family definition therein, i.e., `tweedie()`.
 
 For more information regarding the families and their link functions, see the Wikipedia page [Generalized Linear Model](https://en.wikipedia.org/wiki/Generalized_linear_model).
 
@@ -665,6 +698,18 @@ When doing prediction, a new column called `prediction` will be appended. Let's 
 ```{r}
 gaussianFitted <- predict(gaussianGLM, carsDF)
 head(select(gaussianFitted, "model", "prediction", "mpg", "wt", "hp"))
+```
+
+The following is the same fit using the tweedie family:
+```{r}
+tweedieGLM1 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie", var.power = 0.0)
+summary(tweedieGLM1)
+```
+We can try other distributions in the tweedie family, for example, a compound Poisson distribution with a log link:
+```{r}
+tweedieGLM2 <- spark.glm(carsDF, mpg ~ wt + hp, family = "tweedie", 
+                         var.power = 1.2, link.power = 0.0)
+summary(tweedieGLM2)
 ```
 
 #### Isotonic Regression
@@ -736,6 +781,19 @@ df <- createDataFrame(longley)
 rfModel <- spark.randomForest(df, Employed ~ ., type = "regression", maxDepth = 2, numTrees = 2)
 summary(rfModel)
 predictions <- predict(rfModel, df)
+```
+
+#### Bisecting k-Means
+
+`spark.bisectingKmeans` is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+model <- spark.bisectingKmeans(training, Class ~ Survived, k = 4)
+summary(model)
+fitted <- predict(model, training)
+head(select(fitted, "Class", "prediction"))
 ```
 
 #### Gaussian Mixture Model
@@ -873,9 +931,10 @@ testSummary
 
 ### Model Persistence
 The following example shows how to save/load an ML model by SparkR.
-```{r, warning=FALSE}
-irisDF <- createDataFrame(iris)
-gaussianGLM <- spark.glm(irisDF, Sepal_Length ~ Sepal_Width + Species, family = "gaussian")
+```{r}
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
+gaussianGLM <- spark.glm(training, Freq ~ Sex + Age, family = "gaussian")
 
 # Save and then load a fitted MLlib model
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
@@ -886,7 +945,7 @@ gaussianGLM2 <- read.ml(modelPath)
 summary(gaussianGLM2)
 
 # Check model prediction
-gaussianPredictions <- predict(gaussianGLM2, irisDF)
+gaussianPredictions <- predict(gaussianGLM2, training)
 head(gaussianPredictions)
 
 unlink(modelPath)

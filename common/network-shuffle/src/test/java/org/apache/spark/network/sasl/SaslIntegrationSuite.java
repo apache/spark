@@ -19,11 +19,11 @@ package org.apache.spark.network.sasl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -38,7 +38,6 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
@@ -103,10 +102,9 @@ public class SaslIntegrationSuite {
   }
 
   @Test
-  public void testGoodClient() throws IOException {
+  public void testGoodClient() throws IOException, InterruptedException {
     clientFactory = context.createClientFactory(
-      Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
+        Arrays.asList(new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     String msg = "Hello, World!";
@@ -120,8 +118,7 @@ public class SaslIntegrationSuite {
     when(badKeyHolder.getSaslUser(anyString())).thenReturn("other-app");
     when(badKeyHolder.getSecretKey(anyString())).thenReturn("wrong-password");
     clientFactory = context.createClientFactory(
-      Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "unknown-app", badKeyHolder)));
+        Arrays.asList(new SaslClientBootstrap(conf, "unknown-app", badKeyHolder)));
 
     try {
       // Bootstrap should fail on startup.
@@ -133,9 +130,8 @@ public class SaslIntegrationSuite {
   }
 
   @Test
-  public void testNoSaslClient() throws IOException {
-    clientFactory = context.createClientFactory(
-      Lists.<TransportClientBootstrap>newArrayList());
+  public void testNoSaslClient() throws IOException, InterruptedException {
+    clientFactory = context.createClientFactory(new ArrayList<>());
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     try {
@@ -159,15 +155,11 @@ public class SaslIntegrationSuite {
     RpcHandler handler = new TestRpcHandler();
     TransportContext context = new TransportContext(conf, handler);
     clientFactory = context.createClientFactory(
-      Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
-    TransportServer server = context.createServer();
-    try {
+      Arrays.asList(new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
+    try (TransportServer server = context.createServer()) {
       clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Digest-challenge format violation"));
-    } finally {
-      server.close();
     }
   }
 
@@ -191,14 +183,13 @@ public class SaslIntegrationSuite {
     try {
       // Create a client, and make a request to fetch blocks from a different app.
       clientFactory = blockServerContext.createClientFactory(
-        Lists.<TransportClientBootstrap>newArrayList(
-          new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
+          Arrays.asList(new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
       client1 = clientFactory.createClient(TestUtils.getLocalHost(),
         blockServer.getPort());
 
-      final AtomicReference<Throwable> exception = new AtomicReference<>();
+      AtomicReference<Throwable> exception = new AtomicReference<>();
 
-      final CountDownLatch blockFetchLatch = new CountDownLatch(1);
+      CountDownLatch blockFetchLatch = new CountDownLatch(1);
       BlockFetchingListener listener = new BlockFetchingListener() {
         @Override
         public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
@@ -235,12 +226,11 @@ public class SaslIntegrationSuite {
       // Create a second client, authenticated with a different app ID, and try to read from
       // the stream created for the previous app.
       clientFactory2 = blockServerContext.createClientFactory(
-        Lists.<TransportClientBootstrap>newArrayList(
-          new SaslClientBootstrap(conf, "app-2", secretKeyHolder)));
+          Arrays.asList(new SaslClientBootstrap(conf, "app-2", secretKeyHolder)));
       client2 = clientFactory2.createClient(TestUtils.getLocalHost(),
         blockServer.getPort());
 
-      final CountDownLatch chunkReceivedLatch = new CountDownLatch(1);
+      CountDownLatch chunkReceivedLatch = new CountDownLatch(1);
       ChunkReceivedCallback callback = new ChunkReceivedCallback() {
         @Override
         public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
@@ -284,7 +274,7 @@ public class SaslIntegrationSuite {
     }
   }
 
-  private void checkSecurityException(Throwable t) {
+  private static void checkSecurityException(Throwable t) {
     assertNotNull("No exception was caught.", t);
     assertTrue("Expected SecurityException.",
       t.getMessage().contains(SecurityException.class.getName()));

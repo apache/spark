@@ -914,15 +914,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = spark.read.json(sparkContext.makeRDD(
-      """{"a.b": {"c": {"d..e": {"f": 1}}}}""" :: Nil))
+    val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
       Row(1)
     )
 
-    val df2 = spark.read.json(sparkContext.makeRDD(
-      """{"a  b": {"c": {"d  e": {"f": 1}}}}""" :: Nil))
+    val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
     checkAnswer(
       df2.select(df2("`a  b`.c.d  e.f")),
       Row(1)
@@ -977,59 +975,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.dropDuplicates("key", "value1"),
       Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
-  }
-
-  test("SPARK-7150 range api") {
-    // numSlice is greater than length
-    val res1 = spark.range(0, 10, 1, 15).select("id")
-    assert(res1.count == 10)
-    assert(res1.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
-
-    val res2 = spark.range(3, 15, 3, 2).select("id")
-    assert(res2.count == 4)
-    assert(res2.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
-
-    val res3 = spark.range(1, -2).select("id")
-    assert(res3.count == 0)
-
-    // start is positive, end is negative, step is negative
-    val res4 = spark.range(1, -2, -2, 6).select("id")
-    assert(res4.count == 2)
-    assert(res4.agg(sum("id")).as("sumid").collect() === Seq(Row(0)))
-
-    // start, end, step are negative
-    val res5 = spark.range(-3, -8, -2, 1).select("id")
-    assert(res5.count == 3)
-    assert(res5.agg(sum("id")).as("sumid").collect() === Seq(Row(-15)))
-
-    // start, end are negative, step is positive
-    val res6 = spark.range(-8, -4, 2, 1).select("id")
-    assert(res6.count == 2)
-    assert(res6.agg(sum("id")).as("sumid").collect() === Seq(Row(-14)))
-
-    val res7 = spark.range(-10, -9, -20, 1).select("id")
-    assert(res7.count == 0)
-
-    val res8 = spark.range(Long.MinValue, Long.MaxValue, Long.MaxValue, 100).select("id")
-    assert(res8.count == 3)
-    assert(res8.agg(sum("id")).as("sumid").collect() === Seq(Row(-3)))
-
-    val res9 = spark.range(Long.MaxValue, Long.MinValue, Long.MinValue, 100).select("id")
-    assert(res9.count == 2)
-    assert(res9.agg(sum("id")).as("sumid").collect() === Seq(Row(Long.MaxValue - 1)))
-
-    // only end provided as argument
-    val res10 = spark.range(10).select("id")
-    assert(res10.count == 10)
-    assert(res10.agg(sum("id")).as("sumid").collect() === Seq(Row(45)))
-
-    val res11 = spark.range(-1).select("id")
-    assert(res11.count == 0)
-
-    // using the default slice number
-    val res12 = spark.range(3, 15, 3).select("id")
-    assert(res12.count == 4)
-    assert(res12.agg(sum("id")).as("sumid").collect() === Seq(Row(30)))
   }
 
   test("SPARK-8621: support empty string column name") {
@@ -1163,8 +1108,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {
-    val df = spark.read.json(sparkContext.makeRDD(
-      """{"a": {"b": 1}}""" :: Nil))
+    val df = spark.read.json(Seq("""{"a": {"b": 1}}""").toDS())
     checkAnswer(df.orderBy("a.b"), Row(Row(1)))
   }
 
@@ -1217,8 +1161,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
-    val input = spark.read.json(spark.sparkContext.makeRDD(
-      (1 to 10).map(i => s"""{"id": $i}""")))
+    val input = spark.read.json((1 to 10).map(i => s"""{"id": $i}""").toDS())
 
     val df = input.select($"id", rand(0).as('r))
     df.as("a").join(df.filter($"r" < 0.5).as("b"), $"a.id" === $"b.id").collect().foreach { row =>
@@ -1754,5 +1697,29 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-17913: compare long and string type column may return confusing result") {
     val df = Seq(123L -> "123", 19157170390056973L -> "19157170390056971").toDF("i", "j")
     checkAnswer(df.select($"i" === $"j"), Row(true) :: Row(false) :: Nil)
+  }
+
+  test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
+    val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
+    checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
+  }
+
+  test("SPARK-19893: cannot run set operations with map type") {
+    val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
+    val e = intercept[AnalysisException](df.intersect(df))
+    assert(e.message.contains(
+      "Cannot have map type columns in DataFrame which calls set operations"))
+    val e2 = intercept[AnalysisException](df.except(df))
+    assert(e2.message.contains(
+      "Cannot have map type columns in DataFrame which calls set operations"))
+    val e3 = intercept[AnalysisException](df.distinct())
+    assert(e3.message.contains(
+      "Cannot have map type columns in DataFrame which calls set operations"))
+    withTempView("v") {
+      df.createOrReplaceTempView("v")
+      val e4 = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v"))
+      assert(e4.message.contains(
+        "Cannot have map type columns in DataFrame which calls set operations"))
+    }
   }
 }

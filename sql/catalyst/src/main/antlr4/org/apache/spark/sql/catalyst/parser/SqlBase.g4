@@ -82,7 +82,7 @@ statement
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier                                    #createTableLike
+        LIKE source=tableIdentifier locationSpec?                      #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq)?                      #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -123,7 +123,8 @@ statement
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
-    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
+    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
+        statement                                                      #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
@@ -365,13 +366,22 @@ querySpecification
        (RECORDREADER recordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | ((kind=SELECT setQuantifier? namedExpressionSeq fromClause?
+    | ((kind=SELECT hint? setQuantifier? namedExpressionSeq fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
        aggregation?
        (HAVING having=booleanExpression)?
        windows?)
+    ;
+
+hint
+    : '/*+' hintStatement '*/'
+    ;
+
+hintStatement
+    : hintName=identifier
+    | hintName=identifier '(' parameters+=identifier (',' parameters+=identifier)* ')'
     ;
 
 fromClause
@@ -496,10 +506,10 @@ expression
 
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
+    | EXISTS '(' query ')'                                         #exists
     | predicated                                                   #booleanDefault
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
-    | EXISTS '(' query ')'                                         #exists
     ;
 
 // workaround for:
@@ -530,15 +540,16 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
-    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
-    | '(' expression (',' expression)+ ')'                                                     #rowConstructor
+    | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
+    | qualifiedName '(' (setQuantifier? namedExpression (',' namedExpression)*)? ')'
+       (OVER windowSpec)?                                                                      #functionCall
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -684,7 +695,7 @@ nonReserved
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | GLOBAL | TEMPORARY | OPTIONS
     | GROUPING | CUBE | ROLLUP
-    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
+    | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN | COST
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
     | SET | RESET
     | VIEW | REPLACE
@@ -785,6 +796,7 @@ EXPLAIN: 'EXPLAIN';
 FORMAT: 'FORMAT';
 LOGICAL: 'LOGICAL';
 CODEGEN: 'CODEGEN';
+COST: 'COST';
 CAST: 'CAST';
 SHOW: 'SHOW';
 TABLES: 'TABLES';
@@ -1002,8 +1014,12 @@ SIMPLE_COMMENT
     : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
     ;
 
+BRACKETED_EMPTY_COMMENT
+    : '/**/' -> channel(HIDDEN)
+    ;
+
 BRACKETED_COMMENT
-    : '/*' .*? '*/' -> channel(HIDDEN)
+    : '/*' ~[+] .*? '*/' -> channel(HIDDEN)
     ;
 
 WS
