@@ -20,7 +20,8 @@ package org.apache.spark.sql.hive
 import java.sql.Timestamp
 import java.util.TimeZone
 
-import org.apache.spark._
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompatibilityTest, ParquetFileFormat}
@@ -28,7 +29,8 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructType, TimestampType}
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
+class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton
+    with BeforeAndAfterEach {
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
    * to the default value of hive.exec.stagingdir.
@@ -44,6 +46,17 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       s"""Schema of the Parquet file written by parquet-avro:
          |$schema
        """.stripMargin)
+  }
+
+  override def afterEach(): Unit = {
+    sparkContext.conf.set(
+      SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, "false")
+    try {
+      // drop all databases, tables and functions after each test
+      spark.sessionState.catalog.reset()
+    } finally {
+      super.afterEach()
+    }
   }
 
   private def testParquetHiveCompatibility(row: Row, hiveTypes: String*): Unit = {
@@ -154,10 +167,11 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   // * altering table properties directly
   // * variety of timezones, local & non-local
   Seq(false, true).foreach { setTableTzByDefault =>
-    testCreateReadWriteTablesWithTimezone("no_tz", None, setTableTzByDefault)
+    testCreateAlterTablesWithTimezone("no_tz", None, setTableTzByDefault)
+    testReadWriteTablesWithTimezone("no_tz", None, setTableTzByDefault)
     val localTz = TimeZone.getDefault.getID()
-    testCreateReadWriteTablesWithTimezone("local", Some(localTz), setTableTzByDefault)
-
+    testCreateAlterTablesWithTimezone("local", Some(localTz), setTableTzByDefault)
+    testReadWriteTablesWithTimezone("local", Some(localTz), setTableTzByDefault)
     // check with a variety of timezones.  The unit tests currently are configured to always use
     // America/Los_Angeles, but even if they didn't, we'd be sure to cover a non-local timezone.
     Seq(
@@ -166,32 +180,30 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       "Berlin" -> "Europe/Berlin"
     ).foreach { case (tableName, zone) =>
       if (zone != localTz) {
-        testCreateReadWriteTablesWithTimezone(tableName, Some(zone), setTableTzByDefault)
+        testCreateAlterTablesWithTimezone(tableName, Some(zone), setTableTzByDefault)
+        testReadWriteTablesWithTimezone(tableName, Some(zone), setTableTzByDefault)
       }
     }
   }
 
   private def checkHasTz(table: String, tz: Option[String]): Unit = {
     val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
-    val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-    assert(tableMetadata.properties.get(key) === tz)
+    assert(tableMetadata.properties.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY) === tz)
   }
 
-  private def testCreateReadWriteTablesWithTimezone(
+  private def testCreateAlterTablesWithTimezone(
       baseTable: String,
       explicitTz: Option[String],
       setTableTzByDefault: Boolean): Unit = {
-    val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
-    test(s"SPARK-12297: Parquet Timestamp & Hive timezone; " +
+    test(s"SPARK-12297: Create and Alter Parquet tables and timezones; " +
         s"setTzByDefault = $setTableTzByDefault; explicitTz = $explicitTz") {
       // we're cheating a bit here, in general SparkConf isn't meant to be set at runtime,
       // but its OK in this case, and lets us run this test, because these tests don't like
       // creating multiple HiveContexts in the same jvm
-      sparkContext.conf.set(
-        SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, setTableTzByDefault.toString)
-
-      withTable(baseTable, s"like_$baseTable", s"select_$baseTable", s"external_$baseTable",
-        s"saveAsTable_$baseTable", s"insert_$baseTable") {
+      val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+      sparkContext.conf.set(SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key,
+          setTableTzByDefault.toString)
+      withTable(baseTable, s"like_$baseTable", s"select_$baseTable") {
         val localTz = TimeZone.getDefault()
         val localTzId = localTz.getID()
         val defaultTz = if (setTableTzByDefault) Some(localTzId) else None
@@ -212,8 +224,6 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         checkHasTz(s"like_$baseTable", expectedTableTz)
         spark.sql(
           raw"""CREATE TABLE select_$baseTable
-
-
                 | STORED AS PARQUET
                 | AS
                 | SELECT * from $baseTable
@@ -224,15 +234,40 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         spark.sql(
           raw"""ALTER TABLE $baseTable SET TBLPROPERTIES ($key="America/Los_Angeles")""")
         checkHasTz(baseTable, Some("America/Los_Angeles"))
-        spark.sql(raw"""ALTER TABLE $baseTable SET TBLPROPERTIES ($key="UTC")""")
+        spark.sql( raw"""ALTER TABLE $baseTable SET TBLPROPERTIES ($key="UTC")""")
         checkHasTz(baseTable, Some("UTC"))
-        spark.sql(raw"""ALTER TABLE $baseTable UNSET TBLPROPERTIES ($key)""")
+        spark.sql( raw"""ALTER TABLE $baseTable UNSET TBLPROPERTIES ($key)""")
         checkHasTz(baseTable, None)
         explicitTz.foreach { tz =>
           spark.sql( raw"""ALTER TABLE $baseTable SET TBLPROPERTIES ($key="$tz")""")
           checkHasTz(baseTable, expectedTableTz)
         }
+      }
+    }
+  }
 
+  private def testReadWriteTablesWithTimezone(
+      baseTable: String,
+      explicitTz: Option[String],
+      setTableTzByDefault: Boolean): Unit = {
+    val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
+    test(s"SPARK-12297: Read And Write from Parquet tables with Timestamps; " +
+        s"setTzByDefault = $setTableTzByDefault; explicitTz = $explicitTz") {
+      // we're cheating a bit here, in general SparkConf isn't meant to be set at runtime,
+      // but its OK in this case, and lets us run this test, because these tests don't like
+      // creating multiple HiveContexts in the same jvm
+      sparkContext.conf.set(
+        SQLConf.PARQUET_TABLE_INCLUDE_TIMEZONE.key, setTableTzByDefault.toString)
+
+      withTable(s"external_$baseTable", s"saveAsTable_$baseTable", s"insert_$baseTable") {
+        val localTz = TimeZone.getDefault()
+        val localTzId = localTz.getID()
+        val defaultTz = if (setTableTzByDefault) Some(localTzId) else None
+        val expectedTableTz = explicitTz.orElse(defaultTz)
+        // check that created tables have correct TBLPROPERTIES
+        val tblProperties = explicitTz.map {
+          tz => raw"""TBLPROPERTIES ($key="$tz")"""
+        }.getOrElse("")
 
         import spark.implicits._
         val originalTsStrings = Seq(
@@ -257,8 +292,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
                 | $tblProperties
                """.stripMargin)
         checkHasTz(s"insert_$baseTable", expectedTableTz)
-        rawData.createOrReplaceTempView(s"tempView_$baseTable")
-        spark.sql(s"INSERT INTO insert_$baseTable SELECT value AS ts FROM tempView_$baseTable")
+        rawData.write.insertInto(s"insert_$baseTable")
         val readFromTable = spark.table(s"insert_$baseTable").collect()
           .map(_.getAs[Timestamp](0))
         // no matter what, roundtripping via the table should leave the data unchanged
