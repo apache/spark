@@ -226,7 +226,7 @@ private[spark] object GradientBoostedTrees extends Logging {
       (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
     .map(_ / dataCount)
 
-    broadcastTrees.destroy()
+    broadcastTrees.destroy(blocking = false)
     evaluation.toArray
   }
 

@@ -34,6 +34,8 @@ trait CatalystConf {
   def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
 
+  def tableRelationCacheSize: Int
+
   def runSQLonFile: Boolean
 
   def warehousePath: String
@@ -58,6 +60,14 @@ trait CatalystConf {
    * Enables CBO for estimation of plan statistics when set true.
    */
   def cboEnabled: Boolean
+
+  /** Enables join reorder in CBO. */
+  def joinReorderEnabled: Boolean
+
+  /** The maximum number of joined nodes allowed in the dynamic programming algorithm. */
+  def joinReorderDPThreshold: Int
+
+  override def clone(): CatalystConf = throw new CloneNotSupportedException()
 }
 
 
@@ -69,9 +79,15 @@ case class SimpleCatalystConf(
     optimizerMaxIterations: Int = 100,
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
+    tableRelationCacheSize: Int = 1000,
     runSQLonFile: Boolean = true,
     crossJoinEnabled: Boolean = false,
     cboEnabled: Boolean = false,
+    joinReorderEnabled: Boolean = false,
+    joinReorderDPThreshold: Int = 12,
     warehousePath: String = "/user/hive/warehouse",
     sessionLocalTimeZone: String = TimeZone.getDefault().getID)
-  extends CatalystConf
+  extends CatalystConf {
+
+  override def clone(): SimpleCatalystConf = this.copy()
+}

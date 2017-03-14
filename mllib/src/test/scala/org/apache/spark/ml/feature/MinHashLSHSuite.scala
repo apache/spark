@@ -54,7 +54,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
     val mh = new MinHashLSH()
     val settings = Map("inputCol" -> "keys", "outputCol" -> "values")
-    testEstimatorAndModelReadWrite(mh, dataset, settings, checkModelData)
+    testEstimatorAndModelReadWrite(mh, dataset, settings, settings, checkModelData)
   }
 
   test("hashFunction") {

@@ -190,6 +190,7 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>build-helper-maven-plugin</artifactId>
+            <version>3.0.0</version>
             <executions>
               <execution>
                 <id>add-scala-test-sources</id>
@@ -219,7 +220,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+          <argLine>-da -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
         </configuration>
       </plugin>
       <plugin>

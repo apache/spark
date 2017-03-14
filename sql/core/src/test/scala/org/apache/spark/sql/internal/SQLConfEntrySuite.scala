@@ -171,4 +171,38 @@ class SQLConfEntrySuite extends SparkFunSuite {
       buildConf(key).stringConf.createOptional
     }
   }
+
+  test("StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE") {
+    val confEntry = StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE
+    assert(conf.getConf(confEntry) === 1000)
+
+    conf.setConf(confEntry, -1)
+    val e1 = intercept[IllegalArgumentException] {
+      conf.getConf(confEntry)
+    }
+    assert(e1.getMessage === "The maximum size of the cache must not be negative")
+
+    val e2 = intercept[IllegalArgumentException] {
+      conf.setConfString(confEntry.key, "-1")
+    }
+    assert(e2.getMessage === "The maximum size of the cache must not be negative")
+  }
+
+  test("clone SQLConf") {
+    val original = new SQLConf
+    val key = "spark.sql.SQLConfEntrySuite.clone"
+    assert(original.getConfString(key, "noentry") === "noentry")
+
+    // inheritance
+    original.setConfString(key, "orig")
+    val clone = original.clone()
+    assert(original ne clone)
+    assert(clone.getConfString(key, "noentry") === "orig")
+
+    // independence
+    clone.setConfString(key, "clone")
+    assert(original.getConfString(key, "noentry") === "orig")
+    original.setConfString(key, "dontcopyme")
+    assert(clone.getConfString(key, "noentry") === "clone")
+  }
 }

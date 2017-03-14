@@ -156,12 +156,7 @@ class LauncherServer implements Closeable {
       this.server = server;
       this.running = true;
 
-      this.serverThread = factory.newThread(new Runnable() {
-        @Override
-        public void run() {
-          acceptConnections();
-        }
-      });
+      this.serverThread = factory.newThread(this::acceptConnections);
       serverThread.start();
     } catch (IOException ioe) {
       close();

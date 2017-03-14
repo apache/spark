@@ -143,4 +143,16 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     assert(createStackGenerator(50).find(isCodeGenerated).isDefined)
     assert(createStackGenerator(100).find(isCodeGenerated).isEmpty)
   }
+
+  test("SPARK-19512 codegen for comparing structs is incorrect") {
+    // this would raise CompileException before the fix
+    spark.range(10)
+      .selectExpr("named_struct('a', id) as col1", "named_struct('a', id+2) as col2")
+      .filter("col1 = col2").count()
+    // this would raise java.lang.IndexOutOfBoundsException before the fix
+    spark.range(10)
+      .selectExpr("named_struct('a', id, 'b', id) as col1",
+        "named_struct('a',id+2, 'b',id+2) as col2")
+      .filter("col1 = col2").count()
+  }
 }

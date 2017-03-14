@@ -66,7 +66,7 @@ case class CreateDatabaseCommand(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        path.getOrElse(catalog.getDefaultDBPath(databaseName)),
+        path.map(CatalogUtils.stringToURI(_)).getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]
@@ -146,7 +146,7 @@ case class DescribeDatabaseCommand(
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
-        Row("Location", dbMetadata.locationUri) :: Nil
+        Row("Location", CatalogUtils.URIToString(dbMetadata.locationUri)) :: Nil
 
     if (extended) {
       val properties =
@@ -199,8 +199,7 @@ case class DropTableCommand(
       }
     }
     try {
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession.table(tableName.quotedString))
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
     } catch {
       case _: NoSuchTableException if ifExists =>
       case NonFatal(e) => log.warn(e.toString, e)
@@ -426,7 +425,8 @@ case class AlterTableAddPartitionCommand(
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
-      CatalogTablePartition(normalizedSpec, table.storage.copy(locationUri = location))
+      CatalogTablePartition(normalizedSpec, table.storage.copy(
+        locationUri = location.map(CatalogUtils.stringToURI(_))))
     }
     catalog.createPartitions(table.identifier, parts, ignoreIfExists = ifNotExists)
     Seq.empty[Row]
@@ -710,7 +710,7 @@ case class AlterTableRecoverPartitionsCommand(
         // inherit table storage format (possibly except for location)
         CatalogTablePartition(
           spec,
-          table.storage.copy(locationUri = Some(location.toUri.toString)),
+          table.storage.copy(locationUri = Some(location.toUri)),
           params)
       }
       spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
@@ -741,6 +741,7 @@ case class AlterTableSetLocationCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    val locUri = CatalogUtils.stringToURI(location)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     partitionSpec match {
       case Some(spec) =>
@@ -748,11 +749,11 @@ case class AlterTableSetLocationCommand(
           sparkSession, table, "ALTER TABLE ... SET LOCATION")
         // Partition spec is specified, so we set the location only for this partition
         val part = catalog.getPartition(table.identifier, spec)
-        val newPart = part.copy(storage = part.storage.copy(locationUri = Some(location)))
+        val newPart = part.copy(storage = part.storage.copy(locationUri = Some(locUri)))
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
         // No partition spec is specified, so we set the location for the table itself
-        catalog.alterTable(table.withNewStorage(locationUri = Some(location)))
+        catalog.alterTable(table.withNewStorage(locationUri = Some(locUri)))
     }
     Seq.empty[Row]
   }

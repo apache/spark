@@ -24,10 +24,9 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JS
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
@@ -41,7 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegralType, StringType}
@@ -96,7 +95,6 @@ private[client] sealed abstract class Shim {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit
@@ -106,7 +104,6 @@ private[client] sealed abstract class Shim {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit
 
   def loadDynamicPartitions(
@@ -116,7 +113,6 @@ private[client] sealed abstract class Shim {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
 
   def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit
@@ -271,7 +267,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     val table = hive.getTable(database, tableName)
     parts.foreach { s =>
       val location = s.storage.locationUri.map(
-        uri => new Path(table.getPath, new Path(new URI(uri)))).orNull
+        uri => new Path(table.getPath, new Path(uri))).orNull
       val params = if (s.parameters.nonEmpty) s.parameters.asJava else null
       val spec = s.spec.asJava
       if (hive.getPartition(table, spec, false) != null && ignoreIfExists) {
@@ -332,12 +328,11 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit = {
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      holdDDLTime: JBoolean, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean)
+      JBoolean.FALSE, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean)
   }
 
   override def loadTable(
@@ -345,9 +340,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
-    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime: JBoolean)
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, JBoolean.FALSE)
   }
 
   override def loadDynamicPartitions(
@@ -357,10 +351,9 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean)
+      numDP: JInteger, JBoolean.FALSE, listBucketingEnabled: JBoolean)
   }
 
   override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
@@ -469,7 +462,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
     parts.zipWithIndex.foreach { case (s, i) =>
       addPartitionDesc.addPartition(
-        s.spec.asJava, s.storage.locationUri.map(u => new Path(new URI(u)).toString).orNull)
+        s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString(_)).orNull)
       if (s.parameters.nonEmpty) {
         addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
       }
@@ -703,12 +696,11 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       tableName: String,
       partSpec: JMap[String, String],
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit = {
     loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      holdDDLTime: JBoolean, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      JBoolean.FALSE, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, JBoolean.FALSE)
   }
 
@@ -717,9 +709,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       loadPath: Path,
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit = {
-    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime: JBoolean,
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, JBoolean.FALSE,
       isSrcLocal: JBoolean, JBoolean.FALSE, JBoolean.FALSE)
   }
 
@@ -730,10 +721,9 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE)
+      numDP: JInteger, JBoolean.FALSE, listBucketingEnabled: JBoolean, JBoolean.FALSE)
   }
 
   override def dropTable(
@@ -743,12 +733,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       deleteData: Boolean,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = {
-    try {
-      dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
-        ignoreIfNotExists: JBoolean, purge: JBoolean)
-    } catch {
-      case e: InvocationTargetException => throw e.getCause()
-    }
+    dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
+      ignoreIfNotExists: JBoolean, purge: JBoolean)
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
@@ -818,10 +804,9 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
-      numDP: JInteger, holdDDLTime: JBoolean, listBucketingEnabled: JBoolean, JBoolean.FALSE,
+      numDP: JInteger, JBoolean.FALSE, listBucketingEnabled: JBoolean, JBoolean.FALSE,
       0L: JLong)
   }
 
@@ -835,11 +820,81 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
     val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
-    try {
-      dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
-    } catch {
-      case e: InvocationTargetException => throw e.getCause()
-    }
+    dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
+  }
+
+}
+
+private[client] class Shim_v2_0 extends Shim_v1_2 {
+  private lazy val loadPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "loadPartition",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadTableMethod =
+    findMethod(
+      classOf[Hive],
+      "loadTable",
+      classOf[Path],
+      classOf[String],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JLong.TYPE)
+
+  override def loadPartition(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      isSrcLocal: JBoolean, JBoolean.FALSE)
+  }
+
+  override def loadTable(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, isSrcLocal: JBoolean,
+      JBoolean.FALSE, JBoolean.FALSE)
+  }
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      listBucketingEnabled: Boolean): Unit = {
+    loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      numDP: JInteger, listBucketingEnabled: JBoolean, JBoolean.FALSE, 0L: JLong)
   }
 
 }

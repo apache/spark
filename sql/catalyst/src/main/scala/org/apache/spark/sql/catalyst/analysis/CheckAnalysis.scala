@@ -18,10 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -44,6 +42,18 @@ trait CheckAnalysis extends PredicateHelper {
     exprs.flatMap(_.collect {
       case e: Generator => e
     }).length > 1
+  }
+
+  protected def hasMapType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[MapType])
+  }
+
+  protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasMapType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasMapType(a.dataType))
+    case _ => None
   }
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
@@ -123,8 +133,7 @@ trait CheckAnalysis extends PredicateHelper {
             if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
-            }
-            else if (conditions.nonEmpty) {
+            } else if (conditions.nonEmpty) {
               // Collect the columns from the subquery for further checking.
               var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
 
@@ -154,7 +163,7 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               }
 
-              // Skip subquery aliases added by the Analyzer and the SQLBuilder.
+              // Skip subquery aliases added by the Analyzer.
               // For projects, do the necessary mapping and skip to its child.
               def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
                 case s: SubqueryAlias => cleanQuery(s.child)
@@ -202,7 +211,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case f @ Filter(condition, child) =>
+          case Filter(condition, _) =>
             splitConjunctivePredicates(condition).foreach {
               case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
@@ -321,12 +330,12 @@ trait CheckAnalysis extends PredicateHelper {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (!dt1.sameType(dt2)) {
+                if (TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. $dt1 <> $dt2 at the ${ordinalNumber(ci)} column of
-                      |the ${ordinalNumber(ti + 1)} table
+                      |column types. ${dt1.catalogString} <> ${dt2.catalogString} at the
+                      |${ordinalNumber(ci)} column of the ${ordinalNumber(ti + 1)} table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
@@ -376,6 +385,14 @@ trait CheckAnalysis extends PredicateHelper {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
+          // TODO: although map type is not orderable, technically map type should be able to be
+          // used in equality comparison, remove this type check once we support it.
+          case o if mapColumnInSetOperation(o).isDefined =>
+            val mapCol = mapColumnInSetOperation(o).get
+            failAnalysis("Cannot have map type columns in DataFrame which calls " +
+              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
+              "is " + mapCol.dataType.simpleString)
+
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
@@ -386,6 +403,10 @@ trait CheckAnalysis extends PredicateHelper {
                  | ${o.expressions.map(_.sql).mkString(",")}
                  |in operator ${operator.simpleString}
                """.stripMargin)
+
+          case _: Hint =>
+            throw new IllegalStateException(
+              "Internal error: logical hint operator should have been removed during analysis")
 
           case _ => // Analysis successful!
         }
