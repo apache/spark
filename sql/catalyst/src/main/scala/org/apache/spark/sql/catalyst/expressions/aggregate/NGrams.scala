@@ -77,7 +77,7 @@ case class NGrams(child: Expression,
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(ArrayType(StringType), ArrayType(ArrayType(StringType))),
+    Seq(TypeCollection(ArrayType(StringType, false), ArrayType(ArrayType(StringType, false))),
       IntegerType, IntegerType, IntegerType)
   }
 
@@ -106,10 +106,8 @@ case class NGrams(child: Expression,
   def updateArray(genericArrayData: GenericArrayData, buffer: NGramBuffer, inputRow: InternalRow) {
     val values = (0 until genericArrayData.numElements()).map(genericArrayData.get(_, StringType).
       asInstanceOf[UTF8String]).toVector
-    if (values != null) {
-      val nGrams = getNGrams(values, n)
-      nGrams.foreach(buffer.add(_))
-    }
+    val nGrams = getNGrams(values, n)
+    nGrams.foreach(buffer.add(_))
     buffer.trim()
   }
   override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
