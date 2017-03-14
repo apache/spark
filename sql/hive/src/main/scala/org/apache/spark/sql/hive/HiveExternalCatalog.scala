@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.util
 import java.util.TimeZone
@@ -63,14 +64,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   /**
    * A Hive client used to interact with the metastore.
    */
-  val client: HiveClient = {
+  lazy val client: HiveClient = {
     HiveUtils.newClientForMetadata(conf, hadoopConf)
   }
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
     classOf[HiveException].getCanonicalName,
-    classOf[TException].getCanonicalName)
+    classOf[TException].getCanonicalName,
+    classOf[InvocationTargetException].getCanonicalName)
 
   /**
    * Whether this is an exception thrown by the hive client that should be wrapped.
@@ -96,7 +98,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     try {
       body
     } catch {
-      case NonFatal(e) if isClientException(e) =>
+      case NonFatal(exception) if isClientException(exception) =>
+        val e = exception match {
+          // Since we are using shim, the exceptions thrown by the underlying method of
+          // Method.invoke() are wrapped by InvocationTargetException
+          case i: InvocationTargetException => i.getCause
+          case o => o
+        }
         throw new AnalysisException(
           e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
     }
