@@ -1369,7 +1369,7 @@ test_that("column functions", {
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
   df <- as.DataFrame(list(list("people" = jsonArr)))
   schema <- structType(structField("name", "string"))
-  arr <- collect(select(df, alias(from_json(df$people, schema, asArray = TRUE), "arrcol")))
+  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
   expect_equal(ncol(arr), 1)
   expect_equal(nrow(arr), 1)
   expect_is(arr[[1]][[1]], "list")

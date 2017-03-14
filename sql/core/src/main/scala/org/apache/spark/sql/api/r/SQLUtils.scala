@@ -85,10 +85,6 @@ private[sql] object SQLUtils extends Logging {
     StructType(fields)
   }
 
-  def createArrayType(dataType: DataType): ArrayType = {
-    ArrayType(elementType = dataType)
-  }
-
   // Support using regex in string interpolation
   private[this] implicit class RegexContext(sc: StringContext) {
     def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)

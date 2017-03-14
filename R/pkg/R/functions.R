@@ -2437,7 +2437,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' @param x Column containing the JSON string.
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#' @param asArray indicating if input string is JSON array or object.
+#' @param asJsonArray indicating if input string is JSON array or object.
 #' @param ... additional named properties to control how the json is parsed, accepts the same
 #'            options as the JSON data source.
 #'
@@ -2453,9 +2453,9 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'}
 #' @note from_json since 2.2.0
 setMethod("from_json", signature(x = "Column", schema = "structType"),
-          function(x, schema, asArray = FALSE, ...) {
-            if (asArray) {
-              jschema <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+          function(x, schema, asJsonArray = FALSE, ...) {
+            if (asJsonArray) {
+              jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
                                      "createArrayType",
                                      schema$jobj)
             } else {
