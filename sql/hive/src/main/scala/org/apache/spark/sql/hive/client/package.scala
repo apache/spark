@@ -67,7 +67,7 @@ package object client {
       exclusions = Seq("org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    case object v2_1 extends HiveVersion("2.1.0",
+    case object v2_1 extends HiveVersion("2.1.1",
       exclusions = Seq("org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
