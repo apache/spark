@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrameReaderWriterOptions, QueryTest, Row}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
@@ -143,7 +143,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
       checkPartitionValues(files.head, "2016-12-01 00:00:00")
     }
     withTempPath { f =>
-      df.write.option(DataFrameReaderWriterOptions.TIMEZONE, "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .partitionBy("ts").parquet(f.getAbsolutePath)
       val files = recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
       assert(files.length == 1)
