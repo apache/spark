@@ -140,6 +140,18 @@ class JavaParams(JavaWrapper, Params):
         Transforms the embedded params from the companion Java object.
         """
         sc = SparkContext._active_spark_context
+
+        # SPARK-10931: Temporary fix to add params when loading model
+        java_params = list(self._java_obj.params())
+        from pyspark.ml.param import Param
+        for java_param in java_params:
+            java_param_name = java_param.name()
+            if not hasattr(self, java_param_name):
+                param = Param(self, java_param_name, java_param.doc())
+                setattr(self, java_param_name, param)
+                self._params = None
+        # end SPARK-10931 temporary fix
+
         for param in self.params:
             if self._java_obj.hasParam(param.name):
                 java_param = self._java_obj.getParam(param.name)
@@ -264,6 +276,14 @@ class JavaEstimator(JavaParams, Estimator):
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
         model = self._create_model(java_model)
+        # SPARK-10931: This is a temporary fix to allow models to own params
+        # from estimators. Eventually, these params should be in models through
+        # using common base classes between estimators and models.
+        for param in self.params:
+            if not hasattr(model, param.name) and java_model.hasParam(param.name):
+                setattr(model, param.name, param)
+                model._params = None
+        # end SPARK-10931 temporary fix
         return self._copyValues(model)
 
 
