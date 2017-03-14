@@ -31,5 +31,9 @@ package object catalyst {
    */
   protected[sql] object ScalaReflectionLock
 
+  /**
+   * This class is only here to minimize the change for ticket SPARK-19944
+   * (moves SQLConf from sql/core to sql/catalyst). This class should eventually be removed.
+   */
   type CatalystConf = SQLConf
 }

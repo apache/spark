@@ -22,7 +22,11 @@ import java.util.TimeZone
 import org.apache.spark.sql.internal.SQLConf
 
 
-/** A CatalystConf that can be used for local testing. */
+/**
+ * A SQLConf that can be used for local testing. This class is only here to minimize the change
+ * for ticket SPARK-19944 (moves SQLConf from sql/core to sql/catalyst). This class should
+ * eventually be removed (test cases should just create SQLConf and set values appropriately).
+ */
 case class SimpleCatalystConf(
     override val caseSensitiveAnalysis: Boolean,
     override val orderByOrdinal: Boolean = true,
