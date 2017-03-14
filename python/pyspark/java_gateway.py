@@ -27,7 +27,7 @@ import shlex
 import socket
 import platform
 from subprocess import Popen, PIPE
-from threading  import Thread
+from threading import Thread
 
 
 if sys.version >= '3':

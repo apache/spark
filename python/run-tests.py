@@ -113,18 +113,20 @@ def run_generic_test(test_name, pyspark_python, launch_cmd):
         per_test_output.close()
         LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
+
 def run_standalone_python_test(test_name, pyspark_python):
     """
     Runs a standalone python test. This verifies PySpark launch behaviour when starting the JVM from
     Python side instead of JVM starting Python.
     """
-    launch_cmd=pyspark_python
-    run_generic_test(test_name, pyspark_python, launch_cmd)
+    run_generic_test(test_name, pyspark_python, launch_cmd=pyspark_python)
+
 
 def run_individual_python_test(test_name, pyspark_python):
     """Run a Python test launching the JVM first."""
     launch_cmd = os.path.join(SPARK_HOME, "bin/pyspark")
     run_generic_test(test_name, pyspark_python, launch_cmd)
+
 
 def get_default_python_executables():
     python_execs = [x for x in ["python2.6", "python3.4", "pypy"] if which(x)]
