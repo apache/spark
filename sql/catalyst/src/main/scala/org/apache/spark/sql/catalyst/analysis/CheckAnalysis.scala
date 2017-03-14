@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -133,10 +134,8 @@ trait CheckAnalysis extends PredicateHelper {
             if (conditions.isEmpty && query.output.size != 1) {
               failAnalysis(
                 s"Scalar subquery must return only one column, but got ${query.output.size}")
-            } else if (conditions.nonEmpty) {
-              // Collect the columns from the subquery for further checking.
-              var subqueryColumns = conditions.flatMap(_.references).filter(query.output.contains)
-
+            }
+            else if (conditions.nonEmpty) {
               def checkAggregate(agg: Aggregate): Unit = {
                 // Make sure correlated scalar subqueries contain one row for every outer row by
                 // enforcing that they are aggregates containing exactly one aggregate expression.
@@ -152,6 +151,9 @@ trait CheckAnalysis extends PredicateHelper {
                 // SPARK-18504/SPARK-18814: Block cases where GROUP BY columns
                 // are not part of the correlated columns.
                 val groupByCols = AttributeSet(agg.groupingExpressions.flatMap(_.references))
+                // Collect the local references from the correlated predicate in the subquery.
+                val subqueryColumns = getCorrelatedPredicates(query).flatMap(_.references)
+                  .filterNot(conditions.flatMap(_.references).contains)
                 val correlatedCols = AttributeSet(subqueryColumns)
                 val invalidCols = groupByCols -- correlatedCols
                 // GROUP BY columns must be a subset of columns in the predicates
@@ -167,17 +169,7 @@ trait CheckAnalysis extends PredicateHelper {
               // For projects, do the necessary mapping and skip to its child.
               def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
                 case s: SubqueryAlias => cleanQuery(s.child)
-                case p: Project =>
-                  // SPARK-18814: Map any aliases to their AttributeReference children
-                  // for the checking in the Aggregate operators below this Project.
-                  subqueryColumns = subqueryColumns.map {
-                    xs => p.projectList.collectFirst {
-                      case e @ Alias(child : AttributeReference, _) if e.exprId == xs.exprId =>
-                        child
-                    }.getOrElse(xs)
-                  }
-
-                  cleanQuery(p.child)
+                case p: Project => cleanQuery(p.child)
                 case child => child
               }
 
@@ -211,14 +203,9 @@ trait CheckAnalysis extends PredicateHelper {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
-          case Filter(condition, _) =>
-            splitConjunctivePredicates(condition).foreach {
-              case _: PredicateSubquery | Not(_: PredicateSubquery) =>
-              case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
-                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
-                  s" conditions: $e")
-              case e =>
-            }
+          case Filter(condition, _) if hasNullAwarePredicateWithinNot(condition) =>
+            failAnalysis("Null-aware predicate sub-queries cannot be used in nested " +
+              s"conditions: $condition")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
@@ -306,8 +293,11 @@ trait CheckAnalysis extends PredicateHelper {
                 s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
             }
 
-          case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
-            failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+          case p if p.expressions.exists(SubqueryExpression.hasInOrExistsSubquery) =>
+            p match {
+              case _: Filter => // Ok
+              case _ => failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+            }
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
