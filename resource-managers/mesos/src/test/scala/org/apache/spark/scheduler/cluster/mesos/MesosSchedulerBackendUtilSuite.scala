@@ -22,7 +22,7 @@ import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class MesosSchedulerBackendUtilSuite extends SparkFunSuite with Matchers with MockitoSugar {
+class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
 
   test("ContainerInfo fails to parse invalid docker parameters") {
     val conf = new SparkConf()
