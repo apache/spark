@@ -17,10 +17,21 @@ SHOW TABLES LIKE 'show_t1*|show_t2*';
 SHOW TABLES IN showdb 'show_t*';
 
 -- SHOW TABLE EXTENDED
--- Ignore these because there exist timestamp results, e.g. `Created`.
--- SHOW TABLE EXTENDED LIKE 'show_t*';
+SHOW TABLE EXTENDED LIKE 'show_t*';
 SHOW TABLE EXTENDED;
+
+-- SHOW TABLE EXTENDED ... PARTITION
+SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1);
+-- Throw a ParseException if table name is not specified.
+SHOW TABLE EXTENDED PARTITION(c='Us', d=1);
+-- Don't support regular expression for table name if a partition specification is present.
+SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1);
+-- Partition specification is not complete.
 SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us');
+-- Partition specification is invalid.
+SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1);
+-- Partition specification doesn't exist.
+SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Ch', d=1);
 
 -- Clean Up
 DROP TABLE show_t1;
