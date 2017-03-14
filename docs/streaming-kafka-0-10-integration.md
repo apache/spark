@@ -8,8 +8,7 @@ The Spark Streaming integration for Kafka 0.10 is similar in design to the 0.8 [
 ### API Docs Note
 The API docs are not yet available via the above API Docs link.
 In the interim the Scaladoc can be viewed directly in the source tree 
-  ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/external/kafka-0-10/src/main/scala/org/apache/spark/streaming/kafka010), 
-   [Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/external/kafka-0-10/target/java/org/apache/spark/streaming/kafka010))
+  ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/external/kafka-0-10/src/main/scala/org/apache/spark/streaming/kafka010))
 
 ### Linking
 For Scala/Java applications using SBT/Maven project definitions, link your streaming application with the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
