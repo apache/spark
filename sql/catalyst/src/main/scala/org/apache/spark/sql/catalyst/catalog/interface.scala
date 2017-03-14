@@ -113,7 +113,8 @@ case class CatalogTablePartition(
    */
   def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
     val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
-    val timeZoneId = caseInsensitiveProperties.getOrElse("timeZone", defaultTimeZondId)
+    val timeZoneId = caseInsensitiveProperties.getOrElse(
+      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
     InternalRow.fromSeq(partitionSchema.map { field =>
       Cast(Literal(spec(field.name)), field.dataType, Option(timeZoneId)).eval()
     })
