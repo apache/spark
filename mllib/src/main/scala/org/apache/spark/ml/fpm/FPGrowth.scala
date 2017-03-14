@@ -208,8 +208,8 @@ class FPGrowthModel private[ml] (
 
   /**
    * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
-   * with three fields, "antecedent", "consequent" and "confidence", where "antecedent" and
-   * "consequent" are Array[T] and "confidence" is Double.
+   * with four fields, "antecedent", "consequent", "confidence" and "support", where "antecedent"
+   * and "consequent" are Array[T], "confidence" and "support" are Double.
    */
   @Since("2.2.0")
   @transient lazy val associationRules: DataFrame = {
@@ -319,8 +319,8 @@ private[fpm] object AssociationRules {
    * @param freqCol column name for frequent itemsets count
    * @param numTrainingRecords count of training Dataset
    * @param minConfidence minimum confidence for the result association rules
-   * @return a DataFrame("antecedent", "consequent", "confidence") containing the association
-   *         rules.
+   * @return a DataFrame("antecedent", "consequent", "confidence", "support") containing the
+   *         association rules.
    */
   def getAssociationRulesFromFP[T: ClassTag](
       dataset: Dataset[_],
