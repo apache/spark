@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -1799,9 +1798,9 @@ class HiveDDLSuite
             assert(loc.listFiles().length >= 1)
             checkAnswer(spark.table("t"), Row("1") :: Nil)
           } else {
-            val e = intercept[InvocationTargetException] {
+            val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
           }
         }
@@ -1836,14 +1835,14 @@ class HiveDDLSuite
             checkAnswer(spark.table("t1"),
               Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
           } else {
-            val e = intercept[InvocationTargetException] {
+            val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
 
-            val e1 = intercept[InvocationTargetException] {
+            val e1 = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e1.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
           }
         }
