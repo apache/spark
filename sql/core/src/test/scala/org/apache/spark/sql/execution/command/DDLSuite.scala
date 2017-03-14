@@ -977,60 +977,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testRenamePartitions(isDatasourceTable = false)
   }
 
-  test("show table extended") {
-    withTempView("show1a", "show2b") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show1a
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |
-         |)
-        """.stripMargin)
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show2b
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |)
-        """.stripMargin)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
-          StructType(StructField("database", StringType, false) ::
-            StructField("tableName", StringType, false) ::
-            StructField("isTemporary", BooleanType, false) ::
-            StructField("information", StringType, false) :: Nil))
-    }
-  }
-
-  test("show table extended ... partition") {
-    withTable("showtbl") {
-      sql(
-        """
-          |CREATE TABLE showtbl(a String, b Int, c String, d String)
-          |USING parquet
-          |PARTITIONED BY (c, d)
-        """.stripMargin)
-      sql("ALTER TABLE showtbl ADD PARTITION (c='Us', d=1)")
-      val df = sql("SHOW TABLE EXTENDED LIKE 'showtbl' PARTITION(c='Us', d=1)")
-      assert(df.count() == 1)
-      assert(df.schema ==
-        StructType(StructField("database", StringType, false) ::
-          StructField("tableName", StringType, false) ::
-          StructField("isTemporary", BooleanType, false) ::
-          StructField("information", StringType, false) :: Nil))
-      assert(df.head().getString(1) == "showtbl")
-    }
-  }
-
   test("show databases") {
     sql("CREATE DATABASE showdb2B")
     sql("CREATE DATABASE showdb1A")
