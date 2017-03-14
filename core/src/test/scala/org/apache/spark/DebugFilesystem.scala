@@ -44,7 +44,9 @@ object DebugFilesystem extends Logging {
         logWarning("Leaked filesystem connection created at:")
         exc.printStackTrace()
       }
-      throw new RuntimeException(s"There are $numOpen possibly leaked file streams.")
+      val exc = new RuntimeException(s"There are $numOpen possibly leaked file streams.",
+        openStreams.values().asScala.head)
+      throw exc
     }
   }
 }
