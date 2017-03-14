@@ -733,12 +733,8 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       deleteData: Boolean,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = {
-    try {
-      dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
-        ignoreIfNotExists: JBoolean, purge: JBoolean)
-    } catch {
-      case e: InvocationTargetException => throw e.getCause()
-    }
+    dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
+      ignoreIfNotExists: JBoolean, purge: JBoolean)
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
@@ -824,11 +820,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
     val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
-    try {
-      dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
-    } catch {
-      case e: InvocationTargetException => throw e.getCause()
-    }
+    dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
   }
 
 }
