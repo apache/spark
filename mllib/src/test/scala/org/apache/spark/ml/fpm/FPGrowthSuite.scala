@@ -103,6 +103,20 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       FPGrowthSuite.allParamSettings, checkModelData)
   }
 
+  test("FPGrowth prediction should not contain duplicates") {
+    // This should generate rule 1 -> 3, 2 -> 3
+    val dataset = spark.createDataFrame(Seq(
+      Array("1", "3"),
+      Array("2", "3")
+    ).map(Tuple1(_))).toDF("features")
+    val model = new FPGrowth().fit(dataset)
+
+    val prediction = model.transform(
+      spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("features")
+    ).first().getAs[Seq[String]]("prediction")
+
+    assert(prediction === Seq("3"))
+  }
 }
 
 object FPGrowthSuite {
