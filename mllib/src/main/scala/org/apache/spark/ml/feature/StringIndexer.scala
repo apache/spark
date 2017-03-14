@@ -58,6 +58,28 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
   @Since("1.6.0")
   def getHandleInvalid: String = $(handleInvalid)
 
+  /**
+   * Param for the method used to order values of input column. The first value after ordering
+   * is assigned an index of 0.
+   * Supported options:
+   *   - "freq_desc": in descending order by frequency of values (most frequent value indexed 0)
+   *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
+   *   - "alphabet_desc": in alphabetically descending order
+   *   - "alphabet_asc": in alphabetically ascending order
+   * Default is "freq_desc".
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
+    "The method used to order values of input column. " +
+      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    (value: String) => StringIndexer.supportedStringOrderType.contains(value.toLowerCase))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getStringOrderType: String = $(stringOrderType)
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
@@ -103,14 +125,25 @@ class StringIndexer @Since("1.4.0") (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setStringOrderType(value: String): this.type = set(stringOrderType, value)
+  setDefault(stringOrderType, "freq_desc")
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
-    val counts = dataset.select(col($(inputCol)).cast(StringType))
-      .rdd
-      .map(_.getString(0))
-      .countByValue()
-    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
+
+    val values = dataset.select(col($(inputCol)).cast(StringType))
+      .rdd.map(_.getString(0))
+
+    val labels = $(stringOrderType) match {
+      case "freq_asc" => values.countByValue().toSeq.sortBy(_._2).map(_._1).toArray
+      case "alphabet_desc" => values.distinct.collect.sortWith(_ > _)
+      case "alphabet_asc" => values.distinct.collect.sortWith(_ < _)
+      case _ => values.countByValue().toSeq.sortBy(-_._2).map(_._1).toArray
+    }
+
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
@@ -133,6 +166,10 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
+
+
+  private[ml] val supportedStringOrderType: Array[String] =
+    Array("freq_desc", "freq_asc", "alphabet_desc", "alphabet_asc")
 }
 
 /**

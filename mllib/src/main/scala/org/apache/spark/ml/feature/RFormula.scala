@@ -37,6 +37,28 @@ import org.apache.spark.sql.types._
  */
 private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
 
+  /**
+   * Param for the method used to order values of input column. The first value after ordering
+   * is assigned an index of 0.
+   * Supported options:
+   *   - "freq_desc": in descending order by frequency of values (most frequent value indexed 0)
+   *   - "freq_asc": in ascending order by frequency of values (least frequent value indexed 0)
+   *   - "alphabet_desc": in alphabetically descending order
+   *   - "alphabet_asc": in alphabetically ascending order
+   * Default is "freq_desc".
+   *
+   * @group param
+   */
+  @Since("2.2.0")
+  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
+    "The method used to order values of input column. " +
+      s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    (value: String) => StringIndexer.supportedStringOrderType.contains(value.toLowerCase))
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getStringOrderType: String = $(stringOrderType)
+
   protected def hasLabelCol(schema: StructType): Boolean = {
     schema.map(_.name).contains($(labelCol))
   }
@@ -68,6 +90,14 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
  * If the label column is of type string, it will be first transformed to double with
  * `StringIndexer`. If the label column does not exist in the DataFrame, the output label column
  * will be created from the specified response variable in the formula.
+ *
+ * When a feature column is of string type, it is first transformed to double with `StringIndexer`
+ * and then coded with `OneHotEncoder`. By default, the least frequent value is dropped and used
+ * as the reference level. This behavior is controlled by setting `stringOrderType`:
+ *  - "freq_desc": (default) the least frequent value as reference level
+ *  - "freq_asc": the most frequent value as reference level
+ *  - "alphabet_desc": the first alphabetical value as reference level (R's default setting)
+ *  - "alphabet_asc": the last alphabetical value as reference level
  */
 @Experimental
 @Since("1.5.0")
@@ -125,6 +155,11 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("2.1.0")
   def setForceIndexLabel(value: Boolean): this.type = set(forceIndexLabel, value)
 
+  /** @group setParam */
+  @Since("2.2.0")
+  def setStringOrderType(value: String): this.type = set(stringOrderType, value)
+  setDefault(stringOrderType, "freq_desc")
+
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
     require(isDefined(formula), "Formula must be defined first.")
@@ -155,6 +190,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           encoderStages += new StringIndexer()
             .setInputCol(term)
             .setOutputCol(indexCol)
+            .setStringOrderType($(stringOrderType))
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _ =>
