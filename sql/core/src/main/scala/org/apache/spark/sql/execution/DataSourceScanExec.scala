@@ -17,24 +17,22 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
@@ -357,7 +355,8 @@ case class FileSourceScanExec(
     val bucketed =
       selectedPartitions.flatMap { p =>
         p.files.map { f =>
-          val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
+          val hosts = DefaultFilePartitionStrategy.getBlockHosts(
+            DefaultFilePartitionStrategy.getBlockLocations(f), 0, f.getLen)
           PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
       }.groupBy { f =>
@@ -385,105 +384,23 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    val defaultMaxSplitBytes =
-      fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
-    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-    val bytesPerCore = totalBytes / defaultParallelism
 
-    val maxSplitBytes = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
-    logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
-      s"open cost is considered as scanning $openCostInBytes bytes.")
+    val partitionStrategy =
+      Utils
+        .classForName(fsRelation.sparkSession.sessionState.conf.filesPartitionStrategy)
+        .newInstance().asInstanceOf[FilePartitionStrategy]
 
-    val splitFiles = selectedPartitions.flatMap { partition =>
-      partition.files.flatMap { file =>
-        val blockLocations = getBlockLocations(file)
-        if (fsRelation.fileFormat.isSplitable(
-            fsRelation.sparkSession, fsRelation.options, file.getPath)) {
-          (0L until file.getLen by maxSplitBytes).map { offset =>
-            val remaining = file.getLen - offset
-            val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-            val hosts = getBlockHosts(blockLocations, offset, size)
-            PartitionedFile(
-              partition.values, file.getPath.toUri.toString, offset, size, hosts)
-          }
-        } else {
-          val hosts = getBlockHosts(blockLocations, 0, file.getLen)
-          Seq(PartitionedFile(
-            partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
-        }
-      }
-    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
-
-    val partitions = new ArrayBuffer[FilePartition]
-    val currentFiles = new ArrayBuffer[PartitionedFile]
-    var currentSize = 0L
-
-    /** Close the current partition and move to the next. */
-    def closePartition(): Unit = {
-      if (currentFiles.nonEmpty) {
-        val newPartition =
-          FilePartition(
-            partitions.size,
-            currentFiles.toArray.toSeq) // Copy to a new Array.
-        partitions += newPartition
-      }
-      currentFiles.clear()
-      currentSize = 0
+    val input: Seq[(InternalRow, FileStatus)] = selectedPartitions.flatMap { partitionDirectory =>
+      partitionDirectory.files.map(file => (partitionDirectory.values, file))
     }
 
-    // Assign files to partitions using "First Fit Decreasing" (FFD)
-    splitFiles.foreach { file =>
-      if (currentSize + file.length > maxSplitBytes) {
-        closePartition()
-      }
-      // Add the given file to the current partition.
-      currentSize += file.length + openCostInBytes
-      currentFiles += file
-    }
-    closePartition()
+    val partitions: Seq[FilePartition] =
+      partitionStrategy
+        .partition(fsRelation.sparkSession, fsRelation.fileFormat, fsRelation.options, input)
+        .zipWithIndex
+        .map { case (p: Seq[PartitionedFile], index) => FilePartition(index, p) }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
-  }
-
-  private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
-    case f: LocatedFileStatus => f.getBlockLocations
-    case f => Array.empty[BlockLocation]
-  }
-
-  // Given locations of all blocks of a single file, `blockLocations`, and an `(offset, length)`
-  // pair that represents a segment of the same file, find out the block that contains the largest
-  // fraction the segment, and returns location hosts of that block. If no such block can be found,
-  // returns an empty array.
-  private def getBlockHosts(
-      blockLocations: Array[BlockLocation], offset: Long, length: Long): Array[String] = {
-    val candidates = blockLocations.map {
-      // The fragment starts from a position within this block
-      case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
-        b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
-
-      // The fragment ends at a position within this block
-      case b if offset <= b.getOffset && offset + length < b.getLength =>
-        b.getHosts -> (offset + length - b.getOffset).min(length)
-
-      // The fragment fully contains this block
-      case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
-        b.getHosts -> b.getLength
-
-      // The fragment doesn't intersect with this block
-      case b =>
-        b.getHosts -> 0L
-    }.filter { case (hosts, size) =>
-      size > 0L
-    }
-
-    if (candidates.isEmpty) {
-      Array.empty[String]
-    } else {
-      val (hosts, _) = candidates.maxBy { case (_, size) => size }
-      hosts
-    }
   }
 
   override def sameResult(plan: SparkPlan): Boolean = plan match {
