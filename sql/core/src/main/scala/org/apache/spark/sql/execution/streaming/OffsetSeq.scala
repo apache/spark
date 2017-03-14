@@ -72,8 +72,8 @@ object OffsetSeq {
  * @param conf: Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
  */
 case class OffsetSeqMetadata(
-    var batchWatermarkMs: Long = 0,
-    var batchTimestampMs: Long = 0,
+    batchWatermarkMs: Long = 0,
+    batchTimestampMs: Long = 0,
     conf: Map[String, String] = Map.empty) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
