@@ -58,6 +58,10 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     attr("t4.k-1-2") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2),
       nullCount = 0, avgLen = 4, maxLen = 4),
     attr("t4.v-1-10") -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("t5.k-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
+      nullCount = 0, avgLen = 4, maxLen = 4),
+    attr("t5.v-1-5") -> ColumnStat(distinctCount = 5, min = Some(1), max = Some(5),
       nullCount = 0, avgLen = 4, maxLen = 4)
   ))
 
@@ -91,6 +95,13 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     rowCount = 100,
     size = Some(100 * (8 + 4)),
     attributeStats = AttributeMap(Seq("t3.v-1-100").map(nameToColInfo)))
+
+  // Table t5: small table with two columns
+  private val t5 = StatsTestPlan(
+    outputList = Seq("t5.k-1-5", "t5.v-1-5").map(nameToAttr),
+    rowCount = 20,
+    size = Some(20 * (8 + 4)),
+    attributeStats = AttributeMap(Seq("t5.k-1-5", "t5.v-1-5").map(nameToColInfo)))
 
   test("reorder 3 tables") {
     val originalPlan =
@@ -131,6 +142,23 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
         .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    assertEqualPlans(originalPlan, bestPlan)
+  }
+
+  test("reorder 3 tables - one of the leaf items is a project") {
+    val originalPlan =
+      t1.join(t5).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t5.k-1-5")) &&
+        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    // Items: t1, t3, project(t5.k-1-5, t5)
+    val bestPlan =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
+        .join(t5.select(nameToAttr("t5.k-1-5")), Inner,
+          Some(nameToAttr("t1.k-1-2") === nameToAttr("t5.k-1-5")))
         .select(nameToAttr("t1.v-1-10"))
 
     assertEqualPlans(originalPlan, bestPlan)
