@@ -328,6 +328,14 @@ class PartitionProviderCompatibilitySuite
           .write.mode("append").partitionBy("b", "c").saveAsTable("test")
         checkAnswer(spark.table("test"),
           Row(1, "p", 1) :: Row(2, null, 2) :: Row(3, null, 3) :: Nil)
+        // make sure partition pruning also works.
+        checkAnswer(spark.table("test").filter($"b".isNotNull), Row(1, "p", 1))
+
+        // empty string is an invalid partition value and we treat it as null when read back.
+        Seq((4, "", 4)).toDF("a", "b", "c")
+          .write.mode("append").partitionBy("b", "c").saveAsTable("test")
+        checkAnswer(spark.table("test"),
+          Row(1, "p", 1) :: Row(2, null, 2) :: Row(3, null, 3) :: Row(4, null, 4) :: Nil)
       }
     }
   }
