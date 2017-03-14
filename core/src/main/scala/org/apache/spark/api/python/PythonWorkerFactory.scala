@@ -44,17 +44,17 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
   // (pyspark/daemon.py) and tell it to fork new workers for our tasks. This daemon currently
   // only works on UNIX-based systems now because it uses signals for child management, so we can
   // also fall back to launching workers (pyspark/worker.py) directly.
-  private[this] val useDaemon = !System.getProperty("os.name").startsWith("Windows")
+  val useDaemon = !System.getProperty("os.name").startsWith("Windows")
 
-  private[this] var daemon: Process = _
-  private[this] val daemonHost = InetAddress.getByAddress(Array[Byte](127, 0, 0, 1))
-  private[this] var daemonPort: Int = 0
-  private[this] val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
-  private[this] val idleWorkers = new mutable.Queue[Socket]()
-  private[this] var lastActivity = 0L
+  var daemon: Process = null
+  val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
+  var daemonPort: Int = 0
+  val daemonWorkers = new mutable.WeakHashMap[Socket, Int]()
+  val idleWorkers = new mutable.Queue[Socket]()
+  var lastActivity = 0L
   new MonitorThread().start()
 
-  private[this] val simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
+  var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
 
   private[this] val condaEnv = {
     // Set up conda environment if there are any conda packages requested
@@ -96,7 +96,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
       .getOrElse("python")
   }
 
-  private[this] val pythonPath = PythonUtils.mergePythonPaths(
+  val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
     envVars.getOrElse("PYTHONPATH", ""),
     sys.env.getOrElse("PYTHONPATH", ""))
@@ -104,7 +104,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
   def create(): Socket = {
     if (useDaemon) {
       synchronized {
-        if (idleWorkers.nonEmpty) {
+        if (idleWorkers.size > 0) {
           return idleWorkers.dequeue()
         }
       }
@@ -154,7 +154,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
   private def createSimpleWorker(): Socket = {
     var serverSocket: ServerSocket = null
     try {
-      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array[Byte](127, 0, 0, 1)))
+      serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
       val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", "pyspark.worker"))
