@@ -166,6 +166,42 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
     }
   }
 
+  Seq("parquet", "json", "csv").foreach { provider =>
+    test("Alter table add columns") {
+      assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+      withTable("t") {
+        sql(s"create table t (c1 int) using ${provider}")
+        sql("insert into table t values (1)")
+        sql("alter table t add columns (c2 int)")
+        checkAnswer(sql("select * from t"), Seq(Row(1, null)))
+        sql("insert into table t values (2, 2)")
+        checkAnswer(sql("select * from t where c2 is not null"), Seq(Row(2, 2)))
+        checkAnswer(
+          sql("select * from t"),
+          Seq(Row(1, null), Row(2, 2))
+        )
+      }
+    }
+  }
+
+  Seq("parquet", "json", "csv").foreach { provider =>
+    test("Alter table add columns with partitions") {
+      assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+      withTable("t") {
+        sql(s"create table t (c1 int, c2 int) using ${provider} partitioned by (c2)")
+        sql("insert into table t values (1, 1)")
+        sql("alter table t add columns (c3 int)")
+        checkAnswer(sql("select * from t"), Seq(Row(1, null, 1)))
+        sql("insert into table t values (2, 2, 3)")
+        checkAnswer(sql("select * from t where c3 is not null"), Seq(Row(2, 2, 3)))
+        checkAnswer(sql("select * from t where c2 = 3"), Seq(Row(2, 2, 3)))
+        checkAnswer(
+          sql("select * from t"),
+          Seq(Row(1, null, 1), Row(2, 2, 3))
+        )
+      }
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2176,6 +2212,87 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location.toString.startsWith("file:/"))
       }
+    }
+  }
+
+  Seq("parquet", "json", "csv").foreach { provider =>
+    test(s"alter datasource table add columns - $provider") {
+      withTable("alter_add_ds") {
+        sql(s"CREATE TABLE alter_add_ds (c1 int) USING $provider")
+        sql("INSERT INTO alter_add_ds VALUES (1)")
+        sql("ALTER TABLE alter_add_ds ADD COLUMNS (c2 int)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds"),
+          Seq(Row(1, null))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c2 is null"),
+          Seq(Row(1, null))
+        )
+
+        sql("INSERT INTO alter_add_ds VALUES (3, 2)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c2 = 2"),
+          Seq(Row(3, 2))
+        )
+      }
+    }
+  }
+
+  Seq("parquet", "json", "csv").foreach { provider =>
+    test(s"alter datasource table add columns - partitioned - $provider") {
+      withTable("alter_add_ds") {
+        sql(s"CREATE TABLE alter_add_ds (c1 int, c2 int) USING $provider partitioned by (c2)")
+        sql("INSERT INTO alter_add_ds partition(c2 = 2) VALUES (1)")
+        sql("ALTER TABLE alter_add_ds ADD COLUMNS (c3 int)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds"),
+          Seq(Row(1, null, 2))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c3 is null"),
+          Seq(Row(1, null, 2))
+        )
+        sql("INSERT INTO alter_add_ds partition(c2 =1) VALUES (2, 3)")
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c3 = 3"),
+          Seq(Row(2, 3, 1))
+        )
+        checkAnswer(
+          sql("SELECT * FROM alter_add_ds where c2 = 1"),
+          Seq(Row(2, 3, 1))
+        )
+      }
+    }
+  }
+
+  test("alter datasource table add columns - text format not supported") {
+    withTable("alter_add_ds_text") {
+      sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING text")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
+      }.getMessage
+      assert(e.contains("does not support ALTER ADD COLUMNS"))
+    }
+  }
+
+  test("alter table add columns -- not support temp view") {
+    withTempView("tmp_v") {
+      sql("create temporary view tmp_v as select 1 as c1, 2 as c2")
+      val e = intercept[AnalysisException] {
+        sql("alter table tmp_v add columns (c3 int)")
+      }
+      assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
+    }
+  }
+
+  test("alter table add columns -- not support view") {
+    withView("v1") {
+      sql("create view v1 as select 1 as c1, 2 as c2")
+      val e = intercept[AnalysisException] {
+        sql("alter table v1 add columns (c3 int)")
+      }
+      assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
     }
   }
 }

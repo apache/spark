@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.types.StructType
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -293,6 +294,25 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     externalCatalog.alterTable(newTableDefinition)
+  }
+
+  /**
+   * Alter the schema of a table identified by the provided table identifier. The new schema
+   * should still contain the existing bucket columns and partition columns used by the table. This
+   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
+   * as the schema itself).
+   *
+   * @param identifier  TableIdentifier
+   * @param newSchema Updated schema to be used for the table (must contain existing partition and
+   *               bucket columns)
+   */
+  def alterTableSchema(identifier: TableIdentifier, newSchema: StructType): Unit = {
+    val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
+    externalCatalog.alterTableSchema(db, table, newSchema)
   }
 
   /**

@@ -208,8 +208,8 @@ case class AlterTableAddColumnsCommand(
     val partitionFields = catalogTable.schema.takeRight(catalogTable.partitionColumnNames.length)
     val dataSchema = catalogTable.schema
       .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length)
-    catalog.alterTable(catalogTable.copy(schema =
-      catalogTable.schema.copy(fields = (dataSchema ++ columns ++ partitionFields).toArray)))
+    catalog.alterTableSchema(table, newSchema =
+      catalogTable.schema.copy(fields = (dataSchema ++ columns ++ partitionFields).toArray))
 
     Seq.empty[Row]
   }
