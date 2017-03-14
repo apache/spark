@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.metadata.Hive
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -31,7 +29,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Test suite for the [[HiveExternalCatalog]].
  */
-class HiveExternalCatalogSuite extends ExternalCatalogSuite with BeforeAndAfterAll {
+class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   private val externalCatalog: HiveExternalCatalog = {
     val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
@@ -48,11 +46,6 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite with BeforeAndAfterA
 
   protected override def resetState(): Unit = {
     externalCatalog.client.reset()
-  }
-
-  override def afterAll(): Unit = {
-    // close current connect to metastore_db
-    Hive.closeCurrent()
   }
 
   import utils._
