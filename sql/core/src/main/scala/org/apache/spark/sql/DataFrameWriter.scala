@@ -90,6 +90,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * </ul>
+   *
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
@@ -121,6 +127,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * </ul>
+   *
    * @since 1.4.0
    */
   def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
@@ -130,6 +142,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds output options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -457,8 +475,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -565,8 +581,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps.</li>
    * </ul>
    *
    * @since 2.0.0
