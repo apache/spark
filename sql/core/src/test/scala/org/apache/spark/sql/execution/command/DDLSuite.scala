@@ -977,40 +977,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testRenamePartitions(isDatasourceTable = false)
   }
 
-  test("show table extended") {
-    withTempView("show1a", "show2b") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show1a
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |
-         |)
-        """.stripMargin)
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show2b
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |)
-        """.stripMargin)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
-          StructType(StructField("database", StringType, false) ::
-            StructField("tableName", StringType, false) ::
-            StructField("isTemporary", BooleanType, false) ::
-            StructField("information", StringType, false) :: Nil))
-    }
-  }
-
   test("show databases") {
     sql("CREATE DATABASE showdb2B")
     sql("CREATE DATABASE showdb1A")

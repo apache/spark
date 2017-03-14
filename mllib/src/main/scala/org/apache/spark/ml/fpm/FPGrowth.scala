@@ -248,10 +248,10 @@ class FPGrowthModel private[ml] (
             rule._2.filter(item => !itemset.contains(item))
           } else {
             Seq.empty
-          })
+          }).distinct
       } else {
         Seq.empty
-      }.distinct }, dt)
+      }}, dt)
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
