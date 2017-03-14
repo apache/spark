@@ -99,12 +99,8 @@ class FPGrowth(JavaEstimator, HasFeaturesCol, HasPredictionCol,
     +----------+----------+----------+
     only showing top 5 rows
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["features"])
-    >>> fpm.transform(new_data).show(1, False)
-    +--------+---------------------+
-    |features|prediction           |
-    +--------+---------------------+
-    |[t, s]  |[y, x, z, x, y, x, z]|
-    +--------+---------------------+
+    >>> sorted(fpm.transform(new_data).first().prediction)
+    ['x', 'y', 'z']
 
     .. versionadded:: 2.2.0
     """
