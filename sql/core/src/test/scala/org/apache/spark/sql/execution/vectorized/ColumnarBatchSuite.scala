@@ -25,9 +25,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -35,7 +36,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val reference = mutable.ArrayBuffer.empty[Boolean]
 
       val column = ColumnVector.allocate(1024, IntegerType, memMode)
@@ -81,7 +83,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Byte Apis") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val reference = mutable.ArrayBuffer.empty[Byte]
 
       val column = ColumnVector.allocate(1024, ByteType, memMode)
@@ -183,7 +186,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Int Apis") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
       val reference = mutable.ArrayBuffer.empty[Int]
@@ -209,16 +213,18 @@ class ColumnarBatchSuite extends SparkFunSuite {
       littleEndian(4) = 6
       littleEndian(6) = 1
 
-      column.putIntsLittleEndian(idx, 1, littleEndian, 4)
-      column.putIntsLittleEndian(idx + 1, 1, littleEndian, 0)
-      reference += 6 + (1 << 16)
-      reference += 7 + (1 << 8)
-      idx += 2
+      if (memMode == MemoryMode.ON_HEAP || memMode == MemoryMode.OFF_HEAP) {
+        column.putIntsLittleEndian(idx, 1, littleEndian, 4)
+        column.putIntsLittleEndian(idx + 1, 1, littleEndian, 0)
+        reference += 6 + (1 << 16)
+        reference += 7 + (1 << 8)
+        idx += 2
 
-      column.putIntsLittleEndian(idx, 2, littleEndian, 0)
-      reference += 7 + (1 << 8)
-      reference += 6 + (1 << 16)
-      idx += 2
+        column.putIntsLittleEndian(idx, 2, littleEndian, 0)
+        reference += 7 + (1 << 8)
+        reference += 6 + (1 << 16)
+        idx += 2
+      }
 
       while (idx < column.capacity) {
         val single = random.nextBoolean()
@@ -251,7 +257,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Long Apis") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
       val reference = mutable.ArrayBuffer.empty[Long]
@@ -277,16 +284,18 @@ class ColumnarBatchSuite extends SparkFunSuite {
       littleEndian(8) = 6
       littleEndian(10) = 1
 
-      column.putLongsLittleEndian(idx, 1, littleEndian, 8)
-      column.putLongsLittleEndian(idx + 1, 1, littleEndian, 0)
-      reference += 6 + (1 << 16)
-      reference += 7 + (1 << 8)
-      idx += 2
+      if (memMode == MemoryMode.ON_HEAP || memMode == MemoryMode.OFF_HEAP) {
+        column.putLongsLittleEndian(idx, 1, littleEndian, 8)
+        column.putLongsLittleEndian(idx + 1, 1, littleEndian, 0)
+        reference += 6 + (1 << 16)
+        reference += 7 + (1 << 8)
+        idx += 2
 
-      column.putLongsLittleEndian(idx, 2, littleEndian, 0)
-      reference += 7 + (1 << 8)
-      reference += 6 + (1 << 16)
-      idx += 2
+        column.putLongsLittleEndian(idx, 2, littleEndian, 0)
+        reference += 7 + (1 << 8)
+        reference += 6 + (1 << 16)
+        idx += 2
+      }
 
       while (idx < column.capacity) {
         val single = random.nextBoolean()
@@ -321,7 +330,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Double APIs") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
       val reference = mutable.ArrayBuffer.empty[Double]
@@ -345,23 +355,25 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
 
-      if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
-        // Ensure array contains Liitle Endian doubles
-        var bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
-        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getDouble(0))
-        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, bb.getDouble(8))
+      if (memMode == MemoryMode.ON_HEAP || memMode == MemoryMode.OFF_HEAP) {
+        if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
+          // Ensure array contains Liitle Endian doubles
+          var bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
+          Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getDouble(0))
+          Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, bb.getDouble(8))
+        }
+
+        column.putDoubles(idx, 1, buffer, 8)
+        column.putDoubles(idx + 1, 1, buffer, 0)
+        reference += 1.123
+        reference += 2.234
+        idx += 2
+
+        column.putDoubles(idx, 2, buffer, 0)
+        reference += 2.234
+        reference += 1.123
+        idx += 2
       }
-
-      column.putDoubles(idx, 1, buffer, 8)
-      column.putDoubles(idx + 1, 1, buffer, 0)
-      reference += 1.123
-      reference += 2.234
-      idx += 2
-
-      column.putDoubles(idx, 2, buffer, 0)
-      reference += 2.234
-      reference += 1.123
-      idx += 2
 
       while (idx < column.capacity) {
         val single = random.nextBoolean()
@@ -395,7 +407,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("String APIs") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val reference = mutable.ArrayBuffer.empty[String]
 
       val column = ColumnVector.allocate(6, BinaryType, memMode)
@@ -447,22 +460,32 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Int Array") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val column = ColumnVector.allocate(10, new ArrayType(IntegerType, true), memMode)
 
       // Fill the underlying data with all the arrays back to back.
-      val data = column.arrayData();
-      var i = 0
-      while (i < 6) {
-        data.putInt(i, i)
-        i += 1
-      }
+      val data = if (memMode == MemoryMode.ON_HEAP || memMode == MemoryMode.OFF_HEAP) {
+        val data = column.arrayData()
+        var i = 0
+        while (i < 6) {
+          data.putInt(i, i)
+          i += 1
+        }
+        column.putArray(0, 0, 1)
+        column.putArray(1, 1, 2)
+        column.putArray(2, 2, 0)
+        column.putArray(3, 3, 3)
 
-      // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
-      column.putArray(0, 0, 1)
-      column.putArray(1, 1, 2)
-      column.putArray(2, 2, 0)
-      column.putArray(3, 3, 3)
+        data
+      } else {
+        // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
+        column.putArray(0, UnsafeArrayData.fromPrimitiveArray(Array(0)))
+        column.putArray(1, UnsafeArrayData.fromPrimitiveArray(Array(1, 2)))
+        column.putArray(2, UnsafeArrayData.fromPrimitiveArray(Array.empty[Int]))
+        column.putArray(3, UnsafeArrayData.fromPrimitiveArray(Array(3, 4, 5)))
+        null
+      }
 
       val a1 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
       val a2 = ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(1)).asInstanceOf[Array[Int]]
@@ -474,16 +497,16 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(a4 === Array(3, 4, 5))
 
       // Verify the ArrayData APIs
-      assert(column.getArray(0).length == 1)
+      assert(column.getArray(0).numElements() == 1)
       assert(column.getArray(0).getInt(0) == 0)
 
-      assert(column.getArray(1).length == 2)
+      assert(column.getArray(1).numElements() == 2)
       assert(column.getArray(1).getInt(0) == 1)
       assert(column.getArray(1).getInt(1) == 2)
 
-      assert(column.getArray(2).length == 0)
+      assert(column.getArray(2).numElements() == 0)
 
-      assert(column.getArray(3).length == 3)
+      assert(column.getArray(3).numElements() == 3)
       assert(column.getArray(3).getInt(0) == 3)
       assert(column.getArray(3).getInt(1) == 4)
       assert(column.getArray(3).getInt(2) == 5)
@@ -491,10 +514,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Add a longer array which requires resizing
       column.reset
       val array = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
-      assert(data.capacity == 10)
-      data.reserve(array.length)
-      assert(data.capacity == array.length * 2)
-      data.putInts(0, array.length, array, 0)
+      if (memMode == MemoryMode.ON_HEAP || memMode == MemoryMode.OFF_HEAP) {
+        assert(data.capacity == 10)
+        data.reserve(array.length)
+        assert(data.capacity == array.length * 2)
+        data.putInts(0, array.length, array, 0)
+      } else {
+        column.putArray(0, UnsafeArrayData.fromPrimitiveArray(array))
+      }
       column.putArray(0, 0, array.length)
       assert(ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
         === array)
@@ -502,7 +529,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Struct Column") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    // skip test for ON_HEAP_UNSAFE since it is complicated to construct a struct on Unsafe
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil)
+      .foreach { memMode => {
       val schema = new StructType().add("int", IntegerType).add("double", DoubleType)
       val column = ColumnVector.allocate(1024, schema, memMode)
 
@@ -532,7 +561,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("ColumnarBatch basic") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val schema = new StructType()
         .add("intCol", IntegerType)
         .add("doubleCol", DoubleType)
@@ -723,7 +753,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Convert rows") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode => {
       val rows = Row(1, 2L, "a", 1.2, 'b'.toByte) :: Row(4, 5L, "cd", 2.3, 'a'.toByte) :: Nil
       val schema = new StructType()
         .add("i1", IntegerType)
@@ -774,7 +805,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         rows += row
         j += 1
       }
-      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil)
+        .foreach { memMode => {
         val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
         assert(batch.numRows() == NUM_ROWS)
 
@@ -810,7 +842,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         val row = if (i < numNulls) Row.fromSeq(Seq(i, null)) else Row.fromSeq(Seq(i, i.toString))
         rows += row
       }
-      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+        .foreach { memMode => {
         val batch = ColumnVectorUtils.toBatch(schema, memMode, rows.iterator.asJava)
         batch.filterNullsInColumn(1)
         batch.setNumRows(NUM_ROWS)
@@ -841,7 +874,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val oldRow = RandomDataGenerator.randomRow(random, schema)
       val newRow = RandomDataGenerator.randomRow(random, schema)
 
-      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+        .foreach { memMode =>
         val batch = ColumnVectorUtils.toBatch(schema, memMode, (oldRow :: Nil).iterator.asJava)
         val columnarBatchRow = batch.getRow(0)
         newRow.toSeq.zipWithIndex.foreach(i => columnarBatchRow.update(i._2, i._1))
@@ -852,7 +886,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("exceeding maximum capacity should throw an error") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: MemoryMode.ON_HEAP_UNSAFE :: Nil)
+      .foreach { memMode =>
       val column = ColumnVector.allocate(1, ByteType, memMode)
       column.MAX_CAPACITY = 15
       column.appendBytes(5, 0.toByte)
