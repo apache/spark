@@ -374,7 +374,7 @@ case class DataSource(
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = partitionSchema,
-          dataSchema = dataSchema.asNullable,
+          dataSchema = dataSchema,
           bucketSpec = bucketSpec,
           format,
           caseInsensitiveOptions)(sparkSession)
