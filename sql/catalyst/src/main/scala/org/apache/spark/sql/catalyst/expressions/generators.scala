@@ -146,8 +146,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
     } else {
       for (i <- 1 until children.length) {
         val j = (i - 1) % numFields
-        if (children(i).dataType != NullType &&
-          children(i).dataType != elementSchema.fields(j).dataType) {
+        if (children(i).dataType != elementSchema.fields(j).dataType) {
           return TypeCheckResult.TypeCheckFailure(
             s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
               s"Argument $i (${children(i).dataType})")

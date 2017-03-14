@@ -654,8 +654,8 @@ object TypeCoercion {
    */
   object StackCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      case s @ Stack(children @ head :: _)
-          if s.childrenResolved && head.dataType == IntegerType && head.foldable =>
+      case s @ Stack(children) if s.childrenResolved && s.children.head.dataType == IntegerType &&
+          s.children.head.foldable =>
         val schema = s.elementSchema
         Stack(children.zipWithIndex.map {
           case (e, 0) => e
