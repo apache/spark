@@ -197,6 +197,8 @@ class SQLTests(ReusedPySparkTestCase):
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.spark = SparkSession(cls.sc)
+        cls.spark.catalog._reset()
+
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.df = cls.spark.createDataFrame(cls.testData)
 
