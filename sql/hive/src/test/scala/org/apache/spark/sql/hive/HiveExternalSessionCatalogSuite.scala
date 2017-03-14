@@ -24,7 +24,11 @@ class HiveExternalSessionCatalogSuite extends SessionCatalogSuite with TestHiveS
 
   protected override val isHiveExternalCatalog = true
 
-  private val externalCatalog = spark.sharedState.externalCatalog
+  private val externalCatalog = {
+    val catalog = spark.sharedState.externalCatalog
+    catalog.asInstanceOf[HiveExternalCatalog].client.reset()
+    catalog
+  }
 
   protected val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
