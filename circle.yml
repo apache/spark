@@ -74,11 +74,7 @@ test:
           case $CIRCLE_NODE_INDEX in
           0)
             publish_artifacts
-            ;;
-          1)
             make_dist hadoop-2.8.0-palantir2 "-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr"
-            ;;
-          2)
             make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr" --clean
             ;;
           esac
