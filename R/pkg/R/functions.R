@@ -2437,7 +2437,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' @param x Column containing the JSON string.
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
-#' @param asJsonArray indicating if input string is JSON array or object.
+#' @param asJsonArray indicating if input string is JSON array of objects or a single object.
 #' @param ... additional named properties to control how the json is parsed, accepts the same
 #'            options as the JSON data source.
 #'
