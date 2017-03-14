@@ -34,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.{Broadcast, TorrentBroadcast, TransFunc}
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -42,8 +43,7 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
-  SamplingUtils}
+import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler, SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -938,6 +938,64 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Broadcast the rdd to the cluster from executor, returning a
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each cluster only once.
+   *
+   * User should pass in a translate function to compute the broadcast value from the rdd.
+   */
+  @Since("2.1.0")
+  private[spark] def broadcast[U: ClassTag](transFunc: TransFunc[T, U]): Broadcast[U] = withScope {
+    val bc = if (partitions.size > 0) {
+      val id = sc.env.broadcastManager.newBroadcastId
+
+      // first: write blocks to block manager from executor.
+      val numBlocksAndChecksums = coalesce(1).mapPartitions { iter =>
+          SparkEnv.get.broadcastManager
+            .uploadBroadcast(transFunc.transform(iter.toArray), id).iterator
+      }.collect()
+
+      // then: create broadcast from driver, this will not write blocks
+      val res = SparkEnv.get.broadcastManager.newExecutorBroadcast(
+        transFunc.transform(Array.empty[T]),
+        id,
+        numBlocksAndChecksums.head,
+        numBlocksAndChecksums.tail)
+
+      val callSite = sc.getCallSite
+      logInfo("Created executor side broadcast " + res.id + " from " + callSite.shortForm)
+      res
+    } else {
+      // Rdd may have 0 partitions, for this case use driver broadcast.
+      val res = SparkEnv.get.broadcastManager.newBroadcast(
+        transFunc.transform(Array.empty[T]), sc.isLocal)
+      val callSite = sc.getCallSite
+      logInfo("Created broadcast " + res.id + " from " + callSite.shortForm)
+      res
+    }
+
+    sc.cleaner.foreach(_.registerBroadcastForCleanup(bc))
+    bc
+  }
+
+  /**
+   * Executor broadcast api, it broadcast the rdd to the cluster from executor, returning a
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each cluster only once.
+   *
+   * @param f is a translate function to compute the broadcast value from the rdd.
+   */
+  @Since("2.1.0")
+  def broadcast[U: ClassTag](f: Iterator[T] => U): Broadcast[U] = withScope {
+    val transFunc = new TransFunc[T, U] {
+      override def transform(rows: Array[T]): U = {
+        f(rows.toIterator)
+      }
+    }
+    broadcast(transFunc)
+  }
+
+    /**
    * Return an iterator that contains all of the elements in this RDD.
    *
    * The iterator will consume as much memory as the largest partition in this RDD.

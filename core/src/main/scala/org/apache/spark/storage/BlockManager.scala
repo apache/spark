@@ -753,6 +753,27 @@ private[spark] class BlockManager(
   }
 
   /**
+   *  Persist a broadcast piece of serialized bytes to the hdfs.
+   */
+  def persistBroadcastPiece(id: BlockId, block: ByteBuffer): Unit = {
+    diskBlockManager.persistBroadcastPiece(id, block)
+  }
+
+  /**
+   * Get broadcast block from the hdfs, as serialized bytes.
+   */
+  def getBroadcastPiece(id: BlockId): Option[ChunkedByteBuffer] = {
+    diskBlockManager.getBroadcastPiece(id)
+  }
+
+  /**
+   * Clean hdfs files for executor broadcast.
+   */
+  def cleanBroadcastPieces(id: Long): Unit = {
+    diskBlockManager.cleanBroadcastPieces(id)
+  }
+
+  /**
    * Put a new block of serialized bytes to the block manager.
    *
    * @param encrypt If true, asks the block manager to encrypt the data block before storing,

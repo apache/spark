@@ -40,6 +40,20 @@ private[spark] trait BroadcastFactory {
    */
   def newBroadcast[T: ClassTag](value: T, isLocal: Boolean, id: Long): Broadcast[T]
 
+  /**
+   * Creates a new broadcast variable with a specified id. The different of the origin interface
+   * is that there is a new param `isExecutorSide` to tell the BroadCast it is a executor-side
+   * broadcast and should consider recovery when get block data failed.
+   */
+  def newExecutorBroadcast[T: ClassTag](
+      value: T,
+      id: Long,
+      nBlocks: Int,
+      cSums: Array[Int]): Broadcast[T]
+
+  // Called from executor to put broadcast data to blockmanager.
+  def uploadBroadcast[T: ClassTag](value_ : T, id: Long): Seq[Int]
+
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
 
   def stop(): Unit

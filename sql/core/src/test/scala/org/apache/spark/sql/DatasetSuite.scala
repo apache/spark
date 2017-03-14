@@ -1064,7 +1064,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
       agg.queryExecution.executedPlan.collectFirst {
         case ShuffleExchange(_, _: RDDScanExec, _) =>
-        case BroadcastExchangeExec(_, _: RDDScanExec) =>
+        case BroadcastExchangeExec(_, _: RDDScanExec, _) =>
       }.foreach { _ =>
         fail(
           "No Exchange should be inserted above RDDScanExec since the checkpointed Dataset " +

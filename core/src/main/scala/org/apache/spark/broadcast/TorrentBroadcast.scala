@@ -38,6 +38,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *
  * The mechanism is as follows:
  *
+ * 1 For driver side broadcast(when isExecutorSide is false):
  * The driver divides the serialized object into small chunks and
  * stores those chunks in the BlockManager of the driver.
  *
@@ -51,10 +52,30 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  *
  * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
  *
+ * 2 For executor side broadcast(when isExecutorSide is true):
+ * One executor divides the serialized object into small chunks and
+ * stores those chunks in the BlockManager of the executor.
+ *
+ * On other executors, the executor first attempts to fetch the object from its BlockManager. If
+ * it does not exist, it then uses remote fetches to fetch the small chunks from
+ * other executors if available. Once it gets the chunks, it puts the chunks in its own
+ * BlockManager, ready for other executors to fetch from.
+ *
+ * In executor side broadcast driver never holds the broadcast data.
+ *
+ * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
+ *
  * @param obj object to broadcast
  * @param id A unique identifier for the broadcast variable.
+ * @param isExecutorSide A identifier for executor broadcast variable.
+ * @param nBlocks how many blocks for executor broadcast.
  */
-private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
+private[spark] class TorrentBroadcast[T: ClassTag](
+    @transient val obj: T,
+    id: Long,
+    isExecutorSide: Boolean = false,
+    nBlocks: Option[Int] = None,
+    cSums: Option[Array[Int]] = None)
   extends Broadcast[T](id) with Logging with Serializable {
 
   /**
@@ -70,6 +91,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
   @transient private var blockSize: Int = _
 
+  /** Whether to generate checksum for blocks or not. */
+  private var checksumEnabled: Boolean = false
+  /** The checksum for all the blocks. */
+  private var checksums: Array[Int] = cSums.getOrElse(null)
+
   private def setConf(conf: SparkConf) {
     compressionCodec = if (conf.getBoolean("spark.broadcast.compress", true)) {
       Some(CompressionCodec.createCodec(conf))
@@ -84,13 +110,14 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   private val broadcastId = BroadcastBlockId(id)
 
-  /** Total number of blocks this broadcast variable contains. */
-  private val numBlocks: Int = writeBlocks(obj)
+  def getNumBlocksAndChecksums: Seq[Int] = if (checksumEnabled) {
+    Seq(numBlocks) ++ checksums
+  } else {
+    Seq(numBlocks)
+  }
 
-  /** Whether to generate checksum for blocks or not. */
-  private var checksumEnabled: Boolean = false
-  /** The checksum for all the blocks. */
-  private var checksums: Array[Int] = _
+  /** Total number of blocks this broadcast variable contains. */
+  private val numBlocks: Int = nBlocks.getOrElse(writeBlocks(obj)) // this must be after checkSums
 
   override protected def getValue() = {
     _value
@@ -132,6 +159,9 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
         checksums(i) = calcChecksum(block)
       }
       val pieceId = BroadcastBlockId(id, "piece" + i)
+      if (isExecutorSide) {
+        blockManager.persistBroadcastPiece(pieceId, block)
+      }
       val bytes = new ChunkedByteBuffer(block.duplicate())
       if (!blockManager.putBytes(pieceId, bytes, MEMORY_AND_DISK_SER, tellMaster = true)) {
         throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")
@@ -158,7 +188,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           blocks(pid) = block
           releaseLock(pieceId)
         case None =>
-          bm.getRemoteBytes(pieceId) match {
+          bm.getRemoteBytes(pieceId).orElse(bm.getBroadcastPiece(pieceId)) match {
             case Some(b) =>
               if (checksumEnabled) {
                 val sum = calcChecksum(b.chunks(0))
@@ -169,7 +199,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
               }
               // We found the block from remote executors/driver's BlockManager, so put the block
               // in this executor's BlockManager.
-              if (!bm.putBytes(pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
+              if (!bm.putBytes(
+                pieceId, b, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)) {
                 throw new SparkException(
                   s"Failed to store $pieceId of $broadcastId in local BlockManager")
               }
@@ -194,7 +225,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * and driver.
    */
   override protected def doDestroy(blocking: Boolean) {
-    TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
+    if (isExecutorSide) {
+      TorrentBroadcast.unpersist(id, removeFromDriver = false, blocking)
+    } else {
+      TorrentBroadcast.unpersist(id, removeFromDriver = true, blocking)
+    }
   }
 
   /** Used by the JVM when serializing this object. */
@@ -301,5 +336,6 @@ private object TorrentBroadcast extends Logging {
   def unpersist(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
     logDebug(s"Unpersisting TorrentBroadcast $id")
     SparkEnv.get.blockManager.master.removeBroadcast(id, removeFromDriver, blocking)
+    SparkEnv.get.blockManager.cleanBroadcastPieces(id)
   }
 }
