@@ -18,11 +18,13 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.ql.metadata.Hive
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.catalog.{CatalogTestUtils, ExternalCatalog, InMemoryCatalog, SessionCatalogSuite}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTestUtils, ExternalCatalog, SessionCatalogSuite}
 
-class HiveExternalSessionCatalogSuite extends SessionCatalogSuite {
+class HiveExternalSessionCatalogSuite extends SessionCatalogSuite with BeforeAndAfterAll {
 
   protected override val isHiveExternalCatalog = true
 
@@ -30,6 +32,11 @@ class HiveExternalSessionCatalogSuite extends SessionCatalogSuite {
     val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
     catalog.client.reset()
     catalog
+  }
+
+  override def afterAll(): Unit = {
+    // close current connect to metastore_db
+    Hive.closeCurrent()
   }
 
   protected val utils = new CatalogTestUtils {
