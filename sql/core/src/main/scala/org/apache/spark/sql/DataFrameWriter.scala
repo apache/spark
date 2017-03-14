@@ -319,7 +319,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
-   * External catalog is used to determine if the table exists.
+   * The external catalog (Hive metastore) is used to determine if the table exists.
    * If the table does not exist in the external catalog, but exists in the datasource,
    * it will be overwritten in the datasource, regardless of the specified `mode`.
    *
