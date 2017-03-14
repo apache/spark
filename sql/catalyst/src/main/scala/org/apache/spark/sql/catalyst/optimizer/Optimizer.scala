@@ -133,7 +133,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.plan))
+        val Subquery(newPlan) = Optimizer.this.execute(Subquery(s.plan))
+        s.withNewPlan(newPlan)
     }
   }
 }
@@ -178,7 +179,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if a.metadata == Metadata.empty && name == attr.name && !blacklist.contains(attr) =>
+      if a.metadata == Metadata.empty &&
+        name == attr.name &&
+        !blacklist.contains(attr) &&
+        !blacklist.contains(a) =>
       attr
     case a => a
   }
@@ -186,10 +190,15 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   /**
    * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
    * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
-   * join.
+   * join or to prevent the removal of top-level subquery attributes.
    */
   private def removeRedundantAliases(plan: LogicalPlan, blacklist: AttributeSet): LogicalPlan = {
     plan match {
+      // We want to keep the same output attributes for subqueries. This means we cannot remove
+      // the aliases that produce these attributes
+      case Subquery(child) =>
+        Subquery(removeRedundantAliases(child, blacklist ++ child.outputSet))
+
       // A join has to be treated differently, because the left and the right side of the join are
       // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
       // situation in which this happens; the rule will only remove an alias if its child

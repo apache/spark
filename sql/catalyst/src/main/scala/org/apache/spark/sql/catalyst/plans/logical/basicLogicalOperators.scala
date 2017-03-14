@@ -39,6 +39,14 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
+/**
+ * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
+ * recognize a subquery as such, and it allows us to write subquery aware transformations.
+ */
+case class Subquery(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
