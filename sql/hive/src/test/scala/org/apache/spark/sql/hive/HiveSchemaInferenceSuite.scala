@@ -293,6 +293,27 @@ class HiveSchemaInferenceSuite
           StructField("firstField", StringType, nullable = true),
           StructField("secondField", StringType, nullable = true))))
     }.getMessage.contains("Detected conflicting schemas"))
+
+    // Schema merge should maintain metastore order.
+    assertResult(
+      StructType(Seq(
+        StructField("first_field", StringType, nullable = true),
+        StructField("second_field", StringType, nullable = true),
+        StructField("third_field", StringType, nullable = true),
+        StructField("fourth_field", StringType, nullable = true),
+        StructField("fifth_field", StringType, nullable = true)))) {
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("first_field", StringType, nullable = true),
+          StructField("second_field", StringType, nullable = true),
+          StructField("third_field", StringType, nullable = true),
+          StructField("fourth_field", StringType, nullable = true),
+          StructField("fifth_field", StringType, nullable = true))),
+        StructType(Seq(
+          StructField("fifth_field", StringType, nullable = true),
+          StructField("third_field", StringType, nullable = true),
+          StructField("second_field", StringType, nullable = true))))
+    }
   }
 }
 
