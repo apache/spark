@@ -319,6 +319,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
+   * External catalog is used to determine if the table exists.
+   * If the table does not exist in the external catalog, but exists in the datasource,
+   * it will be overwritten in the datasource, regardless of the specified `mode`.
+   *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
    * and Parquet), the table is persisted in a Hive compatible format, which means other systems
