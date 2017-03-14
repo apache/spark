@@ -649,7 +649,7 @@ case class ShowTablesCommand(
       val tables =
         tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
       tables.map { tableIdent =>
-        val database = tableIdent.database.getOrElse(db)
+        val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
         val isTemp = catalog.isTemporaryTable(tableIdent)
         if (isExtended) {
