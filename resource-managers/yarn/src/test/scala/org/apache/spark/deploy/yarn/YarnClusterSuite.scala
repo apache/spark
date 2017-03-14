@@ -25,15 +25,17 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
+
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicationState}
+import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.yarn.client.api.YarnClient
-import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicationState}
-import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher._
@@ -348,7 +350,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.LOST)
         var status = yarnClient.getApplicationReport(applicationId).getYarnApplicationState
-        status should not be (FinalApplicationStatus.KILLED)
+        status should not be (YarnApplicationState.KILLED)
       }
 
     } finally {
