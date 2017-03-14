@@ -198,9 +198,9 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 
   private[this] val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
 
-  private[this] val wrappers = dataSchema.zip(structOI.getAllStructFieldRefs().asScala.toSeq)
-      .map { case (f, i) =>
-    wrapperFor(i.getFieldObjectInspector, f.dataType)
+  // Wrapper functions used to wrap Spark SQL input arguments into Hive specific format
+  private[this] val wrappers = dataSchema.zip(structOI.getAllStructFieldRefs().asScala.toSeq).map {
+    case (f, i) => wrapperFor(i.getFieldObjectInspector, f.dataType)
   }
 
   private[this] def wrapOrcStruct(
