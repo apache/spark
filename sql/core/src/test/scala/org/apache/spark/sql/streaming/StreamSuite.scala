@@ -450,10 +450,7 @@ class StreamSuite extends StreamTest {
         var streamingQuery: StreamingQuery = null
         try {
           streamingQuery =
-            query
-              .queryName("counts")
-              .option("checkpointLocation", dir.getCanonicalPath)
-              .start()
+            query.queryName("counts").option("checkpointLocation", dir.getCanonicalPath).start()
           streamingQuery.processAllAvailable()
           inputData.addData(9)
           streamingQuery.processAllAvailable()
@@ -480,10 +477,7 @@ class StreamSuite extends StreamTest {
         try {
           intercept[StreamingQueryException] {
             streamingQuery =
-              query
-                .queryName("badQuery")
-                .option("checkpointLocation", dir.getCanonicalPath)
-                .start()
+              query.queryName("badQuery").option("checkpointLocation", dir.getCanonicalPath).start()
             streamingQuery.processAllAvailable()
           }
         } finally {

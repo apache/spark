@@ -151,11 +151,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 10),
       AssertOnQuery(q => {
         q.exception.get.startOffset ===
-          q.committedOffsets.toOffsetSeq(
-            Seq(inputData), OffsetSeqMetadata()).toString &&
+          q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
           q.exception.get.endOffset ===
-            q.availableOffsets.toOffsetSeq(
-              Seq(inputData), OffsetSeqMetadata()).toString
+            q.availableOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString
       }, "incorrect start offset or end offset on exception")
     )
   }
