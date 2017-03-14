@@ -774,6 +774,7 @@ private[hive] class HiveClientImpl(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+    Hive.closeCurrent()
   }
 }
 
