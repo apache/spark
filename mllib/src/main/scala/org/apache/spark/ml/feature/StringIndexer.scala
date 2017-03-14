@@ -42,7 +42,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * Param for how to handle invalid data (unseen labels or NULL values).
    * Options are 'skip' (filter out rows with invalid data),
    * 'error' (throw an error), or 'keep' (put invalid data in a special additional
-   * bucket, at index numLabels.
+   * bucket, at index numLabels).
    * Default: "error"
    * @group param
    */
@@ -205,8 +205,8 @@ class StringIndexerModel (
       case _ => (dataset, getHandleInvalid == StringIndexer.KEEP_INVALID)
     }
 
-    val indexer = udf { row: Row =>
-      if (row.isNullAt(0)) {
+    val indexer = udf { label: String =>
+      if (label == null) {
         if (keepInvalid) {
           labels.length
         } else {
@@ -214,7 +214,6 @@ class StringIndexerModel (
             "NULLS, try setting StringIndexer.handleInvalid.")
         }
       } else {
-        val label = String.valueOf(row.get(0))
         if (labelToIndex.contains(label)) {
           labelToIndex(label)
         } else if (keepInvalid) {
@@ -227,7 +226,7 @@ class StringIndexerModel (
     }
 
     filteredDataset.select(col("*"),
-      indexer(struct(Array(dataset($(inputCol))): _*)).as($(outputCol), metadata))
+      indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
 
   @Since("1.4.0")
