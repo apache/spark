@@ -46,7 +46,7 @@ case class InMemoryTableScanExec(
       relation.child.output.zip(output)
     )
     expr.transform {
-      case attr: Attribute if attrMap.contains(attr) => attrMap.get(attr).get
+      case attr: Attribute => attrMap.getOrElse(attr, attr)
     }
   }
 
