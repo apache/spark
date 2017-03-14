@@ -20,7 +20,7 @@ package org.apache.spark.util.collection
 import scala.collection.mutable
 
 /**
- * MedianHeap stores numbers and returns the median by O(1) time complexity.
+ * MedianHeap inserts number by O(log n) and returns the median by O(1) time complexity.
  * The basic idea is to maintain two heaps: a maxHeap and a minHeap. The maxHeap stores
  * the smaller half of all numbers while the minHeap stores the larger half.  The sizes
  * of two heaps need to be balanced each time when a new number is inserted so that their
@@ -30,17 +30,15 @@ import scala.collection.mutable
  * has one more element.
  */
 
-private[spark]
-class MedianHeap(implicit val ord: Ordering[Double]) {
+private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
   // Stores all the numbers less than the current median in a maxHeap,
   // i.e median is the maximum, at the root
-  private[this] var maxHeap = mutable.PriorityQueue.empty[Double](implicitly[Ordering[Double]])
+  private[this] var maxHeap = mutable.PriorityQueue.empty[Double](ord)
 
   // Stores all the numbers greater than the current median in a minHeap,
   // i.e median is the minimum, at the root
-  private[this] var minHeap = mutable.PriorityQueue.empty[Double](
-    implicitly[Ordering[Double]].reverse)
+  private[this] var minHeap = mutable.PriorityQueue.empty[Double](ord.reverse)
 
   // Returns if there is no element in MedianHeap.
   def isEmpty(): Boolean = {
@@ -67,41 +65,6 @@ class MedianHeap(implicit val ord: Ordering[Double]) {
       }
     }
     rebalance()
-  }
-
-  // Remove an number from MedianHeap, return if the number exists.
-  def remove(x: Double): Boolean = {
-    if (maxHeap.size != 0 && minHeap.size == 0 ||
-      maxHeap.size != 0 && minHeap.size != 0 && maxHeap.head >= x) {
-      var dropped = false
-      maxHeap = maxHeap.filterNot {
-        case num =>
-          if (!dropped && num == x) {
-            dropped = true
-            true
-          } else {
-            false
-          }
-      }
-      rebalance()
-      dropped
-    } else if (maxHeap.size == 0 && minHeap.size != 0 ||
-      maxHeap.size != 0 && minHeap.size != 0 && minHeap.head <= x) {
-      var dropped = false
-      minHeap = minHeap.filterNot {
-        case num =>
-          if (!dropped && num == x) {
-            dropped = true
-            true
-          } else {
-            false
-          }
-      }
-      rebalance()
-      dropped
-    } else {
-      false
-    }
   }
 
   // Re-balance the heaps.

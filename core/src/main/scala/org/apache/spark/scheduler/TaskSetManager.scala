@@ -917,10 +917,8 @@ private[spark] class TaskSetManager(
    *
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
-
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
     // zombie.
-
     if (isZombie || numTasks == 1 || !speculationEnabled) {
       return false
     }

@@ -79,25 +79,4 @@ class MedianHeapSuite extends SparkFunSuite {
     assert(medianHeap.size === 1000)
     assert(medianHeap.findMedian() === ((array(499) + array(500)) / 2.0))
   }
-
-  test("Remove a number from MedianHeap.") {
-    val random = new Random()
-    val medianHeap = new MedianHeap()
-    val array = new Array[Int](99)
-    var lastNumber = 0
-    (0 until 100).foreach {
-      case i =>
-        val randomNumber = random.nextInt(100)
-        medianHeap.insert(randomNumber)
-        if (i != 99) {
-          array(i) += randomNumber
-        } else {
-          lastNumber = randomNumber
-        }
-    }
-    util.Arrays.sort(array)
-    assert(medianHeap.remove(lastNumber) === true)
-    assert(medianHeap.findMedian() === array(49))
-
-  }
 }
