@@ -1868,8 +1868,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * https://conda.io/docs/spec.html#build-version-spec">package match specification</a>
    * for all tasks to be executed on this SparkContext in the future.
    */
-  def addCondaPackages(packages: Seq[String], withDeps: Boolean): Unit = {
-    condaEnvironment().installPackages(packages, withDeps)
+  def addCondaPackages(packages: Seq[String]): Unit = {
+    condaEnvironment().installPackages(packages)
   }
 
   def addCondaChannel(url: String): Unit = {

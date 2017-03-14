@@ -22,8 +22,6 @@ import java.util.{Map => JMap}
 
 import scala.collection.mutable
 
-import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
-import org.apache.spark.api.conda.CondaEnvironment.PackageRequests
 import org.apache.spark.internal.Logging
 
 /**
@@ -39,9 +37,10 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
                              bootstrapPackages: Seq[String],
                              bootstrapChannels: Seq[String]) extends Logging {
 
-  private[this] var packages = mutable.Buffer(
-    PackageRequests(bootstrapPackages, withDependencies = true))
-  private[this] var channels = bootstrapChannels.toBuffer
+  import CondaEnvironment._
+
+  private[this] val packages = mutable.Buffer(bootstrapPackages: _*)
+  private[this] val channels = bootstrapChannels.toBuffer
 
   val condaEnvDir: Path = rootPath resolve "envs" resolve envName
 
@@ -62,17 +61,15 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
     channels += url
   }
 
-  def installPackages(packages: Seq[String],
-                      withDeps: Boolean): Unit = {
+  def installPackages(packages: Seq[String]): Unit = {
     manager.runCondaProcess(rootPath,
-      List("install", "-n", envName, "-y", "--override-channels", "--no-update-deps")
-        ::: (if (withDeps) Nil else List("--no-deps"))
+      List("install", "-n", envName, "-y", "--override-channels")
         ::: channels.iterator.flatMap(Iterator("--channel", _)).toList
         ::: "--" :: packages.toList,
       description = s"install dependencies in conda env $condaEnvDir"
     )
 
-    this.packages += PackageRequests(packages, withDependencies = withDeps)
+    this.packages ++= packages
   }
 
   /**
@@ -95,9 +92,8 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
 }
 
 object CondaEnvironment {
-  case class PackageRequests(packageSpecs: Seq[String], withDependencies: Boolean)
-
-  case class CondaSetupInstructions(packages: Seq[PackageRequests], channels: Seq[String]) {
+  case class CondaSetupInstructions(packages: Seq[String], channels: Seq[String]) {
     require(channels.nonEmpty)
+    require(packages.nonEmpty)
   }
 }

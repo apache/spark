@@ -27,7 +27,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
-import org.apache.spark.api.conda.CondaEnvironment.PackageRequests
 import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CONDA_BOOTSTRAP_PACKAGES
@@ -70,14 +69,7 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
         val dirId = hash % localDirs.length
         Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
       }
-      val condaBootstrapPackages = env.conf.get(CONDA_BOOTSTRAP_PACKAGES)
-      val condaEnvironment = condaEnvManager.create(envDir, condaBootstrapPackages)
-      // Now install as per the instructions
-      condaPackages.foreach {
-        case PackageRequests(pkgs, withDeps) =>
-          condaEnvironment.installPackages(pkgs, withDeps)
-      }
-      condaEnvironment
+      condaEnvManager.create(envDir, condaPackages)
     }
   }
 

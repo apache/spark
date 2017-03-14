@@ -837,13 +837,13 @@ class SparkContext(object):
             import importlib
             importlib.invalidate_caches()
 
-    def addCondaPackages(self, *packages, withDeps=True):
+    def addCondaPackages(self, *packages):
         """
         Add a conda `package match specification
         <https://conda.io/docs/spec.html#build-version-spec>`_ for all tasks to be executed on
         this SparkContext in the future.
         """
-        self._jsc.addCondaPackages(packages, withDeps)
+        self._jsc.addCondaPackages(packages)
 
     def addCondaChannel(self, url):
         self._jsc.sc().addCondaChannel(url)

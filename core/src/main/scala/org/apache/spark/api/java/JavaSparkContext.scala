@@ -700,8 +700,8 @@ class JavaSparkContext(val sc: SparkContext)
    * https://conda.io/docs/spec.html#build-version-spec">package match specification</a>
    * for all tasks to be executed on this SparkContext in the future.
    */
-  def addCondaPackages(packages: java.util.List[String], withDeps: Boolean): Unit = {
-    sc.addCondaPackages(packages.asScala, withDeps)
+  def addCondaPackages(packages: java.util.List[String]): Unit = {
+    sc.addCondaPackages(packages.asScala)
   }
 
   /**
