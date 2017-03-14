@@ -2658,15 +2658,15 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("b", True),
             ("c", False),
             ("d", True),
-            ("d", lit(None))
+            ("d", None)
         ], ["key", "value"])
         w = Window.partitionBy("key").orderBy("value")
         from pyspark.sql import functions as F
         sel = df.select(df.key,
                         df.value,
-                        F.every().over(w),
-                        F.any().over(w),
-                        F.some().over(w))
+                        F.every("value").over(w),
+                        F.any("value").over(w),
+                        F.some("value").over(w))
         rs = sel.collect()
         expected = [
             ("a", False, False, True, True),
@@ -2678,7 +2678,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("d", True, False, True, True),
             ("d", None, False, True, True)
         ]
-        self.assertEqual(rs, expected)
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
 
     def test_window_functions_every_any_without_partitionBy(self):
         df = self.spark.createDataFrame([
@@ -2689,15 +2690,15 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("b", True),
             ("c", False),
             ("d", True),
-            ("d", lit(None))
+            ("d", None)
         ], ["key", "value"])
         w = Window.orderBy("value").rowsBetween(Window.unboundedPreceding, 0)
         from pyspark.sql import functions as F
         sel = df.select(df.key,
                         df.value,
-                        F.every().over(w),
-                        F.any().over(w),
-                        F.some().over(w))
+                        F.every("value").over(w),
+                        F.any("value").over(w),
+                        F.some("value").over(w))
         rs = sel.collect()
         expected = [
             ("a", False, False, False, False),
@@ -2709,7 +2710,8 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("d", True, False, True, True),
             ("d", None, False, True, True)
         ]
-        self.assertEqual(rs, expected)
+        for r, ex in zip(rs, expected):
+            self.assertEqual(tuple(r), ex[:len(r)])
 
     def test_collect_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
