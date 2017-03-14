@@ -619,7 +619,7 @@ abstract class SessionCatalogSuite extends PlanTest {
   // --------------------------------------------------------------------------
 
   test("basic create and list partitions") {
-    withSessionCatalogAndExternal() { (sessionCatalog, externalCatalog) =>
+    withSessionCatalogAndExternal(EMPTY) { (sessionCatalog, externalCatalog) =>
       sessionCatalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
       sessionCatalog.createTable(newTable("tbl", "mydb"), ignoreIfExists = false)
       sessionCatalog.createPartitions(
