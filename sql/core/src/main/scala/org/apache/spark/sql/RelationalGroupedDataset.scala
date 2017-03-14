@@ -50,7 +50,20 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
-      groupingExprs ++ aggExprs
+      val agg = Aggregate(groupingExprs, aggExprs.map(alias), df.logicalPlan)
+      val plan = df.sparkSession.sessionState.executePlan(agg).analyzed
+      // Find the root aggregate node in the analyzed plan. When aggregate expressions
+      // contain window expressions, the root node of the analyzed plan is not an Aggregate.
+      val aggAnalyzed = plan.find(_.isInstanceOf[Aggregate]).getOrElse(agg).asInstanceOf[Aggregate]
+      def findDup(e: Expression) = aggAnalyzed.aggregateExpressions.exists {
+        case a: Alias => a.child.semanticEquals(e)
+        case o => o.semanticEquals(e)
+      }
+      // Remove the duplicates that appear in both grouping and aggregate expressions.
+      val newGroupingExprs = groupingExprs.zip(aggAnalyzed.groupingExpressions).filterNot {
+        case (_, e) => findDup(e)
+      }.map(_._1)
+      newGroupingExprs ++ aggExprs
     } else {
       aggExprs
     }
