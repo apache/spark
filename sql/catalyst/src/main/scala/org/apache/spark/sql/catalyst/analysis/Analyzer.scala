@@ -1297,6 +1297,10 @@ class Analyzer(
             case _: EqualTo | _: EqualNullSafe => false
             case _ => true
           }
+          // The aggregate expressions are treated in a special way by getOuterReferences. If the
+          // aggregate expression contains only outer reference attributes then the entire aggregate
+          // expression is isolated as an OuterReference.
+          // i.e min(OuterReference(b)) => OuterReference(min(b))
           outerReferences ++= getOuterReferences(correlated)
 
         // Project cannot host any correlated expressions

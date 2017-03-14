@@ -133,16 +133,24 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
         }
-        val isTypeMismatched = valExprs.zip(sub.output).exists {
-          case (l, r) => l.dataType != r.dataType
+
+        val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+          case (l, r) if l.dataType != r.dataType =>
+            s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+          case _ => None
         }
-        if (isTypeMismatched) {
+
+        if (mismatchedColumns.nonEmpty) {
           TypeCheckResult.TypeCheckFailure(
             s"""
-              |The data type of one or more elements in the LHS of an IN subquery
-              |[${valExprs.map(_.dataType).mkString(", ")}]
-              |is not compatible with the data type of the output of the subquery
-              |[${sub.output.map(_.dataType).mkString(", ")}].
+               |The data type of one or more elements in the left hand side of an IN subquery
+               |is not compatible with the data type of the output of the subquery
+               |Mismatched columns:
+               |[${mismatchedColumns.mkString(", ")}]
+               |Left side:
+               |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+               |Right side:
+               |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
              """.stripMargin)
         } else {
           TypeCheckResult.TypeCheckSuccess

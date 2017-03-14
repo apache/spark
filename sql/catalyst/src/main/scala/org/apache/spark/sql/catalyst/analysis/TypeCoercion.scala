@@ -382,30 +382,32 @@ object TypeCoercion {
    *    Analysis Exception will be raised at the type checking phase.
    */
   object InConversion extends Rule[LogicalPlan] {
+    private def flattenExpr(expr: Expression): Seq[Expression] = {
+      expr match {
+        // Multi columns in IN clause is represented as a CreateNamedStruct.
+        // flatten the named struct to get the list of expressions.
+        case cns: CreateNamedStruct => cns.valExprs
+        case expr => Seq(expr)
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId))) if !i.resolved =>
+      case i @ In(a, Seq(ListQuery(sub, children, exprId)))
+        if !i.resolved && flattenExpr(a).length == sub.output.length =>
         // LHS is the value expression of IN subquery.
-        val lhs = a match {
-          // Multi columns in IN clause is represented as a CreateNamedStruct.
-          // flatten the named struct to get the list of expressions.
-          case cns: CreateNamedStruct => cns.valExprs
-          case expr => Seq(expr)
-        }
+        val lhs = flattenExpr(a)
 
         // RHS is the subquery output.
         val rhs = sub.output
-        require(lhs.length == rhs.length)
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType) match {
-            case d @ Some(_) => d
-            case _ => findTightestCommonType(l.dataType, r.dataType)
-          }
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
+            .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
@@ -422,14 +424,11 @@ object TypeCoercion {
 
           // Before constructing the In expression, wrap the multi values in LHS
           // in a CreatedNamedStruct.
-          val newLhs = a match {
-            case cns: CreateNamedStruct =>
-              val nameValue = cns.nameExprs.zip(castedLhs).flatMap {
-                case (name, value) => Seq(name, value)
-              }
-              CreateNamedStruct(nameValue)
-            case _ => castedLhs.head
+          val newLhs = castedLhs match {
+            case Seq(lhs) => lhs
+            case _ => CreateStruct(castedLhs)
           }
+
           In(newLhs, Seq(ListQuery(Project(castedRhs, sub), children, exprId)))
         } else {
           i

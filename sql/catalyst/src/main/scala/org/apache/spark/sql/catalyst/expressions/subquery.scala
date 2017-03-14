@@ -184,7 +184,7 @@ object SubExprUtils extends PredicateHelper {
     val outerExpressions = ArrayBuffer.empty[Expression]
     conditions foreach { expr =>
       expr transformDown {
-        case a: AggregateExpression if containsOuter(a) =>
+        case a: AggregateExpression if a.collectLeaves.forall(_.isInstanceOf[OuterReference]) =>
           val newExpr = stripOuterReference(a)
           outerExpressions += newExpr
           newExpr
@@ -210,19 +210,14 @@ object SubExprUtils extends PredicateHelper {
    * is removed before returning the predicate to the caller.
    */
   def getCorrelatedPredicates(plan: LogicalPlan): Seq[Expression] = {
-    val correlatedPredicates = ArrayBuffer.empty[Seq[Expression]]
     val conditions = plan.collect { case Filter(cond, _) => cond }
-
-    // Collect all the expressions that have outer references.
-    conditions foreach { e =>
+    conditions.flatMap { e =>
       val (correlated, _) = splitConjunctivePredicates(e).partition(containsOuter)
       stripOuterReferences(correlated) match {
-        case Nil => // no-op
-        case xs =>
-          correlatedPredicates += xs
+        case Nil => None
+        case xs => xs
       }
     }
-    correlatedPredicates.flatten
   }
 }
 
