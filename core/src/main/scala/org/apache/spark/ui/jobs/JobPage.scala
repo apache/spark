@@ -20,15 +20,14 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.{Buffer, HashMap, ListBuffer}
+import scala.collection.mutable.{Buffer, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.scheduler.StageInfo
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
@@ -93,55 +92,55 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
     }
   }
 
-  def makeExecutorEvent(executorUIDatas: HashMap[String, ExecutorUIData]): Seq[String] = {
+  def makeExecutorEvent(executorUIDatas: Seq[SparkListenerEvent]): Seq[String] = {
     val events = ListBuffer[String]()
     executorUIDatas.foreach {
-      case (executorId, event) =>
+      case a: SparkListenerExecutorAdded =>
         val addedEvent =
           s"""
              |{
              |  'className': 'executor added',
              |  'group': 'executors',
-             |  'start': new Date(${event.startTime}),
+             |  'start': new Date(${a.time}),
              |  'content': '<div class="executor-event-content"' +
              |    'data-toggle="tooltip" data-placement="bottom"' +
-             |    'data-title="Executor ${executorId}<br>' +
-             |    'Added at ${UIUtils.formatDate(new Date(event.startTime))}"' +
-             |    'data-html="true">Executor ${executorId} added</div>'
+             |    'data-title="Executor ${a.executorId}<br>' +
+             |    'Added at ${UIUtils.formatDate(new Date(a.time))}"' +
+             |    'data-html="true">Executor ${a.executorId} added</div>'
              |}
            """.stripMargin
         events += addedEvent
 
-        if (event.finishTime.isDefined) {
-          val removedEvent =
-            s"""
-               |{
-               |  'className': 'executor removed',
-               |  'group': 'executors',
-               |  'start': new Date(${event.finishTime.get}),
-               |  'content': '<div class="executor-event-content"' +
-               |    'data-toggle="tooltip" data-placement="bottom"' +
-               |    'data-title="Executor ${executorId}<br>' +
-               |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
-               |    '${
-                        if (event.finishReason.isDefined) {
-                          s"""<br>Reason: ${event.finishReason.get.replace("\n", " ")}"""
-                        } else {
-                          ""
-                        }
-                     }"' +
-               |    'data-html="true">Executor ${executorId} removed</div>'
-               |}
-             """.stripMargin
-            events += removedEvent
-        }
+      case e: SparkListenerExecutorRemoved =>
+        val removedEvent =
+          s"""
+             |{
+             |  'className': 'executor removed',
+             |  'group': 'executors',
+             |  'start': new Date(${e.time}),
+             |  'content': '<div class="executor-event-content"' +
+             |    'data-toggle="tooltip" data-placement="bottom"' +
+             |    'data-title="Executor ${e.executorId}<br>' +
+             |    'Removed at ${UIUtils.formatDate(new Date(e.time))}' +
+             |    '${
+                      if (e.reason != null) {
+                        s"""<br>Reason: ${e.reason.replace("\n", " ")}"""
+                      } else {
+                        ""
+                      }
+                   }"' +
+             |    'data-html="true">Executor ${e.executorId} removed</div>'
+             |}
+           """.stripMargin
+          events += removedEvent
+
     }
     events.toSeq
   }
 
   private def makeTimeline(
       stages: Seq[StageInfo],
-      executors: HashMap[String, ExecutorUIData],
+      executors: Seq[SparkListenerEvent],
       appStartTime: Long): Seq[Node] = {
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
@@ -231,20 +230,27 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
       val basePath = "jobs/job"
 
+      val pendingOrSkippedTableId =
+        if (isComplete) {
+          "pending"
+        } else {
+          "skipped"
+        }
+
       val activeStagesTable =
-        new StageTableBase(request, activeStages, "activeStage", parent.basePath,
+        new StageTableBase(request, activeStages, "active", "activeStage", parent.basePath,
           basePath, parent.jobProgresslistener, parent.isFairScheduler,
           killEnabled = parent.killEnabled, isFailedStage = false)
       val pendingOrSkippedStagesTable =
-        new StageTableBase(request, pendingOrSkippedStages, "pendingStage", parent.basePath,
-          basePath, parent.jobProgresslistener, parent.isFairScheduler,
+        new StageTableBase(request, pendingOrSkippedStages, pendingOrSkippedTableId, "pendingStage",
+          parent.basePath, basePath, parent.jobProgresslistener, parent.isFairScheduler,
           killEnabled = false, isFailedStage = false)
       val completedStagesTable =
-        new StageTableBase(request, completedStages, "completedStage", parent.basePath,
+        new StageTableBase(request, completedStages, "completed", "completedStage", parent.basePath,
           basePath, parent.jobProgresslistener, parent.isFairScheduler,
           killEnabled = false, isFailedStage = false)
       val failedStagesTable =
-        new StageTableBase(request, failedStages, "failedStage", parent.basePath,
+        new StageTableBase(request, failedStages, "failed", "failedStage", parent.basePath,
           basePath, parent.jobProgresslistener, parent.isFairScheduler,
           killEnabled = false, isFailedStage = true)
 
@@ -319,7 +325,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val operationGraphListener = parent.operationGraphListener
 
       content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
-          executorListener.executorIdToData, appStartTime)
+          executorListener.executorEvents, appStartTime)
 
       content ++= UIUtils.showDagVizForJob(
         jobId, operationGraphListener.getOperationGraphForJob(jobId))

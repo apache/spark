@@ -113,15 +113,13 @@ public class JavaCustomReceiver extends Receiver<String> {
     port = port_;
   }
 
+  @Override
   public void onStart() {
     // Start the thread that receives data over a connection
-    new Thread()  {
-      @Override public void run() {
-        receive();
-      }
-    }.start();
+    new Thread(this::receive).start();
   }
 
+  @Override
   public void onStop() {
     // There is nothing much to do as the thread calling receive()
     // is designed to stop by itself if isStopped() returns false
@@ -181,7 +179,7 @@ val words = lines.flatMap(_.split(" "))
 ...
 {% endhighlight %}
 
-The full source code is in the example [CustomReceiver.scala](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
+The full source code is in the example [CustomReceiver.scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/CustomReceiver.scala).
 
 </div>
 <div data-lang="java" markdown="1">
@@ -189,11 +187,11 @@ The full source code is in the example [CustomReceiver.scala](https://github.com
 {% highlight java %}
 // Assuming ssc is the JavaStreamingContext
 JavaDStream<String> customReceiverStream = ssc.receiverStream(new JavaCustomReceiver(host, port));
-JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() { ... });
+JavaDStream<String> words = lines.flatMap(s -> ...);
 ...
 {% endhighlight %}
 
-The full source code is in the example [JavaCustomReceiver.java](https://github.com/apache/spark/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
+The full source code is in the example [JavaCustomReceiver.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaCustomReceiver.java).
 
 </div>
 </div>

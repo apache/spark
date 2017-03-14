@@ -469,10 +469,10 @@ class HasStandardization(Params):
 
 class HasThresholds(Params):
     """
-    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
     """
 
-    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", typeConverter=TypeConverters.toListFloat)
+    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.", typeConverter=TypeConverters.toListFloat)
 
     def __init__(self):
         super(HasThresholds, self).__init__()
@@ -488,6 +488,30 @@ class HasThresholds(Params):
         Gets the value of thresholds or its default value.
         """
         return self.getOrDefault(self.thresholds)
+
+
+class HasThreshold(Params):
+    """
+    Mixin for param threshold: threshold in binary classification prediction, in range [0, 1]
+    """
+
+    threshold = Param(Params._dummy(), "threshold", "threshold in binary classification prediction, in range [0, 1]", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(HasThreshold, self).__init__()
+        self._setDefault(threshold=0.5)
+
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
+
+    def getThreshold(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.threshold)
 
 
 class HasWeightCol(Params):
@@ -558,6 +582,30 @@ class HasVarianceCol(Params):
         Gets the value of varianceCol or its default value.
         """
         return self.getOrDefault(self.varianceCol)
+
+
+class HasAggregationDepth(Params):
+    """
+    Mixin for param aggregationDepth: suggested depth for treeAggregate (>= 2).
+    """
+
+    aggregationDepth = Param(Params._dummy(), "aggregationDepth", "suggested depth for treeAggregate (>= 2).", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasAggregationDepth, self).__init__()
+        self._setDefault(aggregationDepth=2)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    def getAggregationDepth(self):
+        """
+        Gets the value of aggregationDepth or its default value.
+        """
+        return self.getOrDefault(self.aggregationDepth)
 
 
 class DecisionTreeParams(Params):

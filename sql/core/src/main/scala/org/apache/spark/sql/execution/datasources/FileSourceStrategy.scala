@@ -62,7 +62,7 @@ object FileSourceStrategy extends Strategy with Logging {
       val filterSet = ExpressionSet(filters)
 
       // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we donot need to
+      // case insensitive, we should change them to match the one in schema, so we do not need to
       // worry about case sensitivity anymore.
       val normalizedFilters = filters.map { e =>
         e transform {
@@ -86,7 +86,7 @@ object FileSourceStrategy extends Strategy with Logging {
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
-      val afterScanFilters = filterSet -- partitionKeyFilters
+      val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
       logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
 
       val filterAttributes = AttributeSet(afterScanFilters)
@@ -106,13 +106,13 @@ object FileSourceStrategy extends Strategy with Logging {
       val outputAttributes = readDataColumns ++ partitionColumns
 
       val scan =
-        new FileSourceScanExec(
+        FileSourceScanExec(
           fsRelation,
           outputAttributes,
           outputSchema,
           partitionKeyFilters.toSeq,
           pushedDownFilters,
-          table)
+          table.map(_.identifier))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)

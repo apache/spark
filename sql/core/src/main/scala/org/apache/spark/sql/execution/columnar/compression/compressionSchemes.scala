@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.types._
 
@@ -56,7 +56,7 @@ private[columnar] case object PassThrough extends CompressionScheme {
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
     extends compression.Decoder[T] {
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(row: InternalRow, ordinal: Int): Unit = {
       columnType.extract(buffer, row, ordinal)
     }
 
@@ -86,7 +86,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     private var _compressedSize = 0
 
     // Using `MutableRow` to store the last value to avoid boxing/unboxing cost.
-    private val lastValue = new SpecificMutableRow(Seq(columnType.dataType))
+    private val lastValue = new SpecificInternalRow(Seq(columnType.dataType))
     private var lastRun = 0
 
     override def uncompressedSize: Int = _uncompressedSize
@@ -117,9 +117,9 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       to.putInt(RunLengthEncoding.typeId)
 
       if (from.hasRemaining) {
-        val currentValue = new SpecificMutableRow(Seq(columnType.dataType))
+        val currentValue = new SpecificInternalRow(Seq(columnType.dataType))
         var currentRun = 1
-        val value = new SpecificMutableRow(Seq(columnType.dataType))
+        val value = new SpecificInternalRow(Seq(columnType.dataType))
 
         columnType.extract(from, currentValue, 0)
 
@@ -156,7 +156,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     private var valueCount = 0
     private var currentValue: T#InternalType = _
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(row: InternalRow, ordinal: Int): Unit = {
       if (valueCount == run) {
         currentValue = columnType.extract(buffer)
         run = ByteBufferHelper.getInt(buffer)
@@ -273,7 +273,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
       Array.fill[Any](elementNum)(columnType.extract(buffer).asInstanceOf[Any])
     }
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(row: InternalRow, ordinal: Int): Unit = {
       columnType.setField(row, ordinal, dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
     }
 
@@ -356,7 +356,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
 
     private var visited: Int = 0
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(row: InternalRow, ordinal: Int): Unit = {
       val bit = visited % BITS_PER_LONG
 
       visited += 1
@@ -443,7 +443,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(row: InternalRow, ordinal: Int): Unit = {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
       row.setInt(ordinal, prev)
@@ -523,7 +523,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def next(row: MutableRow, ordinal: Int): Unit = {
+    override def next(row: InternalRow, ordinal: Int): Unit = {
       val delta = buffer.get()
       prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)

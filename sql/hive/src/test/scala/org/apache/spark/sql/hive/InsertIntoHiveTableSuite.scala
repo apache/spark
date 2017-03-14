@@ -284,19 +284,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     sql("DROP TABLE hiveTableWithStructValue")
   }
 
-  test("Reject partitioning that does not match table") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
-      val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
-          .toDF("id", "data", "part")
-
-      intercept[AnalysisException] {
-        // cannot partition by 2 fields when there is only one in the table definition
-        data.write.partitionBy("part", "data").insertInto("partitioned")
-      }
-    }
-  }
-
   test("Test partition mode = strict") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "strict")) {
       sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
@@ -370,24 +357,14 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     assert(cause.getMessage.contains("insertInto() can't be used together with partitionBy()."))
   }
 
-  test("InsertIntoTable#resolved should include dynamic partitions") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
-      val data = (1 to 10).map(i => (i.toLong, s"data-$i")).toDF("id", "data")
-
-      val logical = InsertIntoTable(spark.table("partitioned").logicalPlan,
-        Map("part" -> None), data.logicalPlan, overwrite = false, ifNotExists = false)
-      assert(!logical.resolved, "Should not resolve: missing partition data")
-    }
-  }
-
   testPartitionedTable(
     "SPARK-16036: better error message when insert into a table with mismatch schema") {
     tableName =>
       val e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
       }
-      assert(e.message.contains("the number of columns are different"))
+      assert(e.message.contains(
+        "target table has 4 column(s) but the inserted data has 5 column(s)"))
   }
 
   testPartitionedTable("SPARK-16037: INSERT statement should match columns by position") {
@@ -409,8 +386,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
         sql(s"INSERT INTO TABLE $tableName PARTITION (c=11, b=10) SELECT 9, 12")
 
-        // c is defined twice. Parser will complain.
-        intercept[ParseException] {
+        // c is defined twice. Analyzer will complain.
+        intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, c=16) SELECT 13")
         }
 

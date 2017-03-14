@@ -41,7 +41,7 @@ import org.apache.spark.network.shuffle.protocol.StreamHandle;
  * {@link org.apache.spark.network.server.OneForOneStreamManager} on the server side.
  */
 public class OneForOneBlockFetcher {
-  private final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
+  private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
 
   private final TransportClient client;
   private final OpenBlocks openMessage;

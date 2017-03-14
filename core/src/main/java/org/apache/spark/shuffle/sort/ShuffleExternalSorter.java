@@ -62,7 +62,7 @@ import org.apache.spark.util.Utils;
  */
 final class ShuffleExternalSorter extends MemoryConsumer {
 
-  private final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
+  private static final Logger logger = LoggerFactory.getLogger(ShuffleExternalSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;

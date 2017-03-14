@@ -109,8 +109,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      val shuffledHashJoin =
-        joins.ShuffledHashJoinExec(leftKeys, rightKeys, Inner, side, None, leftPlan, rightPlan)
+      val shuffledHashJoin = joins.ShuffledHashJoinExec(leftKeys, rightKeys, Inner,
+        side, None, leftPlan, rightPlan)
       val filteredJoin =
         boundCondition.map(FilterExec(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
       EnsureRequirements(spark.sessionState.conf).apply(filteredJoin)
@@ -122,8 +122,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition: Option[Expression],
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
-      val sortMergeJoin =
-        joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition, leftPlan, rightPlan)
+      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition,
+        leftPlan, rightPlan)
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 

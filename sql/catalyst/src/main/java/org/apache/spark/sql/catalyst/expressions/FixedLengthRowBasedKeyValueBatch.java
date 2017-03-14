@@ -165,10 +165,10 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
   protected FixedLengthRowBasedKeyValueBatch(StructType keySchema, StructType valueSchema,
                                              int maxRows, TaskMemoryManager manager) {
     super(keySchema, valueSchema, maxRows, manager);
-    klen = keySchema.defaultSize()
-            + UnsafeRow.calculateBitSetWidthInBytes(keySchema.length());
-    vlen = valueSchema.defaultSize()
-            + UnsafeRow.calculateBitSetWidthInBytes(valueSchema.length());
+    int keySize = keySchema.size() * 8; // each fixed-length field is stored in a 8-byte word
+    int valueSize = valueSchema.size() * 8;
+    klen = keySize + UnsafeRow.calculateBitSetWidthInBytes(keySchema.length());
+    vlen = valueSize + UnsafeRow.calculateBitSetWidthInBytes(valueSchema.length());
     recordLength = klen + vlen + 8;
   }
 }

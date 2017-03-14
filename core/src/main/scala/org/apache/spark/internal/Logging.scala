@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * logging messages at different levels using methods that only evaluate parameters lazily if the
  * log level is enabled.
  */
-private[spark] trait Logging {
+trait Logging {
 
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
@@ -135,7 +135,8 @@ private[spark] trait Logging {
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
         if (replLevel != rootLogger.getEffectiveLevel()) {
           System.err.printf("Setting default log level to \"%s\".\n", replLevel)
-          System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
+          System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
+            "For SparkR, use setLogLevel(newLevel).")
           rootLogger.setLevel(replLevel)
         }
       }

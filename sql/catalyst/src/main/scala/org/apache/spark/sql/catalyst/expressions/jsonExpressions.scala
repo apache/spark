@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.io.{ByteArrayOutputStream, StringWriter}
+import java.io.{ByteArrayOutputStream, CharArrayWriter, StringWriter}
 
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, ParseModes}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -66,7 +69,7 @@ private[this] object JsonPathParser extends RegexParsers {
   // parse `.name` or `['name']` child expressions
   def named: Parser[List[PathInstruction]] =
     for {
-      name <- '.' ~> "[^\\.\\[]+".r | "[\\'" ~> "[^\\'\\?]+" <~ "\\']"
+      name <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']"
     } yield {
       Key :: Named(name) :: Nil
     }
@@ -107,7 +110,12 @@ private[this] object SharedFactory {
  * of the extracted json object. It will return null if the input json string is invalid.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_txt, path) - Extract a json object from path")
+  usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":"b"}', '$.a');
+       b
+  """)
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -323,7 +331,12 @@ case class GetJsonObject(json: Expression, path: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - like get_json_object, but it takes multiple names and return a tuple. All the input parameters and output column types are string.")
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
+       1  2
+  """)
 // scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -467,3 +480,173 @@ case class JsonTuple(children: Seq[Expression])
   }
 }
 
+/**
+ * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
+ */
+case class JsonToStruct(
+    schema: DataType,
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+  override def nullable: Boolean = true
+
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
+    this(schema, options, child, None)
+
+  override def checkInputDataTypes(): TypeCheckResult = schema match {
+    case _: StructType | ArrayType(_: StructType, _) =>
+      super.checkInputDataTypes()
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
+  }
+
+  @transient
+  lazy val rowSchema = schema match {
+    case st: StructType => st
+    case ArrayType(st: StructType, _) => st
+  }
+
+  // This converts parsed rows to the desired output by the given schema.
+  @transient
+  lazy val converter = schema match {
+    case _: StructType =>
+      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
+    case ArrayType(_: StructType, _) =>
+      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+  }
+
+  @transient
+  lazy val parser =
+    new JacksonParser(
+      rowSchema,
+      new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
+
+  override def dataType: DataType = schema
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(json: Any): Any = {
+    // When input is,
+    //   - `null`: `null`.
+    //   - invalid json: `null`.
+    //   - empty string: `null`.
+    //
+    // When the schema is array,
+    //   - json array: `Array(Row(...), ...)`
+    //   - json object: `Array(Row(...))`
+    //   - empty json array: `Array()`.
+    //   - empty json object: `Array(Row(null))`.
+    //
+    // When the schema is a struct,
+    //   - json object/array with single element: `Row(...)`
+    //   - json array with multiple elements: `null`
+    //   - empty json array: `null`.
+    //   - empty json object: `Row(null)`.
+
+    // We need `null` if the input string is an empty string. `JacksonParser` can
+    // deal with this but produces `Nil`.
+    if (json.toString.trim.isEmpty) return null
+
+    try {
+      converter(parser.parse(
+        json.asInstanceOf[UTF8String],
+        CreateJacksonParser.utf8String,
+        identity[UTF8String]))
+    } catch {
+      case _: SparkSQLJsonProcessingException => null
+    }
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
+}
+
+/**
+ * Converts a [[StructType]] to a json output string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       {"a":1,"b":2}
+      > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"26/08/2015"}
+  """)
+// scalastyle:on line.size.limit
+case class StructToJson(
+    options: Map[String, String],
+    child: Expression,
+    timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+  override def nullable: Boolean = true
+
+  def this(options: Map[String, String], child: Expression) = this(options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression) = this(Map.empty, child, None)
+  def this(child: Expression, options: Expression) =
+    this(
+      options = StructToJson.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
+
+  @transient
+  lazy val writer = new CharArrayWriter()
+
+  @transient
+  lazy val gen =
+    new JacksonGenerator(
+      child.dataType.asInstanceOf[StructType],
+      writer,
+      new JSONOptions(options, timeZoneId.get))
+
+  override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (StructType.acceptsType(child.dataType)) {
+      try {
+        JacksonUtils.verifySchema(child.dataType.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName requires that the expression is a struct expression.")
+    }
+  }
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def nullSafeEval(row: Any): Any = {
+    gen.write(row.asInstanceOf[InternalRow])
+    gen.flush()
+    val json = writer.toString
+    writer.reset()
+    UTF8String.fromString(json)
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
+}
+
+object StructToJson {
+
+  def convertToMapData(exp: Expression): Map[String, String] = exp match {
+    case m: CreateMap
+        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
+      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
+      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
+        key.toString -> value.toString
+      }
+    case m: CreateMap =>
+      throw new AnalysisException(
+        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+    case _ =>
+      throw new AnalysisException("Must use a map() function for options")
+  }
+}

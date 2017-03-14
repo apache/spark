@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.{InternalOutputModes, SparkSession}
+import java.util.concurrent.atomic.AtomicInteger
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
@@ -32,12 +36,16 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
-    val currentBatchId: Long)
-  extends QueryExecution(sparkSession, logicalPlan) {
+    val currentBatchId: Long,
+    val currentEventTimeWatermark: Long)
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+  val streamingExtraStrategies =
+    sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+    sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
+    sparkSession.sessionState.planner.StreamingDeduplicationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.
@@ -45,34 +53,62 @@ class IncrementalExecution(
     new SparkPlanner(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
-      stateStrategy)
+      streamingExtraStrategies)
+
+  /**
+   * See [SPARK-18339]
+   * Walk the optimized logical plan and replace CurrentBatchTimestamp
+   * with the desired literal
+   */
+  override lazy val optimizedPlan: LogicalPlan = {
+    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
+      case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
+        logInfo(s"Current batch timestamp = $timestamp")
+        ts.toLiteral
+    }
+  }
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
    * preparation walks the query plan.
    */
-  private var operatorId = 0
+  private val operatorId = new AtomicInteger(0)
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None, None,
+      case StateStoreSaveExec(keys, None, None, None,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
-        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
-        val returnAllStates = if (outputMode == InternalOutputModes.Complete) true else false
-        operatorId += 1
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
 
         StateStoreSaveExec(
           keys,
           Some(stateId),
-          Some(returnAllStates),
+          Some(outputMode),
+          Some(currentEventTimeWatermark),
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))
+      case StreamingDeduplicateExec(keys, child, None, None) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+
+        StreamingDeduplicateExec(
+          keys,
+          child,
+          Some(stateId),
+          Some(currentEventTimeWatermark))
+      case FlatMapGroupsWithStateExec(
+             f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+        FlatMapGroupsWithStateExec(
+          f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
     }
   }
 

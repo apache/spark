@@ -17,6 +17,10 @@
 
 package org.apache.spark.deploy.master.ui
 
+import scala.collection.mutable.HashMap
+
+import org.eclipse.jetty.servlet.ServletContextHandler
+
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, WebUI}
@@ -34,6 +38,7 @@ class MasterWebUI(
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
+  private val proxyHandlers = new HashMap[String, ServletContextHandler]
 
   initialize()
 
@@ -47,6 +52,17 @@ class MasterWebUI(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(
       "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
+  }
+
+  def addProxyTargets(id: String, target: String): Unit = {
+    var endTarget = target.stripSuffix("/")
+    val handler = createProxyHandler("/proxy/" + id, endTarget)
+    attachHandler(handler)
+    proxyHandlers(id) = handler
+  }
+
+  def removeProxyTargets(id: String): Unit = {
+    proxyHandlers.remove(id).foreach(detachHandler)
   }
 }
 

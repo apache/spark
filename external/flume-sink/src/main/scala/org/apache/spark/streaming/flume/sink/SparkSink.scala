@@ -45,7 +45,7 @@ import org.apache.flume.sink.AbstractSink
  * the thread itself is blocked and a reference to it saved off.
  *
  * When the ack for that batch is received,
- * the thread which created the transaction is is retrieved and it commits the transaction with the
+ * the thread which created the transaction is retrieved and it commits the transaction with the
  * channel from the same thread it was originally created in (since Flume transactions are
  * thread local). If a nack is received instead, the sink rolls back the transaction. If no ack
  * is received within the specified timeout, the transaction is rolled back too. If an ack comes

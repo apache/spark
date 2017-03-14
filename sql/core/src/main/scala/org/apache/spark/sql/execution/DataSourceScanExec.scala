@@ -23,12 +23,11 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
@@ -72,8 +71,9 @@ case class RowDataSourceScanExec(
     val unsafeRow = if (outputUnsafeRows) {
       rdd
     } else {
-      rdd.mapPartitionsInternal { iter =>
+      rdd.mapPartitionsWithIndexInternal { (index, iter) =>
         val proj = UnsafeProjection.create(schema)
+        proj.initialize(index)
         iter.map(proj)
       }
     }
@@ -136,7 +136,7 @@ case class RowDataSourceScanExec(
  * @param outputSchema Output schema of the scan.
  * @param partitionFilters Predicates to use for partition pruning.
  * @param dataFilters Data source filters to use for filtering data within partitions.
- * @param metastoreTableIdentifier
+ * @param metastoreTableIdentifier identifier for the table in the metastore.
  */
 case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
@@ -145,50 +145,110 @@ case class FileSourceScanExec(
     partitionFilters: Seq[Expression],
     dataFilters: Seq[Filter],
     override val metastoreTableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec {
+  extends DataSourceScanExec with ColumnarBatchScan  {
 
-  val supportsBatch = relation.fileFormat.supportBatch(
+  val supportsBatch: Boolean = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
-  val needsUnsafeRowConversion = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+  val needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
     SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
   } else {
     false
   }
 
-  override val outputPartitioning: Partitioning = {
+  @transient private lazy val selectedPartitions = relation.location.listFiles(partitionFilters)
+
+  override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
       None
     }
-    bucketSpec.map { spec =>
-      val numBuckets = spec.numBuckets
-      val bucketColumns = spec.bucketColumnNames.flatMap { n =>
-        output.find(_.name == n)
-      }
-      if (bucketColumns.size == spec.bucketColumnNames.size) {
-        HashPartitioning(bucketColumns, numBuckets)
-      } else {
-        UnknownPartitioning(0)
-      }
-    }.getOrElse {
-      UnknownPartitioning(0)
+    bucketSpec match {
+      case Some(spec) =>
+        // For bucketed columns:
+        // -----------------------
+        // `HashPartitioning` would be used only when:
+        // 1. ALL the bucketing columns are being read from the table
+        //
+        // For sorted columns:
+        // ---------------------
+        // Sort ordering should be used when ALL these criteria's match:
+        // 1. `HashPartitioning` is being used
+        // 2. A prefix (or all) of the sort columns are being read from the table.
+        //
+        // Sort ordering would be over the prefix subset of `sort columns` being read
+        // from the table.
+        // eg.
+        // Assume (col0, col2, col3) are the columns read from the table
+        // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
+        // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
+        // above
+
+        def toAttribute(colName: String): Option[Attribute] =
+          output.find(_.name == colName)
+
+        val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
+          val partitioning = HashPartitioning(bucketColumns, spec.numBuckets)
+          val sortColumns =
+            spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
+
+          val sortOrder = if (sortColumns.nonEmpty) {
+            // In case of bucketing, its possible to have multiple files belonging to the
+            // same bucket in a given relation. Each of these files are locally sorted
+            // but those files combined together are not globally sorted. Given that,
+            // the RDD partition will not be sorted even if the relation has sort columns set
+            // Current solution is to check if all the buckets have a single file in it
+
+            val files = selectedPartitions.flatMap(partition => partition.files)
+            val bucketToFilesGrouping =
+              files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
+            val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
+
+            if (singleFilePartitions) {
+              // TODO Currently Spark does not support writing columns sorting in descending order
+              // so using Ascending order. This can be fixed in future
+              sortColumns.map(attribute => SortOrder(attribute, Ascending))
+            } else {
+              Nil
+            }
+          } else {
+            Nil
+          }
+          (partitioning, sortOrder)
+        } else {
+          (UnknownPartitioning(0), Nil)
+        }
+      case _ =>
+        (UnknownPartitioning(0), Nil)
     }
   }
 
   // These metadata values make scan plans uniquely identifiable for equality checking.
-  override val metadata: Map[String, String] = Map(
-    "Format" -> relation.fileFormat.toString,
-    "ReadSchema" -> outputSchema.catalogString,
-    "Batched" -> supportsBatch.toString,
-    "PartitionFilters" -> partitionFilters.mkString("[", ", ", "]"),
-    "PushedFilters" -> dataFilters.mkString("[", ", ", "]"),
-    "InputPaths" -> relation.location.paths.mkString(", "))
+  override val metadata: Map[String, String] = {
+    def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
+    val location = relation.location
+    val locationDesc =
+      location.getClass.getSimpleName + seqToString(location.rootPaths)
+    val metadata =
+      Map(
+        "Format" -> relation.fileFormat.toString,
+        "ReadSchema" -> outputSchema.catalogString,
+        "Batched" -> supportsBatch.toString,
+        "PartitionFilters" -> seqToString(partitionFilters),
+        "PushedFilters" -> seqToString(dataFilters),
+        "Location" -> locationDesc)
+    val withOptPartitionCount =
+      relation.partitionSchemaOption.map { _ =>
+        metadata + ("PartitionCount" -> selectedPartitions.size.toString)
+      } getOrElse {
+        metadata
+      }
+    withOptPartitionCount
+  }
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val selectedPartitions = relation.location.listFiles(partitionFilters)
-
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
@@ -225,8 +285,9 @@ case class FileSourceScanExec(
       val unsafeRows = {
         val scan = inputRDD
         if (needsUnsafeRowConversion) {
-          scan.mapPartitionsInternal { iter =>
+          scan.mapPartitionsWithIndexInternal { (index, iter) =>
             val proj = UnsafeProjection.create(schema)
+            proj.initialize(index)
             iter.map(proj)
           }
         } else {
@@ -251,7 +312,7 @@ case class FileSourceScanExec(
 
   override protected def doProduce(ctx: CodegenContext): String = {
     if (supportsBatch) {
-      return doProduceVectorized(ctx)
+      return super.doProduce(ctx)
     }
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
@@ -275,88 +336,6 @@ case class FileSourceScanExec(
      """.stripMargin
   }
 
-  // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
-  // never requires UnsafeRow as input.
-  private def doProduceVectorized(ctx: CodegenContext): String = {
-    val input = ctx.freshName("input")
-    // PhysicalRDD always just has one input
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-
-    // metrics
-    val numOutputRows = metricTerm(ctx, "numOutputRows")
-    val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.freshName("scanTime")
-    ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
-
-    val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
-    val batch = ctx.freshName("batch")
-    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
-
-    val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
-    val idx = ctx.freshName("batchIdx")
-    ctx.addMutableState("int", idx, s"$idx = 0;")
-    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
-    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
-      ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-      s"$name = $batch.column($i);"
-    }
-
-    val nextBatch = ctx.freshName("nextBatch")
-    ctx.addNewFunction(nextBatch,
-      s"""
-         |private void $nextBatch() throws java.io.IOException {
-         |  long getBatchStart = System.nanoTime();
-         |  if ($input.hasNext()) {
-         |    $batch = ($columnarBatchClz)$input.next();
-         |    $numOutputRows.add($batch.numRows());
-         |    $idx = 0;
-         |    ${columnAssigns.mkString("", "\n", "\n")}
-         |  }
-         |  $scanTimeTotalNs += System.nanoTime() - getBatchStart;
-         |}""".stripMargin)
-
-    ctx.currentVars = null
-    val rowidx = ctx.freshName("rowIdx")
-    val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
-      genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
-    }
-    s"""
-       |if ($batch == null) {
-       |  $nextBatch();
-       |}
-       |while ($batch != null) {
-       |  int numRows = $batch.numRows();
-       |  while ($idx < numRows) {
-       |    int $rowidx = $idx++;
-       |    ${consume(ctx, columnsBatchInput).trim}
-       |    if (shouldStop()) return;
-       |  }
-       |  $batch = null;
-       |  $nextBatch();
-       |}
-       |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
-       |$scanTimeTotalNs = 0;
-     """.stripMargin
-  }
-
-  private def genCodeColumnVector(ctx: CodegenContext, columnVar: String, ordinal: String,
-    dataType: DataType, nullable: Boolean): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(columnVar, dataType, ordinal)
-    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
-    val valueVar = ctx.freshName("value")
-    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
-      s"""
-        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
-        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
-      """
-    } else {
-      s"$javaType ${valueVar} = $value;"
-    }).trim
-    ExprCode(code, isNullVar, valueVar)
-  }
-
   /**
    * Create an RDD for bucketed reads.
    * The non-bucketed variant of this function is [[createNonBucketedReadRDD]].
@@ -372,7 +351,7 @@ case class FileSourceScanExec(
   private def createBucketedReadRDD(
       bucketSpec: BucketSpec,
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Seq[Partition],
+      selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val bucketed =
@@ -404,7 +383,7 @@ case class FileSourceScanExec(
    */
   private def createNonBucketedReadRDD(
       readFile: (PartitionedFile) => Iterator[InternalRow],
-      selectedPartitions: Seq[Partition],
+      selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val defaultMaxSplitBytes =
       fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
@@ -448,21 +427,20 @@ case class FileSourceScanExec(
           FilePartition(
             partitions.size,
             currentFiles.toArray.toSeq) // Copy to a new Array.
-        partitions.append(newPartition)
+        partitions += newPartition
       }
       currentFiles.clear()
       currentSize = 0
     }
 
     // Assign files to partitions using "First Fit Decreasing" (FFD)
-    // TODO: consider adding a slop factor here?
     splitFiles.foreach { file =>
       if (currentSize + file.length > maxSplitBytes) {
         closePartition()
       }
       // Add the given file to the current partition.
       currentSize += file.length + openCostInBytes
-      currentFiles.append(file)
+      currentFiles += file
     }
     closePartition()
 

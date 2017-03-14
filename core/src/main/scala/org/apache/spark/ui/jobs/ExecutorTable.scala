@@ -85,6 +85,11 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
           <th>Shuffle Spill (Memory)</th>
           <th>Shuffle Spill (Disk)</th>
         }}
+        <th>
+          <span data-toggle="tooltip" title={ToolTips.BLACKLISTED}>
+          Blacklisted
+          </span>
+        </th>
       </thead>
       <tbody>
         {createExecutorTable()}
@@ -118,7 +123,8 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
               <div style="float: left">{k}</div>
               <div style="float: right">
               {
-                val logs = parent.executorsListener.executorToLogUrls.getOrElse(k, Map.empty)
+                val logs = parent.executorsListener.executorToTaskSummary.get(k)
+                  .map(_.executorLogs).getOrElse(Map.empty)
                 logs.map {
                   case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
                 }
@@ -159,6 +165,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
                 {Utils.bytesToString(v.diskBytesSpilled)}
               </td>
             }}
+            <td>{v.isBlacklisted}</td>
           </tr>
         }
       case None =>

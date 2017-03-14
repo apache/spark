@@ -18,3 +18,6 @@ select * from testdata limit key > 3;
 -- limit must be integer
 select * from testdata limit true;
 select * from testdata limit 'a';
+
+-- limit within a subquery
+select * from (select * from range(10) limit 5) where id > 3;

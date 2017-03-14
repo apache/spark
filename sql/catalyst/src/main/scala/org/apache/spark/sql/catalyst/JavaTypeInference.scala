@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
+import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
 
 import scala.language.existentials
@@ -52,6 +53,15 @@ object JavaTypeInference {
    */
   def inferDataType(beanClass: Class[_]): (DataType, Boolean) = {
     inferDataType(TypeToken.of(beanClass))
+  }
+
+  /**
+   * Infers the corresponding SQL data type of a Java type.
+   * @param beanType Java type
+   * @return (SQL data type, nullable)
+   */
+  private[sql] def inferDataType(beanType: Type): (DataType, Boolean) = {
+    inferDataType(TypeToken.of(beanType))
   }
 
   /**
@@ -107,11 +117,10 @@ object JavaTypeInference {
         val (valueDataType, nullable) = inferDataType(valueType)
         (MapType(keyDataType, valueDataType, nullable), true)
 
-      case _ =>
+      case other =>
         // TODO: we should only collect properties that have getter and setter. However, some tests
         // pass in scala case class as java bean class which doesn't have getter and setter.
-        val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)
-        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+        val properties = getJavaBeanReadableProperties(other)
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType)
@@ -121,10 +130,15 @@ object JavaTypeInference {
     }
   }
 
-  private def getJavaBeanProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
+  def getJavaBeanReadableProperties(beanClass: Class[_]): Array[PropertyDescriptor] = {
     val beanInfo = Introspector.getBeanInfo(beanClass)
-    beanInfo.getPropertyDescriptors
-      .filter(p => p.getReadMethod != null && p.getWriteMethod != null)
+    beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+      .filter(_.getReadMethod != null)
+  }
+
+  private def getJavaBeanReadableAndWritableProperties(
+      beanClass: Class[_]): Array[PropertyDescriptor] = {
+    getJavaBeanReadableProperties(beanClass).filter(_.getWriteMethod != null)
   }
 
   private def elementType(typeToken: TypeToken[_]): TypeToken[_] = {
@@ -288,9 +302,7 @@ object JavaTypeInference {
           keyData :: valueData :: Nil)
 
       case other =>
-        val properties = getJavaBeanProperties(other)
-        assert(properties.length > 0)
-
+        val properties = getJavaBeanReadableAndWritableProperties(other)
         val setters = properties.map { p =>
           val fieldName = p.getName
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
@@ -396,30 +408,27 @@ object JavaTypeInference {
 
         case _ if mapType.isAssignableFrom(typeToken) =>
           val (keyType, valueType) = mapKeyValueType(typeToken)
+
           ExternalMapToCatalyst(
             inputObject,
             ObjectType(keyType.getRawType),
             serializerFor(_, keyType),
             ObjectType(valueType.getRawType),
-            serializerFor(_, valueType)
+            serializerFor(_, valueType),
+            valueNullable = true
           )
 
         case other =>
-          val properties = getJavaBeanProperties(other)
-          if (properties.length > 0) {
-            CreateNamedStruct(properties.flatMap { p =>
-              val fieldName = p.getName
-              val fieldType = typeToken.method(p.getReadMethod).getReturnType
-              val fieldValue = Invoke(
-                inputObject,
-                p.getReadMethod.getName,
-                inferExternalType(fieldType.getRawType))
-              expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
-            })
-          } else {
-            throw new UnsupportedOperationException(
-              s"Cannot infer type for class ${other.getName} because it is not bean-compliant")
-          }
+          val properties = getJavaBeanReadableAndWritableProperties(other)
+          CreateNamedStruct(properties.flatMap { p =>
+            val fieldName = p.getName
+            val fieldType = typeToken.method(p.getReadMethod).getReturnType
+            val fieldValue = Invoke(
+              inputObject,
+              p.getReadMethod.getName,
+              inferExternalType(fieldType.getRawType))
+            expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
+          })
       }
     }
   }

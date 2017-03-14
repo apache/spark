@@ -37,7 +37,7 @@ test_that("include inside function", {
     }
 
     data <- lapplyPartition(rdd, generateData)
-    actual <- collect(data)
+    actual <- collectRDD(data)
   }
 })
 
@@ -53,7 +53,7 @@ test_that("use include package", {
 
     includePackage(sc, plyr)
     data <- lapplyPartition(rdd, generateData)
-    actual <- collect(data)
+    actual <- collectRDD(data)
   }
 })
 

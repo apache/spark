@@ -445,14 +445,20 @@ private[parquet] class ParquetSchemaConverter(
         //     repeated <element-type> array;
         //   }
         // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
-          Types
+
+        // This should not use `listOfElements` here because this new method checks if the
+        // element name is `element` in the `GroupType` and throws an exception if not.
+        // As mentioned above, Spark prior to 1.4.x writes `ArrayType` as `LIST` but with
+        // `array` as its element name as below. Therefore, we build manually
+        // the correct group type here via the builder. (See SPARK-16777)
+        Types
+          .buildGroup(repetition).as(LIST)
+          .addField(Types
             .buildGroup(REPEATED)
-            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
+            // "array" is the name chosen by parquet-hive (1.7.0 and prior version)
             .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
+          .named(field.name)
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
@@ -461,11 +467,13 @@ private[parquet] class ParquetSchemaConverter(
         // <list-repetition> group <name> (LIST) {
         //   repeated <element-type> element;
         // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
+
+        // Here too, we should not use `listOfElements`. (See SPARK-16777)
+        Types
+          .buildGroup(repetition).as(LIST)
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
-          convertField(StructField("array", elementType, nullable), REPEATED))
+          .addField(convertField(StructField("array", elementType, nullable), REPEATED))
+          .named(field.name)
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
@@ -538,21 +546,8 @@ private[parquet] class ParquetSchemaConverter(
 private[parquet] object ParquetSchemaConverter {
   val SPARK_PARQUET_SCHEMA_NAME = "spark_schema"
 
-  // !! HACK ALERT !!
-  //
-  // PARQUET-363 & PARQUET-278: parquet-mr 1.8.1 doesn't allow constructing empty GroupType,
-  // which prevents us to avoid selecting any columns for queries like `SELECT COUNT(*) FROM t`.
-  // This issue has been fixed in parquet-mr 1.8.2-SNAPSHOT.
-  //
-  // To workaround this problem, here we first construct a `MessageType` with a single dummy
-  // field, and then remove the field to obtain an empty `MessageType`.
-  //
-  // TODO Reverts this change after upgrading parquet-mr to 1.8.2+
-  val EMPTY_MESSAGE = Types
-      .buildMessage()
-      .required(PrimitiveType.PrimitiveTypeName.INT32).named("dummy")
-      .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
-  EMPTY_MESSAGE.getFields.clear()
+  val EMPTY_MESSAGE: MessageType =
+    Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
 
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema

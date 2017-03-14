@@ -44,7 +44,8 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
    * @group param
    */
   final val minDocFreq = new IntParam(
-    this, "minDocFreq", "minimum number of documents in which a term should appear for filtering")
+    this, "minDocFreq", "minimum number of documents in which a term should appear for filtering" +
+      " (>= 0)", ParamValidators.gtEq(0))
 
   setDefault(minDocFreq -> 0)
 

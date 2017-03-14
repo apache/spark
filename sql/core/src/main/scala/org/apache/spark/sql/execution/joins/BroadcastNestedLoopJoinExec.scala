@@ -34,8 +34,7 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression],
-    withinBroadcastThreshold: Boolean = true) extends BinaryExecNode {
+    condition: Option[Expression]) extends BinaryExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -53,7 +52,7 @@ case class BroadcastNestedLoopJoinExec(
       UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
-  private[this] def genResultProjection: InternalRow => InternalRow = joinType match {
+  private[this] def genResultProjection: UnsafeProjection = joinType match {
     case LeftExistence(j) =>
       UnsafeProjection.create(output, output)
     case other =>
@@ -65,7 +64,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -85,7 +84,7 @@ case class BroadcastNestedLoopJoinExec(
 
   @transient private lazy val boundCondition = {
     if (condition.isDefined) {
-      newPredicate(condition.get, streamed.output ++ broadcast.output)
+      newPredicate(condition.get, streamed.output ++ broadcast.output).eval _
     } else {
       (r: InternalRow) => true
     }
@@ -120,7 +119,7 @@ case class BroadcastNestedLoopJoinExec(
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
-      val nulls = new GenericMutableRow(broadcast.output.size)
+      val nulls = new GenericInternalRow(broadcast.output.size)
 
       // Returns an iterator to avoid copy the rows.
       new Iterator[InternalRow] {
@@ -206,14 +205,14 @@ case class BroadcastNestedLoopJoinExec(
       val joinedRow = new JoinedRow
 
       if (condition.isDefined) {
-        val resultRow = new GenericMutableRow(Array[Any](null))
+        val resultRow = new GenericInternalRow(Array[Any](null))
         streamedIter.map { row =>
           val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
           resultRow.setBoolean(0, result)
           joinedRow(row, resultRow)
         }
       } else {
-        val resultRow = new GenericMutableRow(Array[Any](buildRows.nonEmpty))
+        val resultRow = new GenericInternalRow(Array[Any](buildRows.nonEmpty))
         streamedIter.map { row =>
           joinedRow(row, resultRow)
         }
@@ -294,7 +293,7 @@ case class BroadcastNestedLoopJoinExec(
     }
 
     val notMatchedBroadcastRows: Seq[InternalRow] = {
-      val nulls = new GenericMutableRow(streamed.output.size)
+      val nulls = new GenericInternalRow(streamed.output.size)
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       val joinedRow = new JoinedRow
       joinedRow.withLeft(nulls)
@@ -312,7 +311,7 @@ case class BroadcastNestedLoopJoinExec(
     val matchedStreamRows = streamRdd.mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
-      val nulls = new GenericMutableRow(broadcast.output.size)
+      val nulls = new GenericInternalRow(broadcast.output.size)
 
       streamedIter.flatMap { streamedRow =>
         var i = 0
@@ -340,20 +339,11 @@ case class BroadcastNestedLoopJoinExec(
     )
   }
 
-  protected override def doPrepare(): Unit = {
-    if (!withinBroadcastThreshold && !sqlContext.conf.crossJoinEnabled) {
-      throw new AnalysisException("Both sides of this join are outside the broadcasting " +
-        "threshold and computing it could be prohibitively expensive. To explicitly enable it, " +
-        s"please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
-    }
-    super.doPrepare()
-  }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
     val resultRdd = (joinType, buildSide) match {
-      case (Inner, _) =>
+      case (_: InnerLike, _) =>
         innerJoin(broadcastedRelation)
       case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
         outerJoin(broadcastedRelation)
@@ -376,8 +366,9 @@ case class BroadcastNestedLoopJoinExec(
     }
 
     val numOutputRows = longMetric("numOutputRows")
-    resultRdd.mapPartitionsInternal { iter =>
+    resultRdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val resultProj = genResultProjection
+      resultProj.initialize(index)
       iter.map { r =>
         numOutputRows += 1
         resultProj(r)

@@ -32,7 +32,7 @@ package org.apache.spark
  * to reach feature parity with the RDD-based APIs.
  * And once we reach feature parity, this package will be deprecated.
  *
- * @see [[https://issues.apache.org/jira/browse/SPARK-4591 SPARK-4591]] to track the progress of
- *     feature parity
+ * @see <a href="https://issues.apache.org/jira/browse/SPARK-4591">SPARK-4591</a> to track
+ * the progress of feature parity
  */
 package object mllib

@@ -26,15 +26,15 @@ import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
@@ -42,70 +42,78 @@ import org.apache.spark.util.Utils
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    client: HiveClient,
-    sparkSession: SparkSession,
-    functionResourceLoader: FunctionResourceLoader,
+    globalTempViewManager: GlobalTempViewManager,
+    private val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
-    hadoopConf: Configuration)
+    hadoopConf: Configuration,
+    parser: ParserInterface)
   extends SessionCatalog(
-    externalCatalog,
-    functionResourceLoader,
-    functionRegistry,
-    conf,
-    hadoopConf) {
-
-  override def setCurrentDatabase(db: String): Unit = {
-    super.setCurrentDatabase(db)
-    client.setCurrentDatabase(db)
-  }
-
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
-    } else {
-      val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
-    }
-  }
+      externalCatalog,
+      globalTempViewManager,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser) {
 
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
 
-  // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
-  // essentially a cache for metastore tables. However, it relies on a lot of session-specific
-  // things so it would be a lot of work to split its functionality between HiveSessionCatalog
-  // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
-
+  // These 2 rules must be run before all other DDL post-hoc resolution rules, i.e.
+  // `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
-
-  override def refreshTable(name: TableIdentifier): Unit = {
-    super.refreshTable(name)
-    metastoreCatalog.refreshTable(name)
-  }
-
-  def invalidateCache(): Unit = {
-    metastoreCatalog.cachedDataSourceTables.invalidateAll()
-  }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
+  /**
+   * Create a new [[HiveSessionCatalog]] with the provided parameters. `externalCatalog` and
+   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
+   */
+  def newSessionCatalogWith(
+      newSparkSession: SparkSession,
+      conf: SQLConf,
+      hadoopConf: Configuration,
+      functionRegistry: FunctionRegistry,
+      parser: ParserInterface): HiveSessionCatalog = {
+    val catalog = HiveSessionCatalog(
+      newSparkSession,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
+
+    synchronized {
+      catalog.currentDb = currentDb
+      // copy over temporary tables
+      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+    }
+
+    catalog
+  }
+
+  /**
+   * The parent class [[SessionCatalog]] cannot access the [[SparkSession]] class, so we cannot add
+   * a [[SparkSession]] parameter to [[SessionCatalog.newSessionCatalogWith]]. However,
+   * [[HiveSessionCatalog]] requires a [[SparkSession]] parameter, so we can a new version of
+   * `newSessionCatalogWith` and disable this one.
+   *
+   * TODO Refactor HiveSessionCatalog to not use [[SparkSession]] directly.
+   */
+  override def newSessionCatalogWith(
+      conf: CatalystConf,
+      hadoopConf: Configuration,
+      functionRegistry: FunctionRegistry,
+      parser: ParserInterface): HiveSessionCatalog = throw new UnsupportedOperationException(
+    "to clone HiveSessionCatalog, use the other clone method that also accepts a SparkSession")
+
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
+    tableRelationCache.getIfPresent(key)
   }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
@@ -224,20 +232,46 @@ private[sql] class HiveSessionCatalog(
     }
   }
 
+  // TODO Removes this method after implementing Spark native "histogram_numeric".
+  override def functionExists(name: FunctionIdentifier): Boolean = {
+    super.functionExists(name) || hiveFunctions.contains(name.funcName)
+  }
+
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
   // We have a list of Hive built-in functions that we do not support. So, we will check
   // Hive's function registry and lazily load needed functions into our own function registry.
   // List of functions we are explicitly not supporting are:
   // compute_stats, context_ngrams, create_union,
   // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // in_file, index, java_method,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url_tuple, posexplode, reflect2,
-  // str_to_map, windowingtablefunction.
+  // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
+  // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
   private val hiveFunctions = Seq(
-    "hash",
-    "histogram_numeric",
-    "percentile",
-    "percentile_approx"
+    "histogram_numeric"
   )
+}
+
+private[sql] object HiveSessionCatalog {
+
+  def apply(
+      sparkSession: SparkSession,
+      functionRegistry: FunctionRegistry,
+      conf: SQLConf,
+      hadoopConf: Configuration,
+      parser: ParserInterface): HiveSessionCatalog = {
+    // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
+    // essentially a cache for metastore tables. However, it relies on a lot of session-specific
+    // things so it would be a lot of work to split its functionality between HiveSessionCatalog
+    // and HiveCatalog. We should still do it at some point...
+    val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
+
+    new HiveSessionCatalog(
+      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
+      sparkSession.sharedState.globalTempViewManager,
+      metastoreCatalog,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser)
+  }
 }

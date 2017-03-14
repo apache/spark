@@ -22,6 +22,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
 
@@ -252,6 +253,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
+        PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
     }
     eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
   }

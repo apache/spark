@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.io.File
+
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
@@ -83,6 +89,22 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       // them.
       logWarning("Due to a race condition, we miss some jobs and cannot verify the metric values")
     }
+  }
+
+  test("LocalTableScanExec computes metrics in collect and take") {
+    val df1 = spark.createDataset(Seq(1, 2, 3))
+    val logical = df1.queryExecution.logical
+    require(logical.isInstanceOf[LocalRelation])
+    df1.collect()
+    val metrics1 = df1.queryExecution.executedPlan.collectLeaves().head.metrics
+    assert(metrics1.contains("numOutputRows"))
+    assert(metrics1("numOutputRows").value === 3)
+
+    val df2 = spark.createDataset(Seq(1, 2, 3)).limit(2)
+    df2.collect()
+    val metrics2 = df2.queryExecution.executedPlan.collectLeaves().head.metrics
+    assert(metrics2.contains("numOutputRows"))
+    assert(metrics2("numOutputRows").value === 2)
   }
 
   test("Filter metrics") {
@@ -292,4 +314,103 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     assert(metricInfoDeser.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 
+  test("range metrics") {
+    val res1 = InputOutputMetricsHelper.run(
+      spark.range(30).filter(x => x % 3 == 0).toDF()
+    )
+    assert(res1 === (30L, 0L, 30L) :: Nil)
+
+    val res2 = InputOutputMetricsHelper.run(
+      spark.range(150).repartition(4).filter(x => x < 10).toDF()
+    )
+    assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
+
+    withTempDir { tempDir =>
+      val dir = new File(tempDir, "pqS").getCanonicalPath
+
+      spark.range(10).write.parquet(dir)
+      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+
+      val res3 = InputOutputMetricsHelper.run(
+        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+      )
+      // The query above is executed in the following stages:
+      //   1. sql("select * from pqS")    => (10, 0, 10)
+      //   2. range(30)                   => (30, 0, 30)
+      //   3. crossJoin(...) of 1. and 2. => (0, 30, 300)
+      //   4. shuffle & return results    => (0, 300, 0)
+      assert(res3 === (10L, 0L, 10L) :: (30L, 0L, 30L) :: (0L, 30L, 300L) :: (0L, 300L, 0L) :: Nil)
+    }
+  }
+}
+
+object InputOutputMetricsHelper {
+  private class InputOutputMetricsListener extends SparkListener {
+    private case class MetricsResult(
+        var recordsRead: Long = 0L,
+        var shuffleRecordsRead: Long = 0L,
+        var sumMaxOutputRows: Long = 0L)
+
+    private[this] val stageIdToMetricsResult = HashMap.empty[Int, MetricsResult]
+
+    def reset(): Unit = {
+      stageIdToMetricsResult.clear()
+    }
+
+    /**
+     * Return a list of recorded metrics aggregated per stage.
+     *
+     * The list is sorted in the ascending order on the stageId.
+     * For each recorded stage, the following tuple is returned:
+     *  - sum of inputMetrics.recordsRead for all the tasks in the stage
+     *  - sum of shuffleReadMetrics.recordsRead for all the tasks in the stage
+     *  - sum of the highest values of "number of output rows" metric for all the tasks in the stage
+     */
+    def getResults(): List[(Long, Long, Long)] = {
+      stageIdToMetricsResult.keySet.toList.sorted.map { stageId =>
+        val res = stageIdToMetricsResult(stageId)
+        (res.recordsRead, res.shuffleRecordsRead, res.sumMaxOutputRows)
+      }
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+      val res = stageIdToMetricsResult.getOrElseUpdate(taskEnd.stageId, MetricsResult())
+
+      res.recordsRead += taskEnd.taskMetrics.inputMetrics.recordsRead
+      res.shuffleRecordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
+
+      var maxOutputRows = 0L
+      for (accum <- taskEnd.taskMetrics.externalAccums) {
+        val info = accum.toInfo(Some(accum.value), None)
+        if (info.name.toString.contains("number of output rows")) {
+          info.update match {
+            case Some(n: Number) =>
+              if (n.longValue() > maxOutputRows) {
+                maxOutputRows = n.longValue()
+              }
+            case _ => // Ignore.
+          }
+        }
+      }
+      res.sumMaxOutputRows += maxOutputRows
+    }
+  }
+
+  // Run df.collect() and return aggregated metrics for each stage.
+  def run(df: DataFrame): List[(Long, Long, Long)] = {
+    val spark = df.sparkSession
+    val sparkContext = spark.sparkContext
+    val listener = new InputOutputMetricsListener()
+    sparkContext.addSparkListener(listener)
+
+    try {
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+      listener.reset()
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty(5000)
+    } finally {
+      sparkContext.removeSparkListener(listener)
+    }
+    listener.getResults()
+  }
 }

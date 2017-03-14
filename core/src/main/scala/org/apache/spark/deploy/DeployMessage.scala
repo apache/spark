@@ -135,7 +135,7 @@ private[deploy] object DeployMessages {
   }
 
   case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
-    exitStatus: Option[Int])
+    exitStatus: Option[Int], workerLost: Boolean)
 
   case class ApplicationRemoved(message: String)
 

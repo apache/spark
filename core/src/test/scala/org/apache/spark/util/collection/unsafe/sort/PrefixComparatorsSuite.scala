@@ -50,7 +50,8 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
       ("s1", "s2"),
       ("abc", "世界"),
       ("你好", "世界"),
-      ("你好123", "你好122")
+      ("你好123", "你好122"),
+      ("", "")
     )
     // scalastyle:on
 

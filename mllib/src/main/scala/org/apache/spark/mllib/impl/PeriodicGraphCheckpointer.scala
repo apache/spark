@@ -87,7 +87,10 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
 
   override protected def persist(data: Graph[VD, ED]): Unit = {
     if (data.vertices.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      data.vertices.persist()
+    }
+    if (data.edges.getStorageLevel == StorageLevel.NONE) {
+      data.edges.persist()
     }
   }
 

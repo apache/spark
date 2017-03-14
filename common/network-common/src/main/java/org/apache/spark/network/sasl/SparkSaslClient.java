@@ -43,7 +43,7 @@ import static org.apache.spark.network.sasl.SparkSaslServer.*;
  * firstToken, which is then followed by a set of challenges and responses.
  */
 public class SparkSaslClient implements SaslEncryptionBackend {
-  private final Logger logger = LoggerFactory.getLogger(SparkSaslClient.class);
+  private static final Logger logger = LoggerFactory.getLogger(SparkSaslClient.class);
 
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;

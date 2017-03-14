@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
 
@@ -164,7 +165,7 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Get a local property set upstream in the driver, or null if it is missing. See also
-   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String
 
@@ -174,7 +175,7 @@ abstract class TaskContext extends Serializable {
   /**
    * ::DeveloperApi::
    * Returns all metrics sources with the given name which are associated with the instance
-   * which runs the task. For more information see [[org.apache.spark.metrics.MetricsSystem!]].
+   * which runs the task. For more information see `org.apache.spark.metrics.MetricsSystem`.
    */
   @DeveloperApi
   def getMetricsSources(sourceName: String): Seq[Source]
@@ -189,5 +190,11 @@ abstract class TaskContext extends Serializable {
    * deserializing in executors.
    */
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit
+
+  /**
+   * Record that this task has failed due to a fetch failure from a remote host.  This allows
+   * fetch-failure handling to get triggered by the driver, regardless of intervening user-code.
+   */
+  private[spark] def setFetchFailed(fetchFailed: FetchFailedException): Unit
 
 }

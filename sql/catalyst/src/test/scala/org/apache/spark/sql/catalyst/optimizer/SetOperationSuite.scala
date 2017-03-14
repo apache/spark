@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -31,7 +32,8 @@ class SetOperationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Union Pushdown", Once,
         CombineUnions,
-        PushThroughSetOperations,
+        PushProjectionThroughUnion,
+        PushDownPredicate,
         PruneFilters) :: Nil
   }
 
@@ -74,5 +76,72 @@ class SetOperationSuite extends PlanTest {
         testRelation2.select('d) ::
         testRelation3.select('g) :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("Remove unnecessary distincts in multiple unions") {
+    val query1 = OneRowRelation
+      .select(Literal(1).as('a))
+    val query2 = OneRowRelation
+      .select(Literal(2).as('b))
+    val query3 = OneRowRelation
+      .select(Literal(3).as('c))
+
+    // D - U - D - U - query1
+    //     |       |
+    //     query3  query2
+    val unionQuery1 = Distinct(Union(Distinct(Union(query1, query2)), query3)).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    val distinctUnionCorrectAnswer1 =
+      Distinct(Union(query1 :: query2 :: query3 :: Nil)).analyze
+    comparePlans(distinctUnionCorrectAnswer1, optimized1)
+
+    //         query1
+    //         |
+    // D - U - U - query2
+    //     |
+    //     D - U - query2
+    //         |
+    //         query3
+    val unionQuery2 = Distinct(Union(Union(query1, query2),
+      Distinct(Union(query2, query3)))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    val distinctUnionCorrectAnswer2 =
+      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil)).analyze
+    comparePlans(distinctUnionCorrectAnswer2, optimized2)
+  }
+
+  test("Keep necessary distincts in multiple unions") {
+    val query1 = OneRowRelation
+      .select(Literal(1).as('a))
+    val query2 = OneRowRelation
+      .select(Literal(2).as('b))
+    val query3 = OneRowRelation
+      .select(Literal(3).as('c))
+    val query4 = OneRowRelation
+      .select(Literal(4).as('d))
+
+    // U - D - U - query1
+    // |       |
+    // query3  query2
+    val unionQuery1 = Union(Distinct(Union(query1, query2)), query3).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    val distinctUnionCorrectAnswer1 =
+      Union(Distinct(Union(query1 :: query2 :: Nil)) :: query3 :: Nil).analyze
+    comparePlans(distinctUnionCorrectAnswer1, optimized1)
+
+    //         query1
+    //         |
+    // U - D - U - query2
+    // |
+    // D - U - query3
+    //     |
+    //     query4
+    val unionQuery2 =
+      Union(Distinct(Union(query1, query2)), Distinct(Union(query3, query4))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    val distinctUnionCorrectAnswer2 =
+      Union(Distinct(Union(query1 :: query2 :: Nil)),
+            Distinct(Union(query3 :: query4 :: Nil))).analyze
+    comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 }

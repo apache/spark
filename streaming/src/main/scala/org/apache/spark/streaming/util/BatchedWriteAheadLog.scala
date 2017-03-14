@@ -157,7 +157,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
   /** Write all the records in the buffer to the write ahead log. */
   private def flushRecords(): Unit = {
     try {
-      buffer.append(walWriteQueue.take())
+      buffer += walWriteQueue.take()
       val numBatched = walWriteQueue.drainTo(buffer.asJava) + 1
       logDebug(s"Received $numBatched records from queue")
     } catch {

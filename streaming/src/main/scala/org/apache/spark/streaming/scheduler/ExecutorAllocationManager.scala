@@ -226,7 +226,7 @@ private[streaming] object ExecutorAllocationManager extends Logging {
       conf: SparkConf,
       batchDurationMs: Long,
       clock: Clock): Option[ExecutorAllocationManager] = {
-    if (isDynamicAllocationEnabled(conf)) {
+    if (isDynamicAllocationEnabled(conf) && client != null) {
       Some(new ExecutorAllocationManager(client, receiverTracker, conf, batchDurationMs, clock))
     } else None
   }

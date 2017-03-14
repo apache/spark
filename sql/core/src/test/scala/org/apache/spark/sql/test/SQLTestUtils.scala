@@ -18,13 +18,14 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.net.URI
 import java.util.UUID
 
 import scala.language.implicitConversions
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -94,7 +95,13 @@ private[sql] trait SQLTestUtils
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
+    val currentValues = keys.map { key =>
+      if (spark.conf.contains(key)) {
+        Some(spark.conf.get(key))
+      } else {
+        None
+      }
+    }
     (keys, values).zipped.foreach(spark.conf.set)
     try f finally {
       keys.zip(currentValues).foreach {
@@ -287,6 +294,17 @@ private[sql] trait SQLTestUtils
     } else {
       test(name) { runOnThread() }
     }
+  }
+
+  /**
+   * This method is used to make the given path qualified, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  def makeQualifiedPath(path: String): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.makeQualified(hadoopPath).toUri
   }
 }
 

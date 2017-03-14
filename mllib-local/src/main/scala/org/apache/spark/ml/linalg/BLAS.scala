@@ -244,6 +244,24 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
+   * y := alpha*A*x + beta*y
+   *
+   * @param n The order of the n by n matrix A.
+   * @param A The upper triangular part of A in a [[DenseVector]] (column major).
+   * @param x The [[DenseVector]] transformed by A.
+   * @param y The [[DenseVector]] to be modified in place.
+   */
+  def dspmv(
+      n: Int,
+      alpha: Double,
+      A: DenseVector,
+      x: DenseVector,
+      beta: Double,
+      y: DenseVector): Unit = {
+    f2jBLAS.dspmv("U", n, alpha, A.values, x.values, 1, beta, y.values, 1)
+  }
+
+  /**
    * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
@@ -638,12 +656,16 @@ private[spark] object BLAS extends Serializable {
         val indEnd = Arows(rowCounter + 1)
         var sum = 0.0
         var k = 0
-        while (k < xNnz && i < indEnd) {
+        while (i < indEnd && k < xNnz) {
           if (xIndices(k) == Acols(i)) {
             sum += Avals(i) * xValues(k)
+            k += 1
+            i += 1
+          } else if (xIndices(k) < Acols(i)) {
+            k += 1
+          } else {
             i += 1
           }
-          k += 1
         }
         yValues(rowCounter) = sum * alpha + beta * yValues(rowCounter)
         rowCounter += 1

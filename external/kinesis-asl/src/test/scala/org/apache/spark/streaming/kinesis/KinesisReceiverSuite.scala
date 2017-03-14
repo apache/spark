@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Matchers._
 import org.mockito.Matchers.{eq => meq}
@@ -62,13 +62,31 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     checkpointerMock = mock[IRecordProcessorCheckpointer]
   }
 
-  test("check serializability of SerializableAWSCredentials") {
-    Utils.deserialize[SerializableAWSCredentials](
-      Utils.serialize(new SerializableAWSCredentials("x", "y")))
+  test("check serializability of credential provider classes") {
+    Utils.deserialize[BasicCredentialsProvider](
+      Utils.serialize(BasicCredentialsProvider(
+        awsAccessKeyId = "x",
+        awsSecretKey = "y")))
+
+    Utils.deserialize[STSCredentialsProvider](
+      Utils.serialize(STSCredentialsProvider(
+        stsRoleArn = "fakeArn",
+        stsSessionName = "fakeSessionName",
+        stsExternalId = Some("fakeExternalId"))))
+
+    Utils.deserialize[STSCredentialsProvider](
+      Utils.serialize(STSCredentialsProvider(
+        stsRoleArn = "fakeArn",
+        stsSessionName = "fakeSessionName",
+        stsExternalId = Some("fakeExternalId"),
+        longLivedCredsProvider = BasicCredentialsProvider(
+          awsAccessKeyId = "x",
+          awsSecretKey = "y"))))
   }
 
   test("process records including store and set checkpointer") {
     when(receiverMock.isStopped()).thenReturn(false)
+    when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
     recordProcessor.initialize(shardId)
@@ -79,8 +97,23 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, times(1)).setCheckpointer(shardId, checkpointerMock)
   }
 
+  test("split into multiple processes if a limitation is set") {
+    when(receiverMock.isStopped()).thenReturn(false)
+    when(receiverMock.getCurrentLimit).thenReturn(1)
+
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
+    recordProcessor.initialize(shardId)
+    recordProcessor.processRecords(batch, checkpointerMock)
+
+    verify(receiverMock, times(1)).isStopped()
+    verify(receiverMock, times(1)).addRecords(shardId, batch.subList(0, 1))
+    verify(receiverMock, times(1)).addRecords(shardId, batch.subList(1, 2))
+    verify(receiverMock, times(1)).setCheckpointer(shardId, checkpointerMock)
+  }
+
   test("shouldn't store and update checkpointer when receiver is stopped") {
     when(receiverMock.isStopped()).thenReturn(true)
+    when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
     recordProcessor.processRecords(batch, checkpointerMock)
@@ -92,6 +125,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
   test("shouldn't update checkpointer when exception occurs during store") {
     when(receiverMock.isStopped()).thenReturn(false)
+    when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
     when(
       receiverMock.addRecords(anyString, anyListOf(classOf[Record]))
     ).thenThrow(new RuntimeException())
