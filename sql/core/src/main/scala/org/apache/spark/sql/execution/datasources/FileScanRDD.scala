@@ -26,7 +26,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.NextIterator
 
 /**
@@ -62,7 +64,9 @@ case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends RDDPar
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
-    @transient val filePartitions: Seq[FilePartition])
+    @transient val filePartitions: Seq[FilePartition],
+    fullSchema: StructType,
+    dataSourceReader: DataSourceReader)
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
@@ -135,6 +139,8 @@ class FileScanRDD(
         }
       }
 
+      private val projection = UnsafeProjection.create(fullSchema)
+
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
         updateBytesReadWithFileSize()
@@ -144,8 +150,8 @@ class FileScanRDD(
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
-          if (ignoreCorruptFiles) {
-            currentIterator = new NextIterator[Object] {
+          val recordIterator = if (ignoreCorruptFiles) {
+            new NextIterator[Object] {
               // The readFunction may read some bytes before consuming the iterator, e.g.,
               // vectorized Parquet reader. Here we use lazy val to delay the creation of
               // iterator so that we will throw exception in `getNext`.
@@ -173,9 +179,16 @@ class FileScanRDD(
               override def close(): Unit = {}
             }
           } else {
-            currentIterator = readCurrentFile()
+            readCurrentFile()
           }
 
+          currentIterator = dataSourceReader.read(recordIterator).map { obj =>
+            if (obj.isInstanceOf[InternalRow]) {
+              projection(obj.asInstanceOf[InternalRow])
+            } else {
+              obj
+            }
+          }
           hasNext
         } else {
           currentFile = null

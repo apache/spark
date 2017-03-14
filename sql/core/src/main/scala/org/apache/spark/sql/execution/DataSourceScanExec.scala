@@ -23,18 +23,19 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.util.ParseModes
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
@@ -156,6 +157,15 @@ case class FileSourceScanExec(
     false
   }
 
+  val parseMode = relation.options.getOrElse("mode", ParseModes.PERMISSIVE_MODE)
+  val corruptFieldIndex: Option[Int] = outputSchema.getFieldIndex(relation.options.getOrElse(
+    "columnNameOfCorruptRecord", relation.sparkSession.sessionState.conf.columnNameOfCorruptRecord))
+  val requiredSchema = if (corruptFieldIndex.isDefined) {
+    StructType(outputSchema.indices.filter(_ != corruptFieldIndex.get).map(outputSchema))
+  } else {
+    outputSchema
+  }
+
   @transient private lazy val selectedPartitions = relation.location.listFiles(partitionFilters)
 
   override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
@@ -254,7 +264,7 @@ case class FileSourceScanExec(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
-        requiredSchema = outputSchema,
+        requiredSchema = requiredSchema,
         filters = dataFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
@@ -370,7 +380,9 @@ case class FileSourceScanExec(
       FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
+      StructType(outputSchema ++ relation.partitionSchema),
+      new DataSourceReader(parseMode, requiredSchema.length, corruptFieldIndex))
   }
 
   /**
@@ -444,7 +456,9 @@ case class FileSourceScanExec(
     }
     closePartition()
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
+      StructType(outputSchema ++ relation.partitionSchema),
+      new DataSourceReader(parseMode, requiredSchema.length, corruptFieldIndex))
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
