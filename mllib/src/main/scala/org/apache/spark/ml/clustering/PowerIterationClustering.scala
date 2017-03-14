@@ -17,9 +17,10 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -27,7 +28,6 @@ import org.apache.spark.mllib.clustering.{PowerIterationClustering => MLlibPower
 import org.apache.spark.mllib.clustering.PowerIterationClustering.Assignment
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 /**
@@ -86,14 +86,14 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 /**
  * :: Experimental ::
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
- * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
- * similarity matrix of the data.
+ * <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
+ * PIC finds a very low-dimensional embedding of a dataset using truncated power
+ * iteration on a normalized pair-wise similarity matrix of the data.
  *
  * Note that we implement [[PowerIterationClustering]] as a transformer. The [[transform]] is an
  * expensive operation, because it uses PIC algorithm to cluster the whole input dataset.
  *
- * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
+ * @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)</a>
  */
 @Since("2.2.0")
 @Experimental
@@ -140,23 +140,28 @@ class PowerIterationClustering private[clustering] (
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val sparkSession = dataset.sparkSession
-    val rdd: RDD[(Long, Long, Double)] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) =>
-        val array = point.toArray
-        require(array.size == 3, "The number of elements in each row must be 3.")
-        (array(0).toLong, array(1).toLong, array(2))
-    }
+
+    val rdd: RDD[(Long, Long, Double)] = dataset.select("id", "neighbor", "weight").rdd.map {
+      case Row(id: Long, nbr: mutable.WrappedArray[Long], weight: mutable.WrappedArray[Double])
+        => (id, nbr, weight)
+    }.flatMap{ case (id, nbr, weight) =>
+      val ids = Array.fill(nbr.length)(id)
+      ids.zip(nbr).zip(weight)}.map {case ((i, j), k) => (i, j, k)}
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
       .setMaxIterations($(maxIter))
     val model = algorithm.run(rdd)
+
     val rows: RDD[Row] = model.assignments.map {
       case assignment: Assignment => Row(assignment.id, assignment.cluster)
     }
+
     val schema = transformSchema(new StructType(Array(StructField($(idCol), LongType),
       StructField($(predictionCol), IntegerType))))
-    sparkSession.createDataFrame(rows, schema)
+    val result = sparkSession.createDataFrame(rows, schema)
+
+    dataset.join(result, "id")
   }
 
   @Since("2.2.0")
