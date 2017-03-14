@@ -56,7 +56,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.spark_project.jetty=WARN
     """.stripMargin
 
-  private var yarnCluster: MiniYARNCluster = _
+  protected var yarnCluster: MiniYARNCluster = _
   protected var tempDir: File = _
   private var fakeSparkJar: File = _
   protected var hadoopConfDir: File = _
@@ -65,6 +65,7 @@ abstract class BaseYarnClusterSuite
   var oldSystemProperties: Properties = null
 
   def newYarnConfig(): YarnConfiguration
+
 
   override def beforeAll() {
     super.beforeAll()
