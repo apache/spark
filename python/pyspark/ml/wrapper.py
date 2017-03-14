@@ -263,7 +263,8 @@ class JavaEstimator(JavaParams, Estimator):
 
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
-        return self._create_model(java_model)
+        model = self._create_model(java_model)
+        return self._copyValues(model)
 
 
 @inherit_doc
