@@ -190,6 +190,16 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(dm6 === dm2)
     assert(dm6.isTransposed)
     assert(dm6.values.equals(dm2.values))
+
+    val dm7 = dm1.toDenseRowMajor
+    assert(dm7 === dm1)
+    assert(dm7.isTransposed)
+    assert(dm7.values === Array(4.0, 2.0, -8.0, -1.0, 7.0, 4.0))
+
+    val dm8 = dm1.toDenseColMajor
+    assert(dm8 === dm1)
+    assert(!dm8.isTransposed)
+    assert(dm8.values.equals(dm1.values))
   }
 
   test("dense to sparse") {
@@ -242,12 +252,12 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm7.values === Array(4.0, 2.0, 5.0))
     assert(!sm7.isTransposed)
 
-    val sm8 = dm1.toCSCMatrix
+    val sm8 = dm1.toCSC
     assert(sm8 === dm1)
     assert(sm8.values === Array(4.0, 2.0, 5.0))
     assert(!sm8.isTransposed)
 
-    val sm9 = dm2.toCSRMatrix
+    val sm9 = dm2.toCSR
     assert(sm9 === dm2)
     assert(sm9.values === Array(4.0, 5.0, 2.0))
     assert(sm9.isTransposed)
@@ -315,22 +325,22 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm13.values === Array.empty[Double])
     assert(!sm13.isTransposed)
 
-    val sm14 = sm4.toCSCMatrix
+    val sm14 = sm4.toCSC
     assert(sm14 === sm4)
     assert(sm14.values === Array(4.0, 2.0, 5.0))
     assert(!sm14.isTransposed)
 
-    val sm15 = smZeros.toCSCMatrix
+    val sm15 = smZeros.toCSC
     assert(sm15 === smZeros)
     assert(sm15.values === Array.empty[Double])
     assert(!sm15.isTransposed)
 
-    val sm16 = sm3.toCSRMatrix
+    val sm16 = sm3.toCSR
     assert(sm16 === sm4)
     assert(sm16.values === Array(4.0, 5.0, 2.0))
     assert(sm16.isTransposed)
 
-    val sm17 = smZeros.toCSRMatrix
+    val sm17 = smZeros.toCSR
     assert(sm17 === smZeros)
     assert(sm17.values === Array.empty[Double])
     assert(sm17.isTransposed)
@@ -373,6 +383,16 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(dm5 === sm3)
     assert(!dm5.isTransposed)
     assert(dm5.values === Array.fill(6)(0.0))
+
+    val dm6 = sm2.toDenseColMajor
+    assert(dm6 === sm2)
+    assert(!dm6.isTransposed)
+    assert(dm6.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+
+    val dm7 = sm2.toDenseRowMajor
+    assert(dm7 === sm2)
+    assert(dm7.isTransposed)
+    assert(dm7.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
   }
 
   test("compressed dense") {

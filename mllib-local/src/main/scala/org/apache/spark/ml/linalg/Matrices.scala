@@ -175,13 +175,13 @@ sealed trait Matrix extends Serializable {
    * Converts this matrix to a sparse matrix in column major order.
    */
   @Since("2.2.0")
-  def toCSCMatrix: SparseMatrix = toSparseMatrix(colMajor = true)
+  def toCSC: SparseMatrix = toSparseMatrix(colMajor = true)
 
   /**
    * Converts this matrix to a sparse matrix in row major order.
    */
   @Since("2.2.0")
-  def toCSRMatrix: SparseMatrix = toSparseMatrix(colMajor = false)
+  def toCSR: SparseMatrix = toSparseMatrix(colMajor = false)
 
   /**
    * Converts this matrix to a sparse matrix in column major order.
@@ -202,6 +202,18 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.2.0")
   def toDense: DenseMatrix = toDenseMatrix(colMajor = true)
+
+  /**
+   * Converts this matrix to a dense matrix in row major order.
+   */
+  @Since("2.2.0")
+  def toDenseRowMajor: DenseMatrix = toDenseMatrix(colMajor = false)
+
+  /**
+   * Converts this matrix to a dense matrix in column major order.
+   */
+  @Since("2.2.0")
+  def toDenseColMajor: DenseMatrix = toDenseMatrix(colMajor = true)
 
   /**
    * Returns a matrix in either dense or sparse format, whichever uses less storage.
