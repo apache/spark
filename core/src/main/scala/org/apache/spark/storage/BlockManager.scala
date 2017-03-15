@@ -555,12 +555,15 @@ private[spark] class BlockManager(
 
   /**
    * Return a list of locations for the given block, prioritizing the local machine since
-   * multiple block managers can share the same host.
+   * multiple block managers can share the same host, then try to get the same rack data.
    */
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     val locs = Random.shuffle(master.getLocations(blockId))
     val (preferredLocs, otherLocs) = locs.partition { loc => blockManagerId.host == loc.host }
-    preferredLocs ++ otherLocs
+    val (sameRackLocs, differentRackLocs) = otherLocs.partition {
+      loc => blockManagerId.topologyInfo == loc.topologyInfo
+    }
+    preferredLocs ++ sameRackLocs ++ differentRackLocs
   }
 
   /**
