@@ -17,9 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.collection.mutable
-
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -142,11 +141,11 @@ class PowerIterationClustering private[clustering] (
     val sparkSession = dataset.sparkSession
 
     val rdd: RDD[(Long, Long, Double)] = dataset.select("id", "neighbor", "weight").rdd.map {
-      case Row(id: Long, nbr: mutable.WrappedArray[Long], weight: mutable.WrappedArray[Double])
+      case Row(id: Long, nbr: Vector, weight: Vector)
         => (id, nbr, weight)
     }.flatMap{ case (id, nbr, weight) =>
-      val ids = Array.fill(nbr.length)(id)
-      ids.zip(nbr).zip(weight)}.map {case ((i, j), k) => (i, j, k)}
+      val ids = Array.fill(nbr.size)(id)
+      ids.zip(nbr.toArray).zip(weight.toArray)}.map {case ((i, j), k) => (i, j.toLong, k)}
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
