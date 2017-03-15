@@ -734,8 +734,8 @@ class DAGScheduler(
   /**
    * Kill a given task. It will be retried.
    */
-  def killTask(taskId: Long, reason: String): Unit = {
-    taskScheduler.killTask(taskId, true, reason)
+  def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
+    taskScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
   /**

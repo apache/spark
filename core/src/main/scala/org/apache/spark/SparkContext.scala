@@ -2250,22 +2250,19 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Kill a given task. It will be retried.
+   * Kill and reschedule the given task attempt. Task ids can be obtained from the Spark UI
+   * or through SparkListener.onTaskStart.
    *
-   * @param taskId the task ID to kill
+   * @param taskId the task ID to kill. This id uniquely identifies the task attempt.
+   * @param interruptThread whether to interrupt the thread running the task.
+   * @param reason the reason for killing the task, which should be a short string. If a task
+   *   is killed multiple times with different reasons, only one reason will be reported.
    */
-  def killTask(taskId: Long): Unit = {
-    killTask(taskId, "cancelled")
-  }
-
-  /**
-   * Kill a given task. It will be retried.
-   *
-   * @param taskId the task ID to kill
-   * @param reason the reason for killing the task, which should be a short string
-   */
-  def killTask(taskId: Long, reason: String): Unit = {
-    dagScheduler.killTask(taskId, reason)
+  def killTaskAttempt(
+      taskId: Long,
+      interruptThread: Boolean = true,
+      reason: String = "cancelled"): Unit = {
+    dagScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
   /**

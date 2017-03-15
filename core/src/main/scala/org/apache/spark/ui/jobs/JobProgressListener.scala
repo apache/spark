@@ -372,8 +372,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         case Success =>
           execSummary.succeededTasks += 1
         case kill: TaskKilled =>
-          execSummary.killedTasks = execSummary.killedTasks.updated(
-            kill.reason, execSummary.killedTasks.getOrElse(kill.reason, 0) + 1)
+          execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+            kill.reason, execSummary.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -387,8 +387,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.numCompleteTasks += 1
             None
           case kill: TaskKilled =>
-            stageData.numKilledTasks = stageData.numKilledTasks.updated(
-              kill.reason, stageData.numKilledTasks.getOrElse(kill.reason, 0) + 1)
+            stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
+              kill.reason, stageData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
             Some(kill.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
@@ -425,8 +425,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           case Success =>
             jobData.numCompletedTasks += 1
           case kill: TaskKilled =>
-            jobData.numKilledTasks = jobData.numKilledTasks.updated(
-              kill.reason, jobData.numKilledTasks.getOrElse(kill.reason, 0) + 1)
+            jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
+              kill.reason, jobData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
           case _ =>
             jobData.numFailedTasks += 1
         }

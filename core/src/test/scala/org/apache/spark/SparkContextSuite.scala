@@ -538,6 +538,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  // Launches one task that will run forever. Once the SparkListener detects the task has
+  // started, kill and re-schedule it. The second run of the task will complete immediately.
+  // If this test times out, then the first version of the task wasn't killed successfully.
   test("Killing tasks") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
@@ -551,17 +554,20 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         }
         if (!SparkContextSuite.taskKilled) {
           SparkContextSuite.taskKilled = true
-          sc.killTask(taskStart.taskInfo.taskId, "first attempt will hang")
+          sc.killTaskAttempt(taskStart.taskInfo.taskId, true, "first attempt will hang")
         }
       }
     }
     sc.addSparkListener(listener)
-    sc.parallelize(1 to 1).foreach { x =>
-      if (!SparkContextSuite.isTaskStarted) {
-        SparkContextSuite.isTaskStarted = true
-        Thread.sleep(9999999)
+    eventually(timeout(20.seconds)) {
+      sc.parallelize(1 to 1).foreach { x =>
+        // first attempt will hang
+        if (!SparkContextSuite.isTaskStarted) {
+          SparkContextSuite.isTaskStarted = true
+          Thread.sleep(9999999)
+        }
+        // second attempt succeeds immediately
       }
-      // second try succeeds immediately
     }
   }
 }

@@ -158,8 +158,7 @@ private[spark] class Executor(
     threadPool.execute(tr)
   }
 
-  def killTask(
-      taskId: Long, interruptThread: Boolean, reason: String): Unit = {
+  def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
       if (taskReaperEnabled) {
@@ -436,15 +435,12 @@ private[spark] class Executor(
         case _: TaskKilledException =>
           logInfo(s"Executor killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
 
         case _: InterruptedException if task.killed =>
-          logInfo(
-            s"Executor interrupted and preempted $taskName (TID $taskId), reason: $killReason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason

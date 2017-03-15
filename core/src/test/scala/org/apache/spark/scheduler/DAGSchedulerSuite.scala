@@ -126,7 +126,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def cancelTasks(stageId: Int, interruptThread: Boolean) {
       cancelledStages += stageId
     }
-    override def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {}
+    override def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Unit = {}
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
@@ -553,7 +553,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def cancelTasks(stageId: Int, interruptThread: Boolean) {
         throw new UnsupportedOperationException
       }
-      override def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
+      override def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
         throw new UnsupportedOperationException
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}

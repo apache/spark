@@ -276,7 +276,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     listener.onTaskEnd(
       SparkListenerTaskEnd(
         task.stageId, 0, taskType, TaskKilled("test"), taskInfo, metrics))
-    assert(listener.stageIdToData((task.stageId, 0)).numKilledTasks === Map("test" -> 1))
+    assert(listener.stageIdToData((task.stageId, 0)).reasonToNumKilled === Map("test" -> 1))
 
     // Make sure we count success as success.
     listener.onTaskEnd(
