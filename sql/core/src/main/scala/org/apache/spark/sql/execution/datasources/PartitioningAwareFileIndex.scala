@@ -185,12 +185,9 @@ abstract class PartitioningAwareFileIndex(
       logInfo {
         val total = partitions.length
         val selectedSize = selected.length
-        val percentPruned = if (total > 0) {
-          (1 - selectedSize.toDouble / total.toDouble) * 100
-        } else {
-          0
-        }
-        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
+        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
+        s"Selected $selectedSize partitions out of $total, " +
+          s"pruned ${if (total == 0) 0 else s"$percentPruned%"} partitions."
       }
 
       selected
