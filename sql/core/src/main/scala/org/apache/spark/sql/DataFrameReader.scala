@@ -73,7 +73,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -110,7 +110,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -126,7 +126,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
