@@ -267,9 +267,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should not be (null)
       handle.getAppId() should startWith ("application_")
       handle.disconnect()
-
-      var applicationId = ConverterUtils.toApplicationId(handle.getAppId)
-      var yarnClient: YarnClient = getYarnClient
+      val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
+      val yarnClient: YarnClient = getYarnClient
       eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.LOST)
         var status = yarnClient.getApplicationReport(applicationId).getFinalApplicationStatus()
@@ -307,8 +306,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should startWith ("application_")
       handle.disconnect()
 
-      var applicationId = ConverterUtils.toApplicationId(handle.getAppId)
-      var yarnClient: YarnClient = getYarnClient
+      val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
+      val yarnClient: YarnClient = getYarnClient
       eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.LOST)
         var status = yarnClient.getApplicationReport(applicationId).getFinalApplicationStatus
@@ -344,9 +343,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should not be (null)
       handle.getAppId() should startWith ("application_")
       handle.disconnect()
-
-      var applicationId = ConverterUtils.toApplicationId(handle.getAppId)
-      var yarnClient: YarnClient = getYarnClient
+      val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
+      val yarnClient: YarnClient = getYarnClient
       eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.LOST)
         var status = yarnClient.getApplicationReport(applicationId).getYarnApplicationState
