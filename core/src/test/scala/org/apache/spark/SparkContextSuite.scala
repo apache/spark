@@ -539,6 +539,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       }
     }
   }
+
   test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
     "open streams to help debugging") {
     val fs = new DebugFilesystem()
