@@ -335,14 +335,11 @@ object FileFormatWriter extends Logging {
     /** Expressions that given partition columns build a path string like: col1=val/col2=val/... */
     private def partitionPathExpression: Seq[Expression] = {
       desc.partitionColumns.zipWithIndex.flatMap { case (c, i) =>
-        val escaped = ScalaUDF(
-          ExternalCatalogUtils.escapePathName _,
+        val partitionName = ScalaUDF(
+          ExternalCatalogUtils.getPartitionPathString _,
           StringType,
-          Seq(Cast(c, StringType, Option(desc.timeZoneId))),
-          Seq(StringType))
-        val str = If(IsNull(c), Literal(ExternalCatalogUtils.DEFAULT_PARTITION_NAME), escaped)
-        val partitionName = Literal(ExternalCatalogUtils.escapePathName(c.name) + "=") :: str :: Nil
-        if (i == 0) partitionName else Literal(Path.SEPARATOR) :: partitionName
+          Seq(Literal(c.name), Cast(c, StringType, Option(desc.timeZoneId))))
+        if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
       }
     }
 

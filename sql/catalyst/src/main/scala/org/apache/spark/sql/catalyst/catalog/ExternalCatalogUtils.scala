@@ -118,7 +118,7 @@ object ExternalCatalogUtils {
   }
 
   def getPartitionPathString(col: String, value: String): String = {
-    val partitionString = if (value == null) {
+    val partitionString = if (value == null || value.isEmpty) {
       DEFAULT_PARTITION_NAME
     } else {
       escapePathName(value)
