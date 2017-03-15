@@ -56,6 +56,8 @@ object PythonRunner extends CondaRunner with Logging {
     }.orElse(presetPythonExec)
      .getOrElse("python")
 
+    logInfo(s"Python binary that will be called: $pythonExec")
+
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
     val formattedPyFiles = formatPaths(pyFiles)
