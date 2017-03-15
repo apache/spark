@@ -95,18 +95,23 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
     // Attempt to create fake home dir
     Files.createDirectories(fakeHomeDir)
 
-    val command = Process(
-      condaBinaryPath :: args,
-      None,
+    val extraEnv = List(
       "CONDARC" -> condarc.toString,
       "HOME" -> fakeHomeDir.toString
     )
 
+    val command = Process(
+      condaBinaryPath :: args,
+      None,
+      extraEnv: _*
+    )
+
+    logInfo(s"About to execute $command with environment $extraEnv")
     runOrFail(command, description)
+    logInfo(s"Successfully executed $command with environment $extraEnv")
   }
 
   private[this] def runOrFail(command: ProcessBuilder, description: String): Unit = {
-    logInfo(s"About to execute: $command")
     val buffer = new StringBuffer
     val collectErrOutToBuffer = new ProcessIO(
     BasicIO.input(false),
