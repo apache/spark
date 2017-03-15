@@ -26,12 +26,11 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.aggregate.MergePartialAggregate
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.execution.python.ExtractPythonUDFs
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -89,33 +88,32 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = new RuleExecutor[SparkPlan] {
-
-    private val fixedPoint = FixedPoint(sparkSession.sessionState.conf.optimizerMaxIterations)
-
-    override def batches: Seq[Batch] = Seq(
-      Batch("ExtractPythonUDFs", Once,
-        ExtractPythonUDFs),
-      Batch("PlanSubqueries", Once,
-        PlanSubqueries(sparkSession)),
-      Batch("EnsureRequirements", Once,
-        EnsureRequirements(sparkSession.sessionState.conf)),
-      Batch("MergePartialAggregate", fixedPoint,
-        MergePartialAggregate),
-      Batch("CollapseCodegenStages", Once,
-        CollapseCodegenStages(sparkSession.sessionState.conf)),
-      Batch("ReuseResources", Once,
-        ReuseExchange(sparkSession.sessionState.conf),
-        ReuseSubquery(sparkSession.sessionState.conf)
-      )
-    )
-  }.execute(sparkPlan)
+  lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
+  /**
+   * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
+   * row format conversions as needed.
+   */
+  protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
+    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  }
+
+  /** A sequence of rules that will be applied in order to the physical plan before execution. */
+  protected def preparations: Seq[Rule[SparkPlan]] = Seq(
+    python.ExtractPythonUDFs,
+    PlanSubqueries(sparkSession),
+    EnsureRequirements(sparkSession.sessionState.conf),
+    MergePartialAggregate,
+    CollapseCodegenStages(sparkSession.sessionState.conf),
+    ReuseExchange(sparkSession.sessionState.conf),
+    ReuseSubquery(sparkSession.sessionState.conf))
+
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: AnalysisException => e.toString }
+
 
   /**
    * Returns the result as a hive compatible sequence of strings. This is for testing only.

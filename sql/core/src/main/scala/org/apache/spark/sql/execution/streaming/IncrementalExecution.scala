@@ -23,11 +23,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.MergePartialAggregate
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.execution.python.ExtractPythonUDFs
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -115,28 +112,7 @@ class IncrementalExecution(
     }
   }
 
-  override lazy val executedPlan: SparkPlan = new RuleExecutor[SparkPlan] {
-
-    private val fixedPoint = FixedPoint(sparkSession.sessionState.conf.optimizerMaxIterations)
-
-    override def batches: Seq[Batch] = Seq(
-      Batch("AddState", Once, state),
-      Batch("ExtractPythonUDFs", Once,
-        ExtractPythonUDFs),
-      Batch("PlanSubqueries", Once,
-        PlanSubqueries(sparkSession)),
-      Batch("EnsureRequirements", Once,
-        EnsureRequirements(sparkSession.sessionState.conf)),
-      Batch("MergePartialAggregate", fixedPoint,
-        MergePartialAggregate),
-      Batch("CollapseCodegenStages", Once,
-        CollapseCodegenStages(sparkSession.sessionState.conf)),
-      Batch("ReuseResources", Once,
-        ReuseExchange(sparkSession.sessionState.conf),
-        ReuseSubquery(sparkSession.sessionState.conf)
-      )
-    )
-  }.execute(sparkPlan)
+  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
