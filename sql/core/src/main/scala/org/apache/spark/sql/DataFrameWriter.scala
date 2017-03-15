@@ -319,9 +319,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
-   * The external catalog (Hive metastore) is used to determine if the table exists.
-   * If the table does not exist in the external catalog, but exists in the datasource,
-   * it will be overwritten in the datasource, regardless of the specified `mode`.
+   * In this method, save mode is used to determine the behavior if the data source table exists in
+   * Spark catalog. We will always overwrite the underlying data of data source (e.g. a table in
+   * JDBC data source) if the table doesn't exist in Spark catalog, and will always append to the
+   * underlying data of data source if the table already exists.
    *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
