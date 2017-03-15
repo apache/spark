@@ -838,27 +838,29 @@ class Analyzer(
           Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
         }
 
+      // If grouping keys have unresolved expressions, we need to replace them with resolved one
+      // in SELECT clauses.
+      case agg @ Aggregate(groups, aggs, child)
+          if child.resolved && aggs.forall(_.resolved) && groups.exists(!_.resolved) =>
+        agg.copy(groupingExpressions = groups.map {
+            case u: UnresolvedAttribute =>
+              aggs.find(ne => resolver(ne.name, u.name)).map {
+                case alias @ Alias(e, _) => e
+                case e => e
+              }.getOrElse(u)
+            case e => e
+          })
+
       // Skips plan which contains deserializer expressions, as they should be resolved by another
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        // We need to replace unresolved attributes with the resolved ones that this plan `q` holds
-        // as expressions. For example, in `SELECT a AS a1, a1 + 1 AS b`, it replaces the unresolved
-        // `a1` of `a1 + 1 AS b` with the resolved `a1` of `a AS a1`.
-        val resolvedExprs = q.expressions.filter {
-          case ne: NamedExpression if ne.resolved => true
-          case _ => false
-        }.map(_.asInstanceOf[NamedExpression])
         q.transformExpressionsUp  {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-            val result = withPosition(u) {
-                q.resolveChildren(nameParts, resolver).getOrElse {
-                  resolvedExprs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
-                }
-              }
+            val result = withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
             logDebug(s"Resolving $u to $result")
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>

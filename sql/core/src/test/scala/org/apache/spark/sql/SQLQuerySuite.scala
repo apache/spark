@@ -2613,8 +2613,5 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY key1, key2"),
       Row(1, "a", 2) :: Row(2, "a", 1) :: Nil)
-    checkAnswer(
-      sql("SELECT k1 AS key1, key1 + 1 AS key2, COUNT(1) FROM t GROUP BY key1, key2"),
-      Row(1, 2, 2) :: Row(2, 3, 1) :: Nil)
   }
 }
