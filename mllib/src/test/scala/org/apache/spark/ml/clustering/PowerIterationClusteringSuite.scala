@@ -20,6 +20,7 @@ package org.apache.spark.ml.clustering
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -122,7 +123,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
 object PowerIterationClusteringSuite {
 
-  case class TestRow2(id: Long, neighbor: Array[Long], weight: Array[Double])
+  case class TestRow2(id: Long, neighbor: Vector, weight: Vector)
   /** Generates a circle of points. */
   private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
     Array.tabulate(n) { i =>
@@ -157,7 +158,7 @@ object PowerIterationClusteringSuite {
 
     val rdd = sc.parallelize(similarities).map{
       case (id: Long, nbr: Array[Long], weight: Array[Double]) =>
-      TestRow2(id, nbr, weight)}
+      TestRow2(id, Vectors.dense(nbr.map(i => i.toDouble)), Vectors.dense(weight))}
     spark.createDataFrame(rdd)
   }
 
