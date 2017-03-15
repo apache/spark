@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
-import java.net.URI
 import java.util
 
 import scala.collection.mutable
