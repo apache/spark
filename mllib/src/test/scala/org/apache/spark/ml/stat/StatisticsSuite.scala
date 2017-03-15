@@ -17,19 +17,20 @@
 
 package org.apache.spark.ml.stat
 
-import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
+import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.Matrix
 import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.util.LinalgUtils
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 
 class StatisticsSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
-  import StatisticsSuite._
+  import LinalgUtils._
 
   val xData = Array(1.0, 0.0, -2.0)
   val yData = Array(4.0, 5.0, 3.0)
@@ -74,29 +75,6 @@ class StatisticsSuite extends SparkFunSuite with MLlibTestSparkContext with Logg
       (0.4000000,  0.9486833,  Double.NaN, 1.0000000))
     // scalastyle:on
     assert(matrixApproxEqual(extract(spearmanMat), expected))
-  }
-
-}
-
-
-object StatisticsSuite extends Logging {
-
-  def approxEqual(v1: Double, v2: Double, threshold: Double = 1e-6): Boolean = {
-    if (v1.isNaN) {
-      v2.isNaN
-    } else {
-      math.abs(v1 - v2) <= threshold
-    }
-  }
-
-  def matrixApproxEqual(A: BM[Double], B: BM[Double], threshold: Double = 1e-6): Boolean = {
-    for (i <- 0 until A.rows; j <- 0 until A.cols) {
-      if (!approxEqual(A(i, j), B(i, j), threshold)) {
-        logInfo("i, j = " + i + ", " + j + " actual: " + A(i, j) + " expected:" + B(i, j))
-        return false
-      }
-    }
-    true
   }
 
 }

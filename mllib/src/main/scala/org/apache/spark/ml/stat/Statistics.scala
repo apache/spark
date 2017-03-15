@@ -19,7 +19,7 @@ package org.apache.spark.ml.stat
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Since
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
@@ -30,17 +30,18 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * API for statistical functions in MLlib, compatible with Dataframes and Datasets.
  *
  * The functions in this package generalize the functions in [[org.apache.spark.sql.Dataset.stat]]
- * to MLlib's Vector types.
+ * to spark.ml's Vector types.
  */
 @Since("2.2.0")
+@Experimental
 object Statistics {
 
   /**
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * @param dataset a dataset or a dataframe
-   * @param column the name of the column of vectors for which the correlation coefficient needs
+   * @param dataset A dataset or a dataframe
+   * @param column The name of the column of vectors for which the correlation coefficient needs
    *               to be computed. This must be a column of the dataset, and it must contain
    *               Vector objects.
    * @param method String specifying the method to use for computing correlation.
@@ -63,12 +64,10 @@ object Statistics {
    * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
    * avoid recomputing the common lineage.
    */
-  // TODO: how do we handle missing values?
   @Since("2.2.0")
   def corr(dataset: Dataset[_], column: String, method: String): DataFrame = {
     val rdd = dataset.select(column).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
-//      case r: GenericRowWithSchema => OldVectors.fromML(r.getAs[Vector](0))
     }
     val oldM = OldStatistics.corr(rdd, method)
     val name = s"$method($column)"
@@ -78,8 +77,8 @@ object Statistics {
 
   /**
    * Compute the correlation matrix for the input Dataset of Vectors.
-   * @param dataset a dataset or dataframe
-   * @param column a column of this dataset
+   * @param dataset A dataset or dataframe
+   * @param column A column of this dataset
    * @return
    */
   @Since("2.2.0")
