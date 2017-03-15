@@ -188,8 +188,7 @@ class DAGScheduler(
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
   /**
-   * Number of consecutive stage retries allowed before a stage is aborted
-   * (since you can have multiple fetch failures in one stage attempt).
+   * Number of consecutive stage retries allowed before a stage is aborted.
    */
   private[scheduler] val maxConsecutiveStageAttempts =
     sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
@@ -1737,6 +1736,5 @@ private[spark] object DAGScheduler {
   val RESUBMIT_TIMEOUT = 200
 
   // Number of consecutive stage retries allowed before a stage is aborted
-  // (since you can have multiple fetch failures in one stage attempt).
   val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
 }
