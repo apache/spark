@@ -167,7 +167,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
   }
 
   Seq("parquet", "json", "csv").foreach { provider =>
-    test("Alter table add columns") {
+    test(s"Alter table add columns -- ${provider} format") {
       assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
       withTable("t") {
         sql(s"create table t (c1 int) using ${provider}")
@@ -185,7 +185,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
   }
 
   Seq("parquet", "json", "csv").foreach { provider =>
-    test("Alter table add columns with partitions") {
+    test(s"Alter table add columns with partitions -- ${provider} format") {
       assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
       withTable("t") {
         sql(s"create table t (c1 int, c2 int) using ${provider} partitioned by (c2)")
