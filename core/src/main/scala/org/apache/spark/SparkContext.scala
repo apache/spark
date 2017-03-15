@@ -218,10 +218,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
 
-  private[this] val _condaEnvironment: Option[CondaEnvironment] =
-    CondaRunner.condaEnvironment
-
-
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
    | context.                                                                              |
@@ -341,6 +337,9 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     override protected def initialValue(): Properties = new Properties()
   }
+
+  // Retrieve the Conda Environment from CondaRunner if it has set one up for us
+  val condaEnvironment: Option[CondaEnvironment] = CondaRunner.condaEnvironment
 
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
@@ -1857,10 +1856,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def listJars(): Seq[String] = addedJars.keySet.toSeq
 
-  private[spark] def hasCondaEnvironment: Boolean = _condaEnvironment.isDefined
-
-  private[spark] def condaEnvironment(): CondaEnvironment = {
-    _condaEnvironment.getOrElse(sys.error("A conda environment was not set up."))
+  private[this] def condaEnvironmentOrFail(): CondaEnvironment = {
+    condaEnvironment.getOrElse(sys.error("A conda environment was not set up."))
   }
 
   /**
@@ -1869,15 +1866,15 @@ class SparkContext(config: SparkConf) extends Logging {
    * for all tasks to be executed on this SparkContext in the future.
    */
   def addCondaPackages(packages: Seq[String]): Unit = {
-    condaEnvironment().installPackages(packages)
+    condaEnvironmentOrFail().installPackages(packages)
   }
 
   def addCondaChannel(url: String): Unit = {
-    condaEnvironment().addChannel(url)
+    condaEnvironmentOrFail().addChannel(url)
   }
 
   private[spark] def buildCondaInstructions(): Option[CondaSetupInstructions] = {
-    _condaEnvironment.map(_.buildSetupInstructions)
+    condaEnvironment.map(_.buildSetupInstructions)
   }
 
 
