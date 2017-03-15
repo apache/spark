@@ -93,7 +93,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -130,7 +130,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -146,7 +146,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
