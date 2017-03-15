@@ -392,14 +392,16 @@ class StreamExecution(
         val shufflePartitionsSparkSession: Int = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
         offsetSeqMetadata = {
           if (nextOffsets.metadata.isEmpty) {
-            OffsetSeqMetadata(0, 0,
-              Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsSparkSession.toString))
+            OffsetSeqMetadata(
+              batchWatermarkMs = 0,
+              batchTimestampMs = 0,
+              conf = Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsSparkSession.toString))
           } else {
             val metadata = nextOffsets.metadata.get
             val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
               // For backward compatibility, if # partitions was not recorded in the offset log,
               // then ensure it is not missing. The new value is picked up from the conf.
-              logDebug("Number of shuffle partitions from previous run not found in checkpoint. "
+              logWarning("Number of shuffle partitions from previous run not found in checkpoint. "
                 + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
               shufflePartitionsSparkSession
             })
@@ -482,10 +484,9 @@ class StreamExecution(
           }
         }
       }
-      offsetSeqMetadata = OffsetSeqMetadata(
-        batchWatermarkMs,
-        triggerClock.getTimeMillis(), // Current batch timestamp in milliseconds
-        offsetSeqMetadata.conf) // Keep the same conf
+      offsetSeqMetadata = offsetSeqMetadata.copy(
+        batchWatermarkMs = batchWatermarkMs,
+        batchTimestampMs = triggerClock.getTimeMillis()) // Current batch timestamp in milliseconds
 
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {

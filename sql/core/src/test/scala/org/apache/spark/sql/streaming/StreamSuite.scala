@@ -411,11 +411,11 @@ class StreamSuite extends StreamTest {
       CheckAnswer((1, 2), (2, 2), (3, 2)))
   }
 
-  test("SPARK-19873: backward compatibility - recover from a Spark v2.1 checkpoint") {
+  test("recover from a Spark v2.1 checkpoint") {
     var inputData: MemoryStream[Int] = null
     var query: DataStreamWriter[Row] = null
 
-    def init(): Unit = {
+    def prepareMemoryStream(): Unit = {
       inputData = MemoryStream[Int]
       inputData.addData(1, 2, 3, 4)
       inputData.addData(3, 4, 5, 6)
@@ -437,8 +437,8 @@ class StreamSuite extends StreamTest {
     val checkpointDir = new File(resourceUri)
 
     // 1 - Test if recovery from the checkpoint is successful.
-    init()
-    withTempDir(dir => {
+    prepareMemoryStream()
+    withTempDir { dir =>
       // Copy the checkpoint to a temp dir to prevent changes to the original.
       // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
       FileUtils.copyDirectory(checkpointDir, dir)
@@ -464,11 +464,11 @@ class StreamSuite extends StreamTest {
           }
         }
       }
-    })
+    }
 
     // 2 - Check recovery with wrong num shuffle partitions
-    init()
-    withTempDir(dir => {
+    prepareMemoryStream()
+    withTempDir { dir =>
       FileUtils.copyDirectory(checkpointDir, dir)
 
       // Since the number of partitions is greater than 10, should throw exception.
@@ -486,7 +486,7 @@ class StreamSuite extends StreamTest {
           }
         }
       }
-    })
+    }
   }
 }
 
