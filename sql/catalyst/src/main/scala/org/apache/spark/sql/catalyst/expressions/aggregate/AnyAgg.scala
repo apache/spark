@@ -39,7 +39,7 @@ case class AnyAgg(child: Expression) extends DeclarativeAggregate with ImplicitC
     TypeUtils.checkForBooleanExpr(child.dataType, "function any")
 
   private lazy val some = AttributeReference("some", BooleanType)()
-  
+
   private lazy val emptySet = AttributeReference("emptySet", BooleanType)()
 
   override lazy val aggBufferAttributes = some :: emptySet :: Nil
