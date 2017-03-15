@@ -54,7 +54,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    JsonDataSource(parsedOptions).infer(
+    JsonDataSource(parsedOptions).inferSchema(
       sparkSession, files, parsedOptions)
   }
 

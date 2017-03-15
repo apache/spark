@@ -40,18 +40,11 @@ private[sql] object JsonInferSchema {
       json: RDD[T],
       configOptions: JSONOptions,
       createParser: (JsonFactory, T) => JsonParser): StructType = {
-    require(configOptions.samplingRatio > 0,
-      s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
     val shouldHandleCorruptRecord = configOptions.permissive
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
-    val schemaData = if (configOptions.samplingRatio > 0.99) {
-      json
-    } else {
-      json.sample(withReplacement = false, configOptions.samplingRatio, 1)
-    }
 
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
+    val rootType = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
