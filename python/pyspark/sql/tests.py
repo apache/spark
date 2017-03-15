@@ -1894,7 +1894,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(spark.catalog.listTables(), [])
         self.assertEquals(spark.catalog.listTables("some_db"), [])
         spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
-        spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        spark.sql("CREATE TABLE xxxxx1 (name STRING, age INT) USING parquet")
         spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
         tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
         tablesDefault = sorted(spark.catalog.listTables("default"), key=lambda t: t.name)
@@ -1903,7 +1903,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(len(tables), 2)
         self.assertEquals(len(tablesSomeDb), 2)
         self.assertEquals(tables[0], Table(
-            name="tab1",
+            name="xxxxx1",
             database="default",
             description=None,
             tableType="MANAGED",
@@ -1975,10 +1975,10 @@ class SQLTests(ReusedPySparkTestCase):
         spark = self.spark
         spark.catalog._reset()
         spark.sql("CREATE DATABASE some_db")
-        spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        spark.sql("CREATE TABLE xxxxx1 (name STRING, age INT) USING parquet")
         spark.sql("CREATE TABLE some_db.tab2 (nickname STRING, tolerance FLOAT) USING parquet")
-        columns = sorted(spark.catalog.listColumns("tab1"), key=lambda c: c.name)
-        columnsDefault = sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
+        columns = sorted(spark.catalog.listColumns("xxxxx1"), key=lambda c: c.name)
+        columnsDefault = sorted(spark.catalog.listColumns("xxxxx1", "default"), key=lambda c: c.name)
         self.assertEquals(columns, columnsDefault)
         self.assertEquals(len(columns), 2)
         self.assertEquals(columns[0], Column(
