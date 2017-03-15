@@ -1396,6 +1396,10 @@ class Row(tuple):
     >>> row = Row(name="Alice", age=11)
     >>> row
     Row(age=11, name='Alice')
+    >>> row = Row(name="Alice", age=11)
+    >>> another = row(22, "Hyukjin")
+    >>> another
+    Row(age=22, name='Hyukjin')
     >>> row['name'], row['age']
     ('Alice', 11)
     >>> row.name, row.age
@@ -1475,7 +1479,7 @@ class Row(tuple):
     # let object acts like class
     def __call__(self, *args):
         """create new Row object"""
-        return _create_row(self, args)
+        return _create_row(self.__fields__, args)
 
     def __getitem__(self, item):
         if isinstance(item, (int, slice)):
