@@ -53,11 +53,6 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
 
   def reorder(plan: LogicalPlan, output: AttributeSet): LogicalPlan = {
     val (items, conditions) = extractInnerJoins(plan)
-    // Find the star schema joins. Currently, it returns the star join with the largest
-    // fact table. In the future, it can return more than one star join (e.g. F1-D1-D2
-    // and F2-D3-D4).
-    val starJoinPlans = StarSchemaDetection(conf).findStarJoins(items, conditions.toSeq)
-
     val result =
       // Do reordering if the number of items is appropriate and join conditions exist.
       // We also need to check if costs of all items can be evaluated.
