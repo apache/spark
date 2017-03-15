@@ -31,7 +31,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ManualClock
 
-private class FakeSchedulerBackend extends SchedulerBackend {
+class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
   def stop() {}
   def reviveOffers() {}
@@ -73,7 +73,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  private def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
+  def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     confs.foreach { case (k, v) => conf.set(k, v) }
     sc = new SparkContext(conf)
@@ -81,7 +81,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupHelper()
   }
 
-  private def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
+  def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
@@ -102,7 +102,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupHelper()
   }
 
-  private def setupHelper(): TaskSchedulerImpl = {
+  def setupHelper(): TaskSchedulerImpl = {
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     dagScheduler = new DAGScheduler(sc, taskScheduler) {
