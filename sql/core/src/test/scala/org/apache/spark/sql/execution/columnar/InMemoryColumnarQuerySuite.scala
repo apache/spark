@@ -391,12 +391,16 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("InMemoryTableScanExec should return currect output ordering and partitioning") {
-    val ds1 = Seq((0, 0), (1, 1)).toDS
+  test("InMemoryTableScanExec should return correct output ordering and partitioning") {
+    val df1 = Seq((0, 0), (1, 1)).toDF
       .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
-    val ds2 = Seq((0, 0), (1, 1)).toDS
+    val df2 = Seq((0, 0), (1, 1)).toDF
       .repartition(col("_1")).sortWithinPartitions(col("_1")).persist
-    val joined = ds1.joinWith(ds2, ds1("_1") === ds2("_1"))
+
+    // Because two cached dataframes have the same logical plan, this is a self-join actually.
+    // So we force one of in-memory relation to alias its output. Then we can test if original and
+    // aliased in-memory relations have correct ordering and partitioning.
+    val joined = df1.joinWith(df2, df1("_1") === df2("_1"))
 
     val inMemoryScans = joined.queryExecution.executedPlan.collect {
       case m: InMemoryTableScanExec => m
