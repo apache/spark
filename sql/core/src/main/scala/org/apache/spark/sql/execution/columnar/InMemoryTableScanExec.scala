@@ -42,9 +42,7 @@ case class InMemoryTableScanExec(
   override def output: Seq[Attribute] = attributes
 
   private def updateAttribute(expr: Expression): Expression = {
-    val attrMap = AttributeMap(
-      relation.child.output.zip(output)
-    )
+    val attrMap = AttributeMap(relation.child.output.zip(output))
     expr.transform {
       case attr: Attribute => attrMap.getOrElse(attr, attr)
     }
