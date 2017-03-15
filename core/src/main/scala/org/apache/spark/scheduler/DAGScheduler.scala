@@ -189,7 +189,7 @@ class DAGScheduler(
 
   /** Number of consecutive fetch failures allowed before a stage is aborted */
   private[scheduler] val maxConsecutiveFetchFailuresPerStage =
-    sc.getConf.getInt("spark.max.fetch.failures.per.stage",
+    sc.getConf.getInt("spark.stage.maxAttempts",
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_FETCH_FAILURES)
 
   private val messageScheduler =
