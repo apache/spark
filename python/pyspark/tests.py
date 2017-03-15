@@ -1037,6 +1037,12 @@ class RDDTests(ReusedPySparkTestCase):
         zeros = len([x for x in l if x == 0])
         self.assertTrue(zeros == 0)
 
+    def test_repartition_on_textfile(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
+        rdd = self.sc.textFile(path)
+        result = rdd.repartition(1).collect()
+        self.assertEqual(u"Hello World!", result[0])
+
     def test_distinct(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
         self.assertEqual(rdd.getNumPartitions(), 10)
