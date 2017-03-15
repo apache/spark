@@ -111,7 +111,12 @@ case class CatalogTablePartition(
    */
   def toRow(partitionSchema: StructType): InternalRow = {
     InternalRow.fromSeq(partitionSchema.map { field =>
-      Cast(Literal(spec(field.name)), field.dataType).eval()
+      val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+        null
+      } else {
+        spec(field.name)
+      }
+      Cast(Literal(partValue), field.dataType).eval()
     })
   }
 }
@@ -158,7 +163,7 @@ case class BucketSpec(
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
  *                                  catalog. If false, it is inferred automatically based on file
  *                                  structure.
- * @param schemaPresevesCase Whether or not the schema resolved for this table is case-sensitive.
+ * @param schemaPreservesCase Whether or not the schema resolved for this table is case-sensitive.
  *                           When using a Hive Metastore, this flag is set to false if a case-
  *                           sensitive schema was unable to be read from the table properties.
  *                           Used to trigger case-sensitive schema inference at query time, when
