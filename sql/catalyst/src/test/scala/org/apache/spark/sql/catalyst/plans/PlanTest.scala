@@ -43,8 +43,6 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
         e.copy(exprId = ExprId(0))
       case l: ListQuery =>
         l.copy(exprId = ExprId(0))
-      case p: PredicateSubquery =>
-        p.copy(exprId = ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
       case a: Alias =>
@@ -62,7 +60,7 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
    * - Sample the seed will replaced by 0L.
    * - Join conditions will be resorted by hashCode.
    */
-  private def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+  protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case filter @ Filter(condition: Expression, child: LogicalPlan) =>
         Filter(splitConjunctivePredicates(condition).map(rewriteEqual(_)).sortBy(_.hashCode())

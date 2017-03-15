@@ -196,7 +196,7 @@ SET spark.sql.caseSensitive=false
 -- !query 19 schema
 struct<key:string,value:string>
 -- !query 19 output
-spark.sql.caseSensitive
+spark.sql.caseSensitive	false
 
 
 -- !query 20
@@ -212,7 +212,7 @@ SET spark.sql.caseSensitive=true
 -- !query 21 schema
 struct<key:string,value:string>
 -- !query 21 output
-spark.sql.caseSensitive
+spark.sql.caseSensitive	true
 
 
 -- !query 22

@@ -27,7 +27,8 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
     DataSource(
       sparkSession = null,
       className = name,
-      options = Map("timeZone" -> DateTimeUtils.defaultTimeZone().getID)).providingClass
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> DateTimeUtils.defaultTimeZone().getID)
+    ).providingClass
 
   test("jdbc") {
     assert(
