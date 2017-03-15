@@ -28,7 +28,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 
-class StatisticsSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
+class CorrelationsSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
   import LinalgUtils._
 
@@ -51,8 +51,8 @@ class StatisticsSuite extends SparkFunSuite with MLlibTestSparkContext with Logg
 
 
   test("corr(X) default, pearson") {
-    val defaultMat = Statistics.corr(X, "features")
-    val pearsonMat = Statistics.corr(X, "features", "pearson")
+    val defaultMat = Correlations.corr(X, "features")
+    val pearsonMat = Correlations.corr(X, "features", "pearson")
     // scalastyle:off
     val expected = BDM(
       (1.00000000, 0.05564149, Double.NaN, 0.4004714),
@@ -66,7 +66,7 @@ class StatisticsSuite extends SparkFunSuite with MLlibTestSparkContext with Logg
   }
 
   test("corr(X) spearman") {
-    val spearmanMat = Statistics.corr(X, "features", "spearman")
+    val spearmanMat = Correlations.corr(X, "features", "spearman")
     // scalastyle:off
     val expected = BDM(
       (1.0000000,  0.1054093,  Double.NaN, 0.4000000),
