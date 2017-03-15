@@ -47,7 +47,6 @@ object FPGrowthExample {
       "1 2")
     ).map(t => t.split(" ")).toDF("features")
 
-    // Trains a FPGrowth model.
     val fpgrowth = new FPGrowth().setMinSupport(0.5).setMinConfidence(0.6)
     val model = fpgrowth.fit(dataset)
 

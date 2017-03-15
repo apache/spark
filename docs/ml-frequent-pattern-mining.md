@@ -35,15 +35,16 @@ We refer users to the papers for more details.
 
 * `minSupport`: the minimum support for an itemset to be identified as frequent.
   For example, if an item appears 3 out of 5 transactions, it has a support of 3/5=0.6.
-* `minConfidence`: minimum confidence for generating Association Rule. The parameter has no effect during `fit`, but specify
-  the minimum confidence for generating association rules from frequent itemsets.
-* `numPartitions`: the number of partitions used to distribute the work.
+* `minConfidence`: minimum confidence for generating Association Rule. The parameter will not affect the mining
+  for frequent itemsets,, but specify the minimum confidence for generating association rules from frequent itemsets.
+* `numPartitions`: the number of partitions used to distribute the work. By default the param is not set, and
+  partition number of the input dataset is used.
 
 The `FPGrowthModel` provides:
 
-* `freqItemsets`: frequent itemsets in the format of DataFrame("items"[Seq], "freq"[Long])
+* `freqItemsets`: frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
 * `associationRules`: association rules generated with confidence above `minConfidence`, in the format of 
-  DataFrame("antecedent"[Seq], "consequent"[Seq], "confidence"[Double]).
+  DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double]).
 * `transform`: The transform method examines the input items against all the association rules and
   summarize the consequents as prediction. The prediction column has the same data type as the
   input column and does not contain existing items in the input column.

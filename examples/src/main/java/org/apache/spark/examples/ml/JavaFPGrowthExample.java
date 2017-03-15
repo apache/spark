@@ -48,24 +48,20 @@ public class JavaFPGrowthExample {
     });
     Dataset<Row> itemsDF = spark.createDataFrame(data, schema);
 
-    // Learn a mapping from words to Vectors.
-    FPGrowth fpgrowth = new FPGrowth()
+    FPGrowthModel model = new FPGrowth()
       .setMinSupport(0.5)
-      .setMinConfidence(0.6);
+      .setMinConfidence(0.6)
+      .fit(itemsDF);
 
-    FPGrowthModel model = fpgrowth.fit(itemsDF);
-
-    // get frequent itemsets.
+    // Display frequent itemsets.
     model.freqItemsets().show();
 
-    // get generated association rules.
+    // Display generated association rules.
     model.associationRules().show();
 
     // transform examines the input items against all the association rules and summarize the
     // consequents as prediction
-    Dataset<Row> result = model.transform(itemsDF);
-
-    result.show();
+    model.transform(itemsDF).show();
     // $example off$
 
     spark.stop();

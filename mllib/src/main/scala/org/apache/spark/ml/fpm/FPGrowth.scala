@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.fpm
 
-import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.Path
@@ -41,7 +40,7 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
 
   /**
    * Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears
-   * more than (minSupport * size-of-the-dataset) times will be output
+   * more than (minSupport * size-of-the-dataset) times will be output in the frequent itemsets.
    * Default: 0.3
    * @group param
    */
@@ -69,8 +68,8 @@ private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPre
   def getNumPartitions: Int = $(numPartitions)
 
   /**
-   * Minimal confidence for generating Association Rule.
-   * Note that minConfidence has no effect during fitting.
+   * Minimal confidence for generating Association Rule. MinConfidence will not affect the mining
+   * for frequent itemsets, but will affect the association rules generation.
    * Default: 0.8
    * @group param
    */
@@ -154,7 +153,6 @@ class FPGrowth @Since("2.2.0") (
     }
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
-
     val schema = StructType(Seq(
       StructField("items", dataset.schema($(featuresCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
@@ -183,7 +181,7 @@ object FPGrowth extends DefaultParamsReadable[FPGrowth] {
  * :: Experimental ::
  * Model fitted by FPGrowth.
  *
- * @param freqItemsets frequent items in the format of DataFrame("items"[Seq], "freq"[Long])
+ * @param freqItemsets frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
  */
 @Since("2.2.0")
 @Experimental
@@ -303,13 +301,13 @@ private[fpm] object AssociationRules {
 
   /**
    * Computes the association rules with confidence above minConfidence.
-   * @param dataset DataFrame("items", "freq") containing frequent itemset obtained from
-   *                algorithms like [[FPGrowth]].
+   * @param dataset DataFrame("items"[Array], "freq"[Long]) containing frequent itemsets obtained
+   *                from algorithms like [[FPGrowth]].
    * @param itemsCol column name for frequent itemsets
-   * @param freqCol column name for frequent itemsets count
-   * @param minConfidence minimum confidence for the result association rules
-   * @return a DataFrame("antecedent", "consequent", "confidence") containing the association
-   *         rules.
+   * @param freqCol column name for appearance count of the frequent itemsets
+   * @param minConfidence minimum confidence for generating the association rules
+   * @return a DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double])
+   *         containing the association rules.
    */
   def getAssociationRulesFromFP[T: ClassTag](
         dataset: Dataset[_],
