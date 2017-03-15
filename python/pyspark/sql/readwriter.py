@@ -112,7 +112,7 @@ class DataFrameReader(OptionUtils):
 
         You can set the following option(s) for reading files:
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or parttion values.
+                in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -124,7 +124,7 @@ class DataFrameReader(OptionUtils):
 
         You can set the following option(s) for reading files:
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or parttion values.
+                in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:
@@ -530,7 +530,7 @@ class DataFrameWriter(OptionUtils):
 
         You can set the following option(s) for writing files:
             * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or parttion values.
+                timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
@@ -542,7 +542,7 @@ class DataFrameWriter(OptionUtils):
 
         You can set the following option(s) for writing files:
             * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or parttion values.
+                timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:

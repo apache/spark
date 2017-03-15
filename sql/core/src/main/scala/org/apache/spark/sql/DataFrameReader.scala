@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
-import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
+import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -73,7 +73,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -110,7 +110,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -126,7 +126,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -376,17 +376,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    val createParser = CreateJacksonParser.string _
 
     val schema = userSpecifiedSchema.getOrElse {
-      JsonInferSchema.infer(
-        jsonDataset.rdd,
-        parsedOptions,
-        createParser)
+      TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
 
+    val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
       val parser = new JacksonParser(schema, parsedOptions)
       iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
