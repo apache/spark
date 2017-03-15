@@ -217,6 +217,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
+   * <li>`escapeQuoteEscaping` (default `\0`): sets the single character used for escaping
+   * the quote-escape character.</li>
    * <li>`comment` (default empty string): sets the single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>

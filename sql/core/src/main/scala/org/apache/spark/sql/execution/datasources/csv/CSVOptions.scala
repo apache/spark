@@ -88,6 +88,7 @@ class CSVOptions(
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
+  val escapeQuoteEscaping = getChar("escapeQuoteEscaping", '\u0000')
   val comment = getChar("comment", '\u0000')
 
   val headerFlag = getBool("header")
@@ -139,6 +140,8 @@ class CSVOptions(
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
+  val escapeUnquotedValues = getBool("escapeUnquotedValues", false)
+
   val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
 
   val quoteAll = getBool("quoteAll", false)
@@ -153,12 +156,14 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    format.setCharToEscapeQuoteEscaping(escapeQuoteEscaping)
     format.setComment(comment)
     writerSettings.setNullValue(nullValue)
     writerSettings.setEmptyValue(nullValue)
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings.setEscapeUnquotedValues(escapeUnquotedValues)
     writerSettings
   }
 
@@ -168,6 +173,7 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    format.setCharToEscapeQuoteEscaping(escapeQuoteEscaping)
     format.setComment(comment)
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
@@ -177,6 +183,7 @@ class CSVOptions(
     settings.setNullValue(nullValue)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
     settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings.setEscapeUnquotedValues(escapeUnquotedValues)
     settings
   }
 }

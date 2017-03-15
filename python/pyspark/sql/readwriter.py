@@ -315,8 +315,8 @@ class DataFrameReader(OptionUtils):
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, wholeFile=None):
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None
+            columnNameOfCorruptRecord=None, wholeFile=None, escapeQuoteEscaping=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -393,6 +393,8 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param wholeFile: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
+        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
+                                    character. If None is set, it uses the default value, ``\0``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
@@ -406,7 +408,8 @@ class DataFrameReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile,
+            escapeQuoteEscaping=escapeQuoteEscaping)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
@@ -708,7 +711,7 @@ class DataFrameWriter(OptionUtils):
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
-            timestampFormat=None):
+            timestampFormat=None, escapeQuoteEscaping=None, escapeUnquotedValues=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -748,13 +751,19 @@ class DataFrameWriter(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+        :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
+                                    character. If None is set, it uses the default value, ``\0``.
+        :param escapeUnquotedValues: processes escape sequences in unquoted values. If None is set,
+                                     it uses the default value, ``false``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
                        nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
-                       dateFormat=dateFormat, timestampFormat=timestampFormat)
+                       dateFormat=dateFormat, timestampFormat=timestampFormat,
+                       escapeQuoteEscaping=escapeQuoteEscaping,
+                       escapeUnquotedValues=escapeUnquotedValues)
         self._jwrite.csv(path)
 
     @since(1.5)

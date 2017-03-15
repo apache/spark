@@ -482,6 +482,58 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save csv with quote escaping, using escapeQuoteEscaping option") {
+    withTempPath { path =>
+      // when a string to be quoted ends with the escape character, escapeQuoteEscaping is required
+      val df1 = Seq(
+        """You are "beautiful"""",
+        """Yes, \in the inside\"""  // ends with the escape character '\\'
+      ).toDF()
+
+      // escapeQuotes is true by default
+      // quote character is '\"' by default
+      // escape character s '\\' by default
+      df1.coalesce(1).write
+        .format("csv")
+        .option("escapeQuoteEscaping", "\\")
+        .save(path.getAbsolutePath)
+
+      val df2 = spark.read
+        .format("csv")
+        .option("escapeQuoteEscaping", "\\")
+        .load(path.getAbsolutePath)
+
+      checkAnswer(df1, df2)
+    }
+  }
+
+  test("save csv with quote escaping, using escapeUnquotedValues option") {
+    withTempPath { path =>
+      val df1 = Seq(
+        """AA\"BB\""",  // 1 escape char and 1 quote char
+        """AA\""BB\""", // 1 escape char and 2 quote char
+        """AA\\"BB\"""  // 2 escape char and 1 quote char
+      ).toDF()
+
+      // escapeQuotes is true by default
+      // quote character is '\"' by default
+      // escape character s '\\' by default
+      df1.coalesce(1).write
+        .format("csv")
+        .option("escapeQuoteEscaping", "\\")    // required to handle the last '\\' of test strings
+        .option("escapeUnquotedValues", "true") // without this setting, test fails
+        .save(path.getAbsolutePath)
+
+      // escapeUnquotedValues is false by default
+      val df2 = spark.read
+        .format("csv")
+        .option("escapeQuoteEscaping", "\\")
+        .load(path.getAbsolutePath)
+
+      checkAnswer(df1, df2)
+    }
+  }
+
   test("commented lines in CSV data") {
     val results = spark.read
       .format("csv")

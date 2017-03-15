@@ -565,9 +565,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * the separator can be part of the value.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
+   * <li>`escapeQuoteEscaping` (default `\0`): sets the single character used for escaping
+   * the quote-escape character.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
+   * <li>`escapeUnquotedValues` (default `false`): processes escape sequences in unquoted values.
+   * </li>
    * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
    * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
