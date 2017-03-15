@@ -355,6 +355,7 @@ def countDistinct(col, *cols):
     jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
+
 def every(col):
     """Aggregate function: returns true if all values in a group are true.
     """
@@ -431,6 +432,7 @@ def grouping_id(*cols):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
+
 
 @since(1.6)
 def input_file_name():

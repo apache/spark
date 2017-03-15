@@ -2660,7 +2660,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("d", True),
             ("d", None)
         ], ["key", "value"])
-        w = Window.partitionBy("key").orderBy("value").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        w = Window \
+            .partitionBy("key").orderBy("value") \
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
         from pyspark.sql import functions as F
         sel = df.select(df.key,
                         df.value,
