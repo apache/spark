@@ -39,6 +39,7 @@ case class Every(child: Expression) extends DeclarativeAggregate with ImplicitCa
     TypeUtils.checkForBooleanExpr(child.dataType, "function every")
 
   private lazy val every = AttributeReference("every", BooleanType)()
+
   private lazy val emptySet = AttributeReference("emptySet", BooleanType)()
 
   override lazy val aggBufferAttributes = every :: emptySet :: Nil

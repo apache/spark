@@ -173,9 +173,6 @@ _functions_2_2 = {
     'to_date': 'Converts a string date into a DateType using the (optionally) specified format.',
     'to_timestamp': 'Converts a string timestamp into a timestamp type using the ' +
                     '(optionally) specified format.',
-    'every': 'Aggregate function: returns true if all values in the expression are true.',
-    'any': 'Aggregate function: returns true if at least one value in the expression is true.',
-    'some': 'Aggregate function: returns true if at least one value in the expression is true.',
 }
 
 # math functions that take two arguments as input
@@ -228,8 +225,6 @@ for _name, _doc in _functions_1_6.items():
     globals()[_name] = since(1.6)(_create_function(_name, _doc))
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
-for _name, _doc in _functions_2_2.items():
-    globals()[_name] = since(2.2)(_create_function(_name, _doc))
 del _name, _doc
 
 
@@ -360,6 +355,27 @@ def countDistinct(col, *cols):
     jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
+def every(col):
+    """Aggregate function: returns true if all values in a group are true.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.every(_to_java_column(col))
+    return Column(jc)
+
+
+def any(col):
+    """Aggregate function: returns true if at least one value in the group is true.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.any(_to_java_column(col))
+    return Column(jc)
+
+
+def some(col):
+    """Aggregate function: returns true if at least one value in the group is true.
+    """
+    return any(col)
+
 
 @since(1.3)
 def first(col, ignorenulls=False):
@@ -415,7 +431,6 @@ def grouping_id(*cols):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
-
 
 @since(1.6)
 def input_file_name():

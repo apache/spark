@@ -2660,7 +2660,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("d", True),
             ("d", None)
         ], ["key", "value"])
-        w = Window.partitionBy("key").orderBy("value")
+        w = Window.partitionBy("key").orderBy("value").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
         from pyspark.sql import functions as F
         sel = df.select(df.key,
                         df.value,
@@ -2675,40 +2675,43 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             ("b", True, True, True, True),
             ("b", True, True, True, True),
             ("c", False, False, False, False),
-            ("d", True, False, True, True),
-            ("d", None, False, True, True)
+            ("d", None, False, True, True),
+            ("d", True, False, True, True)
         ]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
 
     def test_window_functions_every_any_without_partitionBy(self):
         df = self.spark.createDataFrame([
-            ("a", False),
-            ("a", True),
-            ("a", False),
-            ("b", True),
-            ("b", True),
-            ("c", False),
-            ("d", True),
-            ("d", None)
-        ], ["key", "value"])
-        w = Window.orderBy("value").rowsBetween(Window.unboundedPreceding, 0)
+            (False,),
+            (True,),
+            (False,),
+            (True,),
+            (True,),
+            (False,),
+            (True,),
+            (None,)
+        ], ["value"])
+        w1 = Window.orderBy("value").rowsBetween(Window.unboundedPreceding, 0)
+        w2 = Window.orderBy("value").rowsBetween(-1, 0)
         from pyspark.sql import functions as F
-        sel = df.select(df.key,
-                        df.value,
-                        F.every("value").over(w),
-                        F.any("value").over(w),
-                        F.some("value").over(w))
+        sel = df.select(df.value,
+                        F.every("value").over(w1),
+                        F.any("value").over(w1),
+                        F.some("value").over(w1),
+                        F.every("value").over(w2),
+                        F.any("value").over(w2),
+                        F.some("value").over(w2))
         rs = sel.collect()
         expected = [
-            ("a", False, False, False, False),
-            ("a", False, False, False, False),
-            ("a", True, False, True, True),
-            ("b", True, True, True, True),
-            ("b", True, True, True, True),
-            ("c", False, False, False, False),
-            ("d", True, False, True, True),
-            ("d", None, False, True, True)
+            (None, False, False, False, False, False, False),
+            (False, False, False, False, False, False, False),
+            (False, False, False, False, False, False, False),
+            (False, False, False, False, False, False, False),
+            (True, False, True, True, False, True, True),
+            (True, False, True, True, True, True, True),
+            (True, False, True, True, True, True, True),
+            (True, False, True, True, True, True, True)
         ]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
