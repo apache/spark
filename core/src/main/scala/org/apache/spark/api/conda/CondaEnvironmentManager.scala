@@ -46,9 +46,9 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
     // must link in /tmp to reduce path length in case baseDir is very long...
     // If baseDir path is too long, this breaks conda's 220 character limit for binary replacement.
     // Don't even try to use java.io.tmpdir - yarn sets this to a very long path
-    val linkedBaseDir = Utils.createTempDir("/tmp", "conda").toPath resolve "real"
+    val linkedBaseDir = Utils.createTempDir("/tmp", "conda").toPath.resolve("real")
     logInfo(s"Creating symlink $linkedBaseDir -> $baseDir")
-    Files.createSymbolicLink(linkedBaseDir, Paths get baseDir)
+    Files.createSymbolicLink(linkedBaseDir, Paths.get(baseDir))
 
     // Attempt to create environment
     runCondaProcess(
@@ -73,8 +73,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
    * This hack is necessary otherwise conda tries to use the homedir for pkgs cache.
    */
   private[this] def generateCondarc(baseRoot: Path): Path = {
-    val condaPkgsPath = Paths.get(condaBinaryPath).getParent.getParent resolve "pkgs"
-    val condarc = baseRoot resolve "condarc"
+    val condaPkgsPath = Paths.get(condaBinaryPath).getParent.getParent.resolve("pkgs")
+    val condarc = baseRoot.resolve("condarc")
     val condarcContents =
       s"""pkgs_dirs:
          | - $baseRoot/pkgs
@@ -91,7 +91,7 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
                                      args: List[String],
                                      description: String): Unit = {
     val condarc = generateCondarc(baseRoot)
-    val fakeHomeDir = baseRoot resolve "home"
+    val fakeHomeDir = baseRoot.resolve("home")
     // Attempt to create fake home dir
     Files.createDirectories(fakeHomeDir)
 

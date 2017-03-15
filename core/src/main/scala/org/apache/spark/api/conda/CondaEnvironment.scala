@@ -42,7 +42,7 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
   private[this] val packages = mutable.Buffer(bootstrapPackages: _*)
   private[this] val channels = bootstrapChannels.toBuffer
 
-  val condaEnvDir: Path = rootPath resolve "envs" resolve envName
+  val condaEnvDir: Path = rootPath.resolve("envs").resolve(envName)
 
   def activatedEnvironment(startEnv: Map[String, String] = Map.empty): Map[String, String] = {
     require(!startEnv.contains("PATH"),
@@ -51,7 +51,7 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
     val newVars = System.getenv().asScala.toIterator ++ startEnv ++ List(
       "CONDA_PREFIX" -> condaEnvDir.toString,
       "CONDA_DEFAULT_ENV" -> condaEnvDir.toString,
-      "PATH" -> ((condaEnvDir resolve "bin").toString +
+      "PATH" -> (condaEnvDir.resolve("bin").toString +
         sys.env.get("PATH").map(File.pathSeparator + _).getOrElse(""))
     )
     newVars.toMap

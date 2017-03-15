@@ -79,13 +79,12 @@ private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
 
   private[this] val pythonExec = {
     condaEnv.map { conda =>
-      requestedPythonExec.foreach(exec => sys.error(
-        s"It's forbidden to set the PYSPARK_PYTHON when using conda, but found: $exec"))
+      requestedPythonExec.foreach(exec => sys.error(s"It's forbidden to set the PYSPARK_PYTHON " +
+        s"when using conda, but found: $exec"))
 
       conda.condaEnvDir + "/bin/python"
-    }
-      .orElse(requestedPythonExec)
-      .getOrElse("python")
+    }.orElse(requestedPythonExec)
+     .getOrElse("python")
   }
 
   val pythonPath = PythonUtils.mergePythonPaths(

@@ -18,7 +18,6 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.lang.ProcessBuilder.Redirect
 import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
@@ -54,9 +53,8 @@ object PythonRunner extends CondaRunner with Logging {
           s"It's forbidden to set the PYSPARK python path when using conda, but found: $exec")
       }
       conda.condaEnvDir + "/bin/python"
-    }
-      .orElse(presetPythonExec)
-      .getOrElse("python")
+    }.orElse(presetPythonExec)
+     .getOrElse("python")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -104,7 +102,6 @@ object PythonRunner extends CondaRunner with Logging {
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     builder.redirectErrorStream(true)
     try {
-      logInfo(s"About to start python process: ${builder.command()}")
       val process = builder.start()
 
       new RedirectThread(process.getInputStream, System.out, "redirect output").start()
