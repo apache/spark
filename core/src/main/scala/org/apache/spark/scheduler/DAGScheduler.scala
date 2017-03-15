@@ -187,10 +187,13 @@ class DAGScheduler(
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
-  /** Number of consecutive fetch failures allowed before a stage is aborted */
-  private[scheduler] val maxConsecutiveFetchFailuresPerStage =
-    sc.getConf.getInt("spark.stage.maxAttempts",
-      DAGScheduler.DEFAULT_MAX_CONSECUTIVE_FETCH_FAILURES)
+  /**
+   * Number of consecutive stage retries allowed before a stage is aborted
+   * (since you can have multiple fetch failures in one stage attempt).
+   */
+  private[scheduler] val maxConsecutiveStageAttempts =
+    sc.getConf.getInt("spark.stage.maxConsecutiveAttempts",
+      DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
@@ -326,8 +329,7 @@ class DAGScheduler(
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage = new ShuffleMapStage(id, rdd, numTasks, parents, jobId,
-      maxConsecutiveFetchFailuresPerStage, rdd.creationSite, shuffleDep)
+    val stage = new ShuffleMapStage(id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep)
 
     stageIdToStage(id) = stage
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
@@ -365,8 +367,7 @@ class DAGScheduler(
       callSite: CallSite): ResultStage = {
     val parents = getOrCreateParentStages(rdd, jobId)
     val id = nextStageId.getAndIncrement()
-    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId,
-      maxConsecutiveFetchFailuresPerStage, callSite)
+    val stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -1291,7 +1292,7 @@ class DAGScheduler(
 
           failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
           val shouldAbortStage =
-            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveFetchFailuresPerStage ||
+            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
             disallowStageRetryForTest
 
           if (shouldAbortStage) {
@@ -1300,7 +1301,7 @@ class DAGScheduler(
             } else {
               s"""$failedStage (${failedStage.name})
                  |has failed the maximum allowable number of
-                 |times: $maxConsecutiveFetchFailuresPerStage.
+                 |times: $maxConsecutiveStageAttempts.
                  |Most recent failure reason: $failureMessage""".stripMargin.replaceAll("\n", " ")
             }
             abortStage(failedStage, abortMessage, None)
@@ -1735,6 +1736,7 @@ private[spark] object DAGScheduler {
   // as more failure events come in
   val RESUBMIT_TIMEOUT = 200
 
-  // The number of consecutive fetch failures allowed before a stage is aborted
-  val DEFAULT_MAX_CONSECUTIVE_FETCH_FAILURES = 4
+  // Number of consecutive stage retries allowed before a stage is aborted
+  // (since you can have multiple fetch failures in one stage attempt).
+  val DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS = 4
 }

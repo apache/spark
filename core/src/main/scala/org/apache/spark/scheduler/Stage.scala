@@ -59,7 +59,6 @@ private[scheduler] abstract class Stage(
     val numTasks: Int,
     val parents: List[Stage],
     val firstJobId: Int,
-    val maxConsecutiveFetchFailures: Int,
     val callSite: CallSite)
   extends Logging {
 
