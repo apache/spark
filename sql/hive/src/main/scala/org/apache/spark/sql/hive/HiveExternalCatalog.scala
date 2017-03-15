@@ -22,7 +22,6 @@ import java.lang.reflect.InvocationTargetException
 import java.util
 
 import scala.collection.mutable
-import scala.collection.Map
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -46,6 +45,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
+
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -511,57 +511,94 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
    */
-  override def alterTable(newTableDefinition: CatalogTable): Unit = withClient {
-    assert(newTableDefinition.identifier.database.isDefined)
-    val db = newTableDefinition.identifier.database.get
-    requireTableExists(db, newTableDefinition.identifier.table)
-    verifyTableProperties(newTableDefinition)
+  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
+    requireTableExists(db, tableDefinition.identifier.table)
+    verifyTableProperties(tableDefinition)
 
     // convert table statistics to properties so that we can persist them through hive api
-    val withStatsProps = populateStatsProps(newTableDefinition)
+    val withStatsProps = if (tableDefinition.stats.isDefined) {
+      val stats = tableDefinition.stats.get
+      var statsProperties: Map[String, String] =
+        Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+      if (stats.rowCount.isDefined) {
+        statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
+      }
+      stats.colStats.foreach { case (colName, colStat) =>
+        colStat.toMap.foreach { case (k, v) =>
+          statsProperties += (columnStatKeyPropName(colName, k) -> v)
+        }
+      }
+      tableDefinition.copy(properties = tableDefinition.properties ++ statsProperties)
+    } else {
+      tableDefinition
+    }
 
-    if (newTableDefinition.tableType == VIEW) {
+    if (tableDefinition.tableType == VIEW) {
       client.alterTable(withStatsProps)
     } else {
-      val oldRawTableDef = getRawTable(db, newTableDefinition.identifier.table)
+      val oldTableDef = getRawTable(db, withStatsProps.identifier.table)
 
-      // restore the table metadata in spark sql format for comparing with the input
-      // table metadata that is also in spark sql format
-      val oldRestoredTableDef = restoreTableMetadata(oldRawTableDef)
+      val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
+        tableDefinition.storage
+      } else {
+        // We can't alter the table storage of data source table directly for 2 reasons:
+        //   1. internally we use path option in storage properties to store the value of table
+        //      location, but the given `tableDefinition` is from outside and doesn't have the path
+        //      option, we need to add it manually.
+        //   2. this data source table may be created on a file, not a directory, then we can't set
+        //      the `locationUri` field and save it to Hive metastore, because Hive only allows
+        //      directory as table location.
+        //
+        // For example, an external data source table is created with a single file '/path/to/file'.
+        // Internally, we will add a path option with value '/path/to/file' to storage properties,
+        // and set the `locationUri` to a special value due to SPARK-15269(please see
+        // `saveTableIntoHive` for more details). When users try to get the table metadata back, we
+        // will restore the `locationUri` field from the path option and remove the path option from
+        // storage properties. When users try to alter the table storage, the given
+        // `tableDefinition` will have `locationUri` field with value `/path/to/file` and the path
+        // option is not set.
+        //
+        // Here we need 2 extra steps:
+        //   1. add path option to storage properties, to match the internal format, i.e. using path
+        //      option to store the value of table location.
+        //   2. set the `locationUri` field back to the old one from the existing table metadata,
+        //      if users don't want to alter the table location. This step is necessary as the
+        //      `locationUri` is not always same with the path option, e.g. in the above example
+        //      `locationUri` is a special value and we should respect it. Note that, if users
+        //       want to alter the table location to a file path, we will fail. This should be fixed
+        //       in the future.
 
-      val (newSchema, dataSourceProps) =
-        if (!oldRestoredTableDef.schema.equals(newTableDefinition.schema)) {
-          val props =
-            tableMetaToTableProps(newTableDefinition).filter(_._1.startsWith(DATASOURCE_PREFIX))
-          if (newTableDefinition.provider.isDefined &&
-            newTableDefinition.provider.get.toLowerCase != DDLUtils.HIVE_PROVIDER) {
-            // we only need to populate non-hive provider to the tableprops
-            props.put(DATASOURCE_PROVIDER, newTableDefinition.provider.get)
-          }
-          (newTableDefinition.schema, props)
+        val newLocation = tableDefinition.storage.locationUri.map(CatalogUtils.URIToString(_))
+        val storageWithPathOption = tableDefinition.storage.copy(
+          properties = tableDefinition.storage.properties ++ newLocation.map("path" -> _))
+
+        val oldLocation = getLocationFromStorageProps(oldTableDef)
+        if (oldLocation == newLocation) {
+          storageWithPathOption.copy(locationUri = oldTableDef.storage.locationUri)
         } else {
-          // maintain the original format of the table schema
-          (oldRawTableDef.schema,
-            oldRawTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX)))
+          storageWithPathOption
         }
+      }
 
-      val partitionProviderProp = if (newTableDefinition.tracksPartitionsInCatalog) {
+      val partitionProviderProp = if (tableDefinition.tracksPartitionsInCatalog) {
         TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_CATALOG
       } else {
         TABLE_PARTITION_PROVIDER -> TABLE_PARTITION_PROVIDER_FILESYSTEM
       }
 
-      // Sets the `partitionColumnNames` and `bucketSpec` from the old table definition,
+      // Sets the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is. Also add old data source properties to table
       // properties, to retain the data source table format.
-      val newTableProps =
-        dataSourceProps ++ withStatsProps.properties + partitionProviderProp
-      val newDef = oldRestoredTableDef.copy(
-        storage = newStorageForAlterTable(newTableDefinition, oldRawTableDef),
-        schema = newSchema,
-        partitionColumnNames = oldRawTableDef.partitionColumnNames,
-        bucketSpec = oldRawTableDef.bucketSpec,
-        properties = newTableProps.toMap)
+      val oldDataSourceProps = oldTableDef.properties.filter(_._1.startsWith(DATASOURCE_PREFIX))
+      val newTableProps = oldDataSourceProps ++ withStatsProps.properties + partitionProviderProp
+      val newDef = withStatsProps.copy(
+        storage = newStorage,
+        schema = oldTableDef.schema,
+        partitionColumnNames = oldTableDef.partitionColumnNames,
+        bucketSpec = oldTableDef.bucketSpec,
+        properties = newTableProps)
 
       client.alterTable(newDef)
     }
@@ -583,72 +620,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             "compatible way. Updating Hive metastore in Spark SQL specific format."
         logWarning(warningMessage, e)
         client.alterTable(updatedTable.copy(schema = updatedTable.partitionSchema))
-    }
-  }
-
-  private def newStorageForAlterTable(
-      newTableDef: CatalogTable,
-      oldRawTableDef: CatalogTable): CatalogStorageFormat = {
-    if (DDLUtils.isHiveTable(newTableDef)) {
-      newTableDef.storage
-    } else {
-      // We can't alter the table storage of data source table directly for 2 reasons:
-      //   1. internally we use path option in storage properties to store the value of table
-      //      location, but the given `tableDefinition` is from outside and doesn't have the path
-      //      option, we need to add it manually.
-      //   2. this data source table may be created on a file, not a directory, then we can't set
-      //      the `locationUri` field and save it to Hive metastore, because Hive only allows
-      //      directory as table location.
-      //
-      // For example, an external data source table is created with a single file '/path/to/file'.
-      // Internally, we will add a path option with value '/path/to/file' to storage properties,
-      // and set the `locationUri` to a special value due to SPARK-15269(please see
-      // `saveTableIntoHive` for more details). When users try to get the table metadata back, we
-      // will restore the `locationUri` field from the path option and remove the path option from
-      // storage properties. When users try to alter the table storage, the given
-      // `tableDefinition` will have `locationUri` field with value `/path/to/file` and the path
-      // option is not set.
-      //
-      // Here we need 2 extra steps:
-      //   1. add path option to storage properties, to match the internal format, i.e. using path
-      //      option to store the value of table location.
-      //   2. set the `locationUri` field back to the old one from the existing table metadata,
-      //      if users don't want to alter the table location. This step is necessary as the
-      //      `locationUri` is not always same with the path option, e.g. in the above example
-      //      `locationUri` is a special value and we should respect it. Note that, if users
-      //       want to alter the table location to a file path, we will fail. This should be fixed
-      //       in the future.
-
-      val newLocation = newTableDef.storage.locationUri.map(CatalogUtils.URIToString(_))
-      val storageWithPathOption = newTableDef.storage.copy(
-        properties = newTableDef.storage.properties ++ newLocation.map("path" -> _))
-
-      val oldLocation = getLocationFromStorageProps(oldRawTableDef)
-      if (oldLocation == newLocation) {
-        storageWithPathOption.copy(locationUri = oldRawTableDef.storage.locationUri)
-      } else {
-        storageWithPathOption
-      }
-    }
-  }
-
-  private def populateStatsProps (newTableDefinition: CatalogTable): CatalogTable = {
-    // convert table statistics to properties so that we can persist them through hive api
-    if (newTableDefinition.stats.isDefined) {
-      val stats = newTableDefinition.stats.get
-      var statsProperties: Map[String, String] =
-        Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
-      if (stats.rowCount.isDefined) {
-        statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
-      }
-      stats.colStats.foreach { case (colName, colStat) =>
-        colStat.toMap.foreach { case (k, v) =>
-          statsProperties += (columnStatKeyPropName(colName, k) -> v)
-        }
-      }
-      newTableDefinition.copy(properties = newTableDefinition.properties ++ statsProperties)
-    } else {
-      newTableDefinition
     }
   }
 
