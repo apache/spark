@@ -58,13 +58,12 @@ object SimpleAnalyzer extends Analyzer(
  *
  * @param defaultDatabase The default database used in the view resolution, this overrules the
  *                        current catalog database.
- * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
+ * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
- *                        TODO Limit the depth of nested views.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
-    nestedViewLevel: Int = 0)
+    nestedViewDepth: Int = 0)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -77,7 +76,7 @@ object AnalysisContext {
   def withAnalysisContext[A](database: Option[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(defaultDatabase = database,
-      nestedViewLevel = originContext.nestedViewLevel + 1)
+      nestedViewDepth = originContext.nestedViewDepth + 1)
     set(context)
     try f finally { set(originContext) }
   }
@@ -598,6 +597,12 @@ class Analyzer(
       case view @ View(desc, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
+          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
+            view.failAnalysis(s"The depth of view ${view.desc.identifier} exceeds the maximum " +
+              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
+              "avoid errors. Increase the value of spark.sql.view.maxNestedViewDepth to work " +
+              "aroud this.")
+          }
           execute(child)
         }
         view.copy(child = newChild)

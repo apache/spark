@@ -571,6 +571,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MAX_NESTED_VIEW_DEPTH =
+    buildConf("spark.sql.view.maxNestedViewDepth")
+      .internal()
+      .doc("The maximum depth of a view reference in a nested view. A nested view may reference " +
+        "other nested views, the dependencies are organized in a directed acyclic graph (DAG). " +
+        "However the DAG depth may become too large and cause unexpected behavior. This " +
+        "configuration puts a limit on this: when the depth of a view exceeds this value during " +
+        "analysis, we terminate the resolution to avoid potential errors.")
+      .intConf
+      .checkValue(depth => depth > 0, "The maximum depth of a view reference in a nested view " +
+        "must be positive.")
+      .createWithDefault(100)
+
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
       .internal()
@@ -931,6 +944,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
+
+  def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   /** ********************** SQLConf functionality methods ************ */
 
