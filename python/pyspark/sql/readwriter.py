@@ -315,7 +315,7 @@ class DataFrameReader(OptionUtils):
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, wholeFile=None, escapeQuoteEscaping=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
