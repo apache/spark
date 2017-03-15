@@ -188,6 +188,11 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val CONDA_VERBOSITY = ConfigBuilder("spark.conda.verbosity")
+    .doc("How many times to apply -v to conda. A number between 0 and 3, with 0 being default.")
+    .intConf
+    .createWithDefault(0)
+
   // To limit memory usage, we only track information for a fixed number of tasks
   private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
     .intConf

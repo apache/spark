@@ -31,11 +31,15 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CONDA_BINARY_PATH
 import org.apache.spark.internal.config.CONDA_CHANNEL_URLS
+import org.apache.spark.internal.config.CONDA_VERBOSITY
 import org.apache.spark.util.Utils
 
-final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: Seq[String])
-    extends Logging {
+final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: Seq[String],
+                                    verbosity: Int = 0)
+  extends Logging {
+
   require(condaChannelUrls.nonEmpty, "Can't have an empty list of conda channel URLs")
+  require(verbosity >= 0 && verbosity <= 3, "Verbosity must be between 0 and 3 inclusively")
 
   def create(
       baseDir: String,
@@ -50,11 +54,13 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
     logInfo(s"Creating symlink $linkedBaseDir -> $baseDir")
     Files.createSymbolicLink(linkedBaseDir, Paths.get(baseDir))
 
+    val verbosityFlags = 0.until(verbosity).map(_ => "-v").toList
+
     // Attempt to create environment
     runCondaProcess(
       linkedBaseDir,
-      List("create", "-n", name, "-y", "--override-channels", "-vv",
-        "--no-default-packages")
+      List("create", "-n", name, "-y", "--override-channels", "--no-default-packages")
+        ::: verbosityFlags
         ::: condaChannelUrls.flatMap(Iterator("--channel", _)).toList
         ::: "--" :: bootstrapPackages.toList,
       description = "create conda env"
@@ -136,6 +142,7 @@ object CondaEnvironmentManager {
     val condaChannelUrls = sparkConf.get(CONDA_CHANNEL_URLS)
     require(condaChannelUrls.nonEmpty,
       s"Must define at least one conda channel in $CONDA_CHANNEL_URLS")
-    new CondaEnvironmentManager(condaBinaryPath, condaChannelUrls)
+    val verbosity = sparkConf.get(CONDA_VERBOSITY)
+    new CondaEnvironmentManager(condaBinaryPath, condaChannelUrls, verbosity)
   }
 }
