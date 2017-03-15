@@ -127,7 +127,7 @@ abstract class PartitioningAwareFileIndex(
     }.keys.toSeq
 
     val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
-    val timeZoneId = caseInsensitiveOptions.get("timeZone")
+    val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
       .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     userPartitionSchema match {
