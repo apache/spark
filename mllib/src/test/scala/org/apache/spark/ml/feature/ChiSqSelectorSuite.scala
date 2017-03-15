@@ -151,7 +151,8 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
       assert(model.selectedFeatures === model2.selectedFeatures)
     }
     val nb = new ChiSqSelector
-    testEstimatorAndModelReadWrite(nb, dataset, ChiSqSelectorSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(nb, dataset, ChiSqSelectorSuite.allParamSettings,
+      ChiSqSelectorSuite.allParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and not support other types") {
