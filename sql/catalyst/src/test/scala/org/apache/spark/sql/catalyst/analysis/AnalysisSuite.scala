@@ -21,11 +21,12 @@ import java.util.TimeZone
 
 import org.scalatest.ShouldMatchers
 
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -61,23 +62,23 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
       Project(Seq(UnresolvedAttribute("tBl.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tBl.a")),
-        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")), None)),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
@@ -192,12 +193,13 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   }
 
   test("pull out nondeterministic expressions from RepartitionByExpression") {
-    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
+    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation, numPartitions = 10)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected, testRelation),
+          numPartitions = 10))
     checkAnalysis(plan, expected)
   }
 
@@ -372,8 +374,8 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input)),
           Cross, None))
 
     assertAnalysisSuccess(query)
@@ -433,10 +435,10 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   test("resolve as with an already existed alias") {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tbl2.a")),
-        SubqueryAlias("tbl", testRelation, None).as("tbl2")),
+        SubqueryAlias("tbl", testRelation).as("tbl2")),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysis(SubqueryAlias("tbl", testRelation, None).as("tbl2"), testRelation)
+    checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
   }
 }

@@ -33,14 +33,15 @@ class CreateTableAsSelectSuite
   extends DataSourceTest
   with SharedSQLContext
   with BeforeAndAfterEach {
+  import testImplicits._
 
   protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    spark.read.json(rdd).createOrReplaceTempView("jt")
+    val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}""").toDS()
+    spark.read.json(ds).createOrReplaceTempView("jt")
   }
 
   override def afterAll(): Unit = {

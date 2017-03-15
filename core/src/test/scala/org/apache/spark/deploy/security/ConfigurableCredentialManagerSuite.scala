@@ -48,7 +48,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
-    credentialManager.getServiceCredentialProvider("hive") should not be (None)
+    credentialManager.getServiceCredentialProvider("hive") should be (None)
   }
 
   test("disable hive credential provider") {
@@ -92,19 +92,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     // Only TestTokenProvider can get the time of next token renewal
     val nextRenewal = credentialManager.obtainCredentials(hadoopConf, creds)
     nextRenewal should be (testCredentialProvider.timeOfNextTokenRenewal)
-  }
-
-  test("obtain tokens For HiveMetastore") {
-    val hadoopConf = new Configuration()
-    hadoopConf.set("hive.metastore.kerberos.principal", "bob")
-    // thrift picks up on port 0 and bails out, without trying to talk to endpoint
-    hadoopConf.set("hive.metastore.uris", "http://localhost:0")
-
-    val hiveCredentialProvider = new HiveCredentialProvider()
-    val credentials = new Credentials()
-    hiveCredentialProvider.obtainCredentials(hadoopConf, sparkConf, credentials)
-
-    credentials.getAllTokens.size() should be (0)
   }
 
   test("Obtain tokens For HBase") {

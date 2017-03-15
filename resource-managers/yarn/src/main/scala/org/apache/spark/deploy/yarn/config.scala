@@ -82,6 +82,13 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val ALLOW_HISTORY_SERVER_TRACKING_URL =
+    ConfigBuilder("spark.yarn.historyServer.allowTracking")
+      .doc("Allow using the History Server URL for the application as the tracking URL for the " +
+        "application when the Web UI is not enabled.")
+      .booleanConf
+      .createWithDefault(false)
+
   /* File distribution. */
 
   private[spark] val SPARK_ARCHIVE = ConfigBuilder("spark.yarn.archive")
@@ -119,11 +126,6 @@ package object config {
     .doc("Replication factor for files uploaded by Spark to HDFS.")
     .intConf
     .createOptional
-
-//  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
-//    .doc("Staging directory used while submitting applications.")
-//    .stringConf
-//    .createOptional
 
   /* Cluster-mode launcher configuration. */
 

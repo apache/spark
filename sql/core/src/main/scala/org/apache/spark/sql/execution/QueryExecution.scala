@@ -46,9 +46,14 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def planner = sparkSession.sessionState.planner
 
   def assertAnalyzed(): Unit = {
-    try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
+    // Analyzer is invoked outside the try block to avoid calling it again from within the
+    // catch block below.
+    analyzed
+    try {
+      sparkSession.sessionState.analyzer.checkAnalysis(analyzed)
+    } catch {
       case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
         ae.setStackTrace(e.getStackTrace)
         throw ae
     }
@@ -122,11 +127,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
             .map(s => String.format(s"%-20s", s))
             .mkString("\t")
       }
-    // SHOW TABLES in Hive only output table names, while ours outputs database, table name, isTemp.
-    case command: ExecutedCommandExec if command.cmd.isInstanceOf[ShowTablesCommand] =>
+    // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
+    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
       command.executeCollect().map(_.getString(1))
-    case command: ExecutedCommandExec =>
-      command.executeCollect().map(_.getString(0))
     case other =>
       val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
       // We need the types so we can output struct field names
@@ -197,7 +200,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       """.stripMargin.trim
   }
 
-  override def toString: String = {
+  override def toString: String = completeString(appendStats = false)
+
+  def toStringWithStats: String = completeString(appendStats = true)
+
+  private def completeString(appendStats: Boolean): String = {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -205,12 +212,20 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       stringOrError(analyzed.treeString(verbose = true))
     ).filter(_.nonEmpty).mkString("\n")
 
+    val optimizedPlanString = if (appendStats) {
+      // trigger to compute stats for logical plans
+      optimizedPlan.stats(sparkSession.sessionState.conf)
+      optimizedPlan.treeString(verbose = true, addSuffix = true)
+    } else {
+      optimizedPlan.treeString(verbose = true)
+    }
+
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlan.treeString(verbose = true))}
+       |${stringOrError(optimizedPlanString)}
        |== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim

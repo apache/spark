@@ -665,7 +665,8 @@ object SparkSubmit extends CommandLineUtils {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
-      printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
+      // sysProps may contain sensitive information, so redact before printing
+      printStream.println(s"System properties:\n${Utils.redact(sysProps).mkString("\n")}")
       printStream.println(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       printStream.println("\n")
     }

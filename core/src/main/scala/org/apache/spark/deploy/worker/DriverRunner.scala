@@ -31,7 +31,6 @@ import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BOOTSTRAP_TOKENS, CREDENTIALS_FILE_PATH, KEYTAB, KEYTAB_CONTENT}
 import org.apache.spark.rpc.RpcEndpointRef
