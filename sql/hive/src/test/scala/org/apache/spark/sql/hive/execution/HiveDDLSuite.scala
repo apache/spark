@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -1663,95 +1662,80 @@ class HiveDDLSuite
     }
   }
 
+  test("create hive table with a non-existing location") {
+    withTable("t", "t1") {
+      withTempPath { dir =>
+        spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+        assert(dir.exists())
+
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+      // partition table
+      withTempPath { dir =>
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a int, b int)
+             |USING hive
+             |PARTITIONED BY(a)
+             |LOCATION '$dir'
+           """.stripMargin)
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
+
+        val partDir = new File(dir, "a=1")
+        assert(partDir.exists())
+
+        checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
+
   Seq(true, false).foreach { shouldDelete =>
-    val tcName = if (shouldDelete) "non-existent" else "existed"
-    test(s"CTAS for external data source table with a $tcName location") {
+    val tcName = if (shouldDelete) "non-existing" else "existed"
+
+    test(s"CTAS for external hive table with a $tcName location") {
       withTable("t", "t1") {
-        withTempDir {
-          dir =>
-            if (shouldDelete) {
-              dir.delete()
-            }
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          withTempDir { dir =>
+            if (shouldDelete) dir.delete()
             spark.sql(
               s"""
                  |CREATE TABLE t
-                 |USING parquet
+                 |USING hive
                  |LOCATION '$dir'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
-
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location == new URI(dir.getAbsolutePath))
+            assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
             checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
-        }
-        // partition table
-        withTempDir {
-          dir =>
-            if (shouldDelete) {
-              dir.delete()
-            }
+          }
+          // partition table
+          withTempDir { dir =>
+            if (shouldDelete) dir.delete()
             spark.sql(
               s"""
                  |CREATE TABLE t1
-                 |USING parquet
+                 |USING hive
                  |PARTITIONED BY(a, b)
                  |LOCATION '$dir'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
-
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location == new URI(dir.getAbsolutePath))
+            assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
             val partDir = new File(dir, "a=3")
             assert(partDir.exists())
 
             checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
-        }
-      }
-    }
-
-    test(s"CTAS for external hive table with a $tcName location") {
-      withTable("t", "t1") {
-        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-          withTempDir {
-            dir =>
-              if (shouldDelete) {
-                dir.delete()
-              }
-              spark.sql(
-                s"""
-                   |CREATE TABLE t
-                   |USING hive
-                   |LOCATION '$dir'
-                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-                 """.stripMargin)
-              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
-
-              checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
-          }
-          // partition table
-          withTempDir {
-            dir =>
-              if (shouldDelete) {
-                dir.delete()
-              }
-              spark.sql(
-                s"""
-                   |CREATE TABLE t1
-                   |USING hive
-                   |PARTITIONED BY(a, b)
-                   |LOCATION '$dir'
-                   |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-                 """.stripMargin)
-              val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-              assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
-
-              val partDir = new File(dir, "a=3")
-              assert(partDir.exists())
-
-              checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
           }
         }
       }
@@ -1814,9 +1798,9 @@ class HiveDDLSuite
             assert(loc.listFiles().length >= 1)
             checkAnswer(spark.table("t"), Row("1") :: Nil)
           } else {
-            val e = intercept[InvocationTargetException] {
+            val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
           }
         }
@@ -1851,17 +1835,28 @@ class HiveDDLSuite
             checkAnswer(spark.table("t1"),
               Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
           } else {
-            val e = intercept[InvocationTargetException] {
+            val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
 
-            val e1 = intercept[InvocationTargetException] {
+            val e1 = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e1.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-19905: Hive SerDe table input paths") {
+    withTable("spark_19905") {
+      withTempView("spark_19905_view") {
+        spark.range(10).createOrReplaceTempView("spark_19905_view")
+        sql("CREATE TABLE spark_19905 STORED AS RCFILE AS SELECT * FROM spark_19905_view")
+        assert(spark.table("spark_19905").inputFiles.nonEmpty)
+        assert(sql("SELECT input_file_name() FROM spark_19905").count() > 0)
       }
     }
   }

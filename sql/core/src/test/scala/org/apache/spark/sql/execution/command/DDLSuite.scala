@@ -230,8 +230,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   private def getDBPath(dbName: String): URI = {
-    val warehousePath = s"file:${spark.sessionState.conf.warehousePath.stripPrefix("file:")}"
-    new Path(warehousePath, s"$dbName.db").toUri
+    val warehousePath = makeQualifiedPath(spark.sessionState.conf.warehousePath)
+    new Path(CatalogUtils.URIToString(warehousePath), s"$dbName.db").toUri
   }
 
   test("the qualified path of a database is stored in the catalog") {
@@ -977,40 +977,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testRenamePartitions(isDatasourceTable = false)
   }
 
-  test("show table extended") {
-    withTempView("show1a", "show2b") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show1a
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |
-         |)
-        """.stripMargin)
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show2b
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |)
-        """.stripMargin)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
-          StructType(StructField("database", StringType, false) ::
-            StructField("tableName", StringType, false) ::
-            StructField("isTemporary", BooleanType, false) ::
-            StructField("information", StringType, false) :: Nil))
-    }
-  }
-
   test("show databases") {
     sql("CREATE DATABASE showdb2B")
     sql("CREATE DATABASE showdb1A")
@@ -1360,7 +1326,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val partitionLocation = if (isUsingHiveMetastore) {
       val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
       assert(tableLocation.isDefined)
-      makeQualifiedPath(new Path(tableLocation.get.toString, "paris"))
+      makeQualifiedPath(new Path(tableLocation.get.toString, "paris").toString)
     } else {
       new URI("paris")
     }
@@ -1899,7 +1865,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert data to a data source table which has a not existed location should succeed") {
+  test("insert data to a data source table which has a non-existing location should succeed") {
     withTable("t") {
       withTempDir { dir =>
         spark.sql(
@@ -1909,7 +1875,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == new URI(dir.getAbsolutePath))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
         dir.delete
         assert(!dir.exists)
@@ -1939,7 +1905,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert into a data source table with no existed partition location should succeed") {
+  test("insert into a data source table with a non-existing partition location should succeed") {
     withTable("t") {
       withTempDir { dir =>
         spark.sql(
@@ -1950,7 +1916,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |LOCATION "$dir"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == new URI(dir.getAbsolutePath))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1966,7 +1932,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("read data from a data source table which has a not existed location should succeed") {
+  test("read data from a data source table which has a non-existing location should succeed") {
     withTable("t") {
       withTempDir { dir =>
         spark.sql(
@@ -1976,7 +1942,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS(path "$dir")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table.location == new URI(dir.getAbsolutePath))
+
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
         dir.delete()
         checkAnswer(spark.table("t"), Nil)
@@ -1993,7 +1960,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("read data from a data source table with no existed partition location should succeed") {
+  test("read data from a data source table with non-existing partition location should succeed") {
     withTable("t") {
       withTempDir { dir =>
         spark.sql(
@@ -2015,48 +1982,72 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("create datasource table with a non-existing location") {
+    withTable("t", "t1") {
+      withTempPath { dir =>
+        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t SELECT 1, 2")
+        assert(dir.exists())
+
+        checkAnswer(spark.table("t"), Row(1, 2))
+      }
+      // partition table
+      withTempPath { dir =>
+        spark.sql(s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'")
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+
+        spark.sql("INSERT INTO TABLE t1 PARTITION(a=1) SELECT 2")
+
+        val partDir = new File(dir, "a=1")
+        assert(partDir.exists())
+
+        checkAnswer(spark.table("t1"), Row(2, 1))
+      }
+    }
+  }
+
   Seq(true, false).foreach { shouldDelete =>
-    val tcName = if (shouldDelete) "non-existent" else "existed"
+    val tcName = if (shouldDelete) "non-existing" else "existed"
     test(s"CTAS for external data source table with a $tcName location") {
       withTable("t", "t1") {
-        withTempDir {
-          dir =>
-            if (shouldDelete) {
-              dir.delete()
-            }
-            spark.sql(
-              s"""
-                 |CREATE TABLE t
-                 |USING parquet
-                 |LOCATION '$dir'
-                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-               """.stripMargin)
-            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-            assert(table.location == new URI(dir.getAbsolutePath))
+        withTempDir { dir =>
+          if (shouldDelete) dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t
+               |USING parquet
+               |LOCATION '$dir'
+               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+             """.stripMargin)
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-            checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
+          checkAnswer(spark.table("t"), Row(3, 4, 1, 2))
         }
         // partition table
-        withTempDir {
-          dir =>
-            if (shouldDelete) {
-              dir.delete()
-            }
-            spark.sql(
-              s"""
-                 |CREATE TABLE t1
-                 |USING parquet
-                 |PARTITIONED BY(a, b)
-                 |LOCATION '$dir'
-                 |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
-               """.stripMargin)
-            val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-            assert(table.location == new URI(dir.getAbsolutePath))
+        withTempDir { dir =>
+          if (shouldDelete) dir.delete()
+          spark.sql(
+            s"""
+               |CREATE TABLE t1
+               |USING parquet
+               |PARTITIONED BY(a, b)
+               |LOCATION '$dir'
+               |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
+             """.stripMargin)
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-            val partDir = new File(dir, "a=3")
-            assert(partDir.exists())
+          val partDir = new File(dir, "a=3")
+          assert(partDir.exists())
 
-            checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
+          checkAnswer(spark.table("t1"), Row(1, 2, 3, 4))
         }
       }
     }
@@ -2099,7 +2090,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
           assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
@@ -2120,7 +2111,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
-          assert(table.location == new Path(loc.getAbsolutePath).toUri)
+          assert(table.location == makeQualifiedPath(loc.getAbsolutePath))
           assert(new Path(table.location).toString.contains(specialChars))
 
           assert(loc.listFiles().isEmpty)
@@ -2159,6 +2150,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }
       } finally {
         spark.sql("DROP DATABASE IF EXISTS tmpdb")
+      }
+    }
+  }
+
+  test("the qualified path of a datasource table is stored in the catalog") {
+    withTable("t", "t1") {
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
+        spark.sql(
+          s"""
+             |CREATE TABLE t(a string)
+             |USING parquet
+             |LOCATION '$dir'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.location.toString.startsWith("file:/"))
+      }
+
+      withTempDir { dir =>
+        assert(!dir.getAbsolutePath.startsWith("file:/"))
+        spark.sql(
+          s"""
+             |CREATE TABLE t1(a string, b string)
+             |USING parquet
+             |PARTITIONED BY(b)
+             |LOCATION '$dir'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
+        assert(table.location.toString.startsWith("file:/"))
       }
     }
   }

@@ -24,15 +24,11 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
-import org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.analysis.Resolver
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -260,7 +256,7 @@ object SQLConf {
       "of org.apache.parquet.hadoop.ParquetOutputCommitter.")
     .internal()
     .stringConf
-    .createWithDefault(classOf[ParquetOutputCommitter].getName)
+    .createWithDefault("org.apache.parquet.hadoop.ParquetOutputCommitter")
 
   val PARQUET_VECTORIZED_READER_ENABLED =
     buildConf("spark.sql.parquet.enableVectorizedReader")
@@ -304,6 +300,25 @@ object SQLConf {
            "has an effect when hive filesource partition management is enabled.")
       .longConf
       .createWithDefault(250 * 1024 * 1024)
+
+  object HiveCaseSensitiveInferenceMode extends Enumeration {
+    val INFER_AND_SAVE, INFER_ONLY, NEVER_INFER = Value
+  }
+
+  val HIVE_CASE_SENSITIVE_INFERENCE = buildConf("spark.sql.hive.caseSensitiveInferenceMode")
+    .doc("Sets the action to take when a case-sensitive schema cannot be read from a Hive " +
+      "table's properties. Although Spark SQL itself is not case-sensitive, Hive compatible file " +
+      "formats such as Parquet are. Spark SQL must use a case-preserving schema when querying " +
+      "any table backed by files containing case-sensitive field names or queries may not return " +
+      "accurate results. Valid options include INFER_AND_SAVE (the default mode-- infer the " +
+      "case-sensitive schema from the underlying data files and write it back to the table " +
+      "properties), INFER_ONLY (infer the schema but don't attempt to write it to the table " +
+      "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
+      "instead of inferring).")
+    .stringConf
+    .transform(_.toUpperCase())
+    .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
+    .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -407,7 +422,8 @@ object SQLConf {
     buildConf("spark.sql.sources.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[SQLHadoopMapReduceCommitProtocol].getName)
+      .createWithDefault(
+        "org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol")
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
@@ -568,7 +584,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.commitProtocolClass")
       .internal()
       .stringConf
-      .createWithDefault(classOf[ManifestFileCommitProtocol].getName)
+      .createWithDefault("org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol")
 
   val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
     buildConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
@@ -713,7 +729,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
+class SQLConf extends Serializable with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -801,6 +817,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
 
+  def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
+    HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
+
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
@@ -821,6 +840,18 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  /**
+   * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
+   * identifiers are equal.
+   */
+  def resolver: Resolver = {
+    if (caseSensitiveAnalysis) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
+  }
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
@@ -879,7 +910,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def dataFramePivotMaxValues: Int = getConf(DATAFRAME_PIVOT_MAX_VALUES)
 
-  override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
+  def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
@@ -896,21 +927,21 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
 
-  override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
+  def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
-  override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
+  def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
-  override def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
-  override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
+  def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
-  override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+  def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
-  override def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
+  def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
-  override def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
+  def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -1038,67 +1069,4 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     }
     result
   }
-}
-
-/**
- * Static SQL configuration is a cross-session, immutable Spark configuration. External users can
- * see the static sql configs via `SparkSession.conf`, but can NOT set/unset them.
- */
-object StaticSQLConf {
-
-  import SQLConf.buildStaticConf
-
-  val WAREHOUSE_PATH = buildStaticConf("spark.sql.warehouse.dir")
-    .doc("The default location for managed databases and tables.")
-    .stringConf
-    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
-
-  val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
-    .internal()
-    .stringConf
-    .checkValues(Set("hive", "in-memory"))
-    .createWithDefault("in-memory")
-
-  val GLOBAL_TEMP_DATABASE = buildStaticConf("spark.sql.globalTempDatabase")
-    .internal()
-    .stringConf
-    .createWithDefault("global_temp")
-
-  // This is used to control when we will split a schema's JSON string to multiple pieces
-  // in order to fit the JSON string in metastore's table property (by default, the value has
-  // a length restriction of 4000 characters, so do not use a value larger than 4000 as the default
-  // value of this property). We will split the JSON string of a schema to its length exceeds the
-  // threshold. Note that, this conf is only read in HiveExternalCatalog which is cross-session,
-  // that's why this conf has to be a static SQL conf.
-  val SCHEMA_STRING_LENGTH_THRESHOLD =
-    buildStaticConf("spark.sql.sources.schemaStringLengthThreshold")
-      .doc("The maximum length allowed in a single cell when " +
-        "storing additional schema information in Hive's metastore.")
-      .internal()
-      .intConf
-      .createWithDefault(4000)
-
-  val FILESOURCE_TABLE_RELATION_CACHE_SIZE =
-    buildStaticConf("spark.sql.filesourceTableRelationCacheSize")
-      .internal()
-      .doc("The maximum size of the cache that maps qualified table names to table relation plans.")
-      .intConf
-      .checkValue(cacheSize => cacheSize >= 0, "The maximum size of the cache must not be negative")
-      .createWithDefault(1000)
-
-  // When enabling the debug, Spark SQL internal table properties are not filtered out; however,
-  // some related DDL commands (e.g., ANALYZE TABLE and CREATE TABLE LIKE) might not work properly.
-  val DEBUG_MODE = buildStaticConf("spark.sql.debug")
-    .internal()
-    .doc("Only used for internal debugging. Not all functions are supported when it is enabled.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val HIVE_THRIFT_SERVER_SINGLESESSION =
-    buildStaticConf("spark.sql.hive.thriftServer.singleSession")
-      .doc("When set to true, Hive Thrift server is running in a single session mode. " +
-        "All the JDBC/ODBC connections share the temporary views, function registries, " +
-        "SQL configuration and the current database.")
-      .booleanConf
-      .createWithDefault(false)
 }
