@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.util.TimeZone
-
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -34,15 +32,7 @@ case class SimpleCatalystConf(
     override val optimizerMaxIterations: Int = 100,
     override val optimizerInSetConversionThreshold: Int = 10,
     override val maxCaseBranchesForCodegen: Int = 20,
-    override val tableRelationCacheSize: Int = 1000,
     override val runSQLonFile: Boolean = true,
     override val crossJoinEnabled: Boolean = false,
-    override val cboEnabled: Boolean = false,
-    override val joinReorderEnabled: Boolean = false,
-    override val joinReorderDPThreshold: Int = 12,
-    override val warehousePath: String = "/user/hive/warehouse",
-    override val sessionLocalTimeZone: String = TimeZone.getDefault().getID)
-  extends SQLConf {
-
-  override def clone(): SimpleCatalystConf = this.copy()
-}
+    override val warehousePath: String = "/user/hive/warehouse")
+  extends SQLConf
