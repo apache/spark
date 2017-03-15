@@ -22,22 +22,23 @@ import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
-import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 import com.google.common.primitives.Longs
 import org.apache.commons.codec.binary.Base64
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialUpdater}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.BOOTSTRAP_TOKENS
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkException}
+
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 /**
  * :: DeveloperApi ::
@@ -48,6 +49,9 @@ class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
+
+  private var credentialUpdater: CredentialUpdater = _
+
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -291,12 +295,21 @@ class SparkHadoopUtil extends Logging {
    * Start a thread to periodically update the current user's credentials with new credentials so
    * that access to secured service does not fail.
    */
-  private[spark] def startCredentialUpdater(conf: SparkConf) {}
+  private[spark] def startCredentialUpdater(sparkConf: SparkConf): Unit = {
+    credentialUpdater =
+      new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
+    credentialUpdater.start()
+  }
 
   /**
    * Stop the thread that does the credential updates.
    */
-  private[spark] def stopCredentialUpdater() {}
+  private[spark] def stopCredentialUpdater(): Unit = {
+    if (credentialUpdater != null) {
+      credentialUpdater.stop()
+      credentialUpdater = null
+    }
+  }
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
