@@ -226,6 +226,10 @@ case class FileSourceScanExec(
     }
   }
 
+  @transient
+  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
+
   // These metadata values make scan plans uniquely identifiable for equality checking.
   override val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -238,7 +242,7 @@ case class FileSourceScanExec(
         "ReadSchema" -> outputSchema.catalogString,
         "Batched" -> supportsBatch.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
-        "PushedFilters" -> seqToString(dataFilters),
+        "PushedFilters" -> seqToString(pushedDownFilters),
         "Location" -> locationDesc)
     val withOptPartitionCount =
       relation.partitionSchemaOption.map { _ =>
@@ -250,9 +254,6 @@ case class FileSourceScanExec(
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
-    logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
-
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
