@@ -102,6 +102,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
+    val corruptFieldIndex = requiredSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord)
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = dataSchema(corruptFieldIndex)
@@ -113,8 +114,11 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
-      val parser = new UnivocityParser(dataSchema, requiredSchema, parsedOptions)
-      CSVDataSource(parsedOptions).readFile(conf, file, parser, parsedOptions)
+      val parser = new UnivocityParser(
+        StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
+        StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
+        parsedOptions)
+      CSVDataSource(parsedOptions).readFile(conf, file, parser, corruptFieldIndex)
     }
   }
 
