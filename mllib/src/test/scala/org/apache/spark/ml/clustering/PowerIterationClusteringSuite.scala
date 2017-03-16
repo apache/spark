@@ -50,6 +50,8 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getFeaturesCol === "features")
     assert(pic.getPredictionCol === "prediction")
     assert(pic.getIdCol === "id")
+    assert(pic.getWeightCol === "weight")
+    assert(pic.getNeighborCol === "neighbor")
   }
 
   test("set parameters") {
@@ -60,6 +62,8 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
       .setIdCol("test_id")
+      .setWeightCol("test_weight")
+      .setNeighborCol("test_neighbor")
 
     assert(pic.getK === 9)
     assert(pic.getMaxIter === 33)
@@ -67,6 +71,8 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getFeaturesCol === "test_feature")
     assert(pic.getPredictionCol === "test_prediction")
     assert(pic.getIdCol === "test_id")
+    assert(pic.getWeightCol === "test_weight")
+    assert(pic.getNeighborCol === "test_neighbor")
   }
 
   test("parameters validation") {

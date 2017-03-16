@@ -27,13 +27,14 @@ import org.apache.spark.mllib.clustering.{PowerIterationClustering => MLlibPower
 import org.apache.spark.mllib.clustering.PowerIterationClustering.Assignment
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 /**
  * Common params for PowerIterationClustering
  */
 private[clustering] trait PowerIterationClusteringParams extends Params with HasMaxIter
-  with HasFeaturesCol with HasPredictionCol {
+  with HasFeaturesCol with HasPredictionCol with HasWeightCol {
 
   /**
    * The number of clusters to create (k). Must be > 1. Default: 2.
@@ -67,10 +68,20 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
    * Default: "id"
    * @group param
    */
-  val idCol = new Param[String](this, "idCol", "column name for ids.")
+  val idCol = new Param[String](this, "id", "column name for ids.")
 
   /** @group getParam */
   def getIdCol: String = $(idCol)
+
+  /**
+   * Param for the column name for neighbors required by [[PowerIterationClustering.transform()]].
+   * Default: "neighbor"
+   * @group param
+   */
+  val neighborCol = new Param[String](this, "neighbor", "column name for neighbors.")
+
+  /** @group getParam */
+  def getNeighborCol: String = $(neighborCol)
 
   /**
    * Validates the input schema
@@ -104,7 +115,9 @@ class PowerIterationClustering private[clustering] (
     k -> 2,
     maxIter -> 20,
     initMode -> "random",
-    idCol -> "id")
+    idCol -> "id",
+    weightCol -> "weight",
+    neighborCol -> "neighbor")
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): PowerIterationClustering = defaultCopy(extra)
@@ -136,16 +149,36 @@ class PowerIterationClustering private[clustering] (
   @Since("2.2.0")
   def setIdCol(value: String): this.type = set(idCol, value)
 
+  /**
+   * Sets the value of param [[weightCol]].
+   * Default is "weight"
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
+  /**
+   * Sets the value of param [[neighborCol]].
+   * Default is "neighbor"
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setNeighborCol(value: String): this.type = set(neighborCol, value)
+
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val sparkSession = dataset.sparkSession
 
-    val rdd: RDD[(Long, Long, Double)] = dataset.select("id", "neighbor", "weight").rdd.map {
-      case Row(id: Long, nbr: Vector, weight: Vector)
-        => (id, nbr, weight)
+    val rdd: RDD[(Long, Long, Double)] =
+      dataset.select(col($(idCol)), col($(neighborCol)), col($(weightCol))).rdd.map {
+        case Row(id: Long, nbr: Vector, weight: Vector) => (id, nbr, weight)
     }.flatMap{ case (id, nbr, weight) =>
-      val ids = Array.fill(nbr.size)(id)
-      ids.zip(nbr.toArray).zip(weight.toArray)}.map {case ((i, j), k) => (i, j.toLong, k)}
+        require(nbr.size == weight.size,
+          "The length of neighbor list must be equal to the the length of the weight list.")
+        val ids = Array.fill(nbr.size)(id)
+        ids.zip(nbr.toArray).zip(weight.toArray)}.map {case ((i, j), k) => (i, j.toLong, k)}
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
