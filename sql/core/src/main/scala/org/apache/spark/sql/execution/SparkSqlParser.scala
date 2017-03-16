@@ -753,7 +753,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
     AlterTableAddColumnsCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
+      visitColTypeList(ctx.columns)
     )
   }
 

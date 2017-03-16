@@ -165,43 +165,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
   }
-
-  Seq("parquet", "json", "csv").foreach { provider =>
-    test(s"Alter table add columns -- ${provider} format") {
-      assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
-      withTable("t") {
-        sql(s"create table t (c1 int) using ${provider}")
-        sql("insert into table t values (1)")
-        sql("alter table t add columns (c2 int)")
-        checkAnswer(sql("select * from t"), Seq(Row(1, null)))
-        sql("insert into table t values (2, 2)")
-        checkAnswer(sql("select * from t where c2 is not null"), Seq(Row(2, 2)))
-        checkAnswer(
-          sql("select * from t"),
-          Seq(Row(1, null), Row(2, 2))
-        )
-      }
-    }
-  }
-
-  Seq("parquet", "json", "csv").foreach { provider =>
-    test(s"Alter table add columns with partitions -- ${provider} format") {
-      assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
-      withTable("t") {
-        sql(s"create table t (c1 int, c2 int) using ${provider} partitioned by (c2)")
-        sql("insert into table t values (1, 1)")
-        sql("alter table t add columns (c3 int)")
-        checkAnswer(sql("select * from t"), Seq(Row(1, null, 1)))
-        sql("insert into table t values (2, 2, 3)")
-        checkAnswer(sql("select * from t where c3 is not null"), Seq(Row(2, 2, 3)))
-        checkAnswer(sql("select * from t where c2 = 3"), Seq(Row(2, 2, 3)))
-        checkAnswer(
-          sql("select * from t"),
-          Seq(Row(1, null, 1), Row(2, 2, 3))
-        )
-      }
-    }
-  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2226,13 +2189,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           Seq(Row(1, null))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds where c2 is null"),
+          sql("SELECT * FROM alter_add_ds WHERE c2 is null"),
           Seq(Row(1, null))
         )
 
         sql("INSERT INTO alter_add_ds VALUES (3, 2)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds where c2 = 2"),
+          sql("SELECT * FROM alter_add_ds WHERE c2 = 2"),
           Seq(Row(3, 2))
         )
       }
@@ -2242,24 +2205,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   Seq("parquet", "json", "csv").foreach { provider =>
     test(s"alter datasource table add columns - partitioned - $provider") {
       withTable("alter_add_ds") {
-        sql(s"CREATE TABLE alter_add_ds (c1 int, c2 int) USING $provider partitioned by (c2)")
-        sql("INSERT INTO alter_add_ds partition(c2 = 2) VALUES (1)")
+        sql(s"CREATE TABLE alter_add_ds (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
+        sql("INSERT INTO alter_add_ds PARTITION(c2 = 2) VALUES (1)")
         sql("ALTER TABLE alter_add_ds ADD COLUMNS (c3 int)")
         checkAnswer(
           sql("SELECT * FROM alter_add_ds"),
           Seq(Row(1, null, 2))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds where c3 is null"),
+          sql("SELECT * FROM alter_add_ds WHERE c3 is null"),
           Seq(Row(1, null, 2))
         )
-        sql("INSERT INTO alter_add_ds partition(c2 =1) VALUES (2, 3)")
+        sql("INSERT INTO alter_add_ds PARTITION(c2 =1) VALUES (2, 3)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds where c3 = 3"),
+          sql("SELECT * FROM alter_add_ds WHERE c3 = 3"),
           Seq(Row(2, 3, 1))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds where c2 = 1"),
+          sql("SELECT * FROM alter_add_ds WHERE c2 = 1"),
           Seq(Row(2, 3, 1))
         )
       }
@@ -2278,9 +2241,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter table add columns -- not support temp view") {
     withTempView("tmp_v") {
-      sql("create temporary view tmp_v as select 1 as c1, 2 as c2")
+      sql("CREATE TEMPORARY VIEW tmp_v AS SELECT 1 AS c1, 2 AS c2")
       val e = intercept[AnalysisException] {
-        sql("alter table tmp_v add columns (c3 int)")
+        sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
       assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
     }
@@ -2288,9 +2251,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter table add columns -- not support view") {
     withView("v1") {
-      sql("create view v1 as select 1 as c1, 2 as c2")
+      sql("CREATE VIEW v1 AS SELECT 1 AS c1, 2 AS c2")
       val e = intercept[AnalysisException] {
-        sql("alter table v1 add columns (c3 int)")
+        sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
       assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
     }

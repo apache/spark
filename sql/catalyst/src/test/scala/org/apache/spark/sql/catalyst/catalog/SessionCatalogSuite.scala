@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.types.IntegerType
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -448,6 +449,17 @@ abstract class SessionCatalogSuite extends PlanTest {
         catalog.alterTable(newTable("unknown_table", "db2"))
       }
     }
+  }
+
+  test("alter table add columns") {
+    val externalCatalog = newBasicCatalog()
+    val sessionCatalog = new SessionCatalog(externalCatalog)
+    sessionCatalog.createTable(newTable("alter_add", "default"), ignoreIfExists = false)
+    val oldTab = externalCatalog.getTable("default", "alter_add")
+    sessionCatalog.alterTableSchema(TableIdentifier("alter_add", Some("default")),
+      oldTab.schema.add("c3", IntegerType))
+    val newTab = externalCatalog.getTable("default", "alter_add")
+    assert(newTab.schema.equals(oldTab.schema.add("c3", IntegerType)))
   }
 
   test("get table") {

@@ -964,7 +964,7 @@ class JDBCSuite extends SparkFunSuite
           |CREATE TEMPORARY VIEW people_view
           |USING org.apache.spark.sql.jdbc
           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
-        """.stripMargin.replaceAll("\n", " "))
+        """.stripMargin)
 
       assert(sql("select * from people_view").count() == 3)
     }
@@ -977,7 +977,7 @@ class JDBCSuite extends SparkFunSuite
           |CREATE TABLE IF NOT EXISTS ds_jdbc
           |USING org.apache.spark.sql.jdbc
           |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
-         """.stripMargin.replaceAll("\n", " "))
+         """.stripMargin)
 
       conn.prepareStatement("ALTER TABLE TEST.PEOPLE ADD COLUMN (C3 int)").executeUpdate()
       conn.commit()

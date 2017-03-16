@@ -240,9 +240,7 @@ case class AlterTableAddColumnsCommand(
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
         case s =>
           throw new AnalysisException(
-            s"""${table} is a datasource table with type $s,
-               |which does not support ALTER ADD COLUMNS.
-            """.stripMargin)
+            s"Datasource table $table with type $s, which does not support ALTER ADD COLUMNS.")
       }
     }
 

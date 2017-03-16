@@ -302,9 +302,9 @@ class SessionCatalog(
    * method will also update any Spark SQL-related parameters stored as Hive table properties (such
    * as the schema itself).
    *
-   * @param identifier  TableIdentifier
+   * @param identifier TableIdentifier
    * @param newSchema Updated schema to be used for the table (must contain existing partition and
-   *               bucket columns)
+   *                  bucket columns)
    */
   def alterTableSchema(identifier: TableIdentifier, newSchema: StructType): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
