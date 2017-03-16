@@ -433,6 +433,8 @@ abstract class SessionCatalogSuite extends PlanTest {
       catalog.setCurrentDatabase("db2")
       catalog.alterTable(tbl1.copy(identifier = TableIdentifier("tbl1")))
       val newestTbl1 = catalog.externalCatalog.getTable("db2", "tbl1")
+      // For hive serde table, hive metastore will set transient_lastDdlTime in table's properties,
+      // and its value will be modified, here we ignore it when comparing the two tables.
       assert(newestTbl1.copy(properties = Map.empty) == tbl1.copy(properties = Map.empty))
     }
   }
@@ -1083,6 +1085,8 @@ abstract class SessionCatalogSuite extends PlanTest {
       expectedParts: CatalogTablePartition*): Boolean = {
     // ExternalCatalog may set a default location for partitions, here we ignore the partition
     // location when comparing them.
+    // And for hive serde table, hive metastore will set some values(e.g.transient_lastDdlTime)
+    // in table's parameters and storage's properties, here we also ignore them.
     val actualPartsNormalize = actualParts.map(p =>
       p.copy(parameters = Map.empty, storage = p.storage.copy(
         properties = Map.empty, locationUri = None, serde = None))).toSet
