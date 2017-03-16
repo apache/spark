@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
@@ -29,6 +30,7 @@ import org.apache.spark.rdd.RDD
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
  * @param numIterations number of iterations
  */
+@Since("2.0.0")
 private[ml] class IterativelyReweightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
@@ -55,6 +57,7 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * and Resistant Alternatives, Journal of the Royal Statistical Society.
  * Series B, 1984.</a>
  */
+@Since("2.0.0")
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
     val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double),

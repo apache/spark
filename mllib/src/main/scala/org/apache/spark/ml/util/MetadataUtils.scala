@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.annotation.Since
+
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.ml.attribute._
@@ -27,6 +29,7 @@ import org.apache.spark.sql.types.StructField
 /**
  * Helper utilities for algorithms using ML metadata
  */
+@Since("1.4.0")
 private[spark] object MetadataUtils {
 
   /**

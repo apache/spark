@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
@@ -30,6 +31,7 @@ import org.apache.spark.rdd.RDD
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
+@Since("1.6.0")
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
@@ -73,6 +75,7 @@ private[ml] class WeightedLeastSquaresModel(
  * @param maxIter maximum number of iterations. Only for QuasiNewton solverType.
  * @param tol the convergence tolerance of the iterations. Only for QuasiNewton solverType.
  */
+@Since("1.6.0")
 private[ml] class WeightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
@@ -318,6 +321,7 @@ private[ml] class WeightedLeastSquares(
   }
 }
 
+@Since("1.6.0")
 private[ml] object WeightedLeastSquares {
 
   /**

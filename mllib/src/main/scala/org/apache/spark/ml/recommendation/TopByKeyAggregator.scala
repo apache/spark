@@ -19,7 +19,7 @@ package org.apache.spark.ml.recommendation
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
@@ -30,6 +30,7 @@ import org.apache.spark.util.BoundedPriorityQueue
  * Works on rows of the form (K1, K2, V) where K1 & K2 are IDs and V is the score value. Finds
  * the top `num` K2 items based on the given Ordering.
  */
+@Since("2.2.0")
 private[recommendation] class TopByKeyAggregator[K1: TypeTag, K2: TypeTag, V: TypeTag]
   (num: Int, ord: Ordering[(K2, V)])
   extends Aggregator[(K1, K2, V), BoundedPriorityQueue[(K2, V)], Array[(K2, V)]] {

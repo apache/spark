@@ -18,11 +18,10 @@
 package org.apache.spark.ml.tree
 
 import scala.reflect.ClassTag
-
+import org.apache.spark.annotation.Since
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
@@ -39,6 +38,7 @@ import org.apache.spark.util.collection.OpenHashMap
  *
  * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
+@Since("1.4.0")
 private[spark] trait DecisionTreeModel {
 
   /** Root of the decision tree */
@@ -87,6 +87,7 @@ private[spark] trait DecisionTreeModel {
  *
  * @tparam M  Type of tree model in this ensemble
  */
+@Since("1.4.0")
 private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
 
   // Note: We use getTrees since subclasses of TreeEnsembleModel will store subclasses of
@@ -120,6 +121,7 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 }
 
+@Since("1.4.0")
 private[ml] object TreeEnsembleModel {
 
   /**
@@ -240,6 +242,7 @@ private[ml] object TreeEnsembleModel {
 }
 
 /** Helper classes for tree model persistence */
+@Since("1.4.0")
 private[ml] object DecisionTreeModelReadWrite {
 
   /**
@@ -376,6 +379,7 @@ private[ml] object DecisionTreeModelReadWrite {
   }
 }
 
+@Since("1.4.0")
 private[ml] object EnsembleModelReadWrite {
 
   /**

@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.rdd.RDD
@@ -37,10 +38,13 @@ import org.apache.spark.rdd.RDD
  * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
+
+@Since("1.5.0")
 private[spark] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
   extends Serializable {
 }
 
+@Since("1.5.0")
 private[spark] object TreePoint {
 
   /**

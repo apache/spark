@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -35,7 +37,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 
-
+@Since("2.1.0")
 private[r] class LDAWrapper private (
     val pipeline: PipelineModel,
     val logLikelihood: Double,
@@ -88,6 +90,7 @@ private[r] class LDAWrapper private (
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
 
+@Since("2.1.0")
 private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
   val TOKENIZER_COL = s"${Identifiable.randomUID("rawTokens")}"

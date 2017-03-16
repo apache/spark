@@ -19,7 +19,7 @@ package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable
 import scala.util.Try
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.RandomForestParams
@@ -39,6 +39,7 @@ import org.apache.spark.rdd.RDD
  *                      I.e., the feature takes values in {0, ..., arity - 1}.
  * @param numBins  Number of bins for each feature.
  */
+@Since("2.0.0")
 private[spark] class DecisionTreeMetadata(
     val numFeatures: Int,
     val numExamples: Long,
@@ -96,6 +97,7 @@ private[spark] class DecisionTreeMetadata(
 
 }
 
+@Since("2.0.0")
 private[spark] object DecisionTreeMetadata extends Logging {
 
   /**

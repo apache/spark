@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
@@ -28,6 +30,7 @@ import org.apache.spark.ml.util.MLReader
  * This is the Scala stub of SparkR read.ml. It will dispatch the call to corresponding
  * model wrapper loading function according the class name extracted from rMetadata of the path.
  */
+@Since("2.0.0")
 private[r] object RWrappers extends MLReader[Object] {
 
   override def load(path: String): Object = {

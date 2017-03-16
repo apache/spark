@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.attribute
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * :: DeveloperApi ::
@@ -25,12 +25,14 @@ import org.apache.spark.annotation.DeveloperApi
  * and [[AttributeType$#Binary]].
  */
 @DeveloperApi
+@Since("1.4.0")
 sealed abstract class AttributeType(val name: String)
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
+@Since("1.4.0")
 object AttributeType {
 
   /** Numeric type. */

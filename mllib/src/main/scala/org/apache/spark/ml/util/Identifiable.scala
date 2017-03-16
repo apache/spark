@@ -19,7 +19,7 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 
 /**
@@ -31,6 +31,7 @@ import org.apache.spark.annotation.DeveloperApi
  *          releases.
  */
 @DeveloperApi
+@Since("1.4.0")
 trait Identifiable {
 
   /**
@@ -45,6 +46,7 @@ trait Identifiable {
  * :: DeveloperApi ::
  */
 @DeveloperApi
+@Since("1.4.0")
 object Identifiable {
 
   /**

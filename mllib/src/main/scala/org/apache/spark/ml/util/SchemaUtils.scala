@@ -17,12 +17,15 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.annotation.Since
+
 import org.apache.spark.sql.types.{DataType, NumericType, StructField, StructType}
 
 
 /**
  * Utils for handling schemas.
  */
+@Since("1.4.0")
 private[spark] object SchemaUtils {
 
   // TODO: Move the utility methods to SQL.

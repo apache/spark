@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.commons.math3.distribution.PoissonDistribution
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -38,6 +38,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * TODO: This does not currently support (Double) weighted instances.  Once MLlib has weighted
  *       dataset support, update.  (We store subsampleWeights as Double for this future extension.)
  */
+@Since("2.0.0")
 private[spark] class BaggedPoint[Datum](val datum: Datum, val subsampleWeights: Array[Double])
   extends Serializable
 

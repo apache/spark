@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.annotation.Since
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
 /**
  * Time tracker implementation which holds labeled timers.
  */
+@Since("2.0.0")
 private[spark] class TimeTracker extends Serializable {
 
   private val starts: MutableHashMap[String, Long] = new MutableHashMap[String, Long]()

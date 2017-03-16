@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.sql.{DataFrame, Row}
 
 /**
@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Row}
  * @param k  Number of clusters.
  */
 @Experimental
+@Since("2.1.0")
 class ClusteringSummary private[clustering] (
     @transient val predictions: DataFrame,
     val predictionCol: String,

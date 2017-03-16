@@ -18,11 +18,9 @@
 package org.apache.spark.ml.tree.impl
 
 import java.io.IOException
-
+import org.apache.spark.annotation.Since
 import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.tree.{LearningNode, Split}
 import org.apache.spark.rdd.RDD
@@ -34,6 +32,7 @@ import org.apache.spark.storage.StorageLevel
  * @param split Split information.
  * @param nodeIndex The current node index of a data point that this will update.
  */
+@Since("1.5.0")
 private[tree] case class NodeIndexUpdater(split: Split, nodeIndex: Int) {
 
   /**
@@ -61,6 +60,7 @@ private[tree] case class NodeIndexUpdater(split: Split, nodeIndex: Int) {
  * @param checkpointInterval The checkpointing interval
  *                           (how often should the cache be checkpointed.).
  */
+@Since("1.5.0")
 private[spark] class NodeIdCache(
   var nodeIdsForInstances: RDD[Array[Int]],
   val checkpointInterval: Int) extends Logging {
@@ -173,6 +173,7 @@ private[spark] class NodeIdCache(
   }
 }
 
+@Since("1.5.0")
 private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.

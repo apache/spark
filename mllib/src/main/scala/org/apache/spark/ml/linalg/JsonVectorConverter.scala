@@ -17,10 +17,12 @@
 
 package org.apache.spark.ml.linalg
 
+import org.apache.spark.annotation.Since
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
+@Since("2.0.0")
 private[ml] object JsonVectorConverter {
 
   /**

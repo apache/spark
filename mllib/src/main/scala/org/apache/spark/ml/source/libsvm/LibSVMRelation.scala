@@ -18,11 +18,10 @@
 package org.apache.spark.ml.source.libsvm
 
 import java.io.IOException
-
+import org.apache.spark.annotation.Since
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
-
 import org.apache.spark.TaskContext
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
@@ -37,6 +36,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
+@Since("1.6.0")
 private[libsvm] class LibSVMOutputWriter(
     path: String,
     dataSchema: StructType,
@@ -66,6 +66,7 @@ private[libsvm] class LibSVMOutputWriter(
 
 /** @see [[LibSVMDataSource]] for public documentation. */
 // If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
+@Since("1.6.0")
 private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "libsvm"

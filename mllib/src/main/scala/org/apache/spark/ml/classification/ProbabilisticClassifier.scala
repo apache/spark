@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -28,6 +28,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * (private[classification])  Params for probabilistic classification.
  */
+
+@Since("1.3.0")
 private[classification] trait ProbabilisticClassifierParams
   extends ClassifierParams with HasProbabilityCol with HasThresholds {
   override protected def validateAndTransformSchema(
@@ -50,6 +52,7 @@ private[classification] trait ProbabilisticClassifierParams
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
+@Since("1.3.0")
 abstract class ProbabilisticClassifier[
     FeaturesType,
     E <: ProbabilisticClassifier[FeaturesType, E, M],
@@ -74,6 +77,7 @@ abstract class ProbabilisticClassifier[
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
+@Since("1.3.0")
 abstract class ProbabilisticClassificationModel[
     FeaturesType,
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
@@ -224,6 +228,7 @@ abstract class ProbabilisticClassificationModel[
   }
 }
 
+@Since("1.3.0")
 private[ml] object ProbabilisticClassificationModel {
 
   /**

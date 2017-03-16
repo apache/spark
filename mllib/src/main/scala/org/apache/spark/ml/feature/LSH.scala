@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.types._
 /**
  * Params for [[LSH]].
  */
+@Since("2.1.0")
 private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
   /**
    * Param for the number of hash tables used in LSH OR-amplification.
@@ -61,6 +63,7 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
 /**
  * Model produced by [[LSH]].
  */
+@Since("2.1.0")
 private[ml] abstract class LSHModel[T <: LSHModel[T]]
   extends Model[T] with LSHParams with MLWritable {
   self: T =>
@@ -295,6 +298,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
  * (2) Wang, Jingdong et al. "Hashing for similarity search: A survey." arXiv preprint
  * arXiv:1408.2927 (2014).
  */
+@Since("2.1.0")
 private[ml] abstract class LSH[T <: LSHModel[T]]
   extends Estimator[T] with LSHParams with DefaultParamsWritable {
   self: Estimator[T] =>

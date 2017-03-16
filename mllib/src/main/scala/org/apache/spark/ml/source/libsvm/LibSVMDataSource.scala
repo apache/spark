@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.source.libsvm
 
+import org.apache.spark.annotation.Since
+
 /**
  * `libsvm` package implements Spark SQL data source API for loading LIBSVM data as `DataFrame`.
  * The loaded `DataFrame` has two columns: `label` containing labels stored as doubles and
@@ -50,4 +52,5 @@ package org.apache.spark.ml.source.libsvm
  *
  * @see <a href="https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/">LIBSVM datasets</a>
  */
+@Since("2.0.0")
 class LibSVMDataSource private() {}

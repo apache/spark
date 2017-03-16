@@ -18,10 +18,9 @@
 package org.apache.spark.ml.tree.impl
 
 import java.io.IOException
-
 import scala.collection.mutable
 import scala.util.Random
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
@@ -77,6 +76,8 @@ import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
  * the heaviest part of the computation.  In general, this implementation is bound by either
  * the cost of statistics computation on workers or by communicating the sufficient statistics.
  */
+
+@Since("1.5.0")
 private[spark] object RandomForest extends Logging {
 
   /**

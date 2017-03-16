@@ -20,7 +20,7 @@ package org.apache.spark.ml.ann
 import java.util.Random
 
 import breeze.linalg.{*, axpy => Baxpy, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -34,6 +34,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Implements Layer instantiation.
  *
  */
+@Since("1.5.0")
 private[ann] trait Layer extends Serializable {
 
   /**
@@ -83,6 +84,7 @@ private[ann] trait Layer extends Serializable {
  * Implements functions needed for forward propagation, computing delta and gradient.
  * Can return weights in Vector format.
  */
+@Since("1.5.0")
 private[ann] trait LayerModel extends Serializable {
 
   val weights: BDV[Double]
@@ -130,6 +132,7 @@ private[ann] trait LayerModel extends Serializable {
  * @param numIn number of inputs
  * @param numOut number of outputs
  */
+@Since("1.5.0")
 private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
 
   override val weightSize = numIn * numOut + numOut
@@ -150,6 +153,7 @@ private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
  * @param weights weights
  * @param layer layer properties
  */
+@Since("1.5.0")
 private[ann] class AffineLayerModel private[ann] (
     val weights: BDV[Double],
     val layer: AffineLayer) extends LayerModel {
@@ -185,6 +189,7 @@ private[ann] class AffineLayerModel private[ann] (
 /**
  * Fabric for Affine layer models
  */
+@Since("1.5.0")
 private[ann] object AffineLayerModel {
 
   /**
@@ -229,6 +234,7 @@ private[ann] object AffineLayerModel {
 /**
  * Trait for functions and their derivatives for functional layers
  */
+@Since("1.5.0")
 private[ann] trait ActivationFunction extends Serializable {
 
   /**
@@ -245,6 +251,7 @@ private[ann] trait ActivationFunction extends Serializable {
 /**
  * Implements in-place application of functions in the arrays
  */
+@Since("1.5.0")
 private[ann] object ApplyInPlace {
 
   // TODO: use Breeze UFunc
@@ -281,6 +288,7 @@ private[ann] object ApplyInPlace {
 /**
  * Implements Sigmoid activation function
  */
+@Since("1.5.0")
 private[ann] class SigmoidFunction extends ActivationFunction {
 
   override def eval: (Double) => Double = x => 1.0 / (1 + math.exp(-x))
@@ -312,6 +320,7 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
  *
  * @param layer functional layer
  */
+@Since("1.5.0")
 private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer)
   extends LayerModel {
 
@@ -336,6 +345,7 @@ private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer
 /**
  * Trait for the artificial neural network (ANN) topology properties
  */
+@Since("1.5.0")
 private[ann] trait Topology extends Serializable {
   def model(weights: Vector): TopologyModel
   def model(seed: Long): TopologyModel
@@ -344,6 +354,7 @@ private[ann] trait Topology extends Serializable {
 /**
  * Trait for ANN topology model
  */
+@Since("1.5.0")
 private[ann] trait TopologyModel extends Serializable {
 
   val weights: Vector
@@ -391,6 +402,7 @@ private[ann] trait TopologyModel extends Serializable {
  *
  * @param layers Array of layers
  */
+@Since("1.5.0")
 private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends Topology {
   override def model(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
 
@@ -400,6 +412,7 @@ private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends
 /**
  * Factory for some of the frequently-used topologies
  */
+@Since("1.5.0")
 private[ml] object FeedForwardTopology {
   /**
    * Creates a feed forward topology from the array of layers
@@ -448,6 +461,7 @@ private[ml] object FeedForwardTopology {
  * @param weights network weights
  * @param topology network topology
  */
+@Since("1.5.0")
 private[ml] class FeedForwardModel private(
     val weights: Vector,
     val topology: FeedForwardTopology) extends TopologyModel {
@@ -535,6 +549,7 @@ private[ml] class FeedForwardModel private(
 /**
  * Fabric for feed forward ANN models
  */
+@Since("1.5.0")
 private[ann] object FeedForwardModel {
 
   /**
@@ -579,6 +594,7 @@ private[ann] object FeedForwardModel {
  * @param topology topology
  * @param dataStacker data stacker
  */
+@Since("1.5.0")
 private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) extends Gradient {
   override def compute(
     data: OldVector,
@@ -601,6 +617,7 @@ private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) ext
  * @param inputSize size of the input vectors
  * @param outputSize size of the output vectors
  */
+@Since("1.5.0")
 private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
   extends Serializable {
 
@@ -655,6 +672,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 /**
  * Simple updater
  */
+@Since("1.5.0")
 private[ann] class ANNUpdater extends Updater {
 
   override def compute(
@@ -677,6 +695,7 @@ private[ann] class ANNUpdater extends Updater {
  * @param inputSize input size
  * @param outputSize output size
  */
+@Since("1.5.0")
 private[ml] class FeedForwardTrainer(
     topology: Topology,
     val inputSize: Int,

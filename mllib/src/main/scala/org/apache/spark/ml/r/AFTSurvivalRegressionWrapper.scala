@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -30,6 +32,7 @@ import org.apache.spark.ml.regression.{AFTSurvivalRegression, AFTSurvivalRegress
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
+@Since("2.0.0")
 private[r] class AFTSurvivalRegressionWrapper private (
     val pipeline: PipelineModel,
     val features: Array[String]) extends MLWritable {
@@ -57,6 +60,7 @@ private[r] class AFTSurvivalRegressionWrapper private (
     new AFTSurvivalRegressionWrapper.AFTSurvivalRegressionWrapperWriter(this)
 }
 
+@Since("2.0.0")
 private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalRegressionWrapper] {
 
   private def formulaRewrite(formula: String): (String, String) = {

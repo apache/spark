@@ -19,9 +19,8 @@ package org.apache.spark.ml.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
-
+import org.apache.spark.annotation.Since
 import net.razorvine.pickle._
-
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.api.python.SerDeBase
@@ -29,6 +28,7 @@ import org.apache.spark.mllib.api.python.SerDeBase
 /**
  * SerDe utility functions for pyspark.ml.
  */
+@Since("2.0.0")
 private[spark] object MLSerDe extends SerDeBase with Serializable {
 
   override val PYSPARK_PACKAGE = "pyspark.ml"

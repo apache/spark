@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -30,6 +32,7 @@ import org.apache.spark.ml.regression._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 
+@Since("2.0.0")
 private[r] class GeneralizedLinearRegressionWrapper private (
     val pipeline: PipelineModel,
     val rFeatures: Array[String],
@@ -60,6 +63,7 @@ private[r] class GeneralizedLinearRegressionWrapper private (
     new GeneralizedLinearRegressionWrapper.GeneralizedLinearRegressionWrapperWriter(this)
 }
 
+@Since("2.0.0")
 private[r] object GeneralizedLinearRegressionWrapper
   extends MLReadable[GeneralizedLinearRegressionWrapper] {
 

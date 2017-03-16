@@ -20,7 +20,7 @@ package org.apache.spark.ml.tuning
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
-
+import org.apache.spark.annotation.Since
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
@@ -33,6 +33,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
+@Since("1.5.0")
 private[ml] trait ValidatorParams extends HasSeed with Params {
 
   /**

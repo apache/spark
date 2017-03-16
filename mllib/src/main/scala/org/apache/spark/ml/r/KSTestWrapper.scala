@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.annotation.Since
+
 import org.apache.spark.mllib.stat.Statistics.kolmogorovSmirnovTest
 import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult
 import org.apache.spark.sql.{DataFrame, Row}
 
+@Since("2.1.0")
 private[r] class KSTestWrapper private (
     val testResult: KolmogorovSmirnovTestResult,
     val distName: String,
@@ -37,6 +40,7 @@ private[r] class KSTestWrapper private (
   def summary: String = testResult.toString
 }
 
+@Since("2.1.0")
 private[r] object KSTestWrapper {
 
   def test(
