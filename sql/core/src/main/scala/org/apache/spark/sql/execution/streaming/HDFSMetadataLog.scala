@@ -199,7 +199,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         case ise: IllegalStateException =>
           // re-throw the exception with the log file path added
           throw new IllegalStateException(
-            s"Failed to read log file $batchMetadataFile. ${ise.getMessage}")
+            s"Failed to read log file $batchMetadataFile. ${ise.getMessage}", ise)
       } finally {
         IOUtils.closeQuietly(input)
       }
