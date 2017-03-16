@@ -127,7 +127,7 @@ abstract class PartitioningAwareFileIndex(
     }.keys.toSeq
 
     val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
-    val timeZoneId = caseInsensitiveOptions.get("timeZone")
+    val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
       .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     userPartitionSchema match {
@@ -186,7 +186,8 @@ abstract class PartitioningAwareFileIndex(
         val total = partitions.length
         val selectedSize = selected.length
         val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
-        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
+        s"Selected $selectedSize partitions out of $total, " +
+          s"pruned ${if (total == 0) "0" else s"$percentPruned%"} partitions."
       }
 
       selected

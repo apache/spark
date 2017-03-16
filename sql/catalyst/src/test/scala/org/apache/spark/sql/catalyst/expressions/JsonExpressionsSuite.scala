@@ -471,7 +471,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         JsonToStruct(
           schema,
-          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "timeZone" -> tz.getID),
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+            DateTimeUtils.TIMEZONE_OPTION -> tz.getID),
           Literal(jsonData2),
           gmtId),
         InternalRow(c.getTimeInMillis * 1000L)
@@ -523,14 +524,16 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(
       StructToJson(
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "timeZone" -> gmtId.get),
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          DateTimeUtils.TIMEZONE_OPTION -> gmtId.get),
         struct,
         gmtId),
       """{"t":"2016-01-01T00:00:00"}"""
     )
     checkEvaluation(
       StructToJson(
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "timeZone" -> "PST"),
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          DateTimeUtils.TIMEZONE_OPTION -> "PST"),
         struct,
         gmtId),
       """{"t":"2015-12-31T16:00:00"}"""
