@@ -847,6 +847,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     val testData = Seq((1, 2, 3)).toDF()
     checkAnswer(testData.selectExpr("field('花花世界', 'a', 1.23, true, '花花世界')"), Row(4))
     checkAnswer(testData.selectExpr("field(null, 'a', 1.23, true, null)"), Row(0))
+    checkAnswer(testData.selectExpr("field(4, 3.00, '4', true, 4)"), Row(2))
+    checkAnswer(testData.selectExpr("field(3.00, '3', 3, timestamp(123), '3.00')"), Row(1))
+    checkAnswer(testData.selectExpr("field('3.0', 3.00, 3, '3.00')"), Row(0))
     // scalastyle:on
   }
 }

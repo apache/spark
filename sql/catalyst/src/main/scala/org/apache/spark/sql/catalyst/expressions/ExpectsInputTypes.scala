@@ -63,3 +63,12 @@ trait ExpectsInputTypes extends Expression {
 trait ImplicitCastInputTypes extends ExpectsInputTypes {
   // No other methods
 }
+
+
+/**
+ * A mixin for the analyzer to perform implicit type casting all items to the same type using
+ * [[org.apache.spark.sql.catalyst.analysis.TypeCoercion.ImplicitTypeCasts]].
+ */
+trait ImplicitCastInputTypesToSameType extends ExpectsInputTypes {
+  // No other methods
+}

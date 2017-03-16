@@ -319,14 +319,14 @@ object CaseKeyWhen {
 
 /**
  * A function that returns the index of expr in (expr1, expr2, ...) list or 0 if not found.
- * It takes at least 2 parameters, and all parameters should be subtype of AtomicType or NullType.
- * It's also acceptable to give parameters of different types. When the parameters have different
- * types, comparing will be done based on type firstly. For example, ''999'' 's type is StringType,
- * while 999's type is IntegerType, so that no further comparison need to be done since they have
- * different types.
+ * It takes at least 2 parameters, and all parameters can be of any type.
+ * Implicit cast will be done in this expression based on the first parameter's type.
+ * If the first parameter is of NumericType, all parameters will be implicitly cast to DoubleType,
+ * and those that can't be cast to DoubleType will be regarded as NULL.
+ * If the first parameter is of any other type, all parameters will be implicitly cast to StringType
+ * and the comparison will follow String's comparing rules.
  * If the search expression is NULL, the return value is 0 because NULL fails equality comparison
  * with any value.
- * To also point out, no implicit cast will be done in this expression.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -337,11 +337,12 @@ object CaseKeyWhen {
        3
       > SELECT _FUNC_('a', 'b', 'c', 'd', 'a');
        4
-      > SELECT _FUNC_('999', 'a', 999, 9.99, '999');
-       4
+      > SELECT _FUNC_('999', 'a', 999.0, 999, '999');
+       2
   """)
 // scalastyle:on line.size.limit
-case class Field(children: Seq[Expression]) extends Expression {
+case class Field(children: Seq[Expression]) extends Expression
+  with ImplicitCastInputTypesToSameType {
 
   /** Even if expr is not found in (expr1, expr2, ...) list, the value will be 0, not null */
   override def nullable: Boolean = false
@@ -349,37 +350,39 @@ case class Field(children: Seq[Expression]) extends Expression {
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(children(0).dataType)
 
-  private val dataTypeMatchIndex: Array[Int] = children.zipWithIndex.tail.filter(
-    _._1.dataType.sameType(children.head.dataType)).map(_._2).toArray
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(
+    TypeCollection(DoubleType, StringType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"FIELD requires at least 2 arguments")
-    } else if (!children.forall(
-        e => e.dataType.isInstanceOf[AtomicType] || e.dataType.isInstanceOf[NullType])) {
-      TypeCheckResult.TypeCheckFailure(
-        s"FIELD requires all arguments to be of AtomicType or explicitly indicating NULL")
+    val result = super.checkInputDataTypes()
+    if (result == TypeCheckResult.TypeCheckSuccess) {
+      if (children.length <= 1) {
+        TypeCheckResult.TypeCheckFailure(s"FIELD requires at least 2 arguments")
+      } else {
+        TypeCheckResult.TypeCheckSuccess
+      }
     } else {
-      TypeCheckResult.TypeCheckSuccess
+      result
     }
   }
 
   override def dataType: DataType = IntegerType
+
   override def eval(input: InternalRow): Any = {
     val target = children.head.eval(input)
     @tailrec def findEqual(index: Int): Int = {
-      if (index == dataTypeMatchIndex.length) {
+      if (index == children.length) {
         0
       } else {
-        val value = children(dataTypeMatchIndex(index)).eval(input)
+        val value = children(index).eval(input)
         if (value != null && ordering.equiv(target, value)) {
-          dataTypeMatchIndex(index)
+          index
         } else {
           findEqual(index + 1)
         }
       }
     }
-    if (target == null) 0 else findEqual(index = 0)
+    if (target == null) 0 else findEqual(index = 1)
   }
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -388,8 +391,8 @@ case class Field(children: Seq[Expression]) extends Expression {
     val targetDataType = children(0).dataType
     val dataTypes = children.map(_.dataType)
 
-    def updateEval(evalWithIndex: ((ExprCode, DataType), Int)): String = {
-      val ((eval, _), index) = evalWithIndex
+    def updateEval(evalWithIndex: (ExprCode, Int)): String = {
+      val (eval, index) = evalWithIndex
       s"""
         ${eval.code}
         if (${ctx.genEqual(targetDataType, eval.value, target.value)}) {
@@ -413,8 +416,7 @@ case class Field(children: Seq[Expression]) extends Expression {
          boolean ${ev.isNull} = false;
          int ${ev.value} = 0;
          if (!${target.isNull}) {
-           ${evalChildren.zip(dataTypes).zipWithIndex.tail.filter(
-            x => dataTypeMatchIndex.contains(x._2)).map(updateEval).reduceRight(genIfElseStructure)}
+           ${evalChildren.zipWithIndex.tail.map(updateEval).reduceRight(genIfElseStructure)}
          }
        """.stripMargin)
   }
