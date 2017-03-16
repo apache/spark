@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -571,6 +572,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val MAX_NESTED_VIEW_DEPTH =
+    buildConf("spark.sql.view.maxNestedViewDepth")
+      .internal()
+      .doc("The maximum depth of a view reference in a nested view. A nested view may reference " +
+        "other nested views, the dependencies are organized in a directed acyclic graph (DAG). " +
+        "However the DAG depth may become too large and cause unexpected behavior. This " +
+        "configuration puts a limit on this: when the depth of a view exceeds this value during " +
+        "analysis, we terminate the resolution to avoid potential errors.")
+      .intConf
+      .checkValue(depth => depth > 0, "The maximum depth of a view reference in a nested view " +
+        "must be positive.")
+      .createWithDefault(100)
+
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
       .internal()
@@ -701,6 +715,27 @@ object SQLConf {
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .stringConf
       .createWithDefault(TimeZone.getDefault().getID())
+
+  val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.windowExec.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows buffered in window operator")
+      .intConf
+      .createWithDefault(4096)
+
+  val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows buffered in sort merge join operator")
+      .intConf
+      .createWithDefault(Int.MaxValue)
+
+  val CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.cartesianProductExec.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows buffered in cartesian product operator")
+      .intConf
+      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -931,6 +966,16 @@ class SQLConf extends Serializable with Logging {
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
+
+  def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def sortMergeJoinExecBufferSpillThreshold: Int =
+    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def cartesianProductExecBufferSpillThreshold: Int =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   /** ********************** SQLConf functionality methods ************ */
 
