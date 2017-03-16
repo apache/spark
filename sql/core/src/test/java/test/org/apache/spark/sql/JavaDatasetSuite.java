@@ -1291,4 +1291,91 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(df.schema().length(), 0);
     Assert.assertEquals(df.collectAsList().size(), 1);
   }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference3Bean implements Serializable {
+    private CircularReference3Bean[] child;
+
+    public CircularReference3Bean[] getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference3Bean[] child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference4Bean implements Serializable {
+    private Map<String, CircularReference5Bean> child;
+
+    public Map<String, CircularReference5Bean> getChild() {
+      return child;
+    }
+
+    public void setChild(Map<String, CircularReference5Bean> child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference5Bean implements Serializable {
+    private String id;
+    private List<CircularReference4Bean> child;
+
+    public String getId() {
+      return id;
+    }
+
+    public List<CircularReference4Bean> getChild() {
+      return child;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public void setChild(List<CircularReference4Bean> child) {
+      this.child = child;
+    }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean1() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean2() {
+    CircularReference3Bean bean = new CircularReference3Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean3() {
+    CircularReference4Bean bean = new CircularReference4Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+  }
 }

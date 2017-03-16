@@ -617,12 +617,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val message = intercept[AnalysisException] {
       sql(s"DROP DATABASE $dbName RESTRICT")
     }.getMessage
-    // TODO: Unify the exception.
-    if (isUsingHiveMetastore) {
-      assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
-    } else {
-      assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
-    }
+    assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
+
 
     catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 
@@ -975,40 +971,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter table: rename partition") {
     testRenamePartitions(isDatasourceTable = false)
-  }
-
-  test("show table extended") {
-    withTempView("show1a", "show2b") {
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show1a
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |
-         |)
-        """.stripMargin)
-      sql(
-        """
-         |CREATE TEMPORARY VIEW show2b
-         |USING org.apache.spark.sql.sources.DDLScanSource
-         |OPTIONS (
-         |  From '1',
-         |  To '10',
-         |  Table 'test1'
-         |)
-        """.stripMargin)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").count() >= 2)
-      assert(
-        sql("SHOW TABLE EXTENDED LIKE 'show*'").schema ==
-          StructType(StructField("database", StringType, false) ::
-            StructField("tableName", StringType, false) ::
-            StructField("isTemporary", BooleanType, false) ::
-            StructField("information", StringType, false) :: Nil))
-    }
   }
 
   test("show databases") {

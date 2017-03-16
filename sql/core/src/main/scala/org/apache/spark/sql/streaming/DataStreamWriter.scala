@@ -147,6 +147,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def option(key: String, value: String): DataStreamWriter[T] = {
@@ -178,6 +184,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def options(options: scala.collection.Map[String, String]): DataStreamWriter[T] = {
@@ -187,6 +199,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Adds output options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
