@@ -75,6 +75,7 @@ class MultilayerPerceptronClassifierSuite
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
+    MLTestingUtils.uidChecks(trainer, model)
     val predictionAndLabels = result.select("prediction", "label").collect()
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
       assert(p == l)
