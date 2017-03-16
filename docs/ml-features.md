@@ -1284,6 +1284,61 @@ for more details on the API.
 
 </div>
 
+
+## Imputer
+
+Imputation transformer for completing missing values in the dataset, either using the mean or the 
+median of the columns in which the missing value are located. The input columns should be of
+DoubleType or FloatType. Currently Imputer does not support categorical features and possibly
+creates incorrect values for a categorical feature. All Null values in the input column are
+treated as missing, and so are also imputed.
+
+**Examples**
+
+Suppose that we have a DataFrame with the column `a` and `b`:
+
+~~~
+      a     |      b      
+------------|-----------
+     1.0    | Double.NaN
+     2.0    | Double.NaN
+ Double.NaN |     3.0   
+     4.0    |     4.0   
+     5.0    |     5.0   
+~~~
+
+By default, Imputer will replace all the `Double.NaN` (missing value) with the mean (strategy) from
+other values in the corresponding columns. In our example, the surrogates for `a` and `b` are 3.0
+and 4.0 respectively. After transformation, the output columns will not contain missing value anymore.
+
+~~~
+      a     |      b     | out_a | out_b   
+------------|------------|-------|-------
+     1.0    | Double.NaN |  1.0  |  4.0 
+     2.0    | Double.NaN |  2.0  |  4.0 
+ Double.NaN |     3.0    |  3.0  |  3.0 
+     4.0    |     4.0    |  4.0  |  4.0
+     5.0    |     5.0    |  5.0  |  5.0 
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Imputer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ImputerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Imputer Java docs](api/java/org/apache/spark/ml/feature/Imputer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaImputerExample.java %}
+</div>
+</div>
+
 # Feature Selectors
 
 ## VectorSlicer
