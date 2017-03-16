@@ -36,9 +36,7 @@ dependencies:
       --include '**/target/analysis/***' --include '**/' --exclude '*' . build_classes/
   cache_directories:
     - "build_classes"
-    - "build/zinc-0.3.11"
-    - "build/apache-maven-3.3.9"
-    - "build/scala-2.11.8"
+    - "build"
 
 general:
   artifacts:
