@@ -103,3 +103,4 @@ org.apache.spark.scheduler.ExternalClusterManager
 org.apache.spark.deploy.yarn.security.ServiceCredentialProvider
 spark-warehouse
 structured-streaming/*
+org.apache.spark.deploy.rest.kubernetes.DriverServiceManager

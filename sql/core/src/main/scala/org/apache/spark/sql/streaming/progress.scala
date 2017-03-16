@@ -68,12 +68,12 @@ class StateOperatorProgress private[sql](
  *                incremented.
  * @param durationMs The amount of time taken to perform various operations in milliseconds.
  * @param eventTime Statistics of event time seen in this batch. It may contain the following keys:
- *                 {
+ *                 {{{
  *                   "max" -> "2016-12-05T20:54:20.827Z"  // maximum event time seen in this trigger
  *                   "min" -> "2016-12-05T20:54:20.827Z"  // minimum event time seen in this trigger
  *                   "avg" -> "2016-12-05T20:54:20.827Z"  // average event time seen in this trigger
  *                   "watermark" -> "2016-12-05T20:54:20.827Z"  // watermark used in this trigger
- *                 }
+ *                 }}}
  *                 All timestamps are in ISO8601 format, i.e. UTC timestamps.
  * @param stateOperators Information about operators in the query that store state.
  * @param sources detailed statistics on data being read from each of the streaming sources.
