@@ -268,8 +268,10 @@ class RFormulaModel private[feature](
   }
 
   @Since("1.5.0")
-  override def copy(extra: ParamMap): RFormulaModel = copyValues(
-    new RFormulaModel(uid, resolvedFormula, pipelineModel))
+  override def copy(extra: ParamMap): RFormulaModel = {
+    val copied = new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(parent)
+    copyValues(copied, extra)
+  }
 
   @Since("2.0.0")
   override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"

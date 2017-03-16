@@ -329,7 +329,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
-    copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
+    val copied = new MultilayerPerceptronClassificationModel(uid, layers, weights)
+    copyValues(copied, extra).setParent(parent)
   }
 
   @Since("2.0.0")
