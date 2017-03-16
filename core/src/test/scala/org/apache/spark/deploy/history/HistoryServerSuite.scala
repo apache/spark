@@ -158,7 +158,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
     "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
-    "executor memory usage" -> "applications/app-20161116163331-0000/executors"
+    "executor memory usage" -> "applications/app-20161116163331-0000/executors",
+
+    "app environment" -> "applications/app-20161116163331-0000/environment"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
