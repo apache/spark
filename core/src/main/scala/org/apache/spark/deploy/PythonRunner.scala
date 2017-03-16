@@ -113,9 +113,8 @@ object PythonRunner extends CondaRunner with Logging {
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
-
     sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
-    builder.redirectErrorStream(true)
+    builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()
 
