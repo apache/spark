@@ -921,21 +921,20 @@ class CheckpointTests(unittest.TestCase):
 
         def check_output(n):
             while not os.listdir(outputd):
-                time.sleep(0.01)
+                time.sleep(0.1)
             time.sleep(1)  # make sure mtime is larger than the previous one
             with open(os.path.join(inputd, str(n)), 'w') as f:
                 f.writelines(["%d\n" % i for i in range(10)])
 
             while True:
+                time.sleep(0.1)
                 p = os.path.join(outputd, max(os.listdir(outputd)))
                 if '_SUCCESS' not in os.listdir(p):
                     # not finished
-                    time.sleep(0.01)
                     continue
                 ordd = self.ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
                 d = ordd.values().map(int).collect()
                 if not d:
-                    time.sleep(0.01)
                     continue
                 self.assertEqual(10, len(d))
                 s = set(d)
