@@ -30,6 +30,8 @@ object EventTimeWatermark {
     val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
     delay.milliseconds + delay.months * millisPerMonth
   }
+
+  def containWatermark(attrs: Attribute*): Boolean = attrs.exists(_.metadata.contains(delayKey))
 }
 
 /**
