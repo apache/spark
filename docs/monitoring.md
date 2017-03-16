@@ -170,6 +170,28 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
+    <td>spark.history.ui.admin.acls</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of users/administrators that have view access to all the Spark applications in
+      history server. By default only the users permitted to view the application at run-time could
+      access the related application history, with this, configured users/administrators could also
+      have the permission to access it.
+      Putting a "*" in the list means any user can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.ui.admin.acls.groups</td>
+    <td>empty</td>
+    <td>
+      Comma separated list of groups that have view access to all the Spark applications in
+      history server. By default only the groups permitted to view the application at run-time could
+      access the related application history, with this, configured groups could also
+      have the permission to access it.
+      Putting a "*" in the list means any group can have the privilege of admin.
+    </td>
+  </tr>
+  <tr>
     <td>spark.history.fs.cleaner.enabled</td>
     <td>false</td>
     <td>
@@ -245,12 +267,23 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>
     <code>?status=[completed|running]</code> list only applications in the chosen state.
     <br>
-    <code>?minDate=[date]</code> earliest date/time to list.
+    <code>?minDate=[date]</code> earliest start date/time to list.
+    <br>
+    <code>?maxDate=[date]</code> latest start date/time to list.
+    <br>
+    <code>?minEndDate=[date]</code> earliest end date/time to list.
+    <br>
+    <code>?maxEndDate=[date]</code> latest end date/time to list.
+    <br>
+    <code>?limit=[limit]</code> limits the number of applications listed.
     <br>Examples:
     <br><code>?minDate=2015-02-10</code>
     <br><code>?minDate=2015-02-03T16:42:40.000GMT</code>
-    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code>.
-    <br><code>?limit=[limit]</code> limits the number of applications listed.</td>
+    <br><code>?maxDate=2015-02-11T20:41:30.000GMT</code>
+    <br><code>?minEndDate=2015-02-12</code>
+    <br><code>?minEndDate=2015-02-12T09:15:10.000GMT</code>
+    <br><code>?maxEndDate=2015-02-14T16:30:45.000GMT</code>
+    <br><code>?limit=10</code></td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
@@ -348,6 +381,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
     <td>Details of the given operation and given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/environment</code></td>
+    <td>Environment details of the given application.</td>
   </tr>       
 </table>
 

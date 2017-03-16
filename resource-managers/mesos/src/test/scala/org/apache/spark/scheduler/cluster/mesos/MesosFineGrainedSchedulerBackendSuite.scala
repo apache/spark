@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.util.Arrays
 import java.util.Collection
 import java.util.Collections
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -246,7 +247,16 @@ class MesosFineGrainedSchedulerBackendSuite
       mesosOffers.get(2).getHostname,
       (minCpu - backend.mesosExecutorCores).toInt
     )
-    val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    val taskDesc = new TaskDescription(
+      taskId = 1L,
+      attemptNumber = 0,
+      executorId = "s1",
+      name = "n1",
+      index = 0,
+      addedFiles = mutable.Map.empty[String, Long],
+      addedJars = mutable.Map.empty[String, Long],
+      properties = new Properties(),
+      ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
 
@@ -345,7 +355,16 @@ class MesosFineGrainedSchedulerBackendSuite
       2 // Deducting 1 for executor
     )
 
-    val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    val taskDesc = new TaskDescription(
+      taskId = 1L,
+      attemptNumber = 0,
+      executorId = "s1",
+      name = "n1",
+      index = 0,
+      addedFiles = mutable.Map.empty[String, Long],
+      addedJars = mutable.Map.empty[String, Long],
+      properties = new Properties(),
+      ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
     when(taskScheduler.CPUS_PER_TASK).thenReturn(1)
 

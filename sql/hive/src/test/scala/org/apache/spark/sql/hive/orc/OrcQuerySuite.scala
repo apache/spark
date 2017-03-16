@@ -26,12 +26,14 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
-import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -473,7 +475,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
-                  case _: MetastoreRelation => ()
+                  case _: CatalogRelation => ()
                 }.getOrElse {
                   fail(s"Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")
@@ -610,4 +612,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
     }
   }
+
+   test("read from multiple orc input paths") {
+     val path1 = Utils.createTempDir()
+     val path2 = Utils.createTempDir()
+     makeOrcFile((1 to 10).map(Tuple1.apply), path1)
+     makeOrcFile((1 to 10).map(Tuple1.apply), path2)
+     assertResult(20)(read.orc(path1.getCanonicalPath, path2.getCanonicalPath).count())
+   }
 }

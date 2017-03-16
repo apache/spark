@@ -57,7 +57,8 @@ public class OutputMode {
 
   /**
    * OutputMode in which only the rows that were updated in the streaming DataFrame/Dataset will
-   * be written to the sink every time there are some updates.
+   * be written to the sink every time there are some updates. If the query doesn't contain
+   * aggregations, it will be equivalent to `Append` mode.
    *
    * @since 2.1.1
    */

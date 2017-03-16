@@ -130,7 +130,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
     case _ => false
   }
   override def toString: String = {
-    s"In($attribute, [${values.mkString(",")}]"
+    s"In($attribute, [${values.mkString(",")}])"
   }
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)

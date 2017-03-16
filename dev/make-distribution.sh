@@ -52,20 +52,6 @@ function exit_with_usage {
 # Parse arguments
 while (( "$#" )); do
   case $1 in
-    --hadoop)
-      echo "Error: '--hadoop' is no longer supported:"
-      echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3, hadoop-2.4, hadoop-2.6 and hadoop-2.7."
-      exit_with_usage
-      ;;
-    --with-yarn)
-      echo "Error: '--with-yarn' is no longer supported, use Maven option -Pyarn"
-      exit_with_usage
-      ;;
-    --with-hive)
-      echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
-      exit_with_usage
-      ;;
     --tgz)
       MAKE_TGZ=true
       ;;
@@ -160,7 +146,7 @@ fi
 # Build uber fat JAR
 cd "$SPARK_HOME"
 
-export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m}"
+export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:ReservedCodeCacheSize=512m}"
 
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
@@ -220,6 +206,8 @@ cp -r "$SPARK_HOME/data" "$DISTDIR"
 if [ "$MAKE_PIP" == "true" ]; then
   echo "Building python distribution package"
   pushd "$SPARK_HOME/python" > /dev/null
+  # Delete the egg info file if it exists, this can cache older setup files.
+  rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
   python setup.py sdist
   popd > /dev/null
 else
@@ -232,14 +220,17 @@ if [ "$MAKE_R" == "true" ]; then
   R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
-  # Install source package to get it to generate vignettes, etc.
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
-  NO_TESTS=1 CLEAN_INSTALL=1 "$SPARK_HOME/"R/check-cran.sh
+  NO_TESTS=1 "$SPARK_HOME/"R/check-cran.sh
+
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
   if [ "$R_PACKAGE_VERSION" != "$VERSION" ]; then
     mv $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
   fi
+
+  # Install source package to get it to generate vignettes rds files, etc.
+  VERSION=$VERSION "$SPARK_HOME/"R/install-source-package.sh
   popd > /dev/null
 else
   echo "Skipping building R source package"

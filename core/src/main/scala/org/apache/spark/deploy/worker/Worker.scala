@@ -62,8 +62,8 @@ private[deploy] class Worker(
   private val forwordMessageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-forward-message-scheduler")
 
-  // A separated thread to clean up the workDir. Used to provide the implicit parameter of `Future`
-  // methods.
+  // A separated thread to clean up the workDir and the directories of finished applications.
+  // Used to provide the implicit parameter of `Future` methods.
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
@@ -445,12 +445,25 @@ private[deploy] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.getOrElse(appId,
-            Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-              val appDir = Utils.createDirectory(dir, namePrefix = "executor")
-              Utils.chmod700(appDir)
-              appDir.getAbsolutePath()
-            }.toSeq)
+          val appLocalDirs = appDirectories.getOrElse(appId, {
+            val localRootDirs = Utils.getOrCreateLocalRootDirs(conf)
+            val dirs = localRootDirs.flatMap { dir =>
+              try {
+                val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+                Utils.chmod700(appDir)
+                Some(appDir.getAbsolutePath())
+              } catch {
+                case e: IOException =>
+                  logWarning(s"${e.getMessage}. Ignoring this directory.")
+                  None
+              }
+            }.toSeq
+            if (dirs.isEmpty) {
+              throw new IOException("No subfolder can be created in " +
+                s"${localRootDirs.mkString(",")}.")
+            }
+            dirs
+          })
           appDirectories(appId) = appLocalDirs
           val manager = new ExecutorRunner(
             appId,
@@ -565,10 +578,15 @@ private[deploy] class Worker(
     if (shouldCleanup) {
       finishedApps -= id
       appDirectories.remove(id).foreach { dirList =>
-        logInfo(s"Cleaning up local directories for application $id")
-        dirList.foreach { dir =>
-          Utils.deleteRecursively(new File(dir))
-        }
+        concurrent.Future {
+          logInfo(s"Cleaning up local directories for application $id")
+          dirList.foreach { dir =>
+            Utils.deleteRecursively(new File(dir))
+          }
+        }(cleanupThreadExecutor).onFailure {
+          case e: Throwable =>
+            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+        }(cleanupThreadExecutor)
       }
       shuffleService.applicationRemoved(id)
     }

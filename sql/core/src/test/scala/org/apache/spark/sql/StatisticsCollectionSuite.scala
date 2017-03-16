@@ -59,7 +59,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val df = df1.join(df2, Seq("k"), "left")
 
       val sizes = df.queryExecution.analyzed.collect { case g: Join =>
-        g.statistics.sizeInBytes
+        g.stats(conf).sizeInBytes
       }
 
       assert(sizes.size === 1, s"number of Join nodes is wrong:\n ${df.queryExecution}")
@@ -106,34 +106,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
     val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
     val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
-    assert(df.queryExecution.analyzed.statistics.sizeInBytes >
+    assert(df.queryExecution.analyzed.stats(conf).sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
-    assert(df.selectExpr("a").queryExecution.analyzed.statistics.sizeInBytes >
+    assert(df.selectExpr("a").queryExecution.analyzed.stats(conf).sizeInBytes >
       spark.sessionState.conf.autoBroadcastJoinThreshold)
-  }
-
-  test("estimates the size of limit") {
-    withTempView("test") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
-        .createOrReplaceTempView("test")
-      Seq((0, 1), (1, 24), (2, 48)).foreach { case (limit, expected) =>
-        val df = sql(s"""SELECT * FROM test limit $limit""")
-
-        val sizesGlobalLimit = df.queryExecution.analyzed.collect { case g: GlobalLimit =>
-          g.statistics.sizeInBytes
-        }
-        assert(sizesGlobalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesGlobalLimit.head === BigInt(expected),
-          s"expected exact size $expected for table 'test', got: ${sizesGlobalLimit.head}")
-
-        val sizesLocalLimit = df.queryExecution.analyzed.collect { case l: LocalLimit =>
-          l.statistics.sizeInBytes
-        }
-        assert(sizesLocalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesLocalLimit.head === BigInt(expected),
-          s"expected exact size $expected for table 'test', got: ${sizesLocalLimit.head}")
-      }
-    }
   }
 
   test("column stats round trip serialization") {
@@ -169,6 +145,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
     }
     checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
+  }
+
+  test("number format in statistics") {
+    val numbers = Seq(
+      BigInt(0) -> ("0.0 B", "0"),
+      BigInt(100) -> ("100.0 B", "100"),
+      BigInt(2047) -> ("2047.0 B", "2.05E+3"),
+      BigInt(2048) -> ("2.0 KB", "2.05E+3"),
+      BigInt(3333333) -> ("3.2 MB", "3.33E+6"),
+      BigInt(4444444444L) -> ("4.1 GB", "4.44E+9"),
+      BigInt(5555555555555L) -> ("5.1 TB", "5.56E+12"),
+      BigInt(6666666666666666L) -> ("5.9 PB", "6.67E+15"),
+      BigInt(1L << 10 ) * (1L << 60) -> ("1024.0 EB", "1.18E+21"),
+      BigInt(1L << 11) * (1L << 60) -> ("2.36E+21 B", "2.36E+21")
+    )
+    numbers.foreach { case (input, (expectedSize, expectedRows)) =>
+      val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
+      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows," +
+        s" isBroadcastable=${stats.isBroadcastable}"
+      assert(stats.simpleString == expectedString)
+    }
   }
 }
 
@@ -250,13 +247,13 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   test("SPARK-18856: non-empty partitioned table should not report zero size") {
     withTable("ds_tbl", "hive_tbl") {
       spark.range(100).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("ds_tbl")
-      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.statistics
+      val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats(conf)
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
       if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
         sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
         sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
-        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.statistics
+        val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats(conf)
         assert(stats2.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
       }
     }
@@ -285,7 +282,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     // Analyze only one column.
     sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
     val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
+      case catalogRel: CatalogRelation => (catalogRel, catalogRel.tableMeta)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
     }.head
     val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
@@ -296,10 +293,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
-    assert(relation.statistics.sizeInBytes == 0)
-    assert(relation.statistics.rowCount == Some(0))
-    assert(relation.statistics.attributeStats.size == 1)
-    val (attribute, colStat) = relation.statistics.attributeStats.head
+    assert(relation.stats(conf).sizeInBytes == 0)
+    assert(relation.stats(conf).rowCount == Some(0))
+    assert(relation.stats(conf).attributeStats.size == 1)
+    val (attribute, colStat) = relation.stats(conf).attributeStats.head
     assert(attribute.name == "c1")
     assert(colStat == emptyColStat)
   }

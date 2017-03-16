@@ -242,11 +242,12 @@ class PlannerSuite extends SharedSQLContext {
     val doubleRepartitioned = testData.repartition(10).repartition(20).coalesce(5)
     def countRepartitions(plan: LogicalPlan): Int = plan.collect { case r: Repartition => r }.length
     assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
-    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 1)
+    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 2)
     doubleRepartitioned.queryExecution.optimizedPlan match {
-      case r: Repartition =>
-        assert(r.numPartitions === 5)
-        assert(r.shuffle === false)
+      case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
+        assert(numPartitions === 5)
+        assert(shuffle === false)
+        assert(shuffleChild === true)
     }
   }
 

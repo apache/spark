@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -68,8 +67,6 @@ private[scheduler] abstract class Stage(
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
 
-  val pendingPartitions = new HashSet[Int]
-
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
@@ -77,7 +74,7 @@ private[scheduler] abstract class Stage(
   val details: String = callSite.longForm
 
   /**
-   * Pointer to the [StageInfo] object for the most recent attempt. This needs to be initialized
+   * Pointer to the [[StageInfo]] object for the most recent attempt. This needs to be initialized
    * here, before any attempts have actually been created, because the DAGScheduler uses this
    * StageInfo to tell SparkListeners when a job starts (which happens before any stage attempts
    * have been created).
