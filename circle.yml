@@ -3,8 +3,15 @@ machine:
     version: oraclejdk8
   post:
     - sudo apt-get --assume-yes install r-base r-base-dev
-    - pyenv install miniconda3-latest --skip-existing
-    - ln -s $(pyenv root)/versions/miniconda3-latest ~/miniconda
+    - |
+      if [[ ! -d ${CONDA_ROOT} ]]; then
+          echo "Installing Miniconda...";
+          wget --quiet https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh &&
+            bash Miniconda-latest-Linux-x86_64.sh -b -p ${CONDA_ROOT};
+      else
+          echo "Using cached Miniconda install";
+      fi
+    - ln -s ~/miniconda $(pyenv root)/versions/miniconda3-latest
     - 'pyenv versions | grep -q miniconda3-latest/envs/python2 || $CONDA_BIN create -y -n python2 python==2.7.11 numpy'
     - 'pyenv versions | grep -q miniconda3-latest/envs/python3 || $CONDA_BIN create -y -n python3 python==3.4.4 numpy'
     - pyenv global miniconda3-latest/envs/python2 miniconda3-latest/envs/python3 #pypy-4.0.1
@@ -13,6 +20,7 @@ machine:
     TERM: dumb
     R_HOME: /usr/lib/R
     CONDA_BIN: $HOME/miniconda/bin/conda
+    CONDA_ROOT: $HOME/miniconda
 
 checkout:
   post:
@@ -37,6 +45,7 @@ dependencies:
   cache_directories:
     - "build_classes"
     - "build"
+    - "~/miniconda"
 
 general:
   artifacts:
