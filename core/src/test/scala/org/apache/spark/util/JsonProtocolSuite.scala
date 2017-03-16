@@ -714,9 +714,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     val expectedJson = pretty(parse(expected))
     val actualJson = pretty(parse(actual))
     if (expectedJson != actualJson) {
-      println(expected)
-      println("=================================================")
-      println(actualJson)
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
       println("=== EXPECTED ===\n" + expectedJson + "\n")
@@ -2008,63 +2005,63 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 27,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.0",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}0",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 28,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.1",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}1",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 29,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.2",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}2",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 30,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.3",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}3",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 31,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.4",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}4",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 32,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.5",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}5",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 33,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.6",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}6",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 34,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.7",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}7",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 35,
-      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}.8",
+      |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}8",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true

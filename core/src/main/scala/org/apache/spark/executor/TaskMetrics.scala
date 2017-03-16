@@ -229,11 +229,13 @@ class TaskMetrics private[spark] () extends Serializable {
     output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
   ) ++ testAccum.map(TEST_ACCUM -> _) ++ blockSizeDistributionAccums
 
-  def blockSizeDistributionAccums(): Map[String, AccumulatorV2[_, _]] = {
-    shuffleWriteMetrics._blockSizeDistribution.zipWithIndex.map {
+  def blockSizeDistributionAccums(): LinkedHashMap[String, AccumulatorV2[_, _]] = {
+    val linkedHashMap = LinkedHashMap[String, AccumulatorV2[_, _]]()
+    shuffleWriteMetrics._blockSizeDistribution.zipWithIndex.foreach {
       case (accum, index) =>
-        (shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX + index, accum)
-    }.toMap
+        linkedHashMap.put(shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX + index, accum)
+    }
+    linkedHashMap
   }
 
   @transient private[spark] lazy val internalAccums: Seq[AccumulatorV2[_, _]] =
