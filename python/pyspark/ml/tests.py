@@ -1250,7 +1250,7 @@ class FPGrowthTests(SparkSessionTestCase):
         self.spark.conf.set("spark.sql.shuffle.partitions", "1")
         self.data = self.spark.createDataFrame(
             [([1, 2], ), ([1, 2], ), ([1, 2, 3], ), ([1, 3], )],
-            ["features"])
+            ["items"])
 
     def test_association_rules(self):
         fp = FPGrowth()
