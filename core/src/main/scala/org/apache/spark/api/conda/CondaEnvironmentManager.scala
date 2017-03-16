@@ -87,6 +87,7 @@ final class CondaEnvironmentManager(condaBinaryPath: String, condaChannelUrls: S
          | - $condaPkgsPath
          |envs_dirs:
          | - $baseRoot/envs
+         |show_channel_urls: false
       """.stripMargin
     Files.write(condarc, List(condarcContents).asJava)
     logInfo(f"Using condarc at $condarc:%n$condarcContents")
