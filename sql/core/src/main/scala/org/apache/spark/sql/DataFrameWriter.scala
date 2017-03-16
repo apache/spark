@@ -337,6 +337,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
+   * In this method, save mode is used to determine the behavior if the data source table exists in
+   * Spark catalog. We will always overwrite the underlying data of data source (e.g. a table in
+   * JDBC data source) if the table doesn't exist in Spark catalog, and will always append to the
+   * underlying data of data source if the table already exists.
+   *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
    * and Parquet), the table is persisted in a Hive compatible format, which means other systems
