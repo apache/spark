@@ -445,8 +445,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
         null)
     ))
 
-    // Here is the main assertion -- make sure that we de-register the map outputs for both map stage
-    // from both executors on hostA
+    // Here is the main assertion -- make sure that we de-register
+    // the map outputs for both map stage from both executors on hostA
     val mapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(mapStatus1.count(_ != null) === 1)
     assert(mapStatus1(2).location.executorId === "exec-hostB")
