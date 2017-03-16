@@ -1334,13 +1334,13 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            if (!env.blockManager.externalShuffleServiceEnabled) {
-              handleExecutorLost(bmAddress.executorId, fileLost = false, hostLost = true,
-                Some(bmAddress.host), Some(task.epoch))
+            if (env.blockManager.externalShuffleServiceEnabled) {
+              removeExecutorAndUnregisterOutputOnHost(bmAddress.executorId,
+                bmAddress.host, Some(task.epoch))
             }
             else {
-              handleExecutorLost(bmAddress.executorId, fileLost = true, hostLost = false,
-                Some(bmAddress.host), Some(task.epoch))
+              removeExecutorAndUnregisterOutputOnExecutor(bmAddress.executorId,
+                true, Some(task.epoch))
             }
           }
         }
@@ -1375,9 +1375,16 @@ class DAGScheduler(
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
+      fileLost: Boolean) {
+    removeExecutorAndUnregisterOutputOnExecutor(execId,
+      // There will not be any file loss if external shuffle service is enabled
+      fileLost && !env.blockManager.externalShuffleServiceEnabled, None)
+  }
+
+
+  private[scheduler] def removeExecutorAndUnregisterOutputOnExecutor(
+      execId: String,
       fileLost: Boolean,
-      hostLost: Boolean = false,
-      maybeHost: Option[String] = None,
       maybeEpoch: Option[Long] = None) {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
@@ -1392,7 +1399,34 @@ class DAGScheduler(
       }
     } else {
       logDebug("Additional executor lost message for " + execId +
-               "(epoch " + currentEpoch + ")")
+        "(epoch " + currentEpoch + ")")
+    }
+  }
+
+  private[scheduler] def removeExecutorAndUnregisterOutputOnHost(
+      execId: String,
+      host: String,
+      maybeEpoch: Option[Long] = None) {
+    val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
+    if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
+      failedEpoch(execId) = currentEpoch
+      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
+      blockManagerMaster.removeExecutor(execId)
+      for ((shuffleId, stage) <- shuffleIdToMapStage) {
+        logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
+        stage.removeOutputsOnHost(host)
+        mapOutputTracker.registerMapOutputs(
+          shuffleId,
+          stage.outputLocInMapOutputTrackerFormat(),
+          changeEpoch = true)
+      }
+      if (shuffleIdToMapStage.isEmpty) {
+        mapOutputTracker.incrementEpoch()
+      }
+      clearCacheLocs()
+    } else {
+      logDebug("Additional executor lost message for " + execId +
+        "(epoch " + currentEpoch + ")")
     }
   }
 
