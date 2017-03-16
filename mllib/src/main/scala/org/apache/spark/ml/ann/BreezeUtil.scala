@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.ml.ann
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
