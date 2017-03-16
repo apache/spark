@@ -2362,15 +2362,15 @@ def _prepare_for_python_RDD(sc, command):
         pickled_command = ser.dumps(broadcast)
     broadcast_vars = [x._jbroadcast for x in sc._pickled_broadcast_vars]
     sc._pickled_broadcast_vars.clear()
-    return pickled_command, broadcast_vars
+    return pickled_command, broadcast_vars, sc.environment, sc._python_includes
 
 
 def _wrap_function(sc, func, deserializer, serializer, profiler=None):
     assert deserializer, "deserializer should not be empty"
     assert serializer, "serializer should not be empty"
     command = (func, profiler, deserializer, serializer)
-    pickled_command, broadcast_vars = _prepare_for_python_RDD(sc, command)
-    return sc._jvm.PythonFunction(bytearray(pickled_command), sc.environment, sc._python_includes,
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes,
                                   sc._build_conda_instructions(), sc.pythonExec, sc.pythonVer,
                                   broadcast_vars, sc._javaAccumulator)
 
