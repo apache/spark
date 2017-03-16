@@ -851,7 +851,7 @@ private[hive] object HiveClientImpl {
       hiveTable.setFields(schema.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
-    conf.foreach(c => hiveTable.setOwner(SessionState.getUserFromAuthenticator()))
+    conf.foreach(c => hiveTable.setOwner(SessionState.get().getAuthenticator().getUserName()))
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
     table.storage.locationUri.map(CatalogUtils.URIToString(_)).foreach { loc =>
