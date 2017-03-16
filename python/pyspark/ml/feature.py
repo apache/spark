@@ -874,6 +874,8 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
 @inherit_doc
 class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
     """
+    .. note:: Experimental
+
     Imputation estimator for completing missing values, either using the mean or the median
     of the column in which the missing values are located. The input column should be of
     DoubleType or FloatType. Currently Imputer does not support categorical features and
@@ -1010,6 +1012,8 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
 
 class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
+    .. note:: Experimental
+
     Model fitted by :py:class:`Imputer`.
 
     .. versionadded:: 2.2.0
