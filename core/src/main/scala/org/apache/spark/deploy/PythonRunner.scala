@@ -37,23 +37,36 @@ import org.apache.spark.util.Utils
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
 object PythonRunner extends CondaRunner with Logging {
+  private[this] case class Provenance(from: String, value: String) {
+    override def toString: String = s"Provenance(from = $from, value = $value)"
+  }
+
+  private[this] object Provenance {
+    def fromConf(sparkConf: SparkConf, conf: ConfigEntry[Option[String]]): Option[Provenance] = {
+      sparkConf.get(conf).map(Provenance(s"Spark config ${conf.key}", _))
+    }
+    def fromEnv(name: String): Option[Provenance] = {
+      sys.env.get(name).map(Provenance(s"Environment variable $name", _))
+    }
+  }
+
   override def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit = {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
-    val presetPythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
-      .orElse(sparkConf.get(PYSPARK_PYTHON))
-      .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
-      .orElse(sys.env.get("PYSPARK_PYTHON"))
+    val presetPythonExec = Provenance.fromConf(sparkConf, PYSPARK_DRIVER_PYTHON)
+      .orElse(Provenance.fromConf(sparkConf, PYSPARK_PYTHON))
+      .orElse(Provenance.fromEnv("PYSPARK_DRIVER_PYTHON"))
+      .orElse(Provenance.fromEnv("PYSPARK_PYTHON"))
 
-    val pythonExec = maybeConda.map { conda =>
+    val pythonExec: String = maybeConda.map { conda =>
       presetPythonExec.foreach { exec =>
         sys.error(
           s"It's forbidden to set the PYSPARK python path when using conda, but found: $exec")
       }
       conda.condaEnvDir + "/bin/python"
-    }.orElse(presetPythonExec)
+    }.orElse(presetPythonExec.map(_.value))
      .getOrElse("python")
 
     logInfo(s"Python binary that will be called: $pythonExec")
