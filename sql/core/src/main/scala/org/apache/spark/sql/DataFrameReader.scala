@@ -26,11 +26,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceReader}
 import org.apache.spark.sql.execution.datasources.csv._
-import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -384,9 +385,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
 
     val createParser = CreateJacksonParser.string _
+    val dataSourceReader = DataSourceReader(
+      schema,
+      extraOptions.toMap,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
       val parser = new JacksonParser(schema, parsedOptions)
-      iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
+      dataSourceReader.read(iter.flatMap(parser.parse(_, createParser, UTF8String.fromString)))
+        .asInstanceOf[Iterator[InternalRow]]
     }
 
     Dataset.ofRows(
@@ -439,10 +445,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
-
+    val dataSourceReader = DataSourceReader(
+      schema,
+      extraOptions.toMap,
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val parsed = linesWithoutHeader.mapPartitions { iter =>
       val parser = new UnivocityParser(schema, parsedOptions)
-      iter.flatMap(line => parser.parse(line))
+      dataSourceReader.read(iter.map(line => parser.parse(line)))
+        .asInstanceOf[Iterator[InternalRow]]
     }
 
     Dataset.ofRows(
