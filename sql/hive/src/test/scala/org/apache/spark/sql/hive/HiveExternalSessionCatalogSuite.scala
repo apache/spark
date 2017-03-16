@@ -34,7 +34,7 @@ class HiveExternalSessionCatalogSuite extends SessionCatalogSuite with TestHiveS
     override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
     override val tableOutputFormat: String =
       "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat"
-    override val defaultProvider: String = "parquet"
+    override val defaultProvider: String = "hive"
     override def newEmptyCatalog(): ExternalCatalog = externalCatalog
   }
 }

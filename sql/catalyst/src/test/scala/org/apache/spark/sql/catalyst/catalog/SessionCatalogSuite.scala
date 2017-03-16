@@ -433,7 +433,7 @@ abstract class SessionCatalogSuite extends PlanTest {
       catalog.setCurrentDatabase("db2")
       catalog.alterTable(tbl1.copy(identifier = TableIdentifier("tbl1")))
       val newestTbl1 = catalog.externalCatalog.getTable("db2", "tbl1")
-      assert(newestTbl1 == tbl1)
+      assert(newestTbl1.copy(properties = Map.empty) == tbl1.copy(properties = Map.empty))
     }
   }
 
