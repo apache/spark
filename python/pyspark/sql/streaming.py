@@ -373,6 +373,11 @@ class DataStreamReader(OptionUtils):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
 
+        You can set the following option(s) for reading files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
+                in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
+
         .. note:: Experimental.
 
         >>> s = spark.readStream.option("x", 1)
@@ -383,6 +388,11 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def options(self, **options):
         """Adds input options for the underlying data source.
+
+        You can set the following option(s) for reading files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
+                in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
 
         .. note:: Experimental.
 
@@ -429,7 +439,7 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             timeZone=None, wholeFile=None):
+             wholeFile=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -486,8 +496,6 @@ class DataStreamReader(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
-        :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
-                         If None is set, it uses the default value, session local timezone.
         :param wholeFile: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
 
@@ -503,7 +511,7 @@ class DataStreamReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, timeZone=timeZone, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, wholeFile=wholeFile)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -561,7 +569,7 @@ class DataStreamReader(OptionUtils):
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None, timeZone=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, wholeFile=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
@@ -619,8 +627,6 @@ class DataStreamReader(OptionUtils):
                                   ``-1`` meaning unlimited length.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
-        :param timeZone: sets the string that indicates a timezone to be used to parse timestamps.
-                         If None is set, it uses the default value, session local timezone.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
                   record, and puts the malformed string into a field configured by \
@@ -653,7 +659,7 @@ class DataStreamReader(OptionUtils):
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
-            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode, timeZone=timeZone,
+            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
@@ -721,6 +727,11 @@ class DataStreamWriter(object):
     def option(self, key, value):
         """Adds an output option for the underlying data source.
 
+        You can set the following option(s) for writing files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to format
+                timestamps in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
+
         .. note:: Experimental.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
@@ -729,6 +740,11 @@ class DataStreamWriter(object):
     @since(2.0)
     def options(self, **options):
         """Adds output options for the underlying data source.
+
+        You can set the following option(s) for writing files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to format
+                timestamps in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
 
        .. note:: Experimental.
         """
