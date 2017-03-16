@@ -21,6 +21,7 @@ import java.nio.file.Files
 import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.Stack
 
 import sbt._
@@ -85,10 +86,10 @@ object SparkBuild extends PomBuild {
   import BuildCommons._
   import scala.collection.mutable.Map
 
-  val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
+  val projectsMap: mutable.Map[String, Seq[Setting[_]]] = mutable.Map.empty
 
   override val profiles = {
-    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.propOrNone("sbt.maven.profiles") orElse Properties.envOrNone("SBT_MAVEN_PROFILES") match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
@@ -410,6 +411,10 @@ object SparkBuild extends PomBuild {
       else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](OldDeps.project)
   }
+
+  override def settings: Seq[Def.Setting[_]] = super.settings ++ inScope(Global)(List(
+    updateOptions := updateOptions.value.withCachedResolution(true)
+  ))
 }
 
 object Core {
@@ -757,8 +762,6 @@ object CopyDependencies {
 object TestSettings {
   import BuildCommons._
 
-  val copyTestReportsToCircle: TaskKey[Boolean] = taskKey("Copy the test reports to circle if CIRCLE_TEST_REPORTS is defined")
-
   private val scalaBinaryVersion =
     if (System.getProperty("scala-2.10") == "true") {
       "2.10"
@@ -843,15 +846,7 @@ object TestSettings {
         "org.apache.spark.util.collection"
       ).mkString(":"),
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
-    ),
-    copyTestReportsToCircle := {
-      val reportsDir = target.value / "test-reports"
-      val circleReports = sys.env.get("CIRCLE_TEST_REPORTS")
-      circleReports.filter(_ => reportsDir.exists).exists { circle =>
-        IO.copyDirectory(reportsDir, file(circle) / thisProjectRef.value.project)
-        true
-      }
-    }
+    )
   )
 
 }
