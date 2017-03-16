@@ -1925,7 +1925,8 @@ class HiveDDLSuite
         val e = intercept[AnalysisException] {
           sql("ALTER TABLE tab ADD COLUMNS (c2 int)")
         }.getMessage
-        assert(e.contains("does not support ALTER ADD COLUMNS"))
+        assert(
+          e.contains(s"ALTER ADD COLUMNS does not support datasource table with type"))
       }
     }
   }

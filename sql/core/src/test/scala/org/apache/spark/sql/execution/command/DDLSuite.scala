@@ -2235,7 +2235,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
       }.getMessage
-      assert(e.contains("does not support ALTER ADD COLUMNS"))
+      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
     }
   }
 
@@ -2245,7 +2245,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
     }
   }
 
@@ -2255,17 +2255,49 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
+      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
     }
   }
 
   test("alter table add columns with existing column name") {
     withTable("t1") {
-      sql(s"CREATE TABLE t1 (c1 int) USING PARQUET")
+      sql("CREATE TABLE t1 (c1 int) USING PARQUET")
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
       }.getMessage
       assert(e.contains("Found duplicate column(s)"))
+    }
+  }
+
+  Seq("true", "false").foreach { caseSensitive =>
+    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (caseSensitive == "false") {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            assert(sql("SELECT * FROM t1").schema
+              .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+          }
+        }
+      }
+    }
+  }
+
+  test("alter table add columns to table referenced by a view") {
+    withTable("t1") {
+      withView("v1") {
+        sql("CREATE TABLE t1 (c1 int, c2 int) USING PARQUET")
+        sql("CREATE VIEW v1 AS SELECT * FROM t1")
+        val originViewSchema = sql("SELECT * FROM v1").schema
+        sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
+        assert(sql("SELECT * FROM v1").schema == originViewSchema)
+      }
     }
   }
 }

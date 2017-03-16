@@ -193,10 +193,10 @@ case class AlterTableAddColumnsCommand(
     val catalogTable = verifyAlterTableAddColumn(catalog, table)
 
     try {
-      sparkSession.catalog.uncacheTable(table.unquotedString)
+      sparkSession.catalog.uncacheTable(table.quotedString)
     } catch {
       case NonFatal(e) =>
-        log.warn(s"Exception when attempting to uncache table ${table.unquotedString}", e)
+        log.warn(s"Exception when attempting to uncache table ${table.quotedString}", e)
     }
 
     // Invalidate the table last, otherwise uncaching the table would load the logical plan
@@ -206,16 +206,21 @@ case class AlterTableAddColumnsCommand(
     val newSchemaFields = catalogTable.schema
       .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length) ++
       columns ++ partitionFields
-    checkDuplication(newSchemaFields.map(_.name))
+    checkDuplication(sparkSession, newSchemaFields)
     catalog.alterTableSchema(table, newSchema =
       catalogTable.schema.copy(fields = newSchemaFields.toArray))
 
     Seq.empty[Row]
   }
 
-  private def checkDuplication(colNames: Seq[String]): Unit = {
-    if (colNames.distinct.length != colNames.length) {
-      val duplicateColumns = colNames.groupBy(identity).collect {
+  private def checkDuplication(sparkSession: SparkSession, fields: Seq[StructField]): Unit = {
+    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+      fields.map(_.name)
+    } else {
+      fields.map(_.name.toLowerCase)
+    }
+    if (columnNames.distinct.length != columnNames.length) {
+      val duplicateColumns = columnNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => x
       }
       throw new AnalysisException(
@@ -235,7 +240,10 @@ case class AlterTableAddColumnsCommand(
 
     if (catalogTable.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(
-        s"${table.toString} is a VIEW, which does not support ALTER ADD COLUMNS.")
+        s"""
+          |ALTER ADD COLUMNS does not support views.
+          |You must drop and re-create the views for adding the new columns. Views: $table
+         """.stripMargin)
     }
 
     if (DDLUtils.isDatasourceTable(catalogTable)) {
@@ -249,7 +257,10 @@ case class AlterTableAddColumnsCommand(
         case _: JsonFileFormat | _: CSVFileFormat | _: ParquetFileFormat =>
         case s =>
           throw new AnalysisException(
-            s"Datasource table $table with type $s, which does not support ALTER ADD COLUMNS.")
+            s"""
+               |ALTER ADD COLUMNS does not support datasource table with type $s.
+               |You must drop and re-create the views for adding the new columns. Tables: $table
+         """.stripMargin)
       }
     }
 
