@@ -25,12 +25,12 @@ class TableSchemaParserSuite extends SparkFunSuite {
   def parse(sql: String): StructType = CatalystSqlParser.parseTableSchema(sql)
 
   def checkTableSchema(tableSchemaString: String, expectedDataType: DataType): Unit = {
-    test(s"parse ${tableSchemaString.replace("\n", "")}") {
+    test(s"parse $tableSchemaString") {
       assert(parse(tableSchemaString) === expectedDataType)
     }
   }
 
-  def intercept(sql: String): Unit =
+  def assertError(sql: String): Unit =
     intercept[ParseException](CatalystSqlParser.parseTableSchema(sql))
 
   checkTableSchema("a int", new StructType().add("a", "int"))
@@ -79,10 +79,10 @@ class TableSchemaParserSuite extends SparkFunSuite {
   }
 
   // Negative cases
-  intercept("")
-  intercept("a")
-  intercept("a INT b long")
-  intercept("a INT,, b long")
-  intercept("a INT, b long,,")
-  intercept("a INT, b long, c int,")
+  assertError("")
+  assertError("a")
+  assertError("a INT b long")
+  assertError("a INT,, b long")
+  assertError("a INT, b long,,")
+  assertError("a INT, b long, c int,")
 }
