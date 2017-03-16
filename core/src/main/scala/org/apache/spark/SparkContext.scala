@@ -2261,7 +2261,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def killTaskAttempt(
       taskId: Long,
       interruptThread: Boolean = true,
-      reason: String = "cancelled"): Unit = {
+      reason: String = "killed via SparkContext.killTaskAttempt"): Unit = {
     dagScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 
