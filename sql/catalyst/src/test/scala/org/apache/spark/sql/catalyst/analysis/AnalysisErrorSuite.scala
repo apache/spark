@@ -164,7 +164,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "nested aggregate functions",
-    testRelation.groupBy('a)(
+    testRelation.groupBy()(
       AggregateExpression(
         Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
         Complete,
