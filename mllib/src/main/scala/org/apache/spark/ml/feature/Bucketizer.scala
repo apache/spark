@@ -119,7 +119,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
     val newCol = bucketizer(filteredDataset($(inputCol)))
     val newField = prepOutputField(filteredDataset.schema)
-    filteredDataset.select(col("*"), newCol.as($(outputCol), newField.metadata))
+    filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
   private def prepOutputField(schema: StructType): StructField = {
