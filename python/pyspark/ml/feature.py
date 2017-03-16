@@ -938,9 +938,11 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
                          "will be imputed.", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
-    def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, outputCols=None):
+    def __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None,
+                 outputCols=None):
         """
-        __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, outputCols=None):
+        __init__(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
+                 outputCols=None):
         """
         super(Imputer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
@@ -950,9 +952,11 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     @since("2.2.0")
-    def setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, outputCols=None):
+    def setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None,
+                  outputCols=None):
         """
-        setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, outputCols=None)
+        setParams(self, strategy="mean", missingValue=float("nan"), inputCols=None, \
+                  outputCols=None)
         Sets params for this Imputer.
         """
         kwargs = self._input_kwargs
