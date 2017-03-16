@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
@@ -87,7 +86,7 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
     )
   }
 
-  test("deduplicate with all columns and watermark") {
+  test("deduplicate with watermark") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
       .withColumn("eventTime", $"value".cast("timestamp"))
@@ -95,21 +94,6 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       .dropDuplicates()
       .select($"eventTime".cast("long").as[Long])
 
-    testStreamWithWatermark(inputData, result)
-  }
-
-  test("deduplicate with some columns and watermark") {
-    val inputData = MemoryStream[Int]
-    val result = inputData.toDS()
-      .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
-      .dropDuplicates("value")
-      .select($"eventTime".cast("long").as[Long])
-
-    testStreamWithWatermark(inputData, result)
-  }
-
-  private def testStreamWithWatermark(inputData: MemoryStream[Int], result: Dataset[_]) = {
     testStream(result, Append)(
       AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
       CheckLastBatch(10 to 15: _*),

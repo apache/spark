@@ -54,9 +54,9 @@ trait StateStore {
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
   /**
-   * Remove entries that match the following condition.
+   * Remove keys that match the following condition.
    */
-  def remove(condition: (UnsafeRow, UnsafeRow) => Boolean): Unit
+  def remove(condition: UnsafeRow => Boolean): Unit
 
   /**
    * Remove a single key.

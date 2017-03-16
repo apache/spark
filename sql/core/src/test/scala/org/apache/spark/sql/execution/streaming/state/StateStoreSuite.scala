@@ -629,7 +629,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   }
 
   def remove(store: StateStore, condition: String => Boolean): Unit = {
-    store.remove((key, value) => condition(rowToString(key)))
+    store.remove(row => condition(rowToString(row)))
   }
 
   private def put(store: StateStore, key: String, value: Int): Unit = {

@@ -121,13 +121,13 @@ private[state] class HDFSBackedStateStoreProvider(
       writeToDeltaFile(tempDeltaFileStream, ValueUpdated(key, value))
     }
 
-    /** Remove entries that match the following condition */
-    override def remove(condition: (UnsafeRow, UnsafeRow) => Boolean): Unit = {
+    /** Remove keys that match the following condition */
+    override def remove(condition: UnsafeRow => Boolean): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val entryIter = mapToUpdate.entrySet().iterator()
       while (entryIter.hasNext) {
         val entry = entryIter.next
-        if (condition(entry.getKey, entry.getValue)) {
+        if (condition(entry.getKey)) {
           val value = entry.getValue
           val key = entry.getKey
           entryIter.remove()

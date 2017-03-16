@@ -70,34 +70,18 @@ trait StateStoreWriter extends StatefulOperator {
 /** An operator that supports watermark. */
 trait WatermarkSupport extends UnaryExecNode {
 
-  /** The attributes (may have a watermark attribute) that compose state store's key */
+  /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
-
-  /** The attributes that compose state store's value */
-  def valueExpressions: Seq[Attribute]
 
   /** The watermark value. */
   def eventTimeWatermark: Option[Long]
 
-  private def lookupWatermarkAttribute(attributes: Seq[Attribute]): Option[Attribute] =
-    attributes.find(_.metadata.contains(EventTimeWatermark.delayKey))
-
-  /** The watermark attribute (if exists) from the input row */
-  lazy val optionalWatermarkAttribute = lookupWatermarkAttribute(child.output)
-
-  /** The watermark attribute (if exists) from the keys */
-  lazy val optionalWatermarkAttributeInKeys = lookupWatermarkAttribute(keyExpressions)
-
-  /**
-   * If the input row has a watermark attribute that the keys do not contain, then we should
-   * include that watermark attribute in values.
-   */
-  lazy val shouldIncludeWatermarkInValues =
-    optionalWatermarkAttribute.nonEmpty && optionalWatermarkAttributeInKeys.isEmpty
-
   /** Generate an expression that matches data older than the watermark */
-  private def watermarkExpression(attributes: Seq[Attribute]): Option[Expression] = {
-    lookupWatermarkAttribute(attributes).map { watermarkAttribute =>
+  lazy val watermarkExpression: Option[Expression] = {
+    val optionalWatermarkAttribute =
+      keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
+
+    optionalWatermarkAttribute.map { watermarkAttribute =>
       // If we are evicting based on a window, use the end of the window.  Otherwise just
       // use the attribute itself.
       val evictionExpression =
@@ -118,17 +102,13 @@ trait WatermarkSupport extends UnaryExecNode {
 
   /** Generate a predicate based on keys that matches data older than the watermark */
   lazy val watermarkPredicateForKeys: Option[Predicate] =
-    watermarkExpression(keyExpressions).map(newPredicate(_, keyExpressions))
-
-  /** Generate a predicate based on values that matches data older than the watermark */
-  lazy val watermarkPredicateForValues: Option[Predicate] =
-    watermarkExpression(valueExpressions).map(newPredicate(_, valueExpressions))
+    watermarkExpression.map(newPredicate(_, keyExpressions))
 
   /**
    * Generate a predicate based on the child output that matches data older than the watermark.
    */
   lazy val watermarkPredicate: Option[Predicate] =
-    watermarkExpression(child.output).map(newPredicate(_, child.output))
+    watermarkExpression.map(newPredicate(_, child.output))
 }
 
 /**
@@ -178,8 +158,6 @@ case class StateStoreSaveExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
-  override def valueExpressions: Seq[Attribute] = child.output diff keyExpressions
-
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
     assert(outputMode.nonEmpty,
@@ -224,7 +202,7 @@ case class StateStoreSaveExec(
             }
 
             // Assumption: Append mode can be done only when watermark has been specified
-            store.remove((key, value) => watermarkPredicateForKeys.get.eval(key))
+            store.remove(watermarkPredicateForKeys.get.eval _)
             store.commit()
 
             numTotalStateRows += store.numKeys()
@@ -248,7 +226,7 @@ case class StateStoreSaveExec(
                 if (!baseIterator.hasNext) {
                   // Remove old aggregates if watermark specified
                   if (watermarkPredicateForKeys.nonEmpty) {
-                    store.remove((key, value) => watermarkPredicateForKeys.get.eval(key))
+                    store.remove(watermarkPredicateForKeys.get.eval _)
                   }
                   store.commit()
                   numTotalStateRows += store.numKeys()
@@ -378,13 +356,6 @@ case class StreamingDeduplicateExec(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(keyExpressions) :: Nil
 
-  /**
-   * For streaming deduplication, only the watermark attribute (if exists) composes state store's
-   * value.
-   */
-  override def valueExpressions: Seq[Attribute] =
-    if (shouldIncludeWatermarkInValues) Seq(optionalWatermarkAttribute.get) else Seq()
-
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
@@ -397,9 +368,6 @@ case class StreamingDeduplicateExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-      val optionalGetWatermark = optionalWatermarkAttribute.map { watermarkAttribute =>
-        GenerateUnsafeProjection.generate(Seq(watermarkAttribute), child.output)
-      }
       val numOutputRows = longMetric("numOutputRows")
       val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
@@ -414,14 +382,7 @@ case class StreamingDeduplicateExec(
         val key = getKey(row)
         val value = store.get(key)
         if (value.isEmpty) {
-          if (shouldIncludeWatermarkInValues) {
-            // the watermark attribute is going to be stored as state store value
-            store.put(key.copy(), optionalGetWatermark.get.apply(row))
-          } else {
-            // either the watermark attribute is going to be stored as part of state store key,
-            // or there is no watermark attribute at all
-            store.put(key.copy(), StreamingDeduplicateExec.EMPTY_ROW)
-          }
+          store.put(key.copy(), StreamingDeduplicateExec.EMPTY_ROW)
           numUpdatedStateRows += 1
           numOutputRows += 1
           true
@@ -432,17 +393,7 @@ case class StreamingDeduplicateExec(
       }
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        if (shouldIncludeWatermarkInValues) {
-          // watermark attribute is stored as value, so eval using `watermarkPredicateForValues`
-          // on value
-          watermarkPredicateForValues.foreach(f => store.remove((key, value) => f.eval(value)))
-        } else if (optionalWatermarkAttributeInKeys.nonEmpty) {
-          // watermark attribute is stored as part of key, so eval using
-          // `watermarkPredicateForKeys` on key
-          watermarkPredicateForKeys.foreach(f => store.remove((key, value) => f.eval(key)))
-        } else {
-          // otherwise there is no watermark attribute, and we cannot remove anything
-        }
+        watermarkPredicateForKeys.foreach(f => store.remove(f.eval _))
         store.commit()
         numTotalStateRows += store.numKeys()
       })
