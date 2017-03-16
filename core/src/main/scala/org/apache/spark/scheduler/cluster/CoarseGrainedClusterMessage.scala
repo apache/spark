@@ -43,6 +43,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
+  case class KillExecutorsOnHost(host: String)
+    extends CoarseGrainedClusterMessage
+
   sealed trait RegisterExecutorResponse
 
   case object RegisteredExecutor extends CoarseGrainedClusterMessage with RegisterExecutorResponse
@@ -99,7 +102,8 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RequestExecutors(
       requestedTotal: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int])
+      hostToLocalTaskCount: Map[String, Int],
+      nodeBlacklist: Set[String])
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.

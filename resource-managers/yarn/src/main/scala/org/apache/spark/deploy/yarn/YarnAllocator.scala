@@ -101,7 +101,7 @@ private[yarn] class YarnAllocator(
    * @see SPARK-12864
    */
   private var executorIdCounter: Int =
-    driverRef.askWithRetry[Int](RetrieveLastAllocatedExecutorId)
+    driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
   // Queue to store the timestamp of failed executors
   private val failedExecutorsTimeStamps = new Queue[Long]()
@@ -113,6 +113,8 @@ private[yarn] class YarnAllocator(
 
   @volatile private var targetNumExecutors =
     YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
+
+  private var currentNodeBlacklist = Set.empty[String]
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
   // list of requesters that should be responded to once we find out why the given executor
@@ -148,20 +150,6 @@ private[yarn] class YarnAllocator(
 
   private val labelExpression = sparkConf.get(EXECUTOR_NODE_LABEL_EXPRESSION)
 
-  // ContainerRequest constructor that can take a node label expression. We grab it through
-  // reflection because it's only available in later versions of YARN.
-  private val nodeLabelConstructor = labelExpression.flatMap { expr =>
-    try {
-      Some(classOf[ContainerRequest].getConstructor(classOf[Resource],
-        classOf[Array[String]], classOf[Array[String]], classOf[Priority], classOf[Boolean],
-        classOf[String]))
-    } catch {
-      case e: NoSuchMethodException =>
-        logWarning(s"Node label expression $expr will be ignored because YARN version on" +
-          " classpath does not support it.")
-        None
-    }
-  }
 
   // A map to store preferred hostname and possible task numbers running on it.
   private var hostToLocalTaskCounts: Map[String, Int] = Map.empty
@@ -217,18 +205,35 @@ private[yarn] class YarnAllocator(
    * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
+   * @param nodeBlacklist a set of blacklisted nodes, which is passed in to avoid allocating new
+    *                      containers on them. It will be used to update the application master's
+    *                      blacklist.
    * @return Whether the new requested total is different than the old value.
    */
   def requestTotalExecutorsWithPreferredLocalities(
       requestedTotal: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int]): Boolean = synchronized {
+      hostToLocalTaskCount: Map[String, Int],
+      nodeBlacklist: Set[String]): Boolean = synchronized {
     this.numLocalityAwareTasks = localityAwareTasks
     this.hostToLocalTaskCounts = hostToLocalTaskCount
 
     if (requestedTotal != targetNumExecutors) {
       logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
       targetNumExecutors = requestedTotal
+
+      // Update blacklist infomation to YARN ResouceManager for this application,
+      // in order to avoid allocating new Containers on the problematic nodes.
+      val blacklistAdditions = nodeBlacklist -- currentNodeBlacklist
+      val blacklistRemovals = currentNodeBlacklist -- nodeBlacklist
+      if (blacklistAdditions.nonEmpty) {
+        logInfo(s"adding nodes to YARN application master's blacklist: $blacklistAdditions")
+      }
+      if (blacklistRemovals.nonEmpty) {
+        logInfo(s"removing nodes from YARN application master's blacklist: $blacklistRemovals")
+      }
+      amClient.updateBlacklist(blacklistAdditions.toList.asJava, blacklistRemovals.toList.asJava)
+      currentNodeBlacklist = nodeBlacklist
       true
     } else {
       false
@@ -395,10 +400,7 @@ private[yarn] class YarnAllocator(
       resource: Resource,
       nodes: Array[String],
       racks: Array[String]): ContainerRequest = {
-    nodeLabelConstructor.map { constructor =>
-      constructor.newInstance(resource, nodes, racks, RM_REQUEST_PRIORITY, true: java.lang.Boolean,
-        labelExpression.orNull)
-    }.getOrElse(new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY))
+    new ContainerRequest(resource, nodes, racks, RM_REQUEST_PRIORITY, true, labelExpression.orNull)
   }
 
   /**

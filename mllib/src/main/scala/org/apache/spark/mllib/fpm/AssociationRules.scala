@@ -54,7 +54,7 @@ class AssociationRules private[fpm] (
   }
 
   /**
-   * Computes the association rules with confidence above [[minConfidence]].
+   * Computes the association rules with confidence above `minConfidence`.
    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
    * @return a `Set[Rule[Item]]` containing the association rules.
    *
@@ -80,7 +80,9 @@ class AssociationRules private[fpm] (
     }.filter(_.confidence >= minConfidence)
   }
 
-  /** Java-friendly version of [[run]]. */
+  /**
+   * Java-friendly version of `run`.
+   */
   @Since("1.5.0")
   def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
     val tag = fakeClassTag[Item]

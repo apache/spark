@@ -311,12 +311,41 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-18989: DESC TABLE should not fail with format class not found") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+
+    val argsForCreateTable = Seq(
+      "--class", SPARK_18989_CREATE_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18947",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--jars", TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath,
+      unusedJar.toString)
+    runSparkSubmit(argsForCreateTable)
+
+    val argsForShowTables = Seq(
+      "--class", SPARK_18989_DESC_TABLE.getClass.getName.stripSuffix("$"),
+      "--name", "SPARK-18947",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      unusedJar.toString)
+    runSparkSubmit(argsForShowTables)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val history = ArrayBuffer.empty[String]
-    val commands = Seq("./bin/spark-submit") ++ args
+    val sparkSubmit = if (Utils.isWindows) {
+      // On Windows, `ProcessBuilder.directory` does not change the current working directory.
+      new File("..\\..\\bin\\spark-submit.cmd").getAbsolutePath
+    } else {
+      "./bin/spark-submit"
+    }
+    val commands = Seq(sparkSubmit) ++ args
     val commandLine = commands.mkString("'", "' '", "'")
 
     val builder = new ProcessBuilder(commands: _*).directory(new File(sparkHome))
@@ -456,7 +485,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        "file:" + expectedWarehouseLocation.toString + "/testlocation"
+        CatalogUtils.stringToURI(s"file:${expectedWarehouseLocation.toString}/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -471,8 +500,8 @@ object SetWarehouseLocationTest extends Logging {
       sparkSession.sql("create table testLocation (a int)")
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
-      val expectedLocation =
-        "file:" + expectedWarehouseLocation.toString + "/testlocationdb.db/testlocation"
+      val expectedLocation = CatalogUtils.stringToURI(
+        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -839,17 +868,42 @@ object SPARK_18360 {
       val rawTable = hiveClient.getTable("default", "test_tbl")
       // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
       // location for tables in default database.
-      assert(rawTable.storage.locationUri.get.contains(newWarehousePath))
+      assert(rawTable.storage.locationUri.map(
+        CatalogUtils.URIToString(_)).get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
       // Spark SQL will use the location of default database to generate default table
       // location for tables in default database.
-      assert(readBack.storage.locationUri.get.contains(defaultDbLocation))
+      assert(readBack.storage.locationUri.map(CatalogUtils.URIToString(_))
+        .get.contains(defaultDbLocation))
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")
+    }
+  }
+}
+
+object SPARK_18989_CREATE_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    spark.sql(
+      """
+        |CREATE TABLE IF NOT EXISTS base64_tbl(val string) STORED AS
+        |INPUTFORMAT 'org.apache.hadoop.hive.contrib.fileformat.base64.Base64TextInputFormat'
+        |OUTPUTFORMAT 'org.apache.hadoop.hive.contrib.fileformat.base64.Base64TextOutputFormat'
+      """.stripMargin)
+  }
+}
+
+object SPARK_18989_DESC_TABLE {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
+    try {
+      spark.sql("DESC base64_tbl")
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS base64_tbl")
     }
   }
 }

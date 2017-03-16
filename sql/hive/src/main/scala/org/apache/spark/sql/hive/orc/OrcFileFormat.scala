@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.orc
 import java.net.URI
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -196,6 +198,11 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 
   private[this] val cachedOrcStruct = structOI.create().asInstanceOf[OrcStruct]
 
+  // Wrapper functions used to wrap Spark SQL input arguments into Hive specific format
+  private[this] val wrappers = dataSchema.zip(structOI.getAllStructFieldRefs().asScala.toSeq).map {
+    case (f, i) => wrapperFor(i.getFieldObjectInspector, f.dataType)
+  }
+
   private[this] def wrapOrcStruct(
       struct: OrcStruct,
       oi: SettableStructObjectInspector,
@@ -208,10 +215,8 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
       oi.setStructFieldData(
         struct,
         fieldRefs.get(i),
-        wrap(
-          row.get(i, dataSchema(i).dataType),
-          fieldRefs.get(i).getFieldObjectInspector,
-          dataSchema(i).dataType))
+        wrappers(i)(row.get(i, dataSchema(i).dataType))
+      )
       i += 1
     }
   }
@@ -239,10 +244,7 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit =
-    throw new UnsupportedOperationException("call writeInternal")
-
-  override protected[sql] def writeInternal(row: InternalRow): Unit = {
+  override def write(row: InternalRow): Unit = {
     recordWriter.write(NullWritable.get(), serializer.serialize(row))
   }
 

@@ -28,7 +28,7 @@ setGeneric("cacheRDD", function(x) { standardGeneric("cacheRDD") })
 # @rdname coalesce
 # @seealso repartition
 # @export
-setGeneric("coalesce", function(x, numPartitions, ...) { standardGeneric("coalesce") })
+setGeneric("coalesceRDD", function(x, numPartitions, ...) { standardGeneric("coalesceRDD") })
 
 # @rdname checkpoint-methods
 # @export
@@ -66,7 +66,7 @@ setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("fre
 # @rdname approxQuantile
 # @export
 setGeneric("approxQuantile",
-           function(x, col, probabilities, relativeError) {
+           function(x, cols, probabilities, relativeError) {
              standardGeneric("approxQuantile")
            })
 
@@ -138,9 +138,9 @@ setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 # @export
 setGeneric("name", function(x) { standardGeneric("name") })
 
-# @rdname getNumPartitions
+# @rdname getNumPartitionsRDD
 # @export
-setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
+setGeneric("getNumPartitionsRDD", function(x) { standardGeneric("getNumPartitionsRDD") })
 
 # @rdname getNumPartitions
 # @export
@@ -406,6 +406,13 @@ setGeneric("attach")
 #' @export
 setGeneric("cache", function(x) { standardGeneric("cache") })
 
+#' @rdname coalesce
+#' @param x a Column or a SparkDataFrame.
+#' @param ... additional argument(s). If \code{x} is a Column, additional Columns can be optionally
+#'        provided.
+#' @export
+setGeneric("coalesce", function(x, ...) { standardGeneric("coalesce") })
+
 #' @rdname collect
 #' @export
 setGeneric("collect", function(x, ...) { standardGeneric("collect") })
@@ -491,6 +498,10 @@ setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 #' @rdname gapplyCollect
 #' @export
 setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") })
+
+# @rdname getNumPartitions
+# @export
+setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
 
 #' @rdname summary
 #' @export
@@ -980,6 +991,10 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
+#' @rdname from_json
+#' @export
+setGeneric("from_json", function(x, schema, ...) { standardGeneric("from_json") })
+
 #' @rdname from_unixtime
 #' @export
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
@@ -1252,7 +1267,15 @@ setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname to_date
 #' @export
-setGeneric("to_date", function(x) { standardGeneric("to_date") })
+setGeneric("to_date", function(x, format) { standardGeneric("to_date") })
+
+#' @rdname to_json
+#' @export
+setGeneric("to_json", function(x, ...) { standardGeneric("to_json") })
+
+#' @rdname to_timestamp
+#' @export
+setGeneric("to_timestamp", function(x, format) { standardGeneric("to_timestamp") })
 
 #' @rdname to_utc_timestamp
 #' @export
@@ -1338,6 +1361,11 @@ setGeneric("rbind", signature = "...")
 #' @export
 setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
 
+#' @rdname spark.bisectingKmeans
+#' @export
+setGeneric("spark.bisectingKmeans",
+           function(data, formula, ...) { standardGeneric("spark.bisectingKmeans") })
+
 #' @rdname spark.gaussianMixture
 #' @export
 setGeneric("spark.gaussianMixture",
@@ -1386,7 +1414,11 @@ setGeneric("spark.randomForest",
 
 #' @rdname spark.survreg
 #' @export
-setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
+setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
+
+#' @rdname spark.svmLinear
+#' @export
+setGeneric("spark.svmLinear", function(data, formula, ...) { standardGeneric("spark.svmLinear") })
 
 #' @rdname spark.lda
 #' @export

@@ -58,12 +58,10 @@ private[hive] trait HiveClient {
   def setCurrentDatabase(databaseName: String): Unit
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
-  final def getDatabase(name: String): CatalogDatabase = {
-    getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException(name))
-  }
+  def getDatabase(name: String): CatalogDatabase
 
-  /** Returns the metadata for a given database, or None if it doesn't exist. */
-  def getDatabaseOption(name: String): Option[CatalogDatabase]
+  /** Return whether a table/view with the specified name exists. */
+  def databaseExists(dbName: String): Boolean
 
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
@@ -210,7 +208,6 @@ private[hive] trait HiveClient {
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit
 
@@ -219,7 +216,6 @@ private[hive] trait HiveClient {
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean,
       isSrcLocal: Boolean): Unit
 
   /** Loads new dynamic partitions into an existing table. */
@@ -229,8 +225,7 @@ private[hive] trait HiveClient {
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit
+      numDP: Int): Unit
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit

@@ -47,19 +47,6 @@ abstract class OutputWriterFactory extends Serializable {
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
-
-  /**
-   * Returns a new instance of [[OutputWriter]] that will write data to the given path.
-   * This method gets called by each task on executor to write InternalRows to
-   * format-specific files. Compared to the other `newInstance()`, this is a newer API that
-   * passes only the path that the writer must write to. The writer must write to the exact path
-   * and not modify it (do not add subdirectories, extensions, etc.). All other
-   * file-format-specific information needed to create the writer must be passed
-   * through the [[OutputWriterFactory]] implementation.
-   */
-  def newWriter(path: String): OutputWriter = {
-    throw new UnsupportedOperationException("newInstance with just path not supported")
-  }
 }
 
 
@@ -74,22 +61,11 @@ abstract class OutputWriter {
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
    */
-  def write(row: Row): Unit
+  def write(row: InternalRow): Unit
 
   /**
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
    */
   def close(): Unit
-
-  private var converter: InternalRow => Row = _
-
-  protected[sql] def initConverter(dataSchema: StructType) = {
-    converter =
-      CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
-  }
-
-  protected[sql] def writeInternal(row: InternalRow): Unit = {
-    write(converter(row))
-  }
 }

@@ -75,10 +75,10 @@ class TypedColumn[-T, U](
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.copy(
-          inputDeserializer = Some(unresolvedDeserializer),
-          inputClass = Some(inputEncoder.clsTag.runtimeClass),
-          inputSchema = Some(inputEncoder.schema))
+        ta.withInputInfo(
+          deser = unresolvedDeserializer,
+          cls = inputEncoder.clsTag.runtimeClass,
+          schema = inputEncoder.schema)
     }
     new TypedColumn[T, U](newExpr, encoder)
   }
@@ -166,10 +166,7 @@ class Column(val expr: Expression) extends Logging {
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
-    case explode: Explode => MultiAlias(explode, Nil)
-    case explode: PosExplode => MultiAlias(explode, Nil)
-
-    case jt: JsonTuple => MultiAlias(jt, Nil)
+    case g: Generator => MultiAlias(g, Nil)
 
     case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
@@ -177,7 +174,7 @@ class Column(val expr: Expression) extends Logging {
     // NamedExpression under this Cast.
     case c: Cast =>
       c.transformUp {
-        case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
+        case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
         case other => Alias(expr, usePrettyExpression(expr).sql)()

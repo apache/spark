@@ -242,11 +242,12 @@ class PlannerSuite extends SharedSQLContext {
     val doubleRepartitioned = testData.repartition(10).repartition(20).coalesce(5)
     def countRepartitions(plan: LogicalPlan): Int = plan.collect { case r: Repartition => r }.length
     assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
-    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 1)
+    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 2)
     doubleRepartitioned.queryExecution.optimizedPlan match {
-      case r: Repartition =>
-        assert(r.numPartitions === 5)
-        assert(r.shuffle === false)
+      case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
+        assert(numPartitions === 5)
+        assert(shuffle === false)
+        assert(shuffleChild === true)
     }
   }
 
@@ -363,7 +364,7 @@ class PlannerSuite extends SharedSQLContext {
   // This is a regression test for SPARK-9703
   test("EnsureRequirements should not repartition if only ordering requirement is unsatisfied") {
     // Consider an operator that imposes both output distribution and  ordering requirements on its
-    // children, such as sort sort merge join. If the distribution requirements are satisfied but
+    // children, such as sort merge join. If the distribution requirements are satisfied but
     // the output ordering requirements are unsatisfied, then the planner should only add sorts and
     // should not need to add additional shuffles / exchanges.
     val outputOrdering = Seq(SortOrder(Literal(1), Ascending))

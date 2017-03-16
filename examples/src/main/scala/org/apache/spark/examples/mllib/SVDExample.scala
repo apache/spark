@@ -56,6 +56,8 @@ object SVDExample {
     collect.foreach { vector => println(vector) }
     println(s"Singular values are: $s")
     println(s"V factor is:\n$V")
+
+    sc.stop()
   }
 }
 // scalastyle:on println

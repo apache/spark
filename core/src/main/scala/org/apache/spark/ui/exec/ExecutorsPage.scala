@@ -39,6 +39,7 @@ private[ui] case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
+    isBlacklisted: Int,
     maxMemory: Long,
     executorLogs: Map[String, String])
 
@@ -101,6 +102,7 @@ private[spark] object ExecutorsPage {
       taskSummary.inputBytes,
       taskSummary.shuffleRead,
       taskSummary.shuffleWrite,
+      taskSummary.isBlacklisted,
       maxMem,
       taskSummary.executorLogs
     )

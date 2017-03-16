@@ -84,6 +84,8 @@ case class EventTimeWatermarkExec(
     child: SparkPlan) extends SparkPlan {
 
   val eventTimeStats = new EventTimeStatsAccum()
+  val delayMs = EventTimeWatermark.getDelayMs(delay)
+
   sparkContext.register(eventTimeStats)
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -100,10 +102,16 @@ case class EventTimeWatermarkExec(
   override val output: Seq[Attribute] = child.output.map { a =>
     if (a semanticEquals eventTime) {
       val updatedMetadata = new MetadataBuilder()
-          .withMetadata(a.metadata)
-          .putLong(EventTimeWatermark.delayKey, delay.milliseconds)
-          .build()
-
+        .withMetadata(a.metadata)
+        .putLong(EventTimeWatermark.delayKey, delayMs)
+        .build()
+      a.withMetadata(updatedMetadata)
+    } else if (a.metadata.contains(EventTimeWatermark.delayKey)) {
+      // Remove existing watermark
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .remove(EventTimeWatermark.delayKey)
+        .build()
       a.withMetadata(updatedMetadata)
     } else {
       a

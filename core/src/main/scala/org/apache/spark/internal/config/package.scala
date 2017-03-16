@@ -114,8 +114,18 @@ package object config {
       .intConf
       .createWithDefault(2)
 
+  private[spark] val MAX_FAILURES_PER_EXEC =
+    ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
+      .intConf
+      .createWithDefault(2)
+
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .intConf
+      .createWithDefault(2)
+
+  private[spark] val MAX_FAILED_EXEC_PER_NODE =
+    ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
@@ -128,6 +138,11 @@ package object config {
     ConfigBuilder("spark.blacklist.timeout")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val BLACKLIST_KILL_ENABLED =
+    ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
     ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
@@ -233,4 +248,20 @@ package object config {
         "and event logs.")
       .stringConf
       .createWithDefault("(?i)secret|password")
+
+  private[spark] val NETWORK_AUTH_ENABLED =
+    ConfigBuilder("spark.authenticate")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SASL_ENCRYPTION_ENABLED =
+    ConfigBuilder("spark.authenticate.enableSaslEncryption")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val NETWORK_ENCRYPTION_ENABLED =
+    ConfigBuilder("spark.network.crypto.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
 }

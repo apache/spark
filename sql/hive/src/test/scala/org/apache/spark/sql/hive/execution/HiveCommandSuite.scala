@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
@@ -149,8 +148,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempView("parquet_temp") {
       sql(
         """
-          |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
-          |USING org.apache.spark.sql.parquet.DefaultSource
+         |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
+         |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
 
       // An empty sequence of row is returned for session temporary table.
@@ -202,11 +201,12 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       // LOAD DATA INTO non-partitioned table can't specify partition
       intercept[AnalysisException] {
-        sql(s"""$loadQuery INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
+        sql(
+          s"""$loadQuery INPATH "${testData.toURI}" INTO TABLE non_part_table PARTITION(ds="1")""")
       }
 
       withInputFile { path =>
-        sql(s"""$loadQuery INPATH "$path" INTO TABLE non_part_table""")
+        sql(s"""$loadQuery INPATH "${path.toURI}" INTO TABLE non_part_table""")
 
         // Non-local mode is expected to move the file, while local mode is expected to copy it.
         // Check once here that the behavior is the expected.
@@ -222,7 +222,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       //
       // TODO: need a similar test for non-local mode.
       if (local) {
-        val incorrectUri = "file:/" + testData.getAbsolutePath()
+        val incorrectUri = "file://path/to/data/files/employee.dat"
         intercept[AnalysisException] {
           sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
         }
@@ -231,7 +231,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       // Use URI as inpath:
       // file:/path/to/data/files/employee.dat
       withInputFile { path =>
-        sql(s"""$loadQuery INPATH "${path.toURI()}" INTO TABLE non_part_table""")
+        sql(s"""$loadQuery INPATH "${path.toURI}" INTO TABLE non_part_table""")
       }
 
       checkAnswer(
@@ -240,7 +240,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       // Overwrite existing data.
       withInputFile { path =>
-        sql(s"""$loadQuery INPATH "${path.toURI()}" OVERWRITE INTO TABLE non_part_table""")
+        sql(s"""$loadQuery INPATH "${path.toURI}" OVERWRITE INTO TABLE non_part_table""")
       }
 
       checkAnswer(
@@ -257,7 +257,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         """.stripMargin)
 
       // LOAD DATA INTO partitioned table must specify partition
-      withInputFile { path =>
+      withInputFile { f =>
+        val path = f.toURI
         intercept[AnalysisException] {
           sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table""")
         }
@@ -273,16 +274,16 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         }
       }
 
-      withInputFile { path =>
-        sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(c="1", d="2")""")
+      withInputFile { f =>
+        sql(s"""$loadQuery INPATH "${f.toURI}" INTO TABLE part_table PARTITION(c="1", d="2")""")
       }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
         sql("SELECT * FROM non_part_table").collect())
 
       // Different order of partition columns.
-      withInputFile { path =>
-        sql(s"""$loadQuery INPATH "$path" INTO TABLE part_table PARTITION(d="1", c="2")""")
+      withInputFile { f =>
+        sql(s"""$loadQuery INPATH "${f.toURI}" INTO TABLE part_table PARTITION(d="1", c="2")""")
       }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
@@ -300,7 +301,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |LINES TERMINATED BY '\n'
         """.stripMargin)
 
-      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").toURI
 
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
       checkAnswer(
@@ -400,8 +401,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTempView("parquet_temp") {
       sql(
         """
-          |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
-          |USING org.apache.spark.sql.parquet.DefaultSource
+         |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
+         |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
       // An empty sequence of row is returned for session temporary table.
       intercept[NoSuchTableException] {

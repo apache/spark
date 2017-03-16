@@ -225,15 +225,22 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
 
   /**
    * Train a model using the given dataset and parameters.
-   * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
+   * Developers can implement this instead of `fit()` to avoid dealing with schema validation
    * and copying parameters into the model.
    *
    * @param dataset Training dataset
    * @return Fitted model
    */
   override protected def train(dataset: Dataset[_]): MultilayerPerceptronClassificationModel = {
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(labelCol, featuresCol, predictionCol, layers, maxIter, tol,
+      blockSize, solver, stepSize, seed)
+
     val myLayers = $(layers)
     val labels = myLayers.last
+    instr.logNumClasses(labels)
+    instr.logNumFeatures(myLayers.head)
+
     val lpData = extractLabeledPoints(dataset)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, softmaxOnTop = true)
@@ -258,7 +265,10 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     }
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
-    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
+    val model = new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
+
+    instr.logSuccess(model)
+    model
   }
 }
 
@@ -311,7 +321,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   * This internal method is used to implement `transform()` and output [[predictionCol]].
    */
   override protected def predict(features: Vector): Double = {
     LabelConverter.decodeLabel(mlpModel.predict(features))

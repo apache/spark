@@ -57,7 +57,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  testWithUninterruptibleThread("HDFSMetadataLog: basic") {
+  test("HDFSMetadataLog: basic") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
@@ -82,20 +82,19 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  testWithUninterruptibleThread(
-    "HDFSMetadataLog: fallback from FileContext to FileSystem", quietly = true) {
+  testQuietly("HDFSMetadataLog: fallback from FileContext to FileSystem") {
     spark.conf.set(
       s"fs.$scheme.impl",
       classOf[FakeFileSystem].getName)
     withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://$temp")
+      val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
 
 
-      val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://$temp")
+      val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
       assert(metadataLog2.get(0) === Some("batch0"))
       assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog2.get(None, Some(0)) === Array(0 -> "batch0"))
@@ -103,7 +102,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  testWithUninterruptibleThread("HDFSMetadataLog: purge") {
+  test("HDFSMetadataLog: purge") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
@@ -128,7 +127,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  testWithUninterruptibleThread("HDFSMetadataLog: restart") {
+  test("HDFSMetadataLog: restart") {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
@@ -209,14 +208,13 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     // Open and delete
-    val f1 = fm.open(path)
+    fm.open(path).close()
     fm.delete(path)
     assert(!fm.exists(path))
     intercept[IOException] {
       fm.open(path)
     }
-    fm.delete(path)  // should not throw exception
-    f1.close()
+    fm.delete(path) // should not throw exception
 
     // Rename
     val path1 = new Path(s"$dir/file1")

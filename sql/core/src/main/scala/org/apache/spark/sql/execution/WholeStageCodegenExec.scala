@@ -206,6 +206,21 @@ trait CodegenSupport extends SparkPlan {
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
   }
+
+  /**
+   * For optimization to suppress shouldStop() in a loop of WholeStageCodegen.
+   * Returning true means we need to insert shouldStop() into the loop producing rows, if any.
+   */
+  def isShouldStopRequired: Boolean = {
+    return shouldStopRequired && (this.parent == null || this.parent.isShouldStopRequired)
+  }
+
+  /**
+   * Set to false if this plan consumes all rows produced by children but doesn't output row
+   * to buffer by calling append(), so the children don't require shouldStop()
+   * in the loop of producing rows.
+   */
+  protected def shouldStopRequired: Boolean = true
 }
 
 
@@ -241,7 +256,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val row = ctx.freshName("row")
     s"""
-       | while ($input.hasNext()) {
+       | while ($input.hasNext() && !stopEarly()) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   ${consume(ctx, null, row).trim}
        |   if (shouldStop()) return;
@@ -254,7 +269,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
       verbose: Boolean,
-      prefix: String = ""): StringBuilder = {
+      prefix: String = "",
+      addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "")
   }
 }
@@ -428,7 +444,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
       verbose: Boolean,
-      prefix: String = ""): StringBuilder = {
+      prefix: String = "",
+      addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "*")
   }
 }
