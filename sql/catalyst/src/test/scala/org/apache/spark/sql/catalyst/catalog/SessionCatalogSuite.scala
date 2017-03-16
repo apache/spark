@@ -1092,11 +1092,6 @@ abstract class SessionCatalogSuite extends PlanTest {
           properties = Map.empty, locationUri = None, serde = None))).toSet
 
     actualPartsNormalize == expectedPartsNormalize
-//    actualParts.map(p =>
-//      p.copy(storage = p.storage.copy(
-//        properties = Map.empty, locationUri = None))).toSet ==
-//      expectedParts.map(p =>
-//        p.copy(storage = p.storage.copy(properties = Map.empty, locationUri = None))).toSet
   }
 
   // --------------------------------------------------------------------------
