@@ -861,15 +861,19 @@ object TypeCoercion {
         e.withNewChildren(children)
 
       case e: ImplicitCastInputTypesToSameType =>
-        val children: Seq[Expression] =
-          if (NumericType.acceptsType(e.children.head.dataType)) {
-            e.children.map(child => implicitCast(child, DoubleType).
-              getOrElse(Literal.create(null, DoubleType)))
-          } else {
-            e.children.map(child => implicitCast(child, StringType).
-              getOrElse(Literal.create(null, StringType)))
-          }
-        e.withNewChildren(children)
+        if (e.children.map(_.dataType).count(_ != e.children.head.dataType) == 0) {
+          e
+        } else {
+          val children: Seq[Expression] =
+            if (NumericType.acceptsType(e.children.head.dataType)) {
+              e.children.map(child => implicitCast(child, DoubleType).
+                getOrElse(Literal.create(null, DoubleType)))
+            } else {
+              e.children.map(child => implicitCast(child, StringType).
+                getOrElse(Literal.create(null, StringType)))
+            }
+          e.withNewChildren(children)
+        }
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do

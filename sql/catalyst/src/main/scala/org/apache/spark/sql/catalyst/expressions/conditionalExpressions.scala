@@ -351,7 +351,8 @@ case class Field(children: Seq[Expression]) extends Expression
   private lazy val ordering = TypeUtils.getInterpretedOrdering(children(0).dataType)
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(
-    TypeCollection(DoubleType, StringType))
+    TypeCollection(
+      BinaryType, BooleanType, DateType, NumericType, StringType, TimestampType, NullType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val result = super.checkInputDataTypes()
