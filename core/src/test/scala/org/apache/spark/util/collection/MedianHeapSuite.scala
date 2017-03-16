@@ -54,7 +54,6 @@ class MedianHeapSuite extends SparkFunSuite {
     val array = Array(0, 0, 1, 1, 2, 2, 3, 3, 4, 4)
     val medianHeap = new MedianHeap()
     array.foreach(medianHeap.insert(_))
-    Arrays.sort(array)
     assert(medianHeap.size === 10)
     assert(medianHeap.median === ((array(4) + array(5)) / 2.0))
   }
