@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.util
+import java.util.Arrays
 import java.util.NoSuchElementException
 
 import scala.collection.mutable.ArrayBuffer
@@ -31,7 +31,7 @@ class MedianHeapSuite extends SparkFunSuite {
     val medianHeap = new MedianHeap()
     var valid = false
     try {
-      medianHeap.findMedian()
+      medianHeap.median
     } catch {
       case e: NoSuchElementException =>
         valid = true
@@ -40,43 +40,28 @@ class MedianHeapSuite extends SparkFunSuite {
     assert(valid)
   }
 
-  test("Median should be correct when size of MedianHeap is even or odd") {
-    val random = new Random()
-    val medianHeap1 = new MedianHeap()
-    val array1 = new Array[Int](100)
-    (0 until 100).foreach {
-      case i =>
-        val randomNumber = random.nextInt(1000)
-        medianHeap1.insert(randomNumber)
-        array1(i) += randomNumber
-    }
-    util.Arrays.sort(array1)
-    assert(medianHeap1.findMedian() === ((array1(49) + array1(50)) / 2.0))
+  test("Median should be correct when size of MedianHeap is even") {
+    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    val medianHeap = new MedianHeap()
+    array.foreach(medianHeap.insert(_))
+    assert(medianHeap.size() === 10)
+    assert(medianHeap.median === ((array(4) + array(5)) / 2.0))
+  }
 
-    val medianHeap2 = new MedianHeap()
-    val array2 = new Array[Int](101)
-    (0 until 101).foreach {
-      case i =>
-        val randomNumber = random.nextInt(1000)
-        medianHeap2.insert(randomNumber)
-        array2(i) += randomNumber
-    }
-    util.Arrays.sort(array2)
-    assert(medianHeap2.findMedian() === array2(50))
+  test("Median should be correct when size of MedianHeap is odd") {
+    val array = Array(0, 1, 2, 3, 4, 5, 6, 7, 8)
+    val medianHeap = new MedianHeap()
+    array.foreach(medianHeap.insert(_))
+    assert(medianHeap.size() === 9)
+    assert(medianHeap.median === (array(4)))
   }
 
   test("Size of Median should be correct though there are duplicated numbers inside.") {
-    val random = new Random()
+    val array = Array(0, 0, 1, 1, 2, 2, 3, 3, 4, 4)
     val medianHeap = new MedianHeap()
-    val array = new Array[Int](1000)
-    (0 until 1000).foreach {
-      case i =>
-        val randomNumber = random.nextInt(100)
-        medianHeap.insert(randomNumber)
-        array(i) += randomNumber
-    }
-    util.Arrays.sort(array)
-    assert(medianHeap.size === 1000)
-    assert(medianHeap.findMedian() === ((array(499) + array(500)) / 2.0))
+    array.foreach(medianHeap.insert(_))
+    Arrays.sort(array)
+    assert(medianHeap.size === 10)
+    assert(medianHeap.median === ((array(4) + array(5)) / 2.0))
   }
 }

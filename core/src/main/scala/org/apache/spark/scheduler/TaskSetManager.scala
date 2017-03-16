@@ -143,7 +143,9 @@ private[spark] class TaskSetManager(
   // Task index, start and finish time for each task attempt (indexed by task ID)
   val taskInfos = new HashMap[Long, TaskInfo]
 
-  // Use a MedianHeap to record durations of successful tasks when speculation is enabled.
+  // Use a MedianHeap to record durations of successful tasks so we know when to launch
+  // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
+  // of inserting into the heap when the heap won't be used.
   val successfulTaskDurations = new MedianHeap()
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
@@ -919,7 +921,7 @@ private[spark] class TaskSetManager(
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
     // zombie.
-    if (isZombie || numTasks == 1 || !speculationEnabled) {
+    if (isZombie || numTasks == 1) {
       return false
     }
     var foundTasks = false
@@ -928,7 +930,7 @@ private[spark] class TaskSetManager(
 
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
-      var medianDuration = successfulTaskDurations.findMedian()
+      var medianDuration = successfulTaskDurations.median
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.

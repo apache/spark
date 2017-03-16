@@ -17,51 +17,53 @@
 
 package org.apache.spark.util.collection
 
-import scala.collection.mutable
+import scala.collection.mutable.PriorityQueue
 
 /**
- * MedianHeap inserts number by O(log n) and returns the median by O(1) time complexity.
- * The basic idea is to maintain two heaps: a maxHeap and a minHeap. The maxHeap stores
- * the smaller half of all numbers while the minHeap stores the larger half.  The sizes
- * of two heaps need to be balanced each time when a new number is inserted so that their
- * sizes will not be different by more than 1. Therefore each time when findMedian() is
- * called we check if two heaps have the same size. If they do, we should return the
- * average of the two top values of heaps. Otherwise we return the top of the heap which
- * has one more element.
+ * MedianHeap is designed to be used to quickly track the median of a group of numbers
+ * that may contain duplicates. Inserting a new number has O(log n) time complexity and
+ * determining the median has O(1) time complexity.
+ * The basic idea is to maintain two heaps: a smallerHalf and a largerHalf. The smallerHalf
+ * stores the smaller half of all numbers while the largerHalf stores the larger half.
+ * The sizes of two heaps need to be balanced each time when a new number is inserted so
+ * that their sizes will not be different by more than 1. Therefore each time when
+ * findMedian() is called we check if two heaps have the same size. If they do, we should
+ * return the average of the two top values of heaps. Otherwise we return the top of the
+ * heap which has one more element.
  */
 
 private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
-  // Stores all the numbers less than the current median in a maxHeap,
+  // Stores all the numbers less than the current median in a smallerHalf,
   // i.e median is the maximum, at the root
-  private[this] var maxHeap = mutable.PriorityQueue.empty[Double](ord)
+  private[this] var smallerHalf = PriorityQueue.empty[Double](ord)
 
-  // Stores all the numbers greater than the current median in a minHeap,
+  // Stores all the numbers greater than the current median in a largerHalf,
   // i.e median is the minimum, at the root
-  private[this] var minHeap = mutable.PriorityQueue.empty[Double](ord.reverse)
+  private[this] var largerHalf = PriorityQueue.empty[Double](ord.reverse)
 
   // Returns if there is no element in MedianHeap.
   def isEmpty(): Boolean = {
-    maxHeap.isEmpty && minHeap.isEmpty
+    smallerHalf.isEmpty && largerHalf.isEmpty
   }
 
   // Size of MedianHeap.
   def size(): Int = {
-    maxHeap.size + minHeap.size
+    smallerHalf.size + largerHalf.size
   }
 
   // Insert a new number into MedianHeap.
   def insert(x: Double): Unit = {
-    // If both heaps are empty, we arbitrarily insert it into a heap, let's say, the minHeap.
+    // If both heaps are empty, we arbitrarily insert it into a heap, let's say, the largerHalf.
     if (isEmpty) {
-      minHeap.enqueue(x)
+      largerHalf.enqueue(x)
     } else {
-      // If the number is larger than current median, it should be inserted into minHeap,
-      // otherwise maxHeap.
-      if (x > findMedian) {
-        minHeap.enqueue(x)
+      // If the number is larger than current median, it should be inserted into largerHalf,
+      // otherwise smallerHalf.
+      if (x > median) {
+        largerHalf.enqueue(x)
       } else {
-        maxHeap.enqueue(x)
+        smallerHalf.enqueue(x)
       }
     }
     rebalance()
@@ -69,25 +71,25 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
   // Re-balance the heaps.
   private[this] def rebalance(): Unit = {
-    if (minHeap.size - maxHeap.size > 1) {
-      maxHeap.enqueue(minHeap.dequeue())
+    if (largerHalf.size - smallerHalf.size > 1) {
+      smallerHalf.enqueue(largerHalf.dequeue())
     }
-    if (maxHeap.size - minHeap.size > 1) {
-      minHeap.enqueue(maxHeap.dequeue)
+    if (smallerHalf.size - largerHalf.size > 1) {
+      largerHalf.enqueue(smallerHalf.dequeue)
     }
   }
 
   // Returns the median of the numbers.
-  def findMedian(): Double = {
+  def median: Double = {
     if (isEmpty) {
       throw new NoSuchElementException("MedianHeap is empty.")
     }
-    if (minHeap.size == maxHeap.size) {
-      (minHeap.head + maxHeap.head) / 2.0
-    } else if (minHeap.size > maxHeap.size) {
-      minHeap.head
+    if (largerHalf.size == smallerHalf.size) {
+      (largerHalf.head + smallerHalf.head) / 2.0
+    } else if (largerHalf.size > smallerHalf.size) {
+      largerHalf.head
     } else {
-      maxHeap.head
+      smallerHalf.head
     }
   }
 }
