@@ -212,7 +212,8 @@ private[spark] class PythonRunner(
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
                 if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
+                  env.releasePythonWorker(pythonExec, envVars.asScala.toMap,
+                    condaInstructions, worker)
                   released = true
                 }
               }
