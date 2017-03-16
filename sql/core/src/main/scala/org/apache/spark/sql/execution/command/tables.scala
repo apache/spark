@@ -192,26 +192,35 @@ case class AlterTableAddColumnsCommand(
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(catalog, table)
 
-    // If an exception is thrown here we can just assume the table is uncached;
-    // this can happen with Hive tables when the underlying catalog is in-memory.
-    val wasCached = Try(sparkSession.catalog.isCached(table.unquotedString)).getOrElse(false)
-    if (wasCached) {
-      try {
-        sparkSession.catalog.uncacheTable(table.unquotedString)
-      } catch {
-        case NonFatal(e) => log.warn(e.toString, e)
-      }
+    try {
+      sparkSession.catalog.uncacheTable(table.unquotedString)
+    } catch {
+      case NonFatal(e) =>
+        log.warn(s"Exception when attempting to uncache table ${table.unquotedString}", e)
     }
+
     // Invalidate the table last, otherwise uncaching the table would load the logical plan
     // back into the hive metastore cache
     catalog.refreshTable(table)
     val partitionFields = catalogTable.schema.takeRight(catalogTable.partitionColumnNames.length)
-    val dataSchema = catalogTable.schema
-      .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length)
+    val newSchemaFields = catalogTable.schema
+      .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length) ++
+      columns ++ partitionFields
+    checkDuplication(newSchemaFields.map(_.name))
     catalog.alterTableSchema(table, newSchema =
-      catalogTable.schema.copy(fields = (dataSchema ++ columns ++ partitionFields).toArray))
+      catalogTable.schema.copy(fields = newSchemaFields.toArray))
 
     Seq.empty[Row]
+  }
+
+  private def checkDuplication(colNames: Seq[String]): Unit = {
+    if (colNames.distinct.length != colNames.length) {
+      val duplicateColumns = colNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(
+        s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
+    }
   }
 
   /**

@@ -2180,22 +2180,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("parquet", "json", "csv").foreach { provider =>
     test(s"alter datasource table add columns - $provider") {
-      withTable("alter_add_ds") {
-        sql(s"CREATE TABLE alter_add_ds (c1 int) USING $provider")
-        sql("INSERT INTO alter_add_ds VALUES (1)")
-        sql("ALTER TABLE alter_add_ds ADD COLUMNS (c2 int)")
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (c1 int) USING $provider")
+        sql("INSERT INTO t1 VALUES (1)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds"),
+          sql("SELECT * FROM t1"),
           Seq(Row(1, null))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds WHERE c2 is null"),
+          sql("SELECT * FROM t1 WHERE c2 is null"),
           Seq(Row(1, null))
         )
 
-        sql("INSERT INTO alter_add_ds VALUES (3, 2)")
+        sql("INSERT INTO t1 VALUES (3, 2)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds WHERE c2 = 2"),
+          sql("SELECT * FROM t1 WHERE c2 = 2"),
           Seq(Row(3, 2))
         )
       }
@@ -2204,25 +2204,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("parquet", "json", "csv").foreach { provider =>
     test(s"alter datasource table add columns - partitioned - $provider") {
-      withTable("alter_add_ds") {
-        sql(s"CREATE TABLE alter_add_ds (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
-        sql("INSERT INTO alter_add_ds PARTITION(c2 = 2) VALUES (1)")
-        sql("ALTER TABLE alter_add_ds ADD COLUMNS (c3 int)")
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
+        sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds"),
+          sql("SELECT * FROM t1"),
           Seq(Row(1, null, 2))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds WHERE c3 is null"),
+          sql("SELECT * FROM t1 WHERE c3 is null"),
           Seq(Row(1, null, 2))
         )
-        sql("INSERT INTO alter_add_ds PARTITION(c2 =1) VALUES (2, 3)")
+        sql("INSERT INTO t1 PARTITION(c2 =1) VALUES (2, 3)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds WHERE c3 = 3"),
+          sql("SELECT * FROM t1 WHERE c3 = 3"),
           Seq(Row(2, 3, 1))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_ds WHERE c2 = 1"),
+          sql("SELECT * FROM t1 WHERE c2 = 1"),
           Seq(Row(2, 3, 1))
         )
       }
@@ -2230,10 +2230,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("alter datasource table add columns - text format not supported") {
-    withTable("alter_add_ds_text") {
-      sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING text")
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 int) USING text")
       val e = intercept[AnalysisException] {
-        sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
+        sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
       }.getMessage
       assert(e.contains("does not support ALTER ADD COLUMNS"))
     }
@@ -2256,6 +2256,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
       assert(e.message.contains("is a VIEW, which does not support ALTER ADD COLUMNS"))
+    }
+  }
+
+  test("alter table add columns with existing column name") {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 int) USING PARQUET")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s)"))
     }
   }
 }

@@ -71,6 +71,7 @@ class JDBCSuite extends SparkFunSuite
     conn.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
     conn.prepareStatement(
       "insert into test.people values ('joe ''foo'' \"bar\"', 3)").executeUpdate()
+    conn.commit()
 
     sql(
       s"""

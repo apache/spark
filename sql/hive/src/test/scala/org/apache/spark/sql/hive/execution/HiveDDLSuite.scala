@@ -112,6 +112,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
+  val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
 
   override def afterEach(): Unit = {
     try {
@@ -1861,55 +1862,55 @@ class HiveDDLSuite
     }
   }
 
-  Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO").foreach { tableType =>
+  hiveFormats.foreach { tableType =>
     test(s"alter hive serde table add columns -- partitioned - $tableType") {
-      withTable("alter_add_partitioned") {
+      withTable("tab") {
         sql(
           s"""
-             |CREATE TABLE alter_add_partitioned (c1 int, c2 int)
+             |CREATE TABLE tab (c1 int, c2 int)
              |PARTITIONED BY (c3 int) STORED AS $tableType
           """.stripMargin)
 
-        sql("INSERT INTO alter_add_partitioned PARTITION (c3=1) VALUES (1, 2)")
-        sql("ALTER TABLE alter_add_partitioned ADD COLUMNS (c4 int)")
+        sql("INSERT INTO tab PARTITION (c3=1) VALUES (1, 2)")
+        sql("ALTER TABLE tab ADD COLUMNS (c4 int)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_partitioned WHERE c3 = 1"),
+          sql("SELECT * FROM tab WHERE c3 = 1"),
           Seq(Row(1, 2, null, 1))
         )
-        assert(sql("SELECT * FROM alter_add_partitioned").schema
+        assert(sql("SELECT * FROM tab").schema
           .contains(StructField("c4", IntegerType)))
-        sql("INSERT INTO alter_add_partitioned PARTITION (c3=2) VALUES (2, 3, 4)")
+        sql("INSERT INTO tab PARTITION (c3=2) VALUES (2, 3, 4)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_partitioned"),
+          sql("SELECT * FROM tab"),
           Seq(Row(1, 2, null, 1), Row(2, 3, 4, 2))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_partitioned WHERE c3 = 2 AND c4 IS NOT NULL"),
+          sql("SELECT * FROM tab WHERE c3 = 2 AND c4 IS NOT NULL"),
           Seq(Row(2, 3, 4, 2))
         )
       }
     }
   }
 
-  Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO").foreach { tableType =>
+  hiveFormats.foreach { tableType =>
     test(s"alter hive serde table add columns -- with predicate - $tableType ") {
-      withTable("alter_add_predicate") {
-        sql(s"CREATE TABLE alter_add_predicate (c1 int, c2 int) STORED AS $tableType")
-        sql("INSERT INTO alter_add_predicate VALUES (1, 2)")
-        sql("ALTER TABLE alter_add_predicate ADD COLUMNS (c4 int)")
+      withTable("tab") {
+        sql(s"CREATE TABLE tab (c1 int, c2 int) STORED AS $tableType")
+        sql("INSERT INTO tab VALUES (1, 2)")
+        sql("ALTER TABLE tab ADD COLUMNS (c4 int)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_predicate WHERE c4 IS NULL"),
+          sql("SELECT * FROM tab WHERE c4 IS NULL"),
           Seq(Row(1, 2, null))
         )
-        assert(sql("SELECT * FROM alter_add_predicate").schema
+        assert(sql("SELECT * FROM tab").schema
           .contains(StructField("c4", IntegerType)))
-        sql("INSERT INTO alter_add_predicate VALUES (2, 3, 4)")
+        sql("INSERT INTO tab VALUES (2, 3, 4)")
         checkAnswer(
-          sql("SELECT * FROM alter_add_predicate WHERE c4 = 4 "),
+          sql("SELECT * FROM tab WHERE c4 = 4 "),
           Seq(Row(2, 3, 4))
         )
         checkAnswer(
-          sql("SELECT * FROM alter_add_predicate"),
+          sql("SELECT * FROM tab"),
           Seq(Row(1, 2, null), Row(2, 3, 4))
         )
       }
@@ -1919,13 +1920,23 @@ class HiveDDLSuite
   Seq("orc", "ORC", "org.apache.spark.sql.hive.orc",
     "org.apache.spark.sql.hive.orc.DefaultSource").foreach { source =>
     test(s"alter datasource table add columns - $source format not supported") {
-      withTable("alter_add_ds_text") {
-        sql(s"CREATE TABLE alter_add_ds_text (c1 int) USING $source")
+      withTable("tab") {
+        sql(s"CREATE TABLE tab (c1 int) USING $source")
         val e = intercept[AnalysisException] {
-          sql("ALTER TABLE alter_add_ds_text ADD COLUMNS (c2 int)")
+          sql("ALTER TABLE tab ADD COLUMNS (c2 int)")
         }.getMessage
         assert(e.contains("does not support ALTER ADD COLUMNS"))
       }
+    }
+  }
+
+  test("alter table add columns with existing partition column name") {
+    withTable("tab") {
+      sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE tab ADD COLUMNS (c2 string)")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s)"))
     }
   }
 }
