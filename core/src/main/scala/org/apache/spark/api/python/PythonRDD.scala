@@ -111,23 +111,14 @@ private[spark] class PythonRunner(
   private[this] val localdirs =
     SparkEnv.get.blockManager.diskBlockManager.localDirs.map(f => f.getPath).mkString(",")
 
-  private[this] val firstFunc = funcs.head.funcs.head
-
   // All the Python functions should have the same exec, version and envvars.
-  private[this] val envVars = {
-    val vars = firstFunc.envVars
-    vars.put("SPARK_LOCAL_DIRS", localdirs) // it's also used in monitor thread
-    if (reuse_worker) {
-      vars.put("SPARK_REUSE_WORKER", "1")
-    }
-    vars.asScala.toMap
-  }
-  private[this] val pythonExec = firstFunc.pythonExec
-  private[this] val pythonVer = firstFunc.pythonVer
-  private[this] val condaInstructions = firstFunc.condaSetupInstructions
+  private val envVars = funcs.head.funcs.head.envVars
+  private val pythonExec = funcs.head.funcs.head.pythonExec
+  private val pythonVer = funcs.head.funcs.head.pythonVer
+  private val condaInstructions = funcs.head.funcs.head.condaSetupInstructions
 
   // TODO: support accumulator in multiple UDF
-  private[this] val accumulator = firstFunc.accumulator
+  private val accumulator = funcs.head.funcs.head.accumulator
 
   def compute(
       inputIterator: Iterator[_],
@@ -135,15 +126,20 @@ private[spark] class PythonRunner(
       context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars, condaInstructions)
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
+    envVars.put("SPARK_LOCAL_DIRS", localdirs) // it's also used in monitor thread
+    if (reuse_worker) {
+      envVars.put("SPARK_REUSE_WORKER", "1")
+    }
+    val worker: Socket = env
+      .createPythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions)
     // Whether the worker is released into the idle pool
     @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, inputIterator, partitionIndex, context)
 
-    context.addTaskCompletionListener { _ =>
+    context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
       if (!reuse_worker || !released) {
         try {
@@ -216,7 +212,7 @@ private[spark] class PythonRunner(
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
                 if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars, condaInstructions, worker)
+                  env.releasePythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
                   released = true
                 }
               }
@@ -336,7 +332,7 @@ private[spark] class PythonRunner(
           }
         } else {
           dataOut.writeInt(0)
-          val command = firstFunc.command
+          val command = funcs.head.funcs.head.command
           dataOut.writeInt(command.length)
           dataOut.write(command)
         }
@@ -382,7 +378,7 @@ private[spark] class PythonRunner(
       if (!context.isCompleted) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars, condaInstructions, worker)
+          env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, condaInstructions, worker)
         } catch {
           case e: Exception =>
             logError("Exception when trying to kill worker", e)
