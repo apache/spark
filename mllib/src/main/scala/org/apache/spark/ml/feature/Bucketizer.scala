@@ -113,12 +113,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       }
     }
 
-    val bucketizer: UserDefinedFunction = udf { (row: Row) =>
-      val feature = if (row.isNullAt(0)) None else Some(row.getDouble(0))
+    val bucketizer: UserDefinedFunction = udf { (feature: java.lang.Double) =>
       Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
     }
 
-    val newCol = bucketizer(struct(Array(filteredDataset($(inputCol))): _*))
+    val newCol = bucketizer(filteredDataset($(inputCol)))
     val newField = prepOutputField(filteredDataset.schema)
     filteredDataset.select(col("*"), newCol.as($(outputCol), newField.metadata))
   }
@@ -182,25 +181,25 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
   private[feature] def binarySearchForBuckets(
       splits: Array[Double],
-      feature: Option[Double],
+      feature: java.lang.Double,
       keepInvalid: Boolean): Double = {
-    if (feature.getOrElse(Double.NaN).isNaN) {
+    if (feature == null || feature.isNaN) {
       if (keepInvalid) {
         splits.length - 1
       } else {
         throw new SparkException("Bucketizer encountered NaN/NULL values. " +
           "To handle or skip NaNs/NULLs, try setting Bucketizer.handleInvalid.")
       }
-    } else if (feature.get == splits.last) {
+    } else if (feature == splits.last) {
       splits.length - 2
     } else {
-      val idx = ju.Arrays.binarySearch(splits, feature.get)
+      val idx = ju.Arrays.binarySearch(splits, feature)
       if (idx >= 0) {
         idx
       } else {
         val insertPos = -idx - 1
         if (insertPos == 0 || insertPos == splits.length) {
-          throw new SparkException(s"Feature value ${feature.get} out of Bucketizer bounds" +
+          throw new SparkException(s"Feature value ${feature} out of Bucketizer bounds" +
             s" [${splits.head}, ${splits.last}].  Check your features, or loosen " +
             s"the lower/upper bound constraints.")
         } else {

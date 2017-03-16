@@ -217,7 +217,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val splits: Array[Double] = Double.NegativeInfinity +:
       Array.fill(10)(Random.nextDouble()).sorted :+ Double.PositiveInfinity
     val bsResult = Vectors.dense(data.map(x =>
-      Bucketizer.binarySearchForBuckets(splits, Some(x), false)))
+      Bucketizer.binarySearchForBuckets(splits, x, false)))
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
@@ -248,7 +248,7 @@ private object BucketizerSuite extends SparkFunSuite {
   /** Check all values in splits, plus values between all splits. */
   def checkBinarySearch(splits: Array[Double]): Unit = {
     def testFeature(feature: Double, expectedBucket: Double): Unit = {
-      assert(Bucketizer.binarySearchForBuckets(splits, Some(feature), false) === expectedBucket,
+      assert(Bucketizer.binarySearchForBuckets(splits, feature, false) === expectedBucket,
         s"Expected feature value $feature to be in bucket $expectedBucket with splits:" +
           s" ${splits.mkString(", ")}")
     }
