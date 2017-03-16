@@ -20,15 +20,13 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import scala.util.Random
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.ParquetOutputCommitter
-
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql._
-import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.{DataFrame, _}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -895,6 +893,41 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
       val readBack = reader.load(childDir)
       checkAnswer(df, readBack)
+    }
+  }
+
+  test("DataSourceScanExec uses active session upon execution") {
+    withTempPath { dir =>
+      val childDir = new File(dir, dataSourceName).getCanonicalPath
+      val dataDf = spark.range(4).coalesce(1).toDF()
+      dataDf.write.format(dataSourceName).save(childDir)
+      val reader = spark.read.format(dataSourceName)
+
+      // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema.
+      if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+        reader.option("dataSchema", dataDf.schema.json)
+      }
+
+      val readDf = reader.load(childDir)
+      val Some(scan1) = readDf.queryExecution.executedPlan.collectFirst {
+        case scan: FileSourceScanExec => scan
+      }
+
+      val newSession = spark.newSession()
+
+      val session1 = scan1.sparkSession
+      SparkSession.setActiveSession(newSession)
+      val Some(scan2) = readDf.queryExecution.executedPlan.collectFirst {
+        case scan: FileSourceScanExec => scan
+      }
+
+      val session2 = scan2.sparkSession
+
+      assert(scan1 == scan2)
+      assert(session1 == spark)
+      assert(session2 == newSession)
+
+      SparkSession.setActiveSession(spark)
     }
   }
 }

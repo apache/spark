@@ -23,18 +23,18 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
@@ -147,81 +147,94 @@ case class FileSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
-  val supportsBatch: Boolean = relation.fileFormat.supportBatch(
-    relation.sparkSession, StructType.fromAttributes(output))
+  def supportsBatch: Boolean = relation.fileFormat.supportBatch(
+    sparkSession, StructType.fromAttributes(output))
 
-  val needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-    SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+  def needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+    sparkSession.sessionState.conf.parquetVectorizedReaderEnabled
   } else {
     false
   }
 
+  def sparkSession: SparkSession = SparkSession.getActiveSession.get
+
   @transient private lazy val selectedPartitions = relation.location.listFiles(partitionFilters)
 
-  override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
-    val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
+  private def bucketSpec: Option[BucketSpec] =
+    if (sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
       None
     }
+
+  // For bucketed columns:
+  // -----------------------
+  // `HashPartitioning` would be used only when:
+  // 1. ALL the bucketing columns are being read from the table
+  //
+  // For sorted columns:
+  // ---------------------
+  // Sort ordering should be used when ALL these criteria's match:
+  // 1. `HashPartitioning` is being used
+  // 2. A prefix (or all) of the sort columns are being read from the table.
+  //
+  // Sort ordering would be over the prefix subset of `sort columns` being read
+  // from the table.
+  // eg.
+  // Assume (col0, col2, col3) are the columns read from the table
+  // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
+  // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
+  // above
+  override def outputPartitioning: Partitioning = {
     bucketSpec match {
       case Some(spec) =>
-        // For bucketed columns:
-        // -----------------------
-        // `HashPartitioning` would be used only when:
-        // 1. ALL the bucketing columns are being read from the table
-        //
-        // For sorted columns:
-        // ---------------------
-        // Sort ordering should be used when ALL these criteria's match:
-        // 1. `HashPartitioning` is being used
-        // 2. A prefix (or all) of the sort columns are being read from the table.
-        //
-        // Sort ordering would be over the prefix subset of `sort columns` being read
-        // from the table.
-        // eg.
-        // Assume (col0, col2, col3) are the columns read from the table
-        // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
-        // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
-        // above
+        def toAttribute(colName: String): Option[Attribute] = output.find(_.name == colName)
 
-        def toAttribute(colName: String): Option[Attribute] =
-          output.find(_.name == colName)
-
-        val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
+        val bucketColumns = spec.bucketColumnNames.flatMap(toAttribute)
         if (bucketColumns.size == spec.bucketColumnNames.size) {
-          val partitioning = HashPartitioning(bucketColumns, spec.numBuckets)
-          val sortColumns =
-            spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
+          HashPartitioning(bucketColumns, spec.numBuckets)
+        } else {
+          UnknownPartitioning(0)
+        }
+      case _ =>
+        UnknownPartitioning(0)
+    }
+  }
 
-          val sortOrder = if (sortColumns.nonEmpty) {
+  override def outputOrdering: Seq[SortOrder] = {
+    bucketSpec match {
+      case Some(spec) =>
+        def toAttribute(colName: String): Option[Attribute] = output.find(_.name == colName)
+
+        val bucketColumns = spec.bucketColumnNames.flatMap(toAttribute)
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
+          val sortColumns = spec.sortColumnNames.map(toAttribute).takeWhile(_.isDefined).map(_.get)
+
+          if (sortColumns.nonEmpty) {
             // In case of bucketing, its possible to have multiple files belonging to the
             // same bucket in a given relation. Each of these files are locally sorted
             // but those files combined together are not globally sorted. Given that,
             // the RDD partition will not be sorted even if the relation has sort columns set
             // Current solution is to check if all the buckets have a single file in it
 
-            val files = selectedPartitions.flatMap(partition => partition.files)
+            val files = selectedPartitions.flatMap(_.files)
             val bucketToFilesGrouping =
-              files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
-            val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
-
-            if (singleFilePartitions) {
+              files.map(_.getPath.getName).groupBy(BucketingUtils.getBucketId)
+            if (bucketToFilesGrouping.forall(_._2.length <= 1)) {
               // TODO Currently Spark does not support writing columns sorting in descending order
               // so using Ascending order. This can be fixed in future
-              sortColumns.map(attribute => SortOrder(attribute, Ascending))
+              sortColumns.map(SortOrder(_, Ascending))
             } else {
               Nil
             }
           } else {
             Nil
           }
-          (partitioning, sortOrder)
         } else {
-          (UnknownPartitioning(0), Nil)
+          Nil
         }
       case _ =>
-        (UnknownPartitioning(0), Nil)
+        Nil
     }
   }
 
@@ -248,19 +261,18 @@ case class FileSourceScanExec(
     withOptPartitionCount
   }
 
-  private lazy val inputRDD: RDD[InternalRow] = {
-    val readFile: (PartitionedFile) => Iterator[InternalRow] =
-      relation.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = relation.sparkSession,
-        dataSchema = relation.dataSchema,
-        partitionSchema = relation.partitionSchema,
-        requiredSchema = outputSchema,
-        filters = dataFilters,
-        options = relation.options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
+  private def inputRDD: RDD[InternalRow] = {
+    val readFile = relation.fileFormat.buildReaderWithPartitionValues(
+      sparkSession = sparkSession,
+      dataSchema = relation.dataSchema,
+      partitionSchema = relation.partitionSchema,
+      requiredSchema = outputSchema,
+      filters = dataFilters,
+      options = relation.options,
+      hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 
     relation.bucketSpec match {
-      case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
+      case Some(bucketing) if sparkSession.sessionState.conf.bucketingEnabled =>
         createBucketedReadRDD(bucketing, readFile, selectedPartitions, relation)
       case _ =>
         createNonBucketedReadRDD(readFile, selectedPartitions, relation)
@@ -370,7 +382,7 @@ case class FileSourceScanExec(
       FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    new FileScanRDD(sparkSession, readFile, filePartitions)
   }
 
   /**
@@ -385,10 +397,10 @@ case class FileSourceScanExec(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
-    val defaultMaxSplitBytes =
-      fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+    val session = sparkSession
+    val defaultMaxSplitBytes = session.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = session.sessionState.conf.filesOpenCostInBytes
+    val defaultParallelism = session.sparkContext.defaultParallelism
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 

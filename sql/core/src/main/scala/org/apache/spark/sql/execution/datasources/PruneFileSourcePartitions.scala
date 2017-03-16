@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
@@ -47,7 +48,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         }
       }
 
-      val sparkSession = fsRelation.sparkSession
+      val sparkSession = SparkSession.getActiveSession.get
       val partitionColumns =
         logicalRelation.resolve(
           partitionSchema, sparkSession.sessionState.analyzer.resolver)
