@@ -162,15 +162,8 @@ object PageRank extends Logging {
       iteration += 1
     }
 
-    // If the graph has sinks (vertices with no outgoing edges) the sum of ranks will not be correct
-    val rankSum = rankGraph.vertices.values.sum()
-    if (personalized) {
-      rankGraph.mapVertices((id, rank) => rank / rankSum)
-    } else {
-      val numVertices = rankGraph.numVertices
-      val correctionFactor = numVertices.toDouble / rankSum
-      rankGraph.mapVertices((id, rank) => rank * correctionFactor)
-    }
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
+    normalizeRankSum(rankGraph, personalized)
   }
 
   /**
@@ -256,7 +249,7 @@ object PageRank extends Logging {
       i += 1
     }
 
-    // If the graph has sinks (vertices with no outgoing edges) the sum of ranks will not be correct
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
     val rankSums = rankGraph.vertices.values.fold(zero)(_ :+ _)
     rankGraph.mapVertices { (vid, attr) =>
       Vectors.fromBreeze(attr :/ rankSums)
@@ -369,7 +362,12 @@ object PageRank extends Logging {
       vp, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
 
-    // If the graph has sinks (vertices with no outgoing edges) the sum of ranks will not be correct
+    // SPARK-18847 If the graph has sinks (vertices with no outgoing edges) correct the sum of ranks
+    normalizeRankSum(rankGraph, personalized)
+  }
+
+  // Normalizes the sum of ranks to n (or 1 if personalized)
+  private def normalizeRankSum(rankGraph: Graph[Double, Double], personalized: Boolean) = {
     val rankSum = rankGraph.vertices.values.sum()
     if (personalized) {
       rankGraph.mapVertices((id, rank) => rank / rankSum)
@@ -379,5 +377,4 @@ object PageRank extends Logging {
       rankGraph.mapVertices((id, rank) => rank * correctionFactor)
     }
   }
-
 }
