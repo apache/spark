@@ -617,12 +617,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val message = intercept[AnalysisException] {
       sql(s"DROP DATABASE $dbName RESTRICT")
     }.getMessage
-    // TODO: Unify the exception.
-    if (isUsingHiveMetastore) {
-      assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
-    } else {
-      assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
-    }
+    assert(message.contains(s"Database $dbName is not empty. One or more tables exist"))
+
 
     catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 

@@ -127,7 +127,7 @@ class InMemoryCatalog(
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
         if (catalog(db).tables.nonEmpty) {
-          throw new AnalysisException(s"Database '$db' is not empty. One or more tables exist.")
+          throw new AnalysisException(s"Database $db is not empty. One or more tables exist.")
         }
         if (catalog(db).functions.nonEmpty) {
           throw new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
