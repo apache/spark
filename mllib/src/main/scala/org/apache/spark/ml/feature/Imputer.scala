@@ -94,7 +94,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
  * :: Experimental ::
  * Imputation estimator for completing missing values, either using the mean or the median
  * of the column in which the missing values are located. The input column should be of
- * DoubleType or FloatType. Currently Imputer does not support categorical features yet
+ * DoubleType or FloatType. Currently Imputer does not support categorical features
  * (SPARK-15041) and possibly creates incorrect values for a categorical feature.
  *
  * Note that the mean/median value is computed after filtering out missing values.
@@ -176,8 +176,8 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  * :: Experimental ::
  * Model fitted by [[Imputer]].
  *
- * @param surrogateDF a DataFrame contains inputCols and their corresponding surrogates, which are
- *                    used to replace the missing values in the input DataFrame.
+ * @param surrogateDF a DataFrame containing inputCols and their corresponding surrogates,
+ *                    which are used to replace the missing values in the input DataFrame.
  */
 @Experimental
 class ImputerModel private[ml](
