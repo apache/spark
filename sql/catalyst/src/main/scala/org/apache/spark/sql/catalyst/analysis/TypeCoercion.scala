@@ -654,13 +654,11 @@ object TypeCoercion {
    */
   object StackCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      case s @ Stack(children) if s.childrenResolved && s.children.head.dataType == IntegerType &&
-          s.children.head.foldable =>
-        val schema = s.elementSchema
+      case s @ Stack(children) if s.childrenResolved && s.hasFoldableRowNums =>
         Stack(children.zipWithIndex.map {
           case (e, 0) => e
           case (Literal(null, NullType), index: Int) =>
-            Literal.create(null, schema.fields((index - 1) % schema.length).dataType)
+            Literal.create(null, s.findDataType(index - 1))
           case (e, _) => e
         })
     }

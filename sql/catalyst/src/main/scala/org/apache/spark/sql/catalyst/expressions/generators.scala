@@ -138,6 +138,10 @@ case class Stack(children: Seq[Expression]) extends Generator {
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
 
+  def hasFoldableRowNums: Boolean = {
+    children.nonEmpty && children.head.dataType == IntegerType && children.head.foldable
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
@@ -156,15 +160,16 @@ case class Stack(children: Seq[Expression]) extends Generator {
     }
   }
 
-  private def findDataType(column: Integer): DataType = {
-    // Find the first data type except NullType
-    for (i <- (column + 1) until children.length by numFields) {
+  def findDataType(column: Int): DataType = {
+    // Find the first data type except NullType.
+    val firstDataIndex = (column % numFields) + 1
+    for (i <- firstDataIndex until children.length by numFields) {
       if (children(i).dataType != NullType) {
         return children(i).dataType
       }
     }
     // If all values of the column are NullType, use it.
-    children(column + 1).dataType
+    NullType
   }
 
   override def elementSchema: StructType =
