@@ -1363,19 +1363,22 @@ abstract class SessionCatalogSuite extends PlanTest {
     Seq(true, false) foreach { caseSensitive =>
       val conf = SimpleCatalystConf(caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
-      val analyzer = new Analyzer(catalog, conf)
+      try {
+        val analyzer = new Analyzer(catalog, conf)
 
-      // The analyzer should report the undefined function rather than the undefined table first.
-      val cause = intercept[AnalysisException] {
-        analyzer.execute(
-          UnresolvedRelation(TableIdentifier("undefined_table")).select(
-            UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+        // The analyzer should report the undefined function rather than the undefined table first.
+        val cause = intercept[AnalysisException] {
+          analyzer.execute(
+            UnresolvedRelation(TableIdentifier("undefined_table")).select(
+              UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+            )
           )
-        )
-      }
+        }
 
-      assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
-      catalog.reset()
+        assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+      } finally {
+        catalog.reset()
+      }
     }
   }
 }
