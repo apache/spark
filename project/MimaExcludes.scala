@@ -49,6 +49,9 @@ object MimaExcludes {
     // [SPARK-18537] Add a REST api to spark streaming
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.streaming.scheduler.StreamingListener.onStreamingStarted"),
 
+    // CondaRunner is meant to own the main() method then delegate to another method
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.deploy.CondaRunner.main"),
+
     // [SPARK-19148][SQL] do not expose the external table concept in Catalog
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createTable"),
 
@@ -64,10 +67,7 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.<init>$default$11"),
 
     // [SPARK-17161] Removing Python-friendly constructors not needed
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.this"),
-
-    // CondaRunner is meant to own the main() method then delegate to another method
-    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.deploy.CondaRunner.main")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.this")
   )
 
   // Exclude rules for 2.1.x
