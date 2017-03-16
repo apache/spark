@@ -40,7 +40,7 @@ import org.apache.spark.sql.SparkSession
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
 abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
-    metadataLogVersion: String,
+    metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
@@ -134,7 +134,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(metadataLogVersion.getBytes(UTF_8))
+    out.write(("v" + metadataLogVersion).getBytes(UTF_8))
     logData.foreach { data =>
       out.write('\n')
       out.write(Serialization.write(data).getBytes(UTF_8))
@@ -146,10 +146,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines.next()
-    if (version != metadataLogVersion) {
-      throw new IllegalStateException(s"Unknown log version: ${version}")
-    }
+    val version = parseVersion(lines.next(), metadataLogVersion)
     lines.map(Serialization.read[T]).toArray
   }
 
