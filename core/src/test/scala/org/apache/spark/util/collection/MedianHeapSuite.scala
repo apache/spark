@@ -29,15 +29,9 @@ class MedianHeapSuite extends SparkFunSuite {
 
   test("If no numbers in MedianHeap, NoSuchElementException is thrown.") {
     val medianHeap = new MedianHeap()
-    var valid = false
-    try {
+    intercept[NoSuchElementException] {
       medianHeap.median
-    } catch {
-      case e: NoSuchElementException =>
-        valid = true
     }
-
-    assert(valid)
   }
 
   test("Median should be correct when size of MedianHeap is even") {
@@ -56,12 +50,22 @@ class MedianHeapSuite extends SparkFunSuite {
     assert(medianHeap.median === (array(4)))
   }
 
-  test("Size of Median should be correct though there are duplicated numbers inside.") {
+  test("Median should be correct though there are duplicated numbers inside.") {
     val array = Array(0, 0, 1, 1, 2, 2, 3, 3, 4, 4)
     val medianHeap = new MedianHeap()
     array.foreach(medianHeap.insert(_))
     Arrays.sort(array)
     assert(medianHeap.size === 10)
     assert(medianHeap.median === ((array(4) + array(5)) / 2.0))
+  }
+
+  test("Median should be correct when skew situations.") {
+    val medianHeap = new MedianHeap()
+    (0 until 10).foreach(_ => medianHeap.insert(5))
+    assert(medianHeap.median === 5)
+    (0 until 100).foreach(_ => medianHeap.insert(10))
+    assert(medianHeap.median === 10)
+    (0 until 1000).foreach(_ => medianHeap.insert(0))
+    assert(medianHeap.median === 0)
   }
 }
