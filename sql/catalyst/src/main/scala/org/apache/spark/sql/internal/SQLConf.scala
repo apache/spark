@@ -715,7 +715,7 @@ object SQLConf {
       .doc("The weight of cardinality (number of rows) for plan cost comparison in join reorder: " +
         "rows * weight + size * (1 - weight).")
       .doubleConf
-      .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1]")
+      .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
   val SESSION_LOCAL_TIMEZONE =

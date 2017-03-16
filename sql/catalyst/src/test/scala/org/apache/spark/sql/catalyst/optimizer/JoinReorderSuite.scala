@@ -38,6 +38,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
+        ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
@@ -121,13 +122,17 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(originalPlan, bestPlan)
   }
 
-  test("reorder 3 tables - put cross join at the end") {
+  test("put unjoinable item at the end and reorder 3 joinable tables") {
+    // The ReorderJoin rule puts the unjoinable item at the end, and then CostBasedJoinReorder
+    // reorders other joinable items.
     val originalPlan =
-      t1.join(t2).join(t3).where(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100"))
+      t1.join(t2).join(t4).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
 
     val bestPlan =
       t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .join(t2, Inner, None)
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .join(t4)
 
     assertEqualPlans(originalPlan, bestPlan)
   }

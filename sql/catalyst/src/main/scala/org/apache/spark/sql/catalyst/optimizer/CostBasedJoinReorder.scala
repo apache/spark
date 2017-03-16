@@ -37,10 +37,12 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
       plan
     } else {
       val result = plan transformDown {
-        case p @ Project(projectList, j @ Join(_, _, _: InnerLike, _)) =>
-          reorder(p, p.outputSet)
-        case j @ Join(_, _, _: InnerLike, _) =>
+        // Start reordering with a joinable item, which is an InnerLike join with conditions.
+        case j @ Join(_, _, _: InnerLike, Some(cond)) =>
           reorder(j, j.outputSet)
+        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond)))
+          if projectList.forall(_.isInstanceOf[Attribute]) =>
+          reorder(p, p.outputSet)
       }
       // After reordering is finished, convert OrderedJoin back to Join
       result transformDown {
@@ -56,7 +58,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
       // We also need to check if costs of all items can be evaluated.
       if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
           items.forall(_.stats(conf).rowCount.isDefined)) {
-        JoinReorderDP.search(conf, items, conditions, output).getOrElse(plan)
+        JoinReorderDP.search(conf, items, conditions, output)
       } else {
         plan
       }
@@ -70,12 +72,13 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
    */
   private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
     plan match {
-      case Join(left, right, _: InnerLike, cond) =>
+      case Join(left, right, _: InnerLike, Some(cond)) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left)
         val (rightPlans, rightConditions) = extractInnerJoins(right)
-        (leftPlans ++ rightPlans, cond.toSet.flatMap(splitConjunctivePredicates) ++
+        (leftPlans ++ rightPlans, splitConjunctivePredicates(cond).toSet ++
           leftConditions ++ rightConditions)
-      case Project(projectList, j: Join) if projectList.forall(_.isInstanceOf[Attribute]) =>
+      case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond)))
+        if projectList.forall(_.isInstanceOf[Attribute]) =>
         extractInnerJoins(j)
       case _ =>
         (Seq(plan), Set())
@@ -83,11 +86,11 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
   }
 
   private def replaceWithOrderedJoin(plan: LogicalPlan): LogicalPlan = plan match {
-    case j @ Join(left, right, _: InnerLike, cond) =>
+    case j @ Join(left, right, _: InnerLike, Some(cond)) =>
       val replacedLeft = replaceWithOrderedJoin(left)
       val replacedRight = replaceWithOrderedJoin(right)
       OrderedJoin(j.copy(left = replacedLeft, right = replacedRight))
-    case p @ Project(projectList, j: Join) =>
+    case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond))) =>
       p.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
@@ -131,7 +134,7 @@ object JoinReorderDP extends PredicateHelper {
       conf: SQLConf,
       items: Seq[LogicalPlan],
       conditions: Set[Expression],
-      topOutput: AttributeSet): Option[LogicalPlan] = {
+      topOutput: AttributeSet): LogicalPlan = {
 
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
@@ -147,18 +150,9 @@ object JoinReorderDP extends PredicateHelper {
       foundPlans += searchLevel(foundPlans, conf, conditions, topOutput)
     }
 
-    // Find the best plan
-    assert(foundPlans.last.size <= 1)
-    val bestJoinPlan = foundPlans.last.headOption
-    // Put cartesian products (inner join without join condition) at the end of the plan.
-    bestJoinPlan.map { case (itemIds, joinPlan) =>
-      val itemsNotJoined = itemIndex.keySet -- itemIds
-      var completePlan = joinPlan.plan
-      itemsNotJoined.foreach { id =>
-        completePlan = Join(completePlan, itemIndex(id), Inner, None)
-      }
-      completePlan
-    }
+    // The last level must have one and only one plan, because all items are joinable.
+    assert(foundPlans.size == items.length && foundPlans.last.size == 1)
+    foundPlans.last.head._2.plan
   }
 
   /** Find all possible plans at the next level, based on existing levels. */
@@ -223,8 +217,7 @@ object JoinReorderDP extends PredicateHelper {
       .filter(e => e.references.subsetOf(onePlan.outputSet ++ otherPlan.outputSet))
     if (joinConds.isEmpty) {
       // Cartesian product is very expensive, so we exclude them from candidate plans.
-      // This also helps us to reduce the search space. Unjoinable items will be put at the end
-      // of the plan when the reordering phase finishes.
+      // This also significantly reduces the search space.
       None
     } else {
       // Put the deeper side on the left, tend to build a left-deep tree.
