@@ -373,8 +373,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Boolean = {
-    sparkSession.sessionState.catalog.getTempView(viewName).exists { tempView =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(Dataset.ofRows(sparkSession, tempView))
+    sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, viewDef, blocking = true)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -389,7 +389,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(Dataset.ofRows(sparkSession, viewDef))
+      sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, viewDef, blocking = true)
       sessionCatalog.dropGlobalTempView(viewName)
     }
   }
@@ -434,7 +434,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(query = sparkSession.table(tableName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
   }
 
   /**
@@ -472,17 +472,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
-    // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sparkSession.sharedState.cacheManager.lookupCachedData(logicalPlan).nonEmpty
-    if (isCached) {
-      // Create a data frame to represent the table.
-      // TODO: Use uncacheTable once it supports database name.
-      val df = Dataset.ofRows(sparkSession, logicalPlan)
+    val table = sparkSession.table(tableIdent)
+    if (isCached(table)) {
       // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.uncacheQuery(df, blocking = true)
+      sparkSession.sharedState.cacheManager.uncacheQuery(table, blocking = true)
       // Cache it again.
-      sparkSession.sharedState.cacheManager.cacheQuery(df, Some(tableIdent.table))
+      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableIdent.table))
     }
   }
 
@@ -494,7 +489,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def refreshByPath(resourcePath: String): Unit = {
-    sparkSession.sharedState.cacheManager.invalidateCachedPath(sparkSession, resourcePath)
+    sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, resourcePath)
   }
 }
 
