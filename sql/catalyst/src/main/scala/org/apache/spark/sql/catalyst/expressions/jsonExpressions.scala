@@ -26,6 +26,7 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, ParseModes}
@@ -483,6 +484,17 @@ case class JsonTuple(children: Seq[Expression])
 /**
  * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
+       {"a":1, "b":0.8}
+      > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"2015-08-26 00:00:00.0"}
+  """)
+// scalastyle:on line.size.limit
 case class JsonToStruct(
     schema: DataType,
     options: Map[String, String],
@@ -493,6 +505,21 @@ case class JsonToStruct(
 
   def this(schema: DataType, options: Map[String, String], child: Expression) =
     this(schema, options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression, schema: Expression) =
+    this(
+      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      options = Map.empty[String, String],
+      child = child,
+      timeZoneId = None)
+
+  def this(child: Expression, schema: Expression, options: Expression) =
+    this(
+      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      options = JsonExprUtils.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = schema match {
     case _: StructType | ArrayType(_: StructType, _) =>
@@ -589,7 +616,7 @@ case class StructToJson(
   def this(child: Expression) = this(Map.empty, child, None)
   def this(child: Expression, options: Expression) =
     this(
-      options = StructToJson.convertToMapData(options),
+      options = JsonExprUtils.convertToMapData(options),
       child = child,
       timeZoneId = None)
 
@@ -634,7 +661,12 @@ case class StructToJson(
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
 }
 
-object StructToJson {
+object JsonExprUtils {
+
+  def validateSchemaLiteral(exp: Expression): StructType = exp match {
+    case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
+    case e => throw new AnalysisException(s"Expected a string literal instead of $e")
+  }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
