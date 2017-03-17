@@ -66,7 +66,7 @@ The Spark master, specified either via passing the `--master` command line argum
 master string with `k8s://` will cause the Spark application to launch on the Kubernetes cluster, with the API server
 being contacted at `api_server_url`. If no HTTP protocol is specified in the URL, it defaults to `https`. For example,
 setting the master to `k8s://example.com:443` is equivalent to setting it to `k8s://https://example.com:443`, but to
-connect without SSL on a different port, the master would be set to `k8s://http://example.com:8443`.
+connect without TLS on a different port, the master would be set to `k8s://http://example.com:8443`.
 
 If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
 
@@ -119,20 +119,20 @@ is currently supported.
 
 ## Advanced
  
-### Setting Up SSL For Submitting the Driver
+### Setting Up TLS For Submitting the Driver
 
 When submitting to Kubernetes, a pod is started for the driver, and the pod starts an HTTP server. This HTTP server
 receives the driver's configuration, including uploaded driver jars, from the client before starting the application.
-Spark supports using SSL to encrypt the traffic in this bootstrapping process. It is recommended to configure this
+Spark supports using TLS to encrypt the traffic in this bootstrapping process. It is recommended to configure this
 whenever possible. 
 
 See the [security page](security.html) and [configuration](configuration.html) sections for more information on
-configuring SSL; use the prefix `spark.ssl.kubernetes.submit` in configuring the SSL-related fields in the context
+configuring TLS; use the prefix `spark.ssl.kubernetes.submission` in configuring the TLS-related fields in the context
 of submitting to Kubernetes. For example, to set the trustStore used when the local machine communicates with the driver
-pod in starting the application, set `spark.ssl.kubernetes.submit.trustStore`.
+pod in starting the application, set `spark.ssl.kubernetes.submission.trustStore`.
 
 One note about the keyStore is that it can be specified as either a file on the client machine or a file in the
-container image's disk. Thus `spark.ssl.kubernetes.submit.keyStore` can be a URI with a scheme of either `file:`
+container image's disk. Thus `spark.ssl.kubernetes.submission.keyStore` can be a URI with a scheme of either `file:`
 or `local:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
 the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
 `local:`, the file is assumed to already be on the container's disk at the appropriate path.
@@ -200,42 +200,88 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.caCertFile</code></td>
+  <td><code>spark.kubernetes.authenticate.submission.caCertFile</code></td>
   <td>(none)</td>
   <td>
-    CA cert file for connecting to Kubernetes over SSL. This file should be located on the submitting machine's disk.
+    Path to the CA cert file for connecting to the Kubernetes API server over TLS when starting the driver. This file
+    must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not provide
+    a scheme).
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.clientKeyFile</code></td>
+  <td><code>spark.kubernetes.authenticate.submission.clientKeyFile</code></td>
   <td>(none)</td>
   <td>
-    Client key file for authenticating against the Kubernetes API server. This file should be located on the submitting
-    machine's disk.
+    Path to the client key file for authenticating against the Kubernetes API server when starting the driver. This file
+    must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not provide
+    a scheme).
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.clientCertFile</code></td>
+  <td><code>spark.kubernetes.authenticate.submission.clientCertFile</code></td>
   <td>(none)</td>
   <td>
-    Client cert file for authenticating against the Kubernetes API server. This file should be located on the submitting
-    machine's disk.
+    Path to the client cert file for authenticating against the Kubernetes API server when starting the driver. This
+    file must be located on the submitting machine's disk. Specify this as a path as opposed to a URI (i.e. do not
+    provide a scheme).
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.oauthToken</code></td>
+  <td><code>spark.kubernetes.authenticate.submission.oauthToken</code></td>
   <td>(none)</td>
   <td>
-    OAuth token to use when authenticating against the against the Kubernetes API server. Note that unlike the other
-    authentication options, this should be the exact string value of the token to use for the authentication.
+    OAuth token to use when authenticating against the Kubernetes API server when starting the driver. Note
+    that unlike the other authentication options, this is expected to be the exact string value of the token to use for
+    the authentication.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.serviceAccountName</code></td>
+  <td><code>spark.kubernetes.authenticate.driver.caCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the CA cert file for connecting to the Kubernetes API server over TLS from the driver pod when requesting
+    executors. This file must be located on the submitting machine's disk, and will be uploaded to the driver pod.
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.clientKeyFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the client key file for authenticating against the Kubernetes API server from the driver pod when requesting
+    executors. This file must be located on the submitting machine's disk, and will be uploaded to the driver pod.
+    Specify this as a path as opposed to a URI (i.e. do not provide a scheme). If this is specified, it is highly
+    recommended to set up TLS for the driver submission server, as this value is sensitive information that would be
+    passed to the driver pod in plaintext otherwise.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.clientCertFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to the client cert file for authenticating against the Kubernetes API server from the driver pod when
+    requesting executors. This file must be located on the submitting machine's disk, and will be uploaded to the
+    driver pod. Specify this as a path as opposed to a URI (i.e. do not provide a scheme).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.oauthToken</code></td>
+  <td>(none)</td>
+  <td>
+    OAuth token to use when authenticating against the against the Kubernetes API server from the driver pod when
+    requesting executors. Note that unlike the other authentication options, this must be the exact string value of
+    the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
+    highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
+    be passed to the driver pod in plaintext otherwise.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.authenticate.driver.serviceAccountName</code></td>
   <td><code>default</code></td>
   <td>
     Service account that is used when running the driver pod. The driver pod uses this service account when requesting
-    executor pods from the API server.
+    executor pods from the API server. Note that this cannot be specified alongside a CA cert file, client key file,
+    client cert file, and/or OAuth token.
   </td>
 </tr>
 <tr>
@@ -281,7 +327,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driverSubmitTimeout</code></td>
+  <td><code>spark.kubernetes.driverSubmissionTimeout</code></td>
   <td>60s</td>
   <td>
     Time to wait for the driver pod to start running before aborting its execution.
@@ -296,7 +342,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.waitAppCompletion</code></td>
+  <td><code>spark.kubernetes.submission.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
     In cluster mode, whether to wait for the application to finish before exiting the launcher process.  When changed to

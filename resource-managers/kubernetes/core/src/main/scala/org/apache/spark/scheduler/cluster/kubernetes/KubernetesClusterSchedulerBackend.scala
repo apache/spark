@@ -16,17 +16,14 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
-import java.util.UUID
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import io.fabric8.kubernetes.api.model.{ContainerPortBuilder, EnvVarBuilder, Pod, QuantityBuilder}
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.deploy.kubernetes.{Client, KubernetesClientBuilder}
+import org.apache.spark.deploy.kubernetes.KubernetesClientBuilder
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -76,8 +73,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("kubernetes-executor-requests"))
 
-  private val kubernetesClient = KubernetesClientBuilder
-    .buildFromWithinPod(kubernetesNamespace)
+  private val kubernetesClient = new KubernetesClientBuilder(conf, kubernetesNamespace)
+    .buildFromWithinPod()
 
   private val driverPod = try {
     kubernetesClient.pods().inNamespace(kubernetesNamespace).
