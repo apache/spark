@@ -44,6 +44,7 @@ private[r] class GBTClassifierWrapper private (
   lazy val featureImportances: Vector = gbtcModel.featureImportances
   lazy val numTrees: Int = gbtcModel.getNumTrees
   lazy val treeWeights: Array[Double] = gbtcModel.treeWeights
+  lazy val maxDepth: Int = gbtcModel.getMaxDepth
 
   def summary: String = gbtcModel.toDebugString
 

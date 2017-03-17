@@ -457,7 +457,7 @@ If required, a Hadoop configuration can be passed in as a Python dict. Here is a
 Elasticsearch ESInputFormat:
 
 {% highlight python %}
-$ SPARK_CLASSPATH=/path/to/elasticsearch-hadoop.jar ./bin/pyspark
+$ ./bin/pyspark --jars /path/to/elasticsearch-hadoop.jar
 >>> conf = {"es.resource" : "index/type"}  # assume Elasticsearch is running on localhost defaults
 >>> rdd = sc.newAPIHadoopRDD("org.elasticsearch.hadoop.mr.EsInputFormat",
                              "org.apache.hadoop.io.NullWritable",

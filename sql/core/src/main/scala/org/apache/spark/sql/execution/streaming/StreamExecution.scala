@@ -368,6 +368,13 @@ class StreamExecution(
           }
         }
       } finally {
+        awaitBatchLock.lock()
+        try {
+          // Wake up any threads that are waiting for the stream to progress.
+          awaitBatchLockCondition.signalAll()
+        } finally {
+          awaitBatchLock.unlock()
+        }
         terminationLatch.countDown()
       }
     }
