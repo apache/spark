@@ -35,9 +35,14 @@ function delete_virtualenv() {
 }
 trap delete_virtualenv EXIT
 
+USE_CONDA=0
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
 if ! hash virtualenv 2>/dev/null; then
-  echo "Missing virtualenv skipping pip installability tests."
+  echo "Missing virtualenv, checking for conda."
+  USE_CONDA=1
+fi
+if USE_CONDA && ! hash virtualenv 2>/dev/null; then
+  echo "Missing virtualenv & conda, skipping pip installability tests"
   exit 0
 fi
 if ! hash pip 2>/dev/null; then
@@ -76,7 +81,11 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     mkdir -p "$VIRTUALENV_PATH"
-    virtualenv --python=$python "$VIRTUALENV_PATH"
+    if USE_CONDA; then
+      conda create -y -p "$VIRTUALENV_PATH" $python pandas
+    else
+      virtualenv --python=$python "$VIRTUALENV_PATH"
+    fi
     source "$VIRTUALENV_PATH"/bin/activate
     # Upgrade pip & friends
     pip install --upgrade pip pypandoc wheel
