@@ -15,7 +15,7 @@ For Scala/Java applications using SBT/Maven project definitions, link your appli
 For Python applications, you need to add this above library and its dependencies when deploying your
 application. See the [Deploying](#deploying) subsection below.
 
-## Consuming Data from Kafka
+## Reading Data from Kafka
 
 ### Creating a Kafka Source for Streaming Queries
 
@@ -24,33 +24,33 @@ application. See the [Deploying](#deploying) subsection below.
 {% highlight scala %}
 
 // Subscribe to 1 topic
-val ds1 = spark
+val ds = spark
   .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load()
-ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to multiple topics
-val ds2 = spark
+val ds = spark
   .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1,topic2")
   .load()
-ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to a pattern
-val ds3 = spark
+val ds = spark
   .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribePattern", "topic.*")
   .load()
-ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 {% endhighlight %}
@@ -59,31 +59,31 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic
-Dataset<Row> ds1 = spark
+Dataset<Row> ds = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load()
-ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to multiple topics
-Dataset<Row> ds2 = spark
+Dataset<Row> ds = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1,topic2")
   .load()
-ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to a pattern
-Dataset<Row> ds3 = spark
+Dataset<Row> ds = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribePattern", "topic.*")
   .load()
-ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
@@ -91,31 +91,31 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight python %}
 
 # Subscribe to 1 topic
-ds1 = spark \
+ds = spark \
   .readStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "topic1") \
   .load()
-ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to multiple topics
-ds2 = spark \
+ds = spark \
   .readStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "topic1,topic2") \
   .load()
-ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern
-ds3 = spark \
+ds = spark \
   .readStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribePattern", "topic.*") \
   .load()
-ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
@@ -130,17 +130,17 @@ you can create an Dataset/DataFrame for a defined range of offsets.
 {% highlight scala %}
 
 // Subscribe to 1 topic defaults to the earliest and latest offsets
-val ds1 = spark
+val ds = spark
   .read
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load()
-ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to multiple topics, specifying explicit Kafka offsets
-val ds2 = spark
+val ds = spark
   .read
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -148,11 +148,11 @@ val ds2 = spark
   .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""")
   .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""")
   .load()
-ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to a pattern, at the earliest and latest offsets
-val ds3 = spark
+val ds = spark
   .read
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -160,7 +160,7 @@ val ds3 = spark
   .option("startingOffsets", "earliest")
   .option("endingOffsets", "latest")
   .load()
-ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 {% endhighlight %}
@@ -169,16 +169,16 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic defaults to the earliest and latest offsets
-Dataset<Row> ds1 = spark
+Dataset<Row> ds = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load();
-ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to multiple topics, specifying explicit Kafka offsets
-Dataset<Row> ds2 = spark
+Dataset<Row> ds = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -186,10 +186,10 @@ Dataset<Row> ds2 = spark
   .option("startingOffsets", "{\"topic1\":{\"0\":23,\"1\":-2},\"topic2\":{\"0\":-2}}")
   .option("endingOffsets", "{\"topic1\":{\"0\":50,\"1\":-1},\"topic2\":{\"0\":-1}}")
   .load();
-ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to a pattern, at the earliest and latest offsets
-Dataset<Row> ds3 = spark
+Dataset<Row> ds = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -197,7 +197,7 @@ Dataset<Row> ds3 = spark
   .option("startingOffsets", "earliest")
   .option("endingOffsets", "latest")
   .load();
-ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 {% endhighlight %}
 </div>
@@ -205,16 +205,16 @@ ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 {% highlight python %}
 
 # Subscribe to 1 topic defaults to the earliest and latest offsets
-ds1 = spark \
+ds = spark \
   .read \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "topic1") \
   .load()
-ds1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to multiple topics, specifying explicit Kafka offsets
-ds2 = spark \
+ds = spark \
   .read \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -222,10 +222,10 @@ ds2 = spark \
   .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""") \
   .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""") \
   .load()
-ds2.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern, at the earliest and latest offsets
-ds3 = spark \
+ds = spark \
   .read \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -233,7 +233,7 @@ ds3 = spark \
   .option("startingOffsets", "earliest") \
   .option("endingOffsets", "latest") \
   .load()
-ds3.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
@@ -375,16 +375,16 @@ The following configurations are optional:
 </tr>
 </table>
 
-## Producing Data to Kafka
+## Writing Data to Kafka
 
-### Writing Streaming Queries to Kafka
+### Creating a Kafka Sink for Streaming Queries
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
 // Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-val s1 = df1
+val ds = df
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream
   .format("kafka")
@@ -393,7 +393,7 @@ val s1 = df1
   .start()
 
 // Write key-value data from a DataFrame to Kafka using a topic specified in the data
-val s2 = df2
+val ds = df
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream
   .format("kafka")
@@ -406,7 +406,7 @@ val s2 = df2
 {% highlight java %}
 
 // Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-StreamingQuery s1 = df1
+StreamingQuery ds = df
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
   .format("kafka")
@@ -415,7 +415,7 @@ StreamingQuery s1 = df1
   .start()
 
 // Write key-value data from a DataFrame to Kafka using a topic specified in the data
-StreamingQuery s2 = df1
+StreamingQuery ds = df
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .writeStream()
   .format("kafka")
@@ -428,7 +428,7 @@ StreamingQuery s2 = df1
 {% highlight python %}
 
 # Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-s1 = df1 \
+ds = df \
   .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
   .format("kafka") \
@@ -437,7 +437,7 @@ s1 = df1 \
   .start()
 
 # Write key-value data from a DataFrame to Kafka using a topic specified in the data
-s2 = df2 \
+ds = df \
   .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
   .writeStream \
   .format("kafka") \
@@ -448,14 +448,14 @@ s2 = df2 \
 </div>
 </div>
 
-### Writing Batch Queries to Kafka
+### Writing the output of Batch Queries to Kafka
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
 // Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .write
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -463,7 +463,7 @@ df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .save()
 
 // Write key-value data from a DataFrame to Kafka using a topic specified in the data
-df2.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .write
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -475,7 +475,7 @@ df2.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .write()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -483,7 +483,7 @@ df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .save()
 
 // Write key-value data from a DataFrame to Kafka using a topic specified in the data
-df1.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
   .write()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -495,7 +495,7 @@ df1.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight python %}
 
 # Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .write \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -503,7 +503,7 @@ df1.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
   .save()
 
 # Write key-value data from a DataFrame to Kafka using a topic specified in the data
-df2.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
   .write \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
