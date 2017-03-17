@@ -42,7 +42,8 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   private val files = new ConcurrentHashMap[String, File]()
   private val jars = new ConcurrentHashMap[String, File]()
   private val dirs = new ConcurrentHashMap[String, File]()
-
+  private val lazyFileDescriptor = rpcEnv.transportConf.lazyFileDescriptor()
+  private val memoryMapBytes = rpcEnv.transportConf.memoryMapBytes()
   override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
     throw new UnsupportedOperationException()
   }
@@ -59,7 +60,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     }
 
     if (file != null && file.isFile()) {
-      new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
+      new FileSegmentManagedBuffer(lazyFileDescriptor, memoryMapBytes, file, 0, file.length())
     } else {
       null
     }
