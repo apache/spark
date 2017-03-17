@@ -204,14 +204,25 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  @transient private var _cachedMinConf: Double = Double.NaN
+
+  @transient private var _cachedRules: DataFrame = null
+
   /**
    * Get association rules fitted by AssociationRules using the minConfidence. Returns a dataframe
    * with three fields, "antecedent", "consequent" and "confidence", where "antecedent" and
    * "consequent" are Array[T] and "confidence" is Double.
    */
   @Since("2.2.0")
-  @transient lazy val associationRules: DataFrame = {
-    AssociationRules.getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
+  @transient def associationRules: DataFrame = {
+    if ($(minConfidence) == _cachedMinConf) {
+      _cachedRules
+    } else {
+      _cachedRules = AssociationRules
+        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence))
+      _cachedMinConf = $(minConfidence)
+      _cachedRules
+    }
   }
 
   /**
