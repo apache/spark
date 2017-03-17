@@ -25,4 +25,5 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
+export PATH=/home/anaconda/bin:$PATH
 exec python -u ./dev/run-tests-jenkins.py "$@"
