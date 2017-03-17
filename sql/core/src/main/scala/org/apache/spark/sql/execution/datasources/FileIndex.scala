@@ -46,12 +46,17 @@ trait FileIndex {
    * Returns all valid files grouped into partitions when the data is partitioned. If the data is
    * unpartitioned, this will return a single partition with no partition values.
    *
-   * @param filters The filters used to prune which partitions are returned.  These filters must
-   *                only refer to partition columns and this method will only return files
-   *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
-   *                filters will not need to be evaluated again on the returned data.
+   * @param partitionFilters The filters used to prune which partitions are returned. These filters
+   *                         must only refer to partition columns and this method will only return
+   *                         files where these predicates are guaranteed to evaluate to `true`.
+   *                         Thus, these filters will not need to be evaluated again on the
+   *                         returned data.
+   * @param dataFilters Filters that can be applied on non-partitioned columns. The implementation
+   *                    does not need to guarantee these filters are applied, i.e. the execution
+   *                    engine will ensure these filters are still applied on the returned files.
    */
-  def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory]
+  def listFiles(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory]
 
   /**
    * Returns the list of files that will be read when scanning this relation. This call may be
