@@ -2098,7 +2098,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
     >>> testData2 = sc.parallelize([Row(id=0, label="a"), Row(id=1, label="d"),
-    ...     Row(id=2, label="e")], 2)
+    ...     Row(id=2, label=None)], 2)
     >>> dfKeep= spark.createDataFrame(testData2)
     >>> modelKeep = stringIndexer.setHandleInvalid("keep").fit(stringIndDf)
     >>> tdK = modelKeep.transform(dfKeep)
@@ -2133,16 +2133,17 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     .. versionadded:: 1.4.0
     """
 
+
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
                             "ordering is assigned an index of 0. Supported options: " +
                             "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
                             typeConverter=TypeConverters.toString)
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle unseen labels. " +
-                          "Options are 'skip' (filter out rows with unseen labels), " +
-                          "error (throw an error), or 'keep' (put unseen labels in a special " +
-                          "additional bucket, at index numLabels).",
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
+                          "labels or NULL values). Options are 'skip' (filter out rows with " +
+                          "invalid data), error (throw an error), or 'keep' (put invalid data " +
+                          "in a special additional bucket, at index numLabels).",
                           typeConverter=TypeConverters.toString)
 
     @keyword_only
