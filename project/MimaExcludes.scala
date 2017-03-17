@@ -49,6 +49,9 @@ object MimaExcludes {
     // [SPARK-18537] Add a REST api to spark streaming
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.streaming.scheduler.StreamingListener.onStreamingStarted"),
 
+    // CondaRunner is meant to own the main() method then delegate to another method
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.deploy.CondaRunner.main"),
+
     // [SPARK-19148][SQL] do not expose the external table concept in Catalog
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createTable"),
 

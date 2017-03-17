@@ -2057,6 +2057,35 @@ class SparkSubmitTests(unittest.TestCase):
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode, msg="Process failed with error:\n {0}".format(out))
 
+    def test_conda(self):
+        """Submit and test a single script file via conda"""
+        script = self.createTempFile("test.py", """
+                    |from pyspark import SparkContext
+                    |
+                    |sc = SparkContext()
+                    |sc.addCondaPackages('numpy=1.11.1')
+                    |
+                    |# Ensure numpy is accessible on the driver
+                    |import numpy
+                    |arr = [1, 2, 3]
+                    |def mul2(x):
+                    |  # Also ensure numpy accessible from executor
+                    |  assert numpy.version.version == "1.11.1"
+                    |  return x * 2
+                    |print(sc.parallelize(arr).map(mul2).collect())
+                    """)
+        props = self.createTempFile("properties", """
+            |spark.conda.binaryPath        {}
+            |spark.conda.channelUrls       https://repo.continuum.io/pkgs/free
+            |spark.conda.bootstrapPackages python=3.5
+        """.format(os.environ["CONDA_BIN"]))
+        proc = subprocess.Popen([self.sparkSubmit,
+                                 "--properties-file", props,
+                                 script], stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 4, 6]", out.decode('utf-8'))
+
 
 class ContextTests(unittest.TestCase):
 

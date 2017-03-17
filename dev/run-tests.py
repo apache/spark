@@ -270,7 +270,7 @@ def exec_maven(mvn_args=()):
     kill_zinc_on_port(zinc_port)
 
 
-def exec_sbt(sbt_args=(), exit_on_failure=True):
+def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
@@ -295,8 +295,7 @@ def exec_sbt(sbt_args=(), exit_on_failure=True):
     retcode = sbt_proc.wait()
 
     if retcode != 0:
-        if exit_on_failure:
-            exit_from_command_with_retcode(sbt_cmd, retcode)
+        exit_from_command_with_retcode(sbt_cmd, retcode)
     return sbt_cmd, retcode
 
 
@@ -406,7 +405,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     print("[info] Running Spark tests using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
-    exec_sbt(profiles_and_goals)
+    sbt_cmd, retcode = exec_sbt(profiles_and_goals)
 
 
 def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):

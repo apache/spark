@@ -26,10 +26,15 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
+import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CONDA_BOOTSTRAP_PACKAGES
 import org.apache.spark.util.{RedirectThread, Utils}
 
-private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
+private[spark] class PythonWorkerFactory(requestedPythonExec: Option[String],
+                                         requestedEnvVars: Map[String, String],
+                                         condaInstructions: Option[CondaSetupInstructions])
   extends Logging {
 
   import PythonWorkerFactory._
@@ -49,6 +54,38 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   new MonitorThread().start()
 
   var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
+
+  private[this] val condaEnv = {
+    // Set up conda environment if there are any conda packages requested
+    condaInstructions.map { instructions =>
+      val condaPackages = instructions.packages
+
+      val env = SparkEnv.get
+      val condaEnvManager = CondaEnvironmentManager.fromConf(env.conf)
+      val envDir = {
+        // Which local dir to create it in?
+        val localDirs = env.blockManager.diskBlockManager.localDirs
+        val hash = Utils.nonNegativeHash(condaPackages)
+        val dirId = hash % localDirs.length
+        Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
+      }
+      condaEnvManager.create(envDir, condaPackages)
+    }
+  }
+
+  private[this] val envVars: Map[String, String] = {
+    condaEnv.map(_.activatedEnvironment(requestedEnvVars)).getOrElse(requestedEnvVars)
+  }
+
+  private[this] val pythonExec = {
+    condaEnv.map { conda =>
+      requestedPythonExec.foreach(exec => sys.error(s"It's forbidden to set the PYSPARK_PYTHON " +
+        s"when using conda, but found: $exec"))
+
+      conda.condaEnvDir + "/bin/python"
+    }.orElse(requestedPythonExec)
+     .getOrElse("python")
+  }
 
   val pythonPath = PythonUtils.mergePythonPaths(
     PythonUtils.sparkPythonPath,
