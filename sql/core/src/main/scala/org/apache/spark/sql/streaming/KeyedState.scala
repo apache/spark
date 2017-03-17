@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  * [[KeyValueGroupedDataset]].
  *
  * Detail description on `[map/flatMap]GroupsWithState` operation
- * ------------------------------------------------------------
+ * --------------------------------------------------------------
  * Both, `mapGroupsWithState` and `flatMapGroupsWithState` in [[KeyValueGroupedDataset]]
  * will invoke the user-given function on each group (defined by the grouping function in
  * `Dataset.groupByKey()`) while maintaining user-defined per-group state between invocations.
@@ -86,6 +86,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  * Scala example of using KeyedState in `mapGroupsWithState`:
  * {{{
  * // A mapping function that maintains an integer state for string keys and returns a string.
+ * // Additionally, it sets a timeout to remove the state if it has not received data for an hour.
  * def mappingFunction(key: String, value: Iterator[Int], state: KeyedState[Int]): String = {
  *
  *   if (state.hasTimedOut) {                // If called when timing out, remove the state
@@ -112,11 +113,15 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *   // return something
  * }
  *
+ * dataset
+ *   .groupByKey(...)
+ *   .mapGroupsWithState(KeyedStateTimeout.ProcessingTimeTimeout)(mappingFunction)
  * }}}
  *
  * Java example of using `KeyedState`:
  * {{{
  * // A mapping function that maintains an integer state for string keys and returns a string.
+ * // Additionally, it sets a timeout to remove the state if it has not received data for an hour.
  * MapGroupsWithStateFunction<String, Integer, Integer, String> mappingFunction =
  *    new MapGroupsWithStateFunction<String, Integer, Integer, String>() {
  *
@@ -146,6 +151,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
 *         // return something
  *      }
  *    };
+ *
+ * dataset
+ *     .groupByKey(...)
+ *     .mapGroupsWithState(
+ *         mappingFunction, Encoders.INT, Encoders.STRING, KeyedStateTimeout.ProcessingTimeTimeout);
  * }}}
  *
  * @tparam S User-defined type of the state to be stored for each key. Must be encodable into

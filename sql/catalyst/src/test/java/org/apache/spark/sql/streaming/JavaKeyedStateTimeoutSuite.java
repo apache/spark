@@ -24,6 +24,6 @@ public class JavaKeyedStateTimeoutSuite {
 
   @Test
   public void testTimeouts() {
-    assert(KeyedStateTimeout.ProcessingTime() == ProcessingTimeTimeout$.MODULE$);
+    assert(KeyedStateTimeout.ProcessingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
   }
 }

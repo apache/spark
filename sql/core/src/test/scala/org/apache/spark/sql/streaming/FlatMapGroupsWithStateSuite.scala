@@ -199,21 +199,21 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testStateUpdateWithData(
       testName + "no update",
       stateUpdates = state => { /* do nothing */ },
-      timeoutType = KeyedStateTimeout.None,
+      timeoutType = KeyedStateTimeout.NoTimeout,
       priorState = priorState,
       expectedState = priorState)    // should not change
 
     testStateUpdateWithData(
       testName + "state updated",
       stateUpdates = state => { state.update(5) },
-      timeoutType = KeyedStateTimeout.None,
+      timeoutType = KeyedStateTimeout.NoTimeout,
       priorState = priorState,
       expectedState = Some(5))     // should change
 
     testStateUpdateWithData(
       testName + "state removed",
       stateUpdates = state => { state.remove() },
-      timeoutType = KeyedStateTimeout.None,
+      timeoutType = KeyedStateTimeout.NoTimeout,
       priorState = priorState,
       expectedState = None)        // should be removed
   }
@@ -236,7 +236,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "no update",
         stateUpdates = state => { /* do nothing */ },
-        timeoutType = KeyedStateTimeout.ProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = priorState,                           // state should not change
@@ -245,7 +245,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "state updated",
         stateUpdates = state => { state.update(5) },
-        timeoutType = KeyedStateTimeout.ProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = Some(5),                              // state should change
@@ -254,7 +254,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "state removed",
         stateUpdates = state => { state.remove() },
-        timeoutType = KeyedStateTimeout.ProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = None)                                 // state should be removed
@@ -262,7 +262,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "timeout and state updated",
         stateUpdates = state => { state.update(5); state.setTimeoutDuration(5000) },
-        timeoutType = KeyedStateTimeout.ProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = Some(5),                              // state should change
@@ -350,7 +350,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, KeyedStateTimeout.None)(stateFunc)
+        .flatMapGroupsWithState(Update, KeyedStateTimeout.NoTimeout)(stateFunc)
 
     testStream(result, Update)(
       AddData(inputData, "a"),
@@ -393,7 +393,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, KeyedStateTimeout.None)(stateFunc)
+        .flatMapGroupsWithState(Update, KeyedStateTimeout.NoTimeout)(stateFunc)
     testStream(result, Update)(
       AddData(inputData, "a", "a", "b"),
       CheckLastBatch(("a", "1"), ("a", "2"), ("b", "1")),
@@ -427,7 +427,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(Append, KeyedStateTimeout.None)(stateFunc)
+        .flatMapGroupsWithState(Append, KeyedStateTimeout.NoTimeout)(stateFunc)
         .groupByKey(_._1)
         .count()
 
@@ -460,7 +460,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
     val df = Seq("a", "a", "b").toDS
       .groupByKey(x => x)
-      .flatMapGroupsWithState(Update, KeyedStateTimeout.None)(stateFunc).toDF
+      .flatMapGroupsWithState(Update, KeyedStateTimeout.NoTimeout)(stateFunc).toDF
     checkAnswer(df, Seq(("a", 2), ("b", 1)).toDF)
   }
 
@@ -572,7 +572,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     var e = intercept[IllegalArgumentException] {
       MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(
-        OutputMode.Complete, KeyedStateTimeout.None)(stateFunc)
+        OutputMode.Complete, KeyedStateTimeout.NoTimeout)(stateFunc)
     }
     assert(e.getMessage === "The output mode of function should be append or update")
 
@@ -586,7 +586,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     e = intercept[IllegalArgumentException] {
       MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(
         javaStateFunc, OutputMode.Complete,
-        implicitly[Encoder[Int]], implicitly[Encoder[String]], KeyedStateTimeout.None)
+        implicitly[Encoder[Int]], implicitly[Encoder[String]], KeyedStateTimeout.NoTimeout)
     }
     assert(e.getMessage === "The output mode of function should be append or update")
   }
@@ -594,7 +594,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   def testStateUpdateWithData(
       testName: String,
       stateUpdates: KeyedState[Int] => Unit,
-      timeoutType: KeyedStateTimeout = KeyedStateTimeout.None,
+      timeoutType: KeyedStateTimeout = KeyedStateTimeout.NoTimeout,
       priorState: Option[Int],
       priorTimeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET,
       expectedState: Option[Int] = None,
@@ -631,7 +631,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         Iterator.empty
       }
       testStateUpdate(
-        testTimeoutUpdates = true, mapGroupsFunc, KeyedStateTimeout.ProcessingTime,
+        testTimeoutUpdates = true, mapGroupsFunc, KeyedStateTimeout.ProcessingTimeTimeout,
         preTimeoutState, priorTimeoutTimestamp,
         expectedState, expectedTimeoutTimestamp)
     }
@@ -680,12 +680,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   def newFlatMapGroupsWithStateExec(
       func: (Int, Iterator[Int], KeyedState[Int]) => Iterator[Int],
-      timeoutType: KeyedStateTimeout = KeyedStateTimeout.None,
+      timeoutType: KeyedStateTimeout = KeyedStateTimeout.NoTimeout,
       batchTimestampMs: Long = NO_BATCH_PROCESSING_TIMESTAMP): FlatMapGroupsWithStateExec = {
     MemoryStream[Int]
       .toDS
       .groupByKey(x => x)
-      .flatMapGroupsWithState[Int, Int](Append, timeoutType = timeoutType)(func)
+      .flatMapGroupsWithState[Int, Int](Append, timeoutConf = timeoutType)(func)
       .logicalPlan.collectFirst {
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(

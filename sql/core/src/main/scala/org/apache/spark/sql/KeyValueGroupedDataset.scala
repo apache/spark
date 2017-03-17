@@ -250,7 +250,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         dataAttributes,
         OutputMode.Update,
         isMapGroupsWithState = true,
-        KeyedStateTimeout.None,
+        KeyedStateTimeout.NoTimeout,
         child = logicalPlan))
   }
 
@@ -267,7 +267,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @param func Function to be called on every group.
-   * @param timeoutType Timeout information for groups that do not receive data for a while.
+   * @param timeoutConf Timeout configuration for groups that do not receive data for a while.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
@@ -275,7 +275,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def mapGroupsWithState[S: Encoder, U: Encoder](
-      timeoutType: KeyedStateTimeout)(
+      timeoutConf: KeyedStateTimeout)(
       func: (K, Iterator[V], KeyedState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: KeyedState[S]) => Iterator(func(key, it, s))
     Dataset[U](
@@ -286,7 +286,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         dataAttributes,
         OutputMode.Update,
         isMapGroupsWithState = true,
-        timeoutType,
+        timeoutConf,
         child = logicalPlan))
   }
 
@@ -335,7 +335,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param func          Function to be called on every group.
    * @param stateEncoder  Encoder for the state type.
    * @param outputEncoder Encoder for the output type.
-   * @param timeoutType Timeout information for groups that do not receive data for a while.
+   * @param timeoutConf   Timeout configuration for groups that do not receive data for a while.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
@@ -346,7 +346,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       func: MapGroupsWithStateFunction[K, V, S, U],
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
-      timeoutType: KeyedStateTimeout): Dataset[U] = {
+      timeoutConf: KeyedStateTimeout): Dataset[U] = {
     mapGroupsWithState[S, U](
       (key: K, it: Iterator[V], s: KeyedState[S]) => func.call(key, it.asJava, s)
     )(stateEncoder, outputEncoder)
@@ -366,7 +366,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @param func Function to be called on every group.
    * @param outputMode The output mode of the function.
-   * @param timeoutType Timeout information for groups that do not receive data for a while.
+   * @param timeoutConf Timeout configuration for groups that do not receive data for a while.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
@@ -375,7 +375,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   @InterfaceStability.Evolving
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
-      timeoutType: KeyedStateTimeout)(
+      timeoutConf: KeyedStateTimeout)(
       func: (K, Iterator[V], KeyedState[S]) => Iterator[U]): Dataset[U] = {
     if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")
@@ -388,7 +388,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         dataAttributes,
         outputMode,
         isMapGroupsWithState = false,
-        timeoutType,
+        timeoutConf,
         child = logicalPlan))
   }
 
@@ -408,7 +408,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param outputMode    The output mode of the function.
    * @param stateEncoder  Encoder for the state type.
    * @param outputEncoder Encoder for the output type.
-   * @param timeoutType   Timeout information for groups that do not receive data for a while.
+   * @param timeoutConf   Timeout configuration for groups that do not receive data for a while.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 2.2.0
@@ -420,9 +420,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       outputMode: OutputMode,
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
-      timeoutType: KeyedStateTimeout): Dataset[U] = {
+      timeoutConf: KeyedStateTimeout): Dataset[U] = {
     val f = (key: K, it: Iterator[V], s: KeyedState[S]) => func.call(key, it.asJava, s).asScala
-    flatMapGroupsWithState[S, U](outputMode, timeoutType)(f)(stateEncoder, outputEncoder)
+    flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
   }
 
   /**
