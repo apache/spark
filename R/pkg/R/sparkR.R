@@ -363,6 +363,7 @@ sparkR.session <- function(
   ...) {
 
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
+
   namedParams <- list(...)
   if (length(namedParams) > 0) {
     paramMap <- convertNamedListToEnv(namedParams)
@@ -400,11 +401,16 @@ sparkR.session <- function(
                 sparkConfigMap)
   } else {
     jsc <- get(".sparkRjsc", envir = .sparkREnv)
+    # NOTE(shivaram): Pass in a tempdir that is optionally used if the user has not
+    # overridden this. See SPARK-18817 for more details
+    warehouseTmpDir <- file.path(tempdir(), "spark-warehouse")
+
     sparkSession <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                 "getOrCreateSparkSession",
                                 jsc,
                                 sparkConfigMap,
-                                enableHiveSupport)
+                                enableHiveSupport,
+                                warehouseTmpDir)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
   sparkSession

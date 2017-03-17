@@ -33,6 +33,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils extends Logging {
@@ -46,7 +47,17 @@ private[sql] object SQLUtils extends Logging {
   def getOrCreateSparkSession(
       jsc: JavaSparkContext,
       sparkConfigMap: JMap[Object, Object],
-      enableHiveSupport: Boolean): SparkSession = {
+      enableHiveSupport: Boolean,
+      warehouseDir: String): SparkSession = {
+
+    // Check if SparkContext of sparkConfigMap contains spark.sql.warehouse.dir
+    // If not, set it to warehouseDir chosen by the R process.
+    // NOTE: We need to do this before creating the SparkSession.
+    val sqlWarehouseKey = WAREHOUSE_PATH.key
+    if (!jsc.sc.conf.contains(sqlWarehouseKey) && !sparkConfigMap.containsKey(sqlWarehouseKey)) {
+      jsc.sc.conf.set(sqlWarehouseKey, warehouseDir)
+    }
+
     val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport
         && jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
       SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
