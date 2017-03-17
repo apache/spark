@@ -54,8 +54,9 @@ class CatalogFileIndex(
 
   override def rootPaths: Seq[Path] = baseLocation.map(new Path(_)).toSeq
 
-  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
-    filterPartitions(filters).listFiles(Nil)
+  override def listFiles(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
+    filterPartitions(partitionFilters).listFiles(Nil, dataFilters)
   }
 
   override def refresh(): Unit = fileStatusCache.invalidateAll()

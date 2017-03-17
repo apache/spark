@@ -23,18 +23,18 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{BaseRelation, Filter}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
@@ -135,7 +135,7 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan.
  * @param outputSchema Output schema of the scan.
  * @param partitionFilters Predicates to use for partition pruning.
- * @param dataFilters Data source filters to use for filtering data within partitions.
+ * @param dataFilters Filters on non-partition columns.
  * @param metastoreTableIdentifier identifier for the table in the metastore.
  */
 case class FileSourceScanExec(
@@ -143,7 +143,7 @@ case class FileSourceScanExec(
     output: Seq[Attribute],
     outputSchema: StructType,
     partitionFilters: Seq[Expression],
-    dataFilters: Seq[Filter],
+    dataFilters: Seq[Expression],
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
@@ -156,7 +156,8 @@ case class FileSourceScanExec(
     false
   }
 
-  @transient private lazy val selectedPartitions = relation.location.listFiles(partitionFilters)
+  @transient private lazy val selectedPartitions =
+    relation.location.listFiles(partitionFilters, dataFilters)
 
   override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
@@ -225,6 +226,10 @@ case class FileSourceScanExec(
     }
   }
 
+  @transient
+  private val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
+  logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
+
   // These metadata values make scan plans uniquely identifiable for equality checking.
   override val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -237,7 +242,7 @@ case class FileSourceScanExec(
         "ReadSchema" -> outputSchema.catalogString,
         "Batched" -> supportsBatch.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
-        "PushedFilters" -> seqToString(dataFilters),
+        "PushedFilters" -> seqToString(pushedDownFilters),
         "Location" -> locationDesc)
     val withOptPartitionCount =
       relation.partitionSchemaOption.map { _ =>
@@ -255,7 +260,7 @@ case class FileSourceScanExec(
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = outputSchema,
-        filters = dataFilters,
+        filters = pushedDownFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 

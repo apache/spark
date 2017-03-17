@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URI
-
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.Striped
@@ -248,7 +246,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         .inferSchema(
           sparkSession,
           options,
-          fileIndex.listFiles(Nil).flatMap(_.files))
+          fileIndex.listFiles(Nil, Nil).flatMap(_.files))
         .map(mergeWithMetastoreSchema(relation.tableMeta.schema, _))
 
       inferredSchema match {
