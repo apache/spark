@@ -247,8 +247,8 @@ public class ExternalShuffleBlockResolver {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
       return new FileSegmentManagedBuffer(
-          lazyFileDescriptor,
-          memoryMapBytes,
+        lazyFileDescriptor,
+        memoryMapBytes,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),

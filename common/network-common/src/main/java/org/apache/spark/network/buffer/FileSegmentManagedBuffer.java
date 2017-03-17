@@ -47,8 +47,12 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     this(conf.lazyFileDescriptor(), conf.memoryMapBytes(), file, offset, length);
   }
 
-  public FileSegmentManagedBuffer(boolean lazyFileDescriptor, int memoryMapBytes,
-                                  File file, long offset, long length) {
+  public FileSegmentManagedBuffer(
+      boolean lazyFileDescriptor,
+      int memoryMapBytes,
+      File file,
+      long offset,
+      long length) {
     this.lazyFileDescriptor = lazyFileDescriptor;
     this.memoryMapBytes = memoryMapBytes;
     this.file = file;
