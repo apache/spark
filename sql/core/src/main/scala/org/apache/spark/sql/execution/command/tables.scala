@@ -190,7 +190,7 @@ case class AlterTableAddColumnsCommand(
     columns: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val catalogTable = verifyAlterTableAddColumn(catalog, table)
+    verifyAlterTableAddColumn(catalog, table)
 
     try {
       sparkSession.catalog.uncacheTable(table.quotedString)
@@ -202,30 +202,10 @@ case class AlterTableAddColumnsCommand(
     // Invalidate the table last, otherwise uncaching the table would load the logical plan
     // back into the hive metastore cache
     catalog.refreshTable(table)
-    val partitionFields = catalogTable.schema.takeRight(catalogTable.partitionColumnNames.length)
-    val newSchemaFields = catalogTable.schema
-      .take(catalogTable.schema.length - catalogTable.partitionColumnNames.length) ++
-      columns ++ partitionFields
-    checkDuplication(sparkSession, newSchemaFields)
-    catalog.alterTableSchema(table, newSchema =
-      catalogTable.schema.copy(fields = newSchemaFields.toArray))
+    catalog.alterTableAddColumns(
+      table, columns, sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     Seq.empty[Row]
-  }
-
-  private def checkDuplication(sparkSession: SparkSession, fields: Seq[StructField]): Unit = {
-    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      fields.map(_.name)
-    } else {
-      fields.map(_.name.toLowerCase)
-    }
-    if (columnNames.distinct.length != columnNames.length) {
-      val duplicateColumns = columnNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(
-        s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
-    }
   }
 
   /**
@@ -235,7 +215,7 @@ case class AlterTableAddColumnsCommand(
    */
   private def verifyAlterTableAddColumn(
       catalog: SessionCatalog,
-      table: TableIdentifier): CatalogTable = {
+      table: TableIdentifier): Unit = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
     if (catalogTable.tableType == CatalogTableType.VIEW) {
@@ -263,8 +243,6 @@ case class AlterTableAddColumnsCommand(
          """.stripMargin)
       }
     }
-
-    catalogTable
   }
 }
 
