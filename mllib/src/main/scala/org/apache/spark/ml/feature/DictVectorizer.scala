@@ -17,49 +17,144 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.Estimator
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
-import org.apache.spark.ml.util.{DefaultParamsWritable, Identifiable}
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.types.StructType
+import scala.collection.mutable.ArrayBuilder
 
-class DictVectorizer(override val uid: String)
-	extends Estimator[DictVectorizerModel]
-    with HasInputCols with HasOutputCol with DefaultParamsWritable{
-	def this() = this(Identifiable.randomUID("dictVec"))
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.types._
+
+
+
+private[feature] trait DictVectorizerBase extends Params with HasInputCols with HasOutputCol{
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
+    "invalid data (unseen labels or NULL values). " +
+    "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
+    "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
+    ParamValidators.inArray(DictVectorizer.supportedHandleInvalids))
+
+  setDefault(handleInvalid, DictVectorizer.ERROR_INVALID)
+
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    val fields = schema($(inputCols).toSet)
+    require(fields.map(_.dataType).forall{
+      case df => df.isInstanceOf[NumericType] || df.isInstanceOf[StringType]
+    })
+    val attrGroup = new AttributeGroup($(outputCol))
+    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
+  }
+}
+
+
+class DictVectorizer(override val uid: String, val sep: String = "=")
+  extends Estimator[DictVectorizerModel]
+    with HasInputCols with HasOutputCol with DefaultParamsWritable with DictVectorizerBase{
+  def this() = this(Identifiable.randomUID("dictVec"))
 
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
+  def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /**
-    * Fits a model to the input data.
-    */
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
+
+
   override def fit(dataset: Dataset[_]): DictVectorizerModel = {
+
+    //scalastyle:off
+
+    println(inputCols)
+    println($(inputCols) mkString "-")
+
+    //scalastyle: on
+    dataset.na.drop($(inputCols)).show()
+
+    val diest_df = dataset.na.drop($(inputCols))
+    var labels = ArrayBuilder.make[String]
+
+    dataset.schema($(inputCols).toSet).foreach(p=>p.dataType match {
+      case IntegerType => {
+        labels += p.name
+      }
+      case StringType => {
+        val s = dataset.select(p.name).rdd.map(_.getString(0)).countByValue().toSeq.sortBy(-_._2).map(key=>p.name+sep+key._1)
+        labels ++= s
+      }
+      case ArrayType(StringType, _) => {
+        val s = dataset.select(p.name).rdd.map(_.getAs[Seq[String]](0)).flatMap(y => y).countByValue().toSeq.sortBy(-_._2).map(key=>p.name+sep+key._1)
+        labels ++= s
+      }
+      case ArrayType(t, true) => t match {
+        case IntegerType => false
+        case DoubleType => false
+        case LongType => false
+      }
+      case _ => false
+    })
+    println(labels.result().mkString(","))
+
+    for (col <- $(inputCols)){
+      println(col)
+      println(dataset.schema(col))
+      dataset.schema(col).dataType match {
+        case StringType => {
+          println(diest_df.select(col).rdd.countByValue())
+        }
+        case ArrayType(StringType, true) => {
+          println("shit shit shit")
+          diest_df.rdd.map(row=>{
+            println(row.getAs[Array[String]](col))
+          }).count()
+        }
+
+      }
+    }
+
     new DictVectorizerModel("x", Array("xx"))
   }
 
-  override def copy(extra: ParamMap): Estimator[DictVectorizerModel] = defaultCopy(extra)
+  override def copy(extra: ParamMap): DictVectorizer = defaultCopy(extra)
 
-  /**
-    * :: DeveloperApi ::
-    *
-    * Check transform validity and derive the output schema from the input schema.
-    *
-    * We check validity for interactions between parameters during `transformSchema` and
-    * raise an exception if any parameter value is invalid. Parameter value checks which
-    * do not depend on other parameters are handled by `Param.validate()`.
-    *
-    * Typical implementation should first conduct verification on schema change and parameter
-    * validity, including complex parameter interaction checks.
-    */
   override def transformSchema(schema: StructType): StructType = {
-
+    validateAndTransformSchema(schema)
   }
 }
 
 class DictVectorizerModel( val uid: String, val vocabulary: Array[String],
-                          val sep: String = "=") {
-  def this() = this(Identifiable.randomUID("dictVec"))
+                          val sep: String = "=") extends Model[DictVectorizerModel]
+    with DictVectorizerBase{
 
+
+  def this(labels: Array[String]) = this(Identifiable.randomUID("dictVec"), labels)
+
+  override def copy(extra: ParamMap): DictVectorizerModel = {
+    defaultCopy(extra)
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    val os = validateAndTransformSchema((dataset.schema($(inputCols).toSet)))
+    val inputFields = $(inputCols).map(c => dataset.schema(c))
+    dataset.select(getOutputCol)
+  }
+
+
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
+  }
+}
+
+
+object DictVectorizer extends DefaultParamsReadable[DictVectorizer] {
+  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val ERROR_INVALID: String = "error"
+  private[feature] val KEEP_INVALID: String = "keep"
+  private[feature] val supportedHandleInvalids: Array[String] =
+    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+
+  @Since("1.6.0")
+  override def load(path: String): DictVectorizer = super.load(path)
 }
