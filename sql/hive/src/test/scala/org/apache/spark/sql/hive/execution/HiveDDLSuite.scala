@@ -1940,4 +1940,25 @@ class HiveDDLSuite
       assert(e.contains("Found duplicate column(s)"))
     }
   }
+
+  Seq("true", "false").foreach { caseSensitive =>
+    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (caseSensitive == "false") {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("HiveException"))
+          }
+        }
+      }
+    }
+  }
 }

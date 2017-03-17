@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -452,14 +452,23 @@ abstract class SessionCatalogSuite extends PlanTest {
   }
 
   test("alter table add columns") {
-    val externalCatalog = newBasicCatalog()
-    val sessionCatalog = new SessionCatalog(externalCatalog)
-    sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
-    val oldTab = externalCatalog.getTable("default", "t1")
-    sessionCatalog.alterTableSchema(TableIdentifier("t1", Some("default")),
-      oldTab.schema.add("c3", IntegerType))
-    val newTab = externalCatalog.getTable("default", "t1")
-    assert(newTab.schema.equals(oldTab.schema.add("c3", IntegerType)))
+    withBasicCatalog { sessionCatalog =>
+      sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
+      val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      sessionCatalog.alterTableSchema(TableIdentifier("t1", Some("default")),
+        oldTab.schema.add("c3", IntegerType))
+      val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      if (sessionCatalog.externalCatalog.isInstanceOf[InMemoryCatalog]) {
+        assert(newTab.schema.toString == oldTab.schema.add("c3", IntegerType).toString)
+      } else {
+        // HiveExternalCatalog will always arrange the partition columns to the end
+        val oldTabSchema = StructType(oldTab.schema.take(
+          oldTab.schema.length - oldTab.partitionColumnNames.length) ++
+          Seq(StructField("c3", IntegerType)) ++
+          oldTab.schema.takeRight(oldTab.partitionColumnNames.length))
+        assert(newTab.schema.toString == oldTabSchema.toString)
+      }
+    }
   }
 
   test("get table") {

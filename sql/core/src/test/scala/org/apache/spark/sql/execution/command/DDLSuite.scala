@@ -165,6 +165,28 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
   }
+
+  Seq("true", "false").foreach { caseSensitive =>
+    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (caseSensitive == "false") {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            // hive catalog will still complains that c1 is duplicate column name because hive
+            // identifiers are case insensitive.
+            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            assert(sql("SELECT * FROM t1").schema
+              .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+          }
+        }
+      }
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2266,26 +2288,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
       }.getMessage
       assert(e.contains("Found duplicate column(s)"))
-    }
-  }
-
-  Seq("true", "false").foreach { caseSensitive =>
-    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
-      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
-        withTable("t1") {
-          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
-          if (caseSensitive == "false") {
-            val e = intercept[AnalysisException] {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-            }.getMessage
-            assert(e.contains("Found duplicate column(s)"))
-          } else {
-            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-            assert(sql("SELECT * FROM t1").schema
-              .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
-          }
-        }
-      }
     }
   }
 
