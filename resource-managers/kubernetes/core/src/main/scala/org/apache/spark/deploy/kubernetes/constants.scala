@@ -24,7 +24,8 @@ package object constants {
   private[spark] val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
 
   // Secrets
-  private[spark] val DRIVER_CONTAINER_SECRETS_BASE_DIR = "/var/run/secrets/spark-submission"
+  private[spark] val DRIVER_CONTAINER_SUBMISSION_SECRETS_BASE_DIR =
+    "/var/run/secrets/spark-submission"
   private[spark] val SUBMISSION_APP_SECRET_NAME = "spark-submission-server-secret"
   private[spark] val SUBMISSION_APP_SECRET_PREFIX = "spark-submission-server-secret"
   private[spark] val SUBMISSION_APP_SECRET_VOLUME_NAME = "spark-submission-secret-volume"
@@ -73,7 +74,7 @@ package object constants {
 
   // Miscellaneous
   private[spark] val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
-  private[spark] val KUBERNETES_SUBMIT_SSL_NAMESPACE = "kubernetes.submit"
+  private[spark] val KUBERNETES_SUBMIT_SSL_NAMESPACE = "kubernetes.submission"
   private[spark] val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   private[spark] val MEMORY_OVERHEAD_FACTOR = 0.10
   private[spark] val MEMORY_OVERHEAD_MIN = 384L

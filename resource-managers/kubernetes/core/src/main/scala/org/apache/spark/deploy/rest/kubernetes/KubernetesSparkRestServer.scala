@@ -31,7 +31,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.config.OptionalConfigEntry
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
 
 private case class KubernetesSparkRestServerArguments(
@@ -152,6 +154,7 @@ private[spark] class KubernetesSparkRestServer(
                 appArgs,
                 sparkProperties,
                 secret,
+                driverPodKubernetesCredentials,
                 uploadedJars,
                 uploadedFiles) =>
               val decodedSecret = Base64.decodeBase64(secret)
@@ -214,6 +217,8 @@ private[spark] class KubernetesSparkRestServer(
                 } else {
                   resolvedSparkProperties.remove("spark.files")
                 }
+                resolvedSparkProperties ++= writeKubernetesCredentials(
+                  driverPodKubernetesCredentials, tempDir)
 
                 val command = new ArrayBuffer[String]
                 command += javaExecutable
@@ -280,6 +285,48 @@ private[spark] class KubernetesSparkRestServer(
       CompressionUtils.unpackAndWriteCompressedFiles(files, workingDir)
     }
 
+    private def writeKubernetesCredentials(
+        kubernetesCredentials: KubernetesCredentials,
+        rootTempDir: File): Map[String, String] = {
+      val resolvedDirectory = new File(rootTempDir, "kubernetes-credentials")
+      if (!resolvedDirectory.mkdir()) {
+        throw new IllegalStateException(s"Failed to create credentials dir at "
+          + resolvedDirectory.getAbsolutePath)
+      }
+      val oauthTokenFile = writeRawStringCredentialAndGetConf("oauth-token.txt", resolvedDirectory,
+        KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN, kubernetesCredentials.oauthToken)
+      val caCertFile = writeBase64CredentialAndGetConf("ca.crt", resolvedDirectory,
+        KUBERNETES_DRIVER_MOUNTED_CA_CERT_FILE, kubernetesCredentials.caCertDataBase64)
+      val clientKeyFile = writeBase64CredentialAndGetConf("key.key", resolvedDirectory,
+        KUBERNETES_DRIVER_MOUNTED_CLIENT_KEY_FILE, kubernetesCredentials.clientKeyDataBase64)
+      val clientCertFile = writeBase64CredentialAndGetConf("cert.crt", resolvedDirectory,
+        KUBERNETES_DRIVER_MOUNTED_CLIENT_CERT_FILE, kubernetesCredentials.clientCertDataBase64)
+      (oauthTokenFile ++ caCertFile ++ clientKeyFile ++ clientCertFile).toMap
+    }
+
+    private def writeRawStringCredentialAndGetConf(
+        fileName: String,
+        dir: File,
+        conf: OptionalConfigEntry[String],
+        credential: Option[String]): Option[(String, String)] = {
+      credential.map { cred =>
+        val credentialFile = new File(dir, fileName)
+        Files.write(cred, credentialFile, Charsets.UTF_8)
+        (conf.key, credentialFile.getAbsolutePath)
+      }
+    }
+
+    private def writeBase64CredentialAndGetConf(
+        fileName: String,
+        dir: File,
+        conf: OptionalConfigEntry[String],
+        credential: Option[String]): Option[(String, String)] = {
+      credential.map { cred =>
+        val credentialFile = new File(dir, fileName)
+        Files.write(BaseEncoding.base64().decode(cred), credentialFile)
+        (conf.key, credentialFile.getAbsolutePath)
+      }
+    }
 
     /**
      * Retrieve the path on the driver container where the main app resource is, and what value it

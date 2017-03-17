@@ -19,6 +19,7 @@ package org.apache.spark.deploy.kubernetes.integrationtest
 import java.io.File
 import java.nio.file.Paths
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 import com.google.common.base.Charsets
 import com.google.common.collect.ImmutableList
@@ -54,6 +55,11 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   private val HELPER_JAR_FILE = Paths.get("target", "integration-tests-spark-jobs-helpers")
       .toFile
       .listFiles()(0)
+  private val SUBMITTER_LOCAL_MAIN_APP_RESOURCE = s"file://${EXAMPLES_JAR_FILE.getAbsolutePath}"
+  private val CONTAINER_LOCAL_MAIN_APP_RESOURCE = s"local:///opt/spark/examples/" +
+    s"integration-tests-jars/${EXAMPLES_JAR_FILE.getName}"
+  private val CONTAINER_LOCAL_HELPER_JAR_PATH = s"local:///opt/spark/examples/" +
+    s"integration-tests-jars/${HELPER_JAR_FILE.getName}"
 
   private val TEST_EXISTENCE_FILE = Paths.get("test-data", "input.txt").toFile
   private val TEST_EXISTENCE_FILE_CONTENTS = Files.toString(TEST_EXISTENCE_FILE, Charsets.UTF_8)
@@ -68,6 +74,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   private var clientConfig: Config = _
   private var keyStoreFile: File = _
   private var trustStoreFile: File = _
+  private var sparkConf: SparkConf = _
 
   override def beforeAll(): Unit = {
     Minikube.startMinikube()
@@ -100,6 +107,22 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         || servicesList.getItems == null
         || servicesList.getItems.isEmpty)
     }
+    sparkConf = new SparkConf(true)
+      .setMaster(s"k8s://https://${Minikube.getMinikubeIp}:8443")
+      .set(KUBERNETES_SUBMIT_CA_CERT_FILE, clientConfig.getCaCertFile)
+      .set(KUBERNETES_SUBMIT_CLIENT_KEY_FILE, clientConfig.getClientKeyFile)
+      .set(KUBERNETES_SUBMIT_CLIENT_CERT_FILE, clientConfig.getClientCertFile)
+      .set(KUBERNETES_NAMESPACE, NAMESPACE)
+      .set(DRIVER_DOCKER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_DOCKER_IMAGE, "spark-executor:latest")
+      .setJars(Seq(HELPER_JAR_FILE.getAbsolutePath))
+      .set("spark.executor.memory", "500m")
+      .set("spark.executor.cores", "1")
+      .set("spark.executors.instances", "1")
+      .set("spark.app.name", "spark-pi")
+      .set("spark.ui.enabled", "true")
+      .set("spark.testing", "false")
+      .set(WAIT_FOR_APP_COMPLETION, false)
   }
 
   after {
@@ -112,7 +135,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         .delete
     })
     // spark-submit sets system properties so we have to clear them
-    new SparkConf(true).getAll.map(_._1).foreach { System.clearProperty }
+    new SparkConf(true)
+      .getAll.map(_._1)
+      .filter(_ != "spark.docker.test.persistMinikube")
+      .foreach { System.clearProperty }
   }
 
   override def afterAll(): Unit = {
@@ -159,28 +185,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     // We'll make assertions based on spark rest api, so we need to turn on
     // spark.ui.enabled explicitly since the scalatest-maven-plugin would set it
     // to false by default.
-    val sparkConf = new SparkConf(true)
-      .setMaster(s"k8s://https://${Minikube.getMinikubeIp}:8443")
-      .set("spark.kubernetes.submit.caCertFile", clientConfig.getCaCertFile)
-      .set("spark.kubernetes.submit.clientKeyFile", clientConfig.getClientKeyFile)
-      .set("spark.kubernetes.submit.clientCertFile", clientConfig.getClientCertFile)
-      .set("spark.kubernetes.namespace", NAMESPACE)
-      .set("spark.kubernetes.driver.docker.image", "spark-driver:latest")
-      .set("spark.kubernetes.executor.docker.image", "spark-executor:latest")
-      .set("spark.jars", HELPER_JAR_FILE.getAbsolutePath)
-      .set("spark.executor.memory", "500m")
-      .set("spark.executor.cores", "1")
-      .set("spark.executors.instances", "1")
-      .set("spark.app.name", "spark-pi")
-      .set("spark.ui.enabled", "true")
-      .set("spark.testing", "false")
-      .set("spark.kubernetes.submit.waitAppCompletion", "false")
-    val mainAppResource = s"file://${EXAMPLES_JAR_FILE.getAbsolutePath}"
-
     new Client(
       sparkConf = sparkConf,
       mainClass = SPARK_PI_MAIN_CLASS,
-      mainAppResource = mainAppResource,
+      mainAppResource = SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
       appArgs = Array.empty[String]).run()
     val sparkMetricsService = getSparkMetricsService("spark-pi")
     expectationsForStaticAllocation(sparkMetricsService)
@@ -199,64 +207,38 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--class", SPARK_PI_MAIN_CLASS,
       "--conf", "spark.ui.enabled=true",
       "--conf", "spark.testing=false",
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
-      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
-      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
+      "--conf", s"${KUBERNETES_SUBMIT_CA_CERT_FILE.key}=${clientConfig.getCaCertFile}",
+      "--conf", s"${KUBERNETES_SUBMIT_CLIENT_KEY_FILE.key}=${clientConfig.getClientKeyFile}",
+      "--conf", s"${KUBERNETES_SUBMIT_CLIENT_CERT_FILE.key}=${clientConfig.getClientCertFile}",
+      "--conf", s"${EXECUTOR_DOCKER_IMAGE.key}=spark-executor:latest",
+      "--conf", s"${DRIVER_DOCKER_IMAGE.key}=spark-driver:latest",
+      "--conf", s"${WAIT_FOR_APP_COMPLETION.key}=false",
       EXAMPLES_JAR_FILE.getAbsolutePath)
     SparkSubmit.main(args)
     val sparkMetricsService = getSparkMetricsService("spark-pi")
     expectationsForStaticAllocation(sparkMetricsService)
   }
 
-  test("Run using spark-submit with the examples jar on the docker image") {
-    val args = Array(
-      "--master", s"k8s://${Minikube.getMinikubeIp}:8443",
-      "--deploy-mode", "cluster",
-      "--kubernetes-namespace", NAMESPACE,
-      "--name", "spark-pi",
-      "--executor-memory", "512m",
-      "--executor-cores", "1",
-      "--num-executors", "1",
-      "--jars", s"local:///opt/spark/examples/integration-tests-jars/${HELPER_JAR_FILE.getName}",
-      "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
-      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
-      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
-      s"local:///opt/spark/examples/integration-tests-jars/${EXAMPLES_JAR_FILE.getName}")
-    SparkSubmit.main(args)
+  test("Run with the examples jar on the docker image") {
+    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
+    new Client(
+      sparkConf = sparkConf,
+      mainClass = SPARK_PI_MAIN_CLASS,
+      mainAppResource = CONTAINER_LOCAL_MAIN_APP_RESOURCE,
+      appArgs = Array.empty[String]).run()
     val sparkMetricsService = getSparkMetricsService("spark-pi")
     expectationsForStaticAllocation(sparkMetricsService)
   }
 
   test("Run with custom labels and annotations") {
-    val args = Array(
-      "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
-      "--deploy-mode", "cluster",
-      "--kubernetes-namespace", NAMESPACE,
-      "--name", "spark-pi",
-      "--executor-memory", "512m",
-      "--executor-cores", "1",
-      "--num-executors", "1",
-      "--jars", HELPER_JAR_FILE.getAbsolutePath,
-      "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
-      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
-      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.kubernetes.driver.labels=label1=label1value,label2=label2value",
-      "--conf", "spark.kubernetes.driver.annotations=" +
-        "annotation1=annotation1value," +
-        "annotation2=annotation2value",
-      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
-      EXAMPLES_JAR_FILE.getAbsolutePath)
-    SparkSubmit.main(args)
+    sparkConf.set(KUBERNETES_DRIVER_LABELS, "label1=label1value,label2=label2value")
+    sparkConf.set(KUBERNETES_DRIVER_ANNOTATIONS, "annotation1=annotation1value," +
+        "annotation2=annotation2value")
+    new Client(
+      sparkConf = sparkConf,
+      mainClass = SPARK_PI_MAIN_CLASS,
+      mainAppResource = SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+      appArgs = Array.empty[String]).run()
     val driverPodMetadata = minikubeKubernetesClient
       .pods
       .withLabel("spark-app-name", "spark-pi")
@@ -283,57 +265,22 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Enable SSL on the driver submit server") {
-    val args = Array(
-      "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
-      "--deploy-mode", "cluster",
-      "--kubernetes-namespace", NAMESPACE,
-      "--name", "spark-pi",
-      "--executor-memory", "512m",
-      "--executor-cores", "1",
-      "--num-executors", "1",
-      "--jars", HELPER_JAR_FILE.getAbsolutePath,
-      "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
-      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
-      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.ssl.kubernetes.submit.enabled=true",
-      "--conf", "spark.ssl.kubernetes.submit.keyStore=" +
-        s"file://${keyStoreFile.getAbsolutePath}",
-      "--conf", "spark.ssl.kubernetes.submit.keyStorePassword=changeit",
-      "--conf", "spark.ssl.kubernetes.submit.keyPassword=changeit",
-      "--conf", "spark.ssl.kubernetes.submit.trustStore=" +
-        s"file://${trustStoreFile.getAbsolutePath}",
-      "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
-      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
-      EXAMPLES_JAR_FILE.getAbsolutePath)
-    SparkSubmit.main(args)
+    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_KEYSTORE, s"file://${keyStoreFile.getAbsolutePath}")
+    sparkConf.set("spark.ssl.kubernetes.submission.keyStorePassword", "changeit")
+    sparkConf.set("spark.ssl.kubernetes.submission.keyPassword", "changeit")
+    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE,
+      s"file://${trustStoreFile.getAbsolutePath}")
+    sparkConf.set(DRIVER_SUBMIT_SSL_ENABLED, true)
+    new Client(
+      sparkConf = sparkConf,
+      mainClass = SPARK_PI_MAIN_CLASS,
+      mainAppResource = SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+      appArgs = Array.empty[String]).run()
   }
 
   test("Added files should exist on the driver.") {
-    val args = Array(
-      "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
-      "--deploy-mode", "cluster",
-      "--kubernetes-namespace", NAMESPACE,
-      "--name", "spark-file-existence-test",
-      "--executor-memory", "512m",
-      "--executor-cores", "1",
-      "--num-executors", "1",
-      "--jars", HELPER_JAR_FILE.getAbsolutePath,
-      "--files", TEST_EXISTENCE_FILE.getAbsolutePath,
-      "--class", FILE_EXISTENCE_MAIN_CLASS,
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.testing=true",
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
-      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
-      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
-      EXAMPLES_JAR_FILE.getAbsolutePath,
-      TEST_EXISTENCE_FILE.getName,
-      TEST_EXISTENCE_FILE_CONTENTS)
+    sparkConf.set("spark.files", TEST_EXISTENCE_FILE.getAbsolutePath)
+    sparkConf.setAppName("spark-file-existence-test")
     val podCompletedFuture = SettableFuture.create[Boolean]
     val watch = new Watcher[Pod] {
       override def eventReceived(action: Action, pod: Pod): Unit = {
@@ -364,8 +311,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         .pods
         .withLabel("spark-app-name", "spark-file-existence-test")
         .watch(watch)) { _ =>
-      SparkSubmit.main(args)
-      assert(podCompletedFuture.get, "Failed to run driver pod")
+      new Client(
+        sparkConf = sparkConf,
+        mainClass = FILE_EXISTENCE_MAIN_CLASS,
+        mainAppResource = CONTAINER_LOCAL_MAIN_APP_RESOURCE,
+        appArgs = Array(TEST_EXISTENCE_FILE.getName, TEST_EXISTENCE_FILE_CONTENTS)).run()
+      assert(podCompletedFuture.get(60, TimeUnit.SECONDS), "Failed to run driver pod")
       val driverPod = minikubeKubernetesClient
         .pods
         .withLabel("spark-app-name", "spark-file-existence-test")
@@ -386,27 +337,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     Utils.tryWithResource(minikubeKubernetesClient.services()
         .withLabel("spark-app-name", "spark-pi")
         .watch(externalUriProviderWatch)) { _ =>
-      val args = Array(
-        "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
-        "--deploy-mode", "cluster",
-        "--kubernetes-namespace", NAMESPACE,
-        "--name", "spark-pi",
-        "--executor-memory", "512m",
-        "--executor-cores", "1",
-        "--num-executors", "1",
-        "--jars", HELPER_JAR_FILE.getAbsolutePath,
-        "--class", SPARK_PI_MAIN_CLASS,
-        "--conf", "spark.ui.enabled=true",
-        "--conf", "spark.testing=false",
-        "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-        "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-        "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
-        "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
-        "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-        "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
-        "--conf", s"${DRIVER_SERVICE_MANAGER_TYPE.key}=${ExternalSuppliedUrisDriverServiceManager.TYPE}",
-        EXAMPLES_JAR_FILE.getAbsolutePath)
-      SparkSubmit.main(args)
+      sparkConf.set(DRIVER_SERVICE_MANAGER_TYPE, ExternalSuppliedUrisDriverServiceManager.TYPE)
+      new Client(
+        sparkConf = sparkConf,
+        mainClass = SPARK_PI_MAIN_CLASS,
+        mainAppResource = SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+        appArgs = Array.empty[String]).run()
       val sparkMetricsService = getSparkMetricsService("spark-pi")
       expectationsForStaticAllocation(sparkMetricsService)
       assert(externalUriProviderWatch.annotationSet.get)
@@ -424,5 +360,18 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       assert(driverService.getMetadata.getAnnotations.containsKey(ANNOTATION_RESOLVED_EXTERNAL_URI),
         "Resolved URI annotation not set on driver service.")
     }
+  }
+
+  test("Mount the Kubernetes credentials onto the driver pod") {
+    sparkConf.set(KUBERNETES_DRIVER_CA_CERT_FILE, clientConfig.getCaCertFile)
+    sparkConf.set(KUBERNETES_DRIVER_CLIENT_KEY_FILE, clientConfig.getClientKeyFile)
+    sparkConf.set(KUBERNETES_DRIVER_CLIENT_CERT_FILE, clientConfig.getClientCertFile)
+    new Client(
+      sparkConf = sparkConf,
+      mainClass = SPARK_PI_MAIN_CLASS,
+      mainAppResource = SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+      appArgs = Array.empty[String]).run()
+    val sparkMetricsService = getSparkMetricsService("spark-pi")
+    expectationsForStaticAllocation(sparkMetricsService)
   }
 }
