@@ -105,7 +105,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.001, data, s)
     }
 
-    test(s"Tests with empty data and epsi=$epsi") {
+    test(s"Tests on empty data with epsi=$epsi, compression=$compression") {
       val emptyData = Seq.empty[Double]
       val s = buildSummary(emptyData, epsi, compression)
       assert(s.count == 0, s"Found count=${s.count} but data size=0")
