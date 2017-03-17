@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.net.URI
 import java.util.Date
 
 import com.google.common.base.Objects
@@ -26,8 +27,8 @@ import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, Internal
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.StructType
 
 
@@ -48,10 +49,7 @@ case class CatalogFunction(
  * Storage format, used to describe how a partition or a table is stored.
  */
 case class CatalogStorageFormat(
-    // TODO(ekl) consider storing this field as java.net.URI for type safety. Note that this must
-    // be converted to/from a hadoop Path object using new Path(new URI(locationUri)) and
-    // path.toUri respectively before use as a filesystem path due to URI char escaping.
-    locationUri: Option[String],
+    locationUri: Option[URI],
     inputFormat: Option[String],
     outputFormat: Option[String],
     serde: Option[String],
@@ -105,7 +103,7 @@ case class CatalogTablePartition(
   }
 
   /** Return the partition location, assuming it is specified. */
-  def location: String = storage.locationUri.getOrElse {
+  def location: URI = storage.locationUri.getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
     throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
@@ -113,11 +111,17 @@ case class CatalogTablePartition(
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
-  def toRow(partitionSchema: StructType): InternalRow = {
+  def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
+    val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
+    val timeZoneId = caseInsensitiveProperties.getOrElse(
+      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
     InternalRow.fromSeq(partitionSchema.map { field =>
-      // TODO: use correct timezone for partition values.
-      Cast(Literal(spec(field.name)), field.dataType,
-        Option(DateTimeUtils.defaultTimeZone().getID)).eval()
+      val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+        null
+      } else {
+        spec(field.name)
+      }
+      Cast(Literal(partValue), field.dataType, Option(timeZoneId)).eval()
     })
   }
 }
@@ -165,6 +169,11 @@ case class BucketSpec(
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
  *                                  catalog. If false, it is inferred automatically based on file
  *                                  structure.
+ * @param schemaPreservesCase Whether or not the schema resolved for this table is case-sensitive.
+ *                           When using a Hive Metastore, this flag is set to false if a case-
+ *                           sensitive schema was unable to be read from the table properties.
+ *                           Used to trigger case-sensitive schema inference at query time, when
+ *                           configured.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -182,7 +191,8 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    tracksPartitionsInCatalog: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false,
+    schemaPreservesCase: Boolean = true) {
 
   import CatalogTable._
 
@@ -210,7 +220,7 @@ case class CatalogTable(
   }
 
   /** Return the table location, assuming it is specified. */
-  def location: String = storage.locationUri.getOrElse {
+  def location: URI = storage.locationUri.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify locationUri")
   }
 
@@ -241,7 +251,7 @@ case class CatalogTable(
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
-      locationUri: Option[String] = storage.locationUri,
+      locationUri: Option[URI] = storage.locationUri,
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
@@ -337,7 +347,7 @@ object CatalogTableType {
 case class CatalogDatabase(
     name: String,
     description: String,
-    locationUri: String,
+    locationUri: URI,
     properties: Map[String, String])
 
 

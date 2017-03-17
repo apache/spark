@@ -33,6 +33,7 @@ import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -611,4 +612,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
     }
   }
+
+   test("read from multiple orc input paths") {
+     val path1 = Utils.createTempDir()
+     val path2 = Utils.createTempDir()
+     makeOrcFile((1 to 10).map(Tuple1.apply), path1)
+     makeOrcFile((1 to 10).map(Tuple1.apply), path2)
+     assertResult(20)(read.orc(path1.getCanonicalPath, path2.getCanonicalPath).count())
+   }
 }
