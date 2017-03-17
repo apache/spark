@@ -275,7 +275,7 @@ class StreamExecution(
               reportTimeTaken("triggerExecution") {
                 if (currentBatchId < 0) {
                   // We'll do this initialization only once
-                  populateStartOffsets()
+                  populateStartOffsets(sparkSessionToRunBatches)
                   logDebug(s"Stream running from $committedOffsets to $availableOffsets")
                 } else {
                   constructNextBatch()
@@ -388,7 +388,7 @@ class StreamExecution(
    *  - committedOffsets
    *  - availableOffsets
    */
-  private def populateStartOffsets(): Unit = {
+  private def populateStartOffsets(sparkSessionToRunBatches: SparkSession): Unit = {
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
         logInfo(s"Resuming streaming query, starting with batch $batchId")
@@ -416,6 +416,12 @@ class StreamExecution(
               metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
           }
         }
+
+        // Reset confs to disallow change in number of partitions
+        sparkSessionToRunBatches.conf.set(
+          SQLConf.SHUFFLE_PARTITIONS.key,
+          offsetSeqMetadata.conf(SQLConf.SHUFFLE_PARTITIONS.key))
+        sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
 
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
           s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
@@ -580,12 +586,6 @@ class StreamExecution(
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)
     }
-
-    // Reset confs to disallow change in number of partitions
-    sparkSessionToRunBatch.conf.set(
-      SQLConf.SHUFFLE_PARTITIONS.key,
-      offsetSeqMetadata.conf(SQLConf.SHUFFLE_PARTITIONS.key))
-    sparkSessionToRunBatch.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(

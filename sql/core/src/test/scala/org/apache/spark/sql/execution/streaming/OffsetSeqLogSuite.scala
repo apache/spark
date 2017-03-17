@@ -56,6 +56,11 @@ class OffsetSeqLogSuite extends SparkFunSuite with SharedSQLContext {
     // All set
     assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
       OffsetSeqMetadata(s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}}"""))
+
+    // Drop unknown fields
+    assert(OffsetSeqMetadata(1, 2, getConfWith(shufflePartitions = 3)) ===
+      OffsetSeqMetadata(
+        s"""{"batchWatermarkMs":1,"batchTimestampMs":2,"conf": {"$key":3}},"unknown":1"""))
   }
 
   test("OffsetSeqLog - serialization - deserialization") {
