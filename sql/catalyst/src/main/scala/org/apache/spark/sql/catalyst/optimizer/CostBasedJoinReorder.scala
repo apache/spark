@@ -138,10 +138,10 @@ object JoinReorderDP extends PredicateHelper {
 
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
-    val itemIndex = items.zipWithIndex.map(_.swap).toMap
+    val itemIndex = items.zipWithIndex
     val foundPlans = mutable.Buffer[JoinPlanMap](itemIndex.map {
-      case (id, item) => Set(id) -> JoinPlan(Set(id), item, Set(), Cost(0, 0))
-    })
+      case (item, id) => Set(id) -> JoinPlan(Set(id), item, Set(), Cost(0, 0))
+    }.toMap)
 
     // Build plans for next levels until the last level has only one plan. This plan contains
     // all items that can be joined, so there's no need to continue.

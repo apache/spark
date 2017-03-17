@@ -712,6 +712,7 @@ object SQLConf {
 
   val JOIN_REORDER_CARD_WEIGHT =
     buildConf("spark.sql.cbo.joinReorder.card.weight")
+      .internal()
       .doc("The weight of cardinality (number of rows) for plan cost comparison in join reorder: " +
         "rows * weight + size * (1 - weight).")
       .doubleConf
