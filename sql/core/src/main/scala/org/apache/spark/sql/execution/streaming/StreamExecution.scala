@@ -399,7 +399,7 @@ class StreamExecution(
         availableOffsets = nextOffsets.toStreamProgress(sources)
 
         // update offset metadata
-        nextOffsets.metadata.foreach(metadata => {
+        nextOffsets.metadata.foreach { metadata =>
           val shufflePartitionsSparkSession: Int =
             sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS)
           val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
@@ -410,13 +410,12 @@ class StreamExecution(
             shufflePartitionsSparkSession
           })
           offsetSeqMetadata = OffsetSeqMetadata(
-            metadata.batchWatermarkMs,
-            metadata.batchTimestampMs,
+            metadata.batchWatermarkMs, metadata.batchTimestampMs,
             metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
           // Update conf with correct number of shuffle partitions
           sparkSessionToRunBatches.conf.set(
             SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
-        })
+        }
 
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
           s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
