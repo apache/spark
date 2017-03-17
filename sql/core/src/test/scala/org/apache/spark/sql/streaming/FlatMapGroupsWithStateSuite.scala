@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -35,8 +37,6 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
 case class RunningCount(count: Long)
-
-case class RunningCount2(value: Long)
 
 case class Result(key: Long, count: Int)
 
@@ -187,21 +187,21 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testStateUpdateWithData(
       testName + "no update",
       stateUpdates = state => { /* do nothing */ },
-      timeoutType = KeyedStateTimeout.none,
+      timeoutType = KeyedStateTimeout.None,
       priorState = priorState,
       expectedState = priorState)    // should not change
 
     testStateUpdateWithData(
       testName + "state updated",
       stateUpdates = state => { state.update(5) },
-      timeoutType = KeyedStateTimeout.none,
+      timeoutType = KeyedStateTimeout.None,
       priorState = priorState,
       expectedState = Some(5))     // should change
 
     testStateUpdateWithData(
       testName + "state removed",
       stateUpdates = state => { state.remove() },
-      timeoutType = KeyedStateTimeout.none,
+      timeoutType = KeyedStateTimeout.None,
       priorState = priorState,
       expectedState = None)        // should be removed
   }
@@ -210,22 +210,21 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   for (priorState <- Seq(None, Some(0))) {
     for (priorTimeoutTimestamp <- Seq(TIMEOUT_TIMESTAMP_NOT_SET, 1000)) {
       var testName = s"timeout enabled - "
-      val priorStateStr = if (priorState.nonEmpty) {
+      if (priorState.nonEmpty) {
         testName += "prior state set, "
         if (priorTimeoutTimestamp == 1000) {
-          testName += "prior timeout set"
+          testName += "prior timeout set - "
         } else {
-          testName += "no prior timeout"
+          testName += "no prior timeout - "
         }
       } else {
-        testName += "no prior state"
+        testName += "no prior state - "
       }
-      testName += " - "
 
       testStateUpdateWithData(
         testName + "no update",
         stateUpdates = state => { /* do nothing */ },
-        timeoutType = KeyedStateTimeout.withProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTime,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = priorState,                           // state should not change
@@ -234,7 +233,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "state updated",
         stateUpdates = state => { state.update(5) },
-        timeoutType = KeyedStateTimeout.withProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTime,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = Some(5),                              // state should change
@@ -243,7 +242,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "state removed",
         stateUpdates = state => { state.remove() },
-        timeoutType = KeyedStateTimeout.withProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTime,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = None)                                 // state should be removed
@@ -251,7 +250,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       testStateUpdateWithData(
         testName + "timeout and state updated",
         stateUpdates = state => { state.update(5); state.setTimeoutDuration(5000) },
-        timeoutType = KeyedStateTimeout.withProcessingTime,
+        timeoutType = KeyedStateTimeout.ProcessingTime,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = Some(5),                              // state should change
@@ -339,7 +338,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(stateFunc, "update") // State: Int, Out: (Str, Str)
+        .flatMapGroupsWithState(Update, KeyedStateTimeout.None)(stateFunc)
 
     testStream(result, Update)(
       AddData(inputData, "a"),
@@ -382,8 +381,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(stateFunc, "update") // State: Int, Out: (Str, Str)
-
+        .flatMapGroupsWithState(Update, KeyedStateTimeout.None)(stateFunc)
     testStream(result, Update)(
       AddData(inputData, "a", "a", "b"),
       CheckLastBatch(("a", "1"), ("a", "2"), ("b", "1")),
@@ -417,7 +415,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(stateFunc, "append") // Types = State: MyState, Out: (Str, Str)
+        .flatMapGroupsWithState(Append, KeyedStateTimeout.None)(stateFunc)
         .groupByKey(_._1)
         .count()
 
@@ -448,9 +446,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
       Iterator((key, values.size))
     }
-    checkAnswer(
-      Seq("a", "a", "b").toDS.groupByKey(x => x).flatMapGroupsWithState(stateFunc, "update").toDF,
-      Seq(("a", 2), ("b", 1)).toDF)
+    val df = Seq("a", "a", "b").toDS
+      .groupByKey(x => x)
+      .flatMapGroupsWithState(Update, KeyedStateTimeout.None)(stateFunc).toDF
+    checkAnswer(df, Seq(("a", 2), ("b", 1)).toDF)
   }
 
   test("mapGroupsWithState - streaming") {
@@ -543,7 +542,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   }
 
   test("output partitioning is unknown") {
-    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount2]) => key
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => key
     val inputData = MemoryStream[String]
     val result = inputData.toDS.groupByKey(x => x).mapGroupsWithState(stateFunc)
     result
@@ -555,17 +554,27 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   }
 
   test("disallow complete mode") {
-    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[Int]) => {
       Iterator[String]()
     }
 
     var e = intercept[IllegalArgumentException] {
-      MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(stateFunc, "complete")
+      MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(
+        OutputMode.Complete, KeyedStateTimeout.None)(stateFunc)
     }
     assert(e.getMessage === "The output mode of function should be append or update")
 
+    val javaStateFunc = new FlatMapGroupsWithStateFunction[String, String, Int, String] {
+      import java.util.{Iterator => JIterator}
+      override def call(
+        key: String,
+        values: JIterator[String],
+        state: KeyedState[Int]): JIterator[String] = { null }
+    }
     e = intercept[IllegalArgumentException] {
-      MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(stateFunc, "complete")
+      MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(
+        javaStateFunc, OutputMode.Complete,
+        implicitly[Encoder[Int]], implicitly[Encoder[String]], KeyedStateTimeout.None)
     }
     assert(e.getMessage === "The output mode of function should be append or update")
   }
@@ -573,7 +582,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   def testStateUpdateWithData(
       testName: String,
       stateUpdates: KeyedState[Int] => Unit,
-      timeoutType: KeyedStateTimeout = KeyedStateTimeout.none,
+      timeoutType: KeyedStateTimeout = KeyedStateTimeout.None,
       priorState: Option[Int],
       priorTimeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET,
       expectedState: Option[Int] = None,
@@ -610,7 +619,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         Iterator.empty
       }
       testStateUpdate(
-        testTimeoutUpdates = true, mapGroupsFunc, KeyedStateTimeout.withProcessingTime,
+        testTimeoutUpdates = true, mapGroupsFunc, KeyedStateTimeout.ProcessingTime,
         preTimeoutState, priorTimeoutTimestamp,
         expectedState, expectedTimeoutTimestamp)
     }
@@ -659,12 +668,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   def newFlatMapGroupsWithStateExec(
       func: (Int, Iterator[Int], KeyedState[Int]) => Iterator[Int],
-      timeoutType: KeyedStateTimeout = KeyedStateTimeout.none,
+      timeoutType: KeyedStateTimeout = KeyedStateTimeout.None,
       batchTimestampMs: Long = NO_BATCH_PROCESSING_TIMESTAMP): FlatMapGroupsWithStateExec = {
     MemoryStream[Int]
       .toDS
       .groupByKey(x => x)
-      .flatMapGroupsWithState[Int, Int](func, Append, timeout = timeoutType)
+      .flatMapGroupsWithState[Int, Int](Append, timeoutType = timeoutType)(func)
       .logicalPlan.collectFirst {
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(

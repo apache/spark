@@ -210,7 +210,7 @@ public class JavaDatasetSuite implements Serializable {
       OutputMode.Append(),
       Encoders.LONG(),
       Encoders.STRING(),
-      KeyedStateTimeout.none());
+      KeyedStateTimeout.None());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 

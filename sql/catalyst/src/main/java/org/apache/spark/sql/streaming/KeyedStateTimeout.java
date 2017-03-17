@@ -34,12 +34,12 @@ import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
 public interface KeyedStateTimeout {
 
   /** Timeout based on processing time.  */
-  static KeyedStateTimeout withProcessingTime() {
+  static KeyedStateTimeout ProcessingTime() {
     return ProcessingTimeTimeout$.MODULE$;
   }
 
   /** No timeout */
-  static KeyedStateTimeout none() {
+  static KeyedStateTimeout None() {
     return NoTimeout$.MODULE$;
   }
 }
