@@ -90,8 +90,8 @@ struct<function_desc:string>
 Class: org.apache.spark.sql.catalyst.expressions.JsonToStruct
 Extended Usage:
     Examples:
-      > SELECT from_json('{"a":1}', 'a INT');
-       {"a":1}
+      > SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
+       {"a":1, "b":0.8}
       > SELECT from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
   
@@ -121,7 +121,7 @@ select from_json('{"a":1}', 1)
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-Must be a string literal, but: 1;; line 1 pos 7
+Expected a string literal instead of 1;; line 1 pos 7
 
 
 -- !query 12
