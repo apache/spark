@@ -19,6 +19,7 @@ package org.apache.spark.ml
 
 import java.{util => ju}
 
+import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
@@ -33,6 +34,7 @@ import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -40,6 +42,17 @@ import org.apache.spark.sql.types.StructType
  */
 @DeveloperApi
 abstract class PipelineStage extends Params with Logging {
+
+  // Param against which to set subset of output data frame columns which are to be persisted.
+  private[ml] final val persistCols: Param[Seq[String]] =
+    new Param[Seq[String]](this, "persistCols", "cached output column names")
+
+  // Param against which to set storage level for the output data frame from this stage.
+  private[ml] final val storageLevel: Param[StorageLevel] =
+    new Param[StorageLevel](this, "storageLevel", "cached output storage level")
+
+  // variable to hold the cached data frame, if any, for this stage.
+  private var persistedDf: Option[DataFrame] = None
 
   /**
    * :: DeveloperApi ::
@@ -79,6 +92,62 @@ abstract class PipelineStage extends Params with Logging {
   }
 
   override def copy(extra: ParamMap): PipelineStage
+
+  /**
+   * Marks the output of this pipeline stage to be persisted.
+   *
+   * @param level    Persistence level for output dataframe
+   * @param colExprs Column expressions to select subset of data frame to be persisted.
+   * @return this stage.
+   */
+  @Since("2.3.0")
+  @varargs
+  def persist(level: StorageLevel, colExprs: String*): this.type = {
+    set(persistCols, colExprs)
+    set(storageLevel, level)
+  }
+
+  /**
+   * Marks the output of this pipeline stage to be persisted with default persistence level.
+   *
+   * @param colExprs Column expressions to select subset of data frame to be persisted.
+   * @return this stage.
+   */
+  @Since("2.3.0")
+  @varargs
+  def persist(colExprs: String*): this.type = {
+    persist(StorageLevel.MEMORY_AND_DISK, colExprs: _*)
+  }
+
+  /**
+   * A getter for the cached data frame associated with this stage.
+   * This is set during fitting of pipeline on stages that are marked to persist their output.
+   *
+   * @return the cached data frame option.
+   */
+  @Since("2.3.0")
+  def getPersistedDf(): Option[DataFrame] = persistedDf
+
+  private[ml] def getPersistCols: Option[Seq[String]] = get(persistCols)
+
+  private[ml] def getStorageLevel: Option[StorageLevel] = get(storageLevel)
+
+  private[ml] def persistDf(df: DataFrame): DataFrame = {
+    val dfToPersist = get(persistCols) match {
+      case Some(outputCols: Seq[String]) => df.selectExpr(outputCols: _*)
+      case None => df
+    }
+    persistedDf match {
+      case Some(persisted) => persisted.unpersist()
+      case None =>
+    }
+    setCachedDF(dfToPersist.persist(getStorageLevel.get))
+    dfToPersist
+  }
+
+  private[ml] def setCachedDF(df: DataFrame): Unit = {
+    persistedDf = Option(df)
+  }
 }
 
 /**
@@ -135,19 +204,19 @@ class Pipeline @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): PipelineModel = {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
-    // Search for the last estimator.
-    var indexOfLastEstimator = -1
+    // Search for the last estimator or the last stage marked to persist.
+    var indexOfLastInterest = -1
     theStages.view.zipWithIndex.foreach { case (stage, index) =>
       stage match {
         case _: Estimator[_] =>
-          indexOfLastEstimator = index
-        case _ =>
+          indexOfLastInterest = index
+        case _ => if (stage.getStorageLevel.isDefined) indexOfLastInterest = index
       }
     }
     var curDataset = dataset
     val transformers = ListBuffer.empty[Transformer]
     theStages.view.zipWithIndex.foreach { case (stage, index) =>
-      if (index <= indexOfLastEstimator) {
+      if (index <= indexOfLastInterest) {
         val transformer = stage match {
           case estimator: Estimator[_] =>
             estimator.fit(curDataset)
@@ -157,8 +226,18 @@ class Pipeline @Since("1.4.0") (
             throw new IllegalArgumentException(
               s"Does not support stage $stage of type ${stage.getClass}")
         }
-        if (index < indexOfLastEstimator) {
-          curDataset = transformer.transform(curDataset)
+        if (index <= indexOfLastInterest) {
+          val df = transformer.transform(curDataset)
+          val storageLevelOpt = stage.getStorageLevel
+          val colsOpt = stage.getPersistCols
+          if (storageLevelOpt.isDefined) {
+            val persistedDf = transformer.persistDf(df)
+            // also set to transformer in case it's different from stage
+            stage.setCachedDF(persistedDf)
+            curDataset = persistedDf
+          } else {
+            curDataset = df
+          }
         }
         transformers += transformer
       } else {
@@ -181,7 +260,15 @@ class Pipeline @Since("1.4.0") (
     val theStages = $(stages)
     require(theStages.toSet.size == theStages.length,
       "Cannot have duplicate components in a pipeline.")
-    theStages.foldLeft(schema)((cur, stage) => stage.transformSchema(cur))
+    theStages.foldLeft(schema)((cur, stage) => {
+      val transSchema = stage.transformSchema(cur)
+      if(!stage.getPersistCols.isEmpty) {
+        // Prune non-chached columns
+        StructType(transSchema.filter(s => stage.getPersistCols.get.contains(s.name)))
+      } else {
+        transSchema
+      }
+    })
   }
 
   @Since("1.6.0")
@@ -257,7 +344,7 @@ object Pipeline extends MLReadable[Pipeline] {
 
     /**
      * Load metadata and stages for a [[Pipeline]] or [[PipelineModel]]
-     * @return  (UID, list of stages)
+     * @return (UID, list of stages)
      */
     def load(
         expectedClassName: String,
@@ -301,13 +388,33 @@ class PipelineModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
+    // Check if the passed in data frame was cached in any stage during fit.
+    // If yes, skip to the next needed stage.
+    val skipIndex = stages.map(_.getPersistedDf())
+      .indexWhere(e => dataset.equals(e.getOrElse(None))) + 1
+    if (skipIndex <= 0) {
+      transformSchema(dataset.schema, logging = true)
+    } else {
+      transformSchema(dataset.schema, skipIndex)
+    }
+    stages.drop(skipIndex).foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
   }
 
   @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
-    stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
+    transformSchema(schema, 0)
+  }
+
+  private def transformSchema(schema: StructType, skipToStage: Int): StructType = {
+    stages.drop(skipToStage).foldLeft(schema)((cur, transformer) => {
+      val transSchema = transformer.transformSchema(cur)
+      if (!transformer.getPersistCols.isEmpty) {
+        // Prune non-chached columns
+        StructType(transSchema.filter(s => transformer.getPersistCols.get.contains(s.name)))
+      } else {
+        transSchema
+      }
+    })
   }
 
   @Since("1.4.0")

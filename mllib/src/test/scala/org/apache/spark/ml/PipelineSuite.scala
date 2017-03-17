@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml
 
+import scala.beans.BeanInfo
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
@@ -26,13 +27,18 @@ import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
-import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
+import org.apache.spark.ml.clustering.LDA
+import org.apache.spark.ml.feature.{CountVectorizer, HashingTF, MinMaxScaler, Tokenizer}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
+
+@BeanInfo
+case class Document(docId: Long, text: String)
 
 class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -53,6 +59,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
 
+
     when(dataset0.toDF).thenReturn(dataset0)
     when(dataset1.toDF).thenReturn(dataset1)
     when(dataset2.toDF).thenReturn(dataset2)
@@ -60,11 +67,35 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     when(dataset4.toDF).thenReturn(dataset4)
 
     when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
+    when(estimator0.getPersistCols).thenReturn(None)
+    when(estimator0.getStorageLevel).thenReturn(None)
+    when(estimator0.getPersistedDf()).thenReturn(None)
+
     when(model0.copy(any[ParamMap])).thenReturn(model0)
+    when(model0.getPersistCols).thenReturn(None)
+    when(model0.getStorageLevel).thenReturn(None)
+    when(model0.getPersistedDf()).thenReturn(None)
+
     when(transformer1.copy(any[ParamMap])).thenReturn(transformer1)
+    when(transformer1.getPersistCols).thenReturn(None)
+    when(transformer1.getStorageLevel).thenReturn(None)
+    when(transformer1.getPersistedDf()).thenReturn(None)
+
     when(estimator2.copy(any[ParamMap])).thenReturn(estimator2)
+    when(estimator2.getPersistCols).thenReturn(None)
+    when(estimator2.getStorageLevel).thenReturn(None)
+    when(estimator2.getPersistedDf()).thenReturn(None)
+
     when(model2.copy(any[ParamMap])).thenReturn(model2)
+    when(model2.getPersistCols).thenReturn(None)
+    when(model2.getStorageLevel).thenReturn(None)
+    when(model2.getPersistedDf()).thenReturn(None)
+
     when(transformer3.copy(any[ParamMap])).thenReturn(transformer3)
+    when(transformer3.getPersistCols).thenReturn(None)
+    when(transformer3.getStorageLevel).thenReturn(None)
+    when(transformer3.getPersistedDf()).thenReturn(None)
+
 
     when(estimator0.fit(meq(dataset0))).thenReturn(model0)
     when(model0.transform(meq(dataset0))).thenReturn(dataset1)
@@ -226,6 +257,73 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val stages1 = Array(new WritableStage("a"))
     val steps = stages0 ++ stages1
     val p = new Pipeline().setStages(steps)
+  }
+
+  test("pipeline execution with cached stages") {
+
+    val initialDf = Seq(
+      Document(1, "This is first document"),
+      Document(2, "One more document"),
+      Document(3, "This is third"),
+      Document(4, "And so on...")).toDF()
+
+    val tokenizer = new Tokenizer().setInputCol("text").setOutputCol("words")
+
+    val cv = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setVocabSize(100)
+      .persist(StorageLevel.MEMORY_AND_DISK, "docId", "features")
+
+    val lda = new LDA().setOptimizer("online").setK(10).setMaxIter(10)
+
+    val pipeline = new Pipeline().setStages(Array(tokenizer, cv, lda))
+
+    assert(cv.getPersistedDf().equals(None))
+
+    val pipelineModel = pipeline.fit(initialDf)
+
+    // Marked cv to be persistent, check if it updated.
+    assert(cv.getPersistedDf().isDefined)
+    // The corresponding transformer in the model should also have the persisted df.
+    assert(!pipelineModel.stages(0).getPersistedDf().isDefined,
+      "Found persisted data frame on unexpected stage.")
+
+    assert(pipelineModel.stages(1).getPersistedDf().isDefined,
+      "Did not find persisted data frame at expected stage.")
+
+    assert(!pipelineModel.stages(2).getPersistedDf().isDefined,
+      "Found persisted data frame on unexpected stage.")
+
+    // unexpected pesisted df shape
+    assertResult(4)(cv.getPersistedDf().get.select("docId", "features").count())
+
+    // check if the initial data frame is handled normally.
+    assertResult(5)(pipelineModel.transform(initialDf).schema.fieldNames.length)
+
+    // check if the persisted df's set on Estimator and corresponding Transformer are same.
+    assert(pipelineModel.stages(1).getPersistedDf().get.equals(cv.getPersistedDf().get),
+    "Persisted dataframes for Estimator and corresponding Transformer do not match.")
+
+    // Execute partial pipe line with the persisted data frame automatically.
+    val partialPipelineDf = pipelineModel.transform(cv.getPersistedDf().get)
+
+    assertResult(3)(partialPipelineDf.schema.fieldNames.length)
+
+    val expectedFieldNames = Seq("docId", "features", "topicDistribution")
+    partialPipelineDf.schema.fieldNames.foreach(e => assert(expectedFieldNames.contains(e),
+    s"Unexpected field ${e} in out put."))
+
+    assertResult(1)(sc.getPersistentRDDs.size)
+
+    // check if the pipeline works expectedly even if a persisted df is unpersisted.
+    cv.getPersistedDf().get.unpersist()
+
+    val partialPipelineDf1 = pipelineModel.transform(cv.getPersistedDf().get)
+
+    assertResult(3)(partialPipelineDf1.schema.fieldNames.length)
+    assertResult(4)(partialPipelineDf1.count)
+
   }
 }
 

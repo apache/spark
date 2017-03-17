@@ -326,7 +326,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       assert(expected.pipelineModel.stages.length === actual.pipelineModel.stages.length)
       expected.pipelineModel.stages.zip(actual.pipelineModel.stages).foreach {
         case (exTransformer, acTransformer) =>
-          assert(exTransformer.params === acTransformer.params)
+          assert(exTransformer.params.map(_.name) === acTransformer.params.map(_.name))
       }
       assert(expected.resolvedFormula.label === actual.resolvedFormula.label)
       assert(expected.resolvedFormula.terms === actual.resolvedFormula.terms)
