@@ -80,7 +80,18 @@ case class SortMergeJoinExec(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  override def outputOrdering: Seq[SortOrder] = requiredOrders(leftKeys)
+  override def outputOrdering: Seq[SortOrder] = joinType match {
+    case RightOuter =>
+      // For right outer join, values of the left key will be filled with nulls if it can't
+      // match the value of the right key, so `nullOrdering` of the left key can't be guaranteed.
+      // We should output right key order here.
+      requiredOrders(rightKeys)
+    case FullOuter =>
+      // Neither left key nor right key guarantees `nullOrdering` after full outer join.
+      Nil
+    case _ =>
+      requiredOrders(leftKeys)
+  }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
