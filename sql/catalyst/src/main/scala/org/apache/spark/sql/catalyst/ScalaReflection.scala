@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -162,7 +164,7 @@ object ScalaReflection extends ScalaReflection {
 
     /** Returns the current path or `GetColumnByOrdinal`. */
     def getPath: Expression = {
-      val dataType = schemaFor(tpe).dataType
+      val dataType = schemaForDefaultBinaryType(tpe).dataType
       if (path.isDefined) {
         path.get
       } else {
@@ -407,7 +409,8 @@ object ScalaReflection extends ScalaReflection {
         val cls = getClassFromType(tpe)
 
         val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
-          val Schema(dataType, nullable) = schemaFor(fieldType)
+          val Schema(dataType, nullable) = schemaForDefaultBinaryType(fieldType)
+
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
@@ -441,6 +444,10 @@ object ScalaReflection extends ScalaReflection {
         } else {
           newInstance
         }
+
+      case _ =>
+        // default kryo deserializer
+        DecodeUsingSerializer(getPath, ClassTag(getClassFromType(tpe)), true)
     }
   }
 
@@ -639,9 +646,9 @@ object ScalaReflection extends ScalaReflection {
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
-      case other =>
-        throw new UnsupportedOperationException(
-          s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
+      case _ =>
+        // default kryo serializer
+        EncodeUsingSerializer(inputObject, true)
     }
 
   }
@@ -708,6 +715,13 @@ object ScalaReflection extends ScalaReflection {
       s.toAttributes
   }
 
+  /**
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   * If the tpe mismatched in schemaFor function, the default BinaryType returned
+   */
+  def schemaForDefaultBinaryType(tpe: `Type`): Schema = scala.util.Try(schemaFor(tpe)).toOption
+    .getOrElse(Schema(BinaryType, nullable = true))
+
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
 
@@ -723,20 +737,20 @@ object ScalaReflection extends ScalaReflection {
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
-        Schema(schemaFor(optType).dataType, nullable = true)
+        Schema(schemaForDefaultBinaryType(optType).dataType, nullable = true)
       case t if t <:< localTypeOf[Array[Byte]] => Schema(BinaryType, nullable = true)
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
+        val Schema(dataType, nullable) = schemaForDefaultBinaryType(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
+        val Schema(dataType, nullable) = schemaForDefaultBinaryType(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
       case t if t <:< localTypeOf[Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
-        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-        Schema(MapType(schemaFor(keyType).dataType,
+        val Schema(valueDataType, valueNullable) = schemaForDefaultBinaryType(valueType)
+        Schema(MapType(schemaForDefaultBinaryType(keyType).dataType,
           valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< localTypeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< localTypeOf[java.sql.Timestamp] => Schema(TimestampType, nullable = true)
@@ -767,7 +781,7 @@ object ScalaReflection extends ScalaReflection {
         val params = getConstructorParameters(t)
         Schema(StructType(
           params.map { case (fieldName, fieldType) =>
-            val Schema(dataType, nullable) = schemaFor(fieldType)
+            val Schema(dataType, nullable) = schemaForDefaultBinaryType(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
       case other =>

@@ -1136,7 +1136,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(spark.range(1).map { x => new java.sql.Timestamp(100000) }.head ==
       new java.sql.Timestamp(100000))
   }
+
+  test("fallback to kryo for unknow classes in ExpressionEncoder") {
+    val ds = Seq(DefaultKryoEncoderForSubFiled("a", Seq(1), Some(Set(2))),
+      DefaultKryoEncoderForSubFiled("b", Seq(3), None)).toDS()
+    checkDataset(ds, DefaultKryoEncoderForSubFiled("a", Seq(1), Some(Set(2))),
+      DefaultKryoEncoderForSubFiled("b", Seq(3), None))
+
+    val df = ds.toDF()
+    assert(df.schema(0).dataType == StringType)
+    assert(df.schema(1).dataType == ArrayType(IntegerType, containsNull = false))
+    assert(df.schema(2).dataType == BinaryType)
+  }
 }
+
+case class DefaultKryoEncoderForSubFiled(a: String, b: Seq[Int], c: Option[Set[Int]])
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
