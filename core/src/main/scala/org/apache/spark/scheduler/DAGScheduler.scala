@@ -1377,8 +1377,7 @@ class DAGScheduler(
       execId: String,
       fileLost: Boolean) {
     removeExecutorAndUnregisterOutputOnExecutor(execId,
-      // There will not be any file loss if external shuffle service is enabled
-      fileLost && !env.blockManager.externalShuffleServiceEnabled, None)
+      fileLost || !env.blockManager.externalShuffleServiceEnabled, None)
   }
 
 
