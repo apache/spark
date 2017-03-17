@@ -50,8 +50,6 @@ class UnivocityParser(
 
   private val row = new GenericInternalRow(requiredSchema.length)
 
-  private val emptyRow = new GenericInternalRow(requiredSchema.length)
-
   // Retrieve the raw record string.
   private def getCurrentInput(): UTF8String = {
     UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
@@ -201,11 +199,11 @@ class UnivocityParser(
       } else {
         tokens.take(schema.length)
       }
-      def getPartialResult(): InternalRow = {
+      def getPartialResult(): Option[InternalRow] = {
         try {
-          convert(checkedTokens)
+          Some(convert(checkedTokens))
         } catch {
-          case _: BadRecordException => emptyRow
+          case _: BadRecordException => None
         }
       }
       throw BadRecordException(
@@ -221,7 +219,7 @@ class UnivocityParser(
         row
       } catch {
         case NonFatal(e) =>
-          throw BadRecordException(() => getCurrentInput(), () => emptyRow, e)
+          throw BadRecordException(() => getCurrentInput(), () => None, e)
       }
     }
   }
@@ -246,12 +244,13 @@ private[csv] object UnivocityParser {
       inputStream: InputStream,
       shouldDropHeader: Boolean,
       parser: UnivocityParser,
-      corruptFieldIndex: Option[Int]): Iterator[InternalRow] = {
+      schema: StructType): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
       input => Seq(parser.convert(input)),
       parser.options.parseMode,
-      corruptFieldIndex)
+      schema,
+      parser.options.columnNameOfCorruptRecord)
     convertStream(inputStream, shouldDropHeader, tokenizer) { tokens =>
       safeParser.parse(tokens)
     }.flatten
@@ -288,7 +287,7 @@ private[csv] object UnivocityParser {
       lines: Iterator[String],
       shouldDropHeader: Boolean,
       parser: UnivocityParser,
-      corruptFieldIndex: Option[Int]): Iterator[InternalRow] = {
+      schema: StructType): Iterator[InternalRow] = {
     val options = parser.options
 
     val linesWithoutHeader = if (shouldDropHeader) {
@@ -305,7 +304,8 @@ private[csv] object UnivocityParser {
     val safeParser = new FailureSafeParser[String](
       input => Seq(parser.parse(input)),
       parser.options.parseMode,
-      corruptFieldIndex)
+      schema,
+      parser.options.columnNameOfCorruptRecord)
     filteredLines.flatMap(safeParser.parse)
   }
 }

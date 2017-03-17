@@ -384,7 +384,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val dataSchema = StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val corruptFieldIndex = schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord)
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
@@ -392,7 +391,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
-        corruptFieldIndex)
+        schema,
+        parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
 
@@ -443,7 +443,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
     val dataSchema = StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val corruptFieldIndex = schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord)
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
@@ -454,7 +453,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       val parser = new FailureSafeParser[String](
         input => Seq(rawParser.parse(input)),
         parsedOptions.parseMode,
-        corruptFieldIndex)
+        schema,
+        parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
 

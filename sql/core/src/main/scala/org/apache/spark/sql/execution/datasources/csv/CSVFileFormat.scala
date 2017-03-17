@@ -102,7 +102,6 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    val corruptFieldIndex = requiredSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord)
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = dataSchema(corruptFieldIndex)
@@ -118,7 +117,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)),
         parsedOptions)
-      CSVDataSource(parsedOptions).readFile(conf, file, parser, corruptFieldIndex)
+      CSVDataSource(parsedOptions).readFile(conf, file, parser, requiredSchema)
     }
   }
 

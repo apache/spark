@@ -102,12 +102,11 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    val corruptFieldIndex = requiredSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord)
     val actualSchema =
       StructType(requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     // Check a field requirement for corrupt records here to throw an exception in a driver side
-    corruptFieldIndex.foreach { i =>
-      val f = dataSchema(i)
+    dataSchema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = dataSchema(corruptFieldIndex)
       if (f.dataType != StringType || !f.nullable) {
         throw new AnalysisException(
           "The field for corrupt records must be string type and nullable")
@@ -120,7 +119,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         broadcastedHadoopConf.value.value,
         file,
         parser,
-        corruptFieldIndex)
+        requiredSchema)
     }
   }
 

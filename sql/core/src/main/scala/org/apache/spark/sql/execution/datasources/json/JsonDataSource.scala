@@ -53,7 +53,7 @@ abstract class JsonDataSource extends Serializable {
     conf: Configuration,
     file: PartitionedFile,
     parser: JacksonParser,
-    corruptFieldIndex: Option[Int]): Iterator[InternalRow]
+    schema: StructType): Iterator[InternalRow]
 
   final def inferSchema(
       sparkSession: SparkSession,
@@ -132,13 +132,14 @@ object TextInputJsonDataSource extends JsonDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: JacksonParser,
-      corruptFieldIndex: Option[Int]): Iterator[InternalRow] = {
+      schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
     val safeParser = new FailureSafeParser[Text](
       input => parser.parse(input, CreateJacksonParser.text, textToUTF8String),
       parser.options.parseMode,
-      corruptFieldIndex)
+      schema,
+      parser.options.columnNameOfCorruptRecord)
     linesReader.flatMap(safeParser.parse)
   }
 
@@ -190,7 +191,7 @@ object WholeFileJsonDataSource extends JsonDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: JacksonParser,
-      corruptFieldIndex: Option[Int]): Iterator[InternalRow] = {
+      schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
         CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
@@ -202,9 +203,10 @@ object WholeFileJsonDataSource extends JsonDataSource {
     val safeParser = new FailureSafeParser[InputStream](
       input => parser.parse(input, CreateJacksonParser.inputStream, partitionedFileString),
       parser.options.parseMode,
-      corruptFieldIndex)
+      schema,
+      parser.options.columnNameOfCorruptRecord)
 
     safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)).toIterator
+      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath))
   }
 }

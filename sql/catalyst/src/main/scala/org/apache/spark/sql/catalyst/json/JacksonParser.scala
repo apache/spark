@@ -52,8 +52,6 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  private val emptyRow = new GenericInternalRow(schema.length)
-
   /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
@@ -288,8 +286,7 @@ class JacksonParser(
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
-      // SparkSQLRuntimeException and this exception will be caught by
-      // `parse` method.
+      // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
         s"Failed to parse a value for data type $dataType (current token: $token).")
   }
@@ -370,7 +367,7 @@ class JacksonParser(
       }
     } catch {
       case e @ (_: RuntimeException | _: JsonProcessingException) =>
-        throw BadRecordException(() => recordLiteral(record), () => emptyRow, e)
+        throw BadRecordException(() => recordLiteral(record), () => None, e)
     }
   }
 }
