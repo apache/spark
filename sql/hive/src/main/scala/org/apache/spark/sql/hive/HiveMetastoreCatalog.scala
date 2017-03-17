@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URI
-
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.Striped
@@ -248,7 +246,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         .inferSchema(
           sparkSession,
           options,
-          fileIndex.listFiles(Nil).flatMap(_.files))
+          fileIndex.listFiles(Nil, Nil).flatMap(_.files))
         .map(mergeWithMetastoreSchema(relation.tableMeta.schema, _))
 
       inferredSchema match {
@@ -356,13 +354,10 @@ private[hive] object HiveMetastoreCatalog {
       .filterKeys(!inferredSchema.map(_.name.toLowerCase).contains(_))
       .values
       .filter(_.nullable)
-
     // Merge missing nullable fields to inferred schema and build a case-insensitive field map.
     val inferredFields = StructType(inferredSchema ++ missingNullables)
       .map(f => f.name.toLowerCase -> f).toMap
-    StructType(metastoreFields.map { case(name, field) =>
-      field.copy(name = inferredFields(name).name)
-    }.toSeq)
+    StructType(metastoreSchema.map(f => f.copy(name = inferredFields(f.name).name)))
   } catch {
     case NonFatal(_) =>
       val msg = s"""Detected conflicting schemas when merging the schema obtained from the Hive
