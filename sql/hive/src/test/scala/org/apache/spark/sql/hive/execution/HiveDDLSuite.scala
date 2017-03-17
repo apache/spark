@@ -1952,6 +1952,8 @@ class HiveDDLSuite
             }.getMessage
             assert(e.contains("Found duplicate column(s)"))
           } else {
+            // hive catalog will still complains that c1 is duplicate column name because hive
+            // identifiers are case insensitive.
             val e = intercept[AnalysisException] {
               sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
             }.getMessage

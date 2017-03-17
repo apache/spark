@@ -418,10 +418,10 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("ALTER TABLE ADD COLUMNS does not support RelationProvider") {
-    withTable("ds_relationProvider") {
+    withTable("tab") {
       sql(
         """
-         |CREATE TABLE ds_relationProvider
+         |CREATE TABLE tab
          |USING org.apache.spark.sql.sources.SimpleScanSource
          |OPTIONS (
          |  From '1',
@@ -429,9 +429,9 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
          |)
         """.stripMargin)
       val e = intercept[AnalysisException] {
-        sql("ALTER TABLE ds_relationProvider ADD COLUMNS (c3 int)")
+        sql("ALTER TABLE tab ADD COLUMNS (c3 int)")
       }.getMessage
-      assert(e.contains("does not support ALTER ADD COLUMNS"))
+      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
     }
   }
 }

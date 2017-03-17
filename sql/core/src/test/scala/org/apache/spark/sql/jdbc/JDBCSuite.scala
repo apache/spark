@@ -985,7 +985,7 @@ class JDBCSuite extends SparkFunSuite
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE ds_jdbc ADD COLUMNS (C3 int)")
       }.getMessage
-      assert(e.contains("does not support ALTER ADD COLUMNS"))
+      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
     }
   }
 }

@@ -177,8 +177,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
             }.getMessage
             assert(e.contains("Found duplicate column(s)"))
           } else {
-            // hive catalog will still complains that c1 is duplicate column name because hive
-            // identifiers are case insensitive.
             sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
             assert(sql("SELECT * FROM t1").schema
               .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
