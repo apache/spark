@@ -43,18 +43,16 @@ warnings.filterwarnings(
     action='default', category=PendingDeprecationWarning, module='airflow')
 
 
-try:
-    from cryptography.fernet import Fernet
-except ImportError:
-    pass
-
-
 def generate_fernet_key():
     try:
-        FERNET_KEY = Fernet.generate_key().decode()
+        from cryptography.fernet import Fernet
+    except ImportError:
+        pass
+    try:
+        key = Fernet.generate_key().decode()
     except NameError:
-        FERNET_KEY = "cryptography_not_found_storing_passwords_in_plain_text"
-    return FERNET_KEY
+        key = "cryptography_not_found_storing_passwords_in_plain_text"
+    return key
 
 
 def expand_env_var(env_var):
@@ -774,14 +772,19 @@ def parameterized_config(template):
     current scope
     :param template: a config content templated with {{variables}}
     """
-    FERNET_KEY = generate_fernet_key()
     all_vars = {k: v for d in [globals(), locals()] for k, v in d.items()}
+    if 'FERNET_KEY' not in all_vars:
+        all_vars['FERNET_KEY'] = ''
     return template.format(**all_vars)
 
 TEST_CONFIG_FILE = AIRFLOW_HOME + '/unittests.cfg'
+# only generate a Fernet key if we need to create a new config file
+if not os.path.isfile(TEST_CONFIG_FILE) or not os.path.isfile(AIRFLOW_CONFIG):
+    FERNET_KEY = generate_fernet_key()
 if not os.path.isfile(TEST_CONFIG_FILE):
-    logging.info("Creating new airflow config file for unit tests in: " +
-                 TEST_CONFIG_FILE)
+    logging.info(
+        'Creating new Airflow config file for unit tests in: {}'.format(
+            TEST_CONFIG_FILE))
     with open(TEST_CONFIG_FILE, 'w') as f:
         f.write(parameterized_config(TEST_CONFIG))
 
@@ -789,7 +792,8 @@ if not os.path.isfile(AIRFLOW_CONFIG):
     # These configuration options are used to generate a default configuration
     # when it is missing. The right way to change your configuration is to
     # alter your configuration file, not this code.
-    logging.info("Creating new airflow config file in: " + AIRFLOW_CONFIG)
+    logging.info('Creating new Airflow config file in: {}'.format(
+        AIRFLOW_CONFIG))
     with open(AIRFLOW_CONFIG, 'w') as f:
         f.write(parameterized_config(DEFAULT_CONFIG))
 
