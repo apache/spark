@@ -55,15 +55,19 @@ class QuantileSummariesSuite extends SparkFunSuite {
   }
 
   private def checkQuantile(quant: Double, data: Seq[Double], summary: QuantileSummaries): Unit = {
-    val approx = summary.query(quant).get
-    // The rank of the approximation.
-    val rank = data.count(_ < approx) // has to be <, not <= to be exact
-    val lower = math.floor((quant - summary.relativeError) * data.size)
-    val upper = math.ceil((quant + summary.relativeError) * data.size)
-    val msg =
-      s"$rank not in [$lower $upper], requested quantile: $quant, approx returned: $approx"
-    assert(rank >= lower, msg)
-    assert(rank <= upper, msg)
+    if (data.nonEmpty) {
+      val approx = summary.query(quant).get
+      // The rank of the approximation.
+      val rank = data.count(_ < approx) // has to be <, not <= to be exact
+      val lower = math.floor((quant - summary.relativeError) * data.size)
+      val upper = math.ceil((quant + summary.relativeError) * data.size)
+      val msg =
+        s"$rank not in [$lower $upper], requested quantile: $quant, approx returned: $approx"
+      assert(rank >= lower, msg)
+      assert(rank <= upper, msg)
+    } else {
+      assert(summary.query(quant).isEmpty)
+    }
   }
 
   for {
@@ -102,10 +106,15 @@ class QuantileSummariesSuite extends SparkFunSuite {
     }
 
     test(s"Test on empty QuantileSummaries") {
-      val s = buildSummary(Seq.empty[Double], epsi, compression)
+      val emptyData = Seq.empty[Double]
+      val s = buildSummary(emptyData, epsi, compression)
       assert(s.count == 0, s"Found count=${s.count} but data size=0")
       assert(s.sampled.isEmpty, s"if QuantileSummaries is empty, sampled should be empty")
-      assert(s.query(0.9).isEmpty, "if QuantileSummaries is empty, query should return None")
+      checkQuantile(0.9999, emptyData, s)
+      checkQuantile(0.9, emptyData, s)
+      checkQuantile(0.5, emptyData, s)
+      checkQuantile(0.1, emptyData, s)
+      checkQuantile(0.001, emptyData, s)
     }
   }
 
