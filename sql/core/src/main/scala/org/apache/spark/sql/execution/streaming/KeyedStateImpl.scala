@@ -29,20 +29,20 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *                              for processing time timeouts
  * @param isTimeoutEnabled Whether timeout is enabled. This will be used to check whether the user
  *                         is allowed to configure timeouts.
- * @param isTimingOut     Whether the key for which this state wrapped is being created is
+ * @param hasTimedOut     Whether the key for which this state wrapped is being created is
  *                        getting timed out or not.
  */
 private[sql] class KeyedStateImpl[S](
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
     isTimeoutEnabled: Boolean,
-    override val isTimingOut: Boolean) extends KeyedState[S] {
+    override val hasTimedOut: Boolean) extends KeyedState[S] {
 
   import KeyedStateImpl._
 
   // Constructor to create dummy state when using mapGroupsWithState in a batch query
   def this(optionalValue: Option[S]) = this(
-    optionalValue, -1, isTimeoutEnabled = false, isTimingOut = false)
+    optionalValue, -1, isTimeoutEnabled = false, hasTimedOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
   private var updated: Boolean = false // whether value has been updated (but not removed)
@@ -88,8 +88,14 @@ private[sql] class KeyedStateImpl[S](
   override def setTimeoutDuration(durationMs: Long): Unit = {
     if (!isTimeoutEnabled) {
       throw new UnsupportedOperationException(
-        "Cannot set timeout duration without enabling timeout in map/flatMapGroupsWithState")
+        "Cannot set timeout information without enabling timeout in map/flatMapGroupsWithState")
     }
+    if (!defined) {
+      throw new IllegalStateException(
+        "Cannot set timeout information without any state value, " +
+          "state has either not been initialized, or has already been removed")
+    }
+
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
     }
@@ -130,16 +136,12 @@ private[sql] class KeyedStateImpl[S](
   // ========= Internal API =========
 
   /** Whether the state has been marked for removing */
-  def isRemoved: Boolean = {
-    removed
-  }
+  def hasRemoved: Boolean = removed
 
-  /** Whether the state has been been updated */
-  def isUpdated: Boolean = {
-    updated
-  }
+  /** Whether the state has been updated */
+  def hasUpdated: Boolean = updated
 
-  /** Return timeout timestamp or -1 if not set */
+  /** Return timeout timestamp or `TIMEOUT_TIMESTAMP_NOT_SET` if not set */
   def getTimeoutTimestamp: Long = timeoutTimestamp
 }
 

@@ -59,17 +59,12 @@ case class FlatMapGroupsWithStateExec(
   private val isTimeoutEnabled = timeout == ProcessingTimeTimeout
   private val timestampTimeoutAttribute =
     AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
-  private val stateExistsAttribute =
-    AttributeReference("stateExists", dataType = BooleanType, nullable = false)()
   private val stateAttributes: Seq[Attribute] = {
-    val encoderSchemaAttributes = stateEncoder.schema.toAttributes
-    if (isTimeoutEnabled) {
-      encoderSchemaAttributes :+ stateExistsAttribute :+ timestampTimeoutAttribute
-    } else encoderSchemaAttributes
+    val encSchemaAttribs = stateEncoder.schema.toAttributes
+    if (isTimeoutEnabled) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
   }
 
   import KeyedStateImpl._
-  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
@@ -132,19 +127,14 @@ case class FlatMapGroupsWithStateExec(
     private val stateSerializer = {
       val encoderSerializer = stateEncoder.namedExpressions
       if (isTimeoutEnabled) {
-        encoderSerializer :+ Literal(false) :+ Literal(KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+        encoderSerializer :+ Literal(KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
       } else {
         encoderSerializer
       }
     }
     private val getStateRowFromObj = ObjectOperator.serializeObjectToRow(stateSerializer)
 
-    // Generator for creating empty state rows
-    private val getEmptyStateRow = UnsafeProjection.create(stateSerializer)
-    private val emptyStateInternalRow = new SpecificInternalRow(stateSerializer.map(_.dataType))
-
     // Index of the additional metadata fields in the state row
-    private val stateExistsIndex = stateAttributes.indexOf(stateExistsAttribute)
     private val timeoutTimestampIndex = stateAttributes.indexOf(timestampTimeoutAttribute)
 
     // Metrics
@@ -192,12 +182,12 @@ case class FlatMapGroupsWithStateExec(
     private def callFunctionAndUpdateState(
         keyRow: UnsafeRow,
         valueRowIter: Iterator[InternalRow],
-        stateRowOption: Option[UnsafeRow],
+        prevStateRowOption: Option[UnsafeRow],
         isTimingOut: Boolean): Iterator[InternalRow] = {
 
       val keyObj = getKeyObj(keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
-      val stateObjOption = getStateObj(stateRowOption)
+      val stateObjOption = getStateObj(prevStateRowOption)
       val keyedState = new KeyedStateImpl(
         stateObjOption, batchTimestampMs, isTimeoutEnabled, isTimingOut)
 
@@ -207,24 +197,37 @@ case class FlatMapGroupsWithStateExec(
         getOutputRow(obj)
       }
 
+      // When the iterator is consumed, then write changes to state
       def onIteratorCompletion: Unit = {
-        // When the iterator is consumed, then write changes to state
-        if (keyedState.isRemoved) {
+        // Has the timeout information changed
+
+        if (keyedState.hasRemoved) {
           store.remove(keyRow)
           numUpdatedStateRows += 1
 
         } else {
-          val stateRowToWrite = if (keyedState.isUpdated) {
-            getUpdatedStateRow(keyedState.get)
-          } else {
-            stateRowOption.getOrElse(createNewStateRow)
+          val previousTimeoutTimestamp = prevStateRowOption match {
+            case Some(row) => getTimeoutTimestamp(row)
+            case None => TIMEOUT_TIMESTAMP_NOT_SET
           }
 
-          // Update metadata in row as needed
-          setTimeoutTimestamp(stateRowToWrite, keyedState.getTimeoutTimestamp)
+          val stateRowToWrite = if (keyedState.hasUpdated) {
+            getStateRow(keyedState.get)
+          } else {
+            prevStateRowOption.orNull
+          }
 
-          // Write state row to store if there is any change worth writing
-          if (keyedState.isUpdated || isTimeoutEnabled) {
+          val hasTimeoutChanged = keyedState.getTimeoutTimestamp != previousTimeoutTimestamp
+          val shouldWriteState = keyedState.hasUpdated || hasTimeoutChanged
+
+          if (shouldWriteState) {
+            if (stateRowToWrite == null) {
+              // This should never happen because checks in KeyedStateImpl should avoid cases
+              // where empty state would need to be written
+              throw new IllegalStateException(
+                "Attempting to write empty state")
+            }
+            setTimeoutTimestamp(stateRowToWrite, keyedState.getTimeoutTimestamp)
             store.put(keyRow.copy(), stateRowToWrite.copy())
             numUpdatedStateRows += 1
           }
@@ -237,29 +240,17 @@ case class FlatMapGroupsWithStateExec(
 
     /** Returns the state as Java object if defined */
     def getStateObj(stateRowOption: Option[UnsafeRow]): Option[Any] = {
-      stateRowOption.filter { row =>
-        // If timeout is disabled, then non-existent state data is not stored in store.
-        // If timeout is enabled, then non-existent state maybe stored with stateExists
-        // field set to false.
-        !isTimeoutEnabled || row.getBoolean(stateExistsIndex)
-      }.map(getStateObjFromRow)
+      stateRowOption.map(getStateObjFromRow)
     }
 
     /** Returns the row for an updated state */
-    def getUpdatedStateRow(obj: Any): UnsafeRow = {
-      val row = getStateRowFromObj(obj)
-      if (isTimeoutEnabled) row.setBoolean(stateExistsIndex, true)
-      row
+    def getStateRow(obj: Any): UnsafeRow = {
+      getStateRowFromObj(obj)
     }
 
     /** Returns the timeout timestamp of a state row is set */
     def getTimeoutTimestamp(stateRow: UnsafeRow): Long = {
       if (isTimeoutEnabled) stateRow.getLong(timeoutTimestampIndex) else TIMEOUT_TIMESTAMP_NOT_SET
-    }
-
-    /** Returns a new empty state row */
-    def createNewStateRow(): UnsafeRow = {
-      getEmptyStateRow(emptyStateInternalRow).copy()
     }
 
     /** Set the timestamp in a state row */

@@ -174,18 +174,19 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   def remove(): Unit
 
   /**
-   * Whether the function has been called because the key is timing out.
+   * Whether the function has been called because the key has timed out.
    * @note This can return true only when timeouts are enabled in `[map/flatmap]GroupsWithStates`.
    */
-  def isTimingOut: Boolean
+  def hasTimedOut: Boolean
 
   /**
    * Set the timeout duration in ms for this key.
    * @note Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'durationMs' is not positive")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState")
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   def setTimeoutDuration(durationMs: Long): Unit
 
   /**
@@ -193,7 +194,8 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
    * @note, Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState")
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   def setTimeoutDuration(duration: String): Unit
 }

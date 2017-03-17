@@ -22,8 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, KeyedStateImpl, MemoryStream}
@@ -33,6 +35,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
 case class RunningCount(count: Long)
+
+case class RunningCount2(value: Long)
 
 case class Result(key: Long, count: Int)
 
@@ -63,8 +67,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         }
       }
       assert(state.getOption === expectedData)
-      assert(state.isUpdated === shouldBeUpdated)
-      assert(state.isRemoved === shouldBeRemoved)
+      assert(state.hasUpdated === shouldBeUpdated)
+      assert(state.hasRemoved === shouldBeRemoved)
     }
 
     // Updating empty state
@@ -92,15 +96,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  test("KeyedState - isTimingOut, setTimeoutDuration") {
+  test("KeyedState - setTimeoutDuration, hasTimedOut") {
     import KeyedStateImpl._
     var state: KeyedStateImpl[Int] = null
 
-    for (initState <- Seq(None, Some(5))) { // for different initial state
-
-      // When isTimeoutEnabled = false, then setTimeoutDuration() is not allowed
-      state = new KeyedStateImpl(None)
-      assert(state.isTimingOut === false)
+    // When isTimeoutEnabled = false, then setTimeoutDuration() is not allowed
+    for (initState <- Seq(None, Some(5))) {
+      // for different initial state
+      state = new KeyedStateImpl(initState, 1000, isTimeoutEnabled = false, hasTimedOut = false)
+      assert(state.hasTimedOut === false)
       assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
       intercept[UnsupportedOperationException] {
         state.setTimeoutDuration(1000)
@@ -109,30 +113,48 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         state.setTimeoutDuration("1 day")
       }
       assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    }
 
-      // When isTimeoutEnabled = true, then setTimeoutDuration() is allowed, and
-      // getTimeoutTimestamp returned correct timestamp
-      state = new KeyedStateImpl(initState, 1000, isTimeoutEnabled = true, isTimingOut = false)
-      assert(state.isTimingOut === false)
+    def testTimeoutNotAllowed(): Unit = {
+      intercept[IllegalStateException] {
+        state.setTimeoutDuration(1000)
+      }
       assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-      state.setTimeoutDuration(1000)
-      assert(state.getTimeoutTimestamp === 2000)
-      state.setTimeoutDuration("2 second")
-      assert(state.getTimeoutTimestamp === 3000)
-      assert(state.isTimingOut === false)
-      // Test isTimingOut = true
-      state = new KeyedStateImpl(None, 1000, isTimeoutEnabled = true, isTimingOut = true)
-      assert(state.isTimingOut === true)
-
-      // Test setTimeoutDuration() after remove() does not throw any error
-      state = new KeyedStateImpl(None, 1000, isTimeoutEnabled = true, isTimingOut = false)
-      state.remove()
-      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-      state.setTimeoutDuration(1000)
-      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-      state.setTimeoutDuration("2 second")
+      intercept[IllegalStateException] {
+        state.setTimeoutDuration("2 second")
+      }
       assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
     }
+
+    // When isTimeoutEnabled = true, then setTimeoutDuration() is not allowed until the
+    // state is be defined
+    state = new KeyedStateImpl(None, 1000, isTimeoutEnabled = true, hasTimedOut = false)
+    assert(state.hasTimedOut === false)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    testTimeoutNotAllowed()
+
+    // After state has been set, setTimeoutDuration() is allowed, and
+    // getTimeoutTimestamp returned correct timestamp
+    state.update(5)
+    assert(state.hasTimedOut === false)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    state.setTimeoutDuration(1000)
+    assert(state.getTimeoutTimestamp === 2000)
+    state.setTimeoutDuration("2 second")
+    assert(state.getTimeoutTimestamp === 3000)
+    assert(state.hasTimedOut === false)
+
+    // Test remove() clear timeout timestamp, and setTimeoutDuration() is not allowed after that
+    state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = false)
+    state.remove()
+    assert(state.hasTimedOut === false)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    testTimeoutNotAllowed()
+
+    // Test hasTimedOut = true
+    state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = true)
+    assert(state.hasTimedOut === true)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
   }
 
   test("KeyedState - primitive type") {
@@ -187,10 +209,18 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout is enabled
   for (priorState <- Seq(None, Some(0))) {
     for (priorTimeoutTimestamp <- Seq(TIMEOUT_TIMESTAMP_NOT_SET, 1000)) {
-      val priorStateStr = if (priorState.nonEmpty) "prior state set" else "no prior state"
-      val priorTimeoutStr =
-        if (priorTimeoutTimestamp == 1000) "prior timeout set" else "no prior timeout"
-      val testName = s"timeout enabled - $priorStateStr, $priorTimeoutStr - "
+      var testName = s"timeout enabled - "
+      val priorStateStr = if (priorState.nonEmpty) {
+        testName += "prior state set, "
+        if (priorTimeoutTimestamp == 1000) {
+          testName += "prior timeout set"
+        } else {
+          testName += "no prior timeout"
+        }
+      } else {
+        testName += "no prior state"
+      }
+      testName += " - "
 
       testStateUpdateWithData(
         testName + "no update",
@@ -219,15 +249,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         expectedState = None)                                 // state should be removed
 
       testStateUpdateWithData(
-        testName + "timeout updated",
-        stateUpdates = state => { state.setTimeoutDuration(5000) },
-        timeoutType = KeyedStateTimeout.withProcessingTime,
-        priorState = priorState,
-        priorTimeoutTimestamp = priorTimeoutTimestamp,
-        expectedState = priorState,                           // state should not change
-        expectedTimeoutTimestamp = currentTimestamp + 5000)   // timestamp should change
-
-      testStateUpdateWithData(
         testName + "timeout and state updated",
         stateUpdates = state => { state.update(5); state.setTimeoutDuration(5000) },
         timeoutType = KeyedStateTimeout.withProcessingTime,
@@ -235,14 +256,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         priorTimeoutTimestamp = priorTimeoutTimestamp,
         expectedState = Some(5),                              // state should change
         expectedTimeoutTimestamp = currentTimestamp + 5000)   // timestamp should change
-
-      testStateUpdateWithData(
-        testName + "timeout updated after state removed",
-        stateUpdates = state => { state.remove() ; state.setTimeoutDuration(5000) },
-        timeoutType = KeyedStateTimeout.withProcessingTime,
-        priorState = priorState,
-        priorTimeoutTimestamp = priorTimeoutTimestamp,
-        expectedState = None)                                 // state should be removed
     }
   }
 
@@ -290,12 +303,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     priorTimeoutTimestamp = beforeCurrentTimestamp,
     expectedState = Some(5),                                  // state should change
     expectedTimeoutTimestamp = currentTimestamp + 2000)       // timestamp should change
-
-  testStateUpdateWithTimeout(
-    "should timeout - timeout updated after state removed",
-    stateUpdates = state => { state.remove(); state.setTimeoutDuration(2000) },
-    priorTimeoutTimestamp = beforeCurrentTimestamp,
-    expectedState = None)                                     // state should be removed
 
   test("StateStoreUpdater - rows are cloned before writing to StateStore") {
     // function for running count
@@ -391,6 +398,50 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     )
   }
 
+  test("flatMapGroupsWithState - streaming + aggregation") {
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
+
+      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+      if (count == 3) {
+        state.remove()
+        Iterator(key -> "-1")
+      } else {
+        state.update(RunningCount(count))
+        Iterator(key -> count.toString)
+      }
+    }
+
+    val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(stateFunc, "append") // Types = State: MyState, Out: (Str, Str)
+        .groupByKey(_._1)
+        .count()
+
+    testStream(result, Complete)(
+      AddData(inputData, "a"),
+      CheckLastBatch(("a", 1)),
+      AddData(inputData, "a", "b"),
+      // mapGroups generates ("a", "2"), ("b", "1"); so increases counts of a and b by 1
+      CheckLastBatch(("a", 2), ("b", 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "b"),
+      // mapGroups should remove state for "a" and generate ("a", "-1"), ("b", "2") ;
+      // so increment a and b by 1
+      CheckLastBatch(("a", 3), ("b", 2)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, "a", "c"),
+      // mapGroups should recreate state for "a" and generate ("a", "1"), ("c", "1") ;
+      // so increment a and c by 1
+      CheckLastBatch(("a", 4), ("b", 2), ("c", 1))
+    )
+  }
+
   test("flatMapGroupsWithState - batch") {
     // Function that returns running count only if its even, otherwise does not return
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
@@ -443,112 +494,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     )
   }
 
-  test("mapGroupsWithState - streaming + processing time timeout") {
-    spark.conf.set("spark.sql.shuffle.partitions", "1")
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
-      if (state.isTimingOut) {
-        state.remove()
-        (key, "-1")
-      } else {
-        val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-        state.update(RunningCount(count))
-        state.setTimeoutDuration("10 seconds")
-        (key, count.toString)
-      }
-    }
-
-    val clock = new StreamManualClock
-    val inputData = MemoryStream[String]
-    val timeout = KeyedStateTimeout.withProcessingTime
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x)
-        .mapGroupsWithState(stateFunc, timeout) // Types = State: MyState, Out: (Str, Str)
-
-    testStream(result, Update)(
-      StartStream(ProcessingTime("1 second"), triggerClock = clock),
-      AddData(inputData, "a"),
-      AdvanceManualClock(1 * 1000),
-      CheckLastBatch(("a", "1")),
-      assertNumStateRows(total = 1, updated = 1),
-
-      // "a" should not timeout after 1 sec
-      AddData(inputData, "b"),
-      AdvanceManualClock(1 * 1000),
-      CheckLastBatch(("b", "1")),
-      assertNumStateRows(total = 2, updated = 1),
-
-      // "a" should timeout after 10 sec
-      AddData(inputData, "b"),
-      AdvanceManualClock(10 * 1000),
-      CheckLastBatch(("a", "-1"), ("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
-
-      StopStream,
-      AssertOnQuery { q =>
-        StateStore.stop()   // dropping in-mem stores to make sure it gets recovered from checkpoint
-        true
-      },
-      StartStream(ProcessingTime("1 second"), triggerClock = clock),
-
-      AddData(inputData, "c"),
-      AdvanceManualClock(20 * 1000),
-      CheckLastBatch(("b", "-1"), ("c", "1")),
-      assertNumStateRows(total = 1, updated = 2),
-
-      AddData(inputData, "c"),
-      AdvanceManualClock(20 * 1000),
-      CheckLastBatch(("c", "2")),
-      assertNumStateRows(total = 1, updated = 1)
-    )
-  }
-
-  test("flatMapGroupsWithState - streaming + aggregation") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
-
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      if (count == 3) {
-        state.remove()
-        Iterator(key -> "-1")
-      } else {
-        state.update(RunningCount(count))
-        Iterator(key -> count.toString)
-      }
-    }
-
-    val inputData = MemoryStream[String]
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x)
-        .flatMapGroupsWithState(stateFunc, "append") // Types = State: MyState, Out: (Str, Str)
-        .groupByKey(_._1)
-        .count()
-
-    testStream(result, Complete)(
-      AddData(inputData, "a"),
-      CheckLastBatch(("a", 1)),
-      AddData(inputData, "a", "b"),
-      // mapGroups generates ("a", "2"), ("b", "1"); so increases counts of a and b by 1
-      CheckLastBatch(("a", 2), ("b", 1)),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "b"),
-      // mapGroups should remove state for "a" and generate ("a", "-1"), ("b", "2") ;
-      // so increment a and b by 1
-      CheckLastBatch(("a", 3), ("b", 2)),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "c"),
-      // mapGroups should recreate state for "a" and generate ("a", "1"), ("c", "1") ;
-      // so increment a and c by 1
-      CheckLastBatch(("a", 4), ("b", 2), ("c", 1))
-    )
-  }
-
   test("mapGroupsWithState - batch") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
@@ -597,6 +542,18 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     )
   }
 
+  test("output partitioning is unknown") {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount2]) => key
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS.groupByKey(x => x).mapGroupsWithState(stateFunc)
+    result
+    testStream(result, Update)(
+      AddData(inputData, "a"),
+      CheckLastBatch("a"),
+      AssertOnQuery(_.lastExecution.executedPlan.outputPartitioning === UnknownPartitioning(0))
+    )
+  }
+
   test("disallow complete mode") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
       Iterator[String]()
@@ -622,9 +579,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState: Option[Int] = None,
       expectedTimeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET): Unit = {
 
+    if (priorState.isEmpty && priorTimeoutTimestamp != TIMEOUT_TIMESTAMP_NOT_SET) {
+      return // there can be no prior timestamp, when there is no prior state
+    }
     test(s"StateStoreUpdater - updates with data - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: KeyedState[Int]) => {
-        assert(state.isTimingOut === false, "isTimingOut not false")
+        assert(state.hasTimedOut === false, "hasTimedOut not false")
         assert(values.nonEmpty, "Some value is expected")
         stateUpdates(state)
         Iterator.empty
@@ -644,7 +604,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     test(s"StateStoreUpdater - updates for timeout - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: KeyedState[Int]) => {
-        assert(state.isTimingOut === true, "isTimingOut not true")
+        assert(state.hasTimedOut === true, "hasTimedOut not true")
         assert(values.isEmpty, "values not empty")
         stateUpdates(state)
         Iterator.empty
@@ -671,10 +631,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val updater = new mapGroupsSparkPlan.StateStoreUpdater(store)
     val key = intToRow(0)
     // Prepare store with prior state configs
-    if (priorState.nonEmpty || priorTimeoutTimestamp != TIMEOUT_TIMESTAMP_NOT_SET) {
-      val row = priorState.map(updater.getUpdatedStateRow).getOrElse(updater.createNewStateRow())
+    if (priorState.nonEmpty) {
+      val row = updater.getStateRow(priorState.get)
       updater.setTimeoutTimestamp(row, priorTimeoutTimestamp)
-      store.put(key, row.copy())
+      store.put(key.copy(), row.copy())
     }
 
     // Call updating function to update state store
