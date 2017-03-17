@@ -489,8 +489,8 @@ case class JsonTuple(children: Seq[Expression])
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
   extended = """
     Examples:
-      > SELECT _FUNC_('{"a":1}', 'a INT');
-       {"a":1}
+      > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
+       {"a":1, "b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
   """)
@@ -665,7 +665,7 @@ object JsonExprUtils {
 
   def validateSchemaLiteral(exp: Expression): StructType = exp match {
     case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
-    case e => throw new AnalysisException(s"Must be a string literal, but: $e")
+    case e => throw new AnalysisException(s"Expected a string literal instead of $e")
   }
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
