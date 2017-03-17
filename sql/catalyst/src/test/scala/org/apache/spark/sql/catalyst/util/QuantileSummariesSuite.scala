@@ -100,6 +100,13 @@ class QuantileSummariesSuite extends SparkFunSuite {
       checkQuantile(0.1, data, s)
       checkQuantile(0.001, data, s)
     }
+
+    test(s"Test on empty QuantileSummaries") {
+      val s = buildSummary(Seq.empty[Double], epsi, compression)
+      assert(s.count == 0, s"Found count=${s.count} but data size=0")
+      assert(s.sampled.isEmpty, s"if QuantileSummaries is empty, sampled should be empty")
+      assert(s.query(0.9).isEmpty, "if QuantileSummaries is empty, query should return None")
+    }
   }
 
   // Tests for merging procedure
