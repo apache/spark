@@ -122,6 +122,10 @@ private[sql] class KeyedStateImpl[S](
       throw new IllegalArgumentException(
         s"The provided duration ($duration) is not valid.")
     }
+    if (cal.milliseconds < 0 || cal.months < 0) {
+      throw new IllegalArgumentException("Timeout duration must be positive")
+    }
+
     val delayMs = {
       val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
       cal.milliseconds + cal.months * millisPerMonth

@@ -144,6 +144,18 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     assert(state.getTimeoutTimestamp === 3000)
     assert(state.hasTimedOut === false)
 
+    // setTimeoutDuration() with negative values or 0 is not allowed
+    def testIllegalTimeout(body: => Unit): Unit = {
+      intercept[IllegalArgumentException] { body }
+      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    }
+    state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = false)
+    testIllegalTimeout { state.setTimeoutDuration(-1000) }
+    testIllegalTimeout { state.setTimeoutDuration(0) }
+    testIllegalTimeout { state.setTimeoutDuration("-2 second") }
+    testIllegalTimeout { state.setTimeoutDuration("-1 month") }
+    testIllegalTimeout { state.setTimeoutDuration("1 month -1 day") }
+
     // Test remove() clear timeout timestamp, and setTimeoutDuration() is not allowed after that
     state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = false)
     state.remove()

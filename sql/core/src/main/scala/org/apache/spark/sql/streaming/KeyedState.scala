@@ -36,8 +36,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  * For a static batch Dataset, the function will be invoked once per group. For a streaming
  * Dataset, the function will be invoked for each group repeatedly in every trigger.
  * That is, in every batch of the `streaming.StreamingQuery`,
- * the function will be invoked once for each group that has data in the batch. Furthermore,
- * if timeout is set, then the function will invoked with no data (more detail below).
+ * the function will be invoked once for each group that has data in the trigger. Furthermore,
+ * if timeout is set, then the function will invoked on timed out keys (more detail below).
  *
  * The function is invoked with following parameters.
  *  - The key of the group.
@@ -45,7 +45,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *  - A user-defined state object set by previous invocations of the given function.
  * In case of a batch Dataset, there is only one invocation and state object will be empty as
  * there is no prior state. Essentially, for batch Datasets, `[map/flatMap]GroupsWithState`
- * is equivalent to `[map/flatMap]Groups`.
+ * is equivalent to `[map/flatMap]Groups` and any updates to the state and/or timeouts have
+ * no effect.
  *
  * Important points to note about the function.
  *  - In a trigger, the function will be called only the groups present in the batch. So do not
@@ -54,7 +55,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *    batch, nor with streaming Datasets.
  *  - All the data will be shuffled before applying the function.
  *  - If timeout is set, then the function will also be called with no values.
- *    See more details on `KeyedStateTimeout` below.
+ *    See more details on KeyedStateTimeout` below.
  *
  * Important points to note about using `KeyedState`.
  *  - The value of the state cannot be null. So updating state with null will throw
@@ -70,7 +71,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *    `[map|flatMap]GroupsWithState`, but the exact timeout duration is configurable per key
  *    (by calling `setTimeout...()` in `KeyedState`).
  *  - When the timeout occurs for a key, the function is called with no values, and
- *    `KeyedState.isTimingOut()` set to true.
+ *    `KeyedState.hasTimedOut()` set to true.
  *  - The timeout is reset for key every time the function is called on the key, that is,
  *    when the key has new data, or the key has timed out. So the user has to set the timeout
  *    duration every time the function is called, otherwise there will not be any timeout set.
@@ -87,7 +88,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  * // A mapping function that maintains an integer state for string keys and returns a string.
  * def mappingFunction(key: String, value: Iterator[Int], state: KeyedState[Int]): String = {
  *
- *   if (state.isTimingOut) {                // If called when timing out, remove the state
+ *   if (state.hasTimedOut) {                // If called when timing out, remove the state
  *     state.remove()
  *
  *   } else if (state.exists) {              // If state exists, use it for processing
@@ -99,14 +100,14 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *     } else {
  *       val newState = ...
  *       state.update(newState)              // Set the new state
+ *       state.setTimeoutDuration("1 hour")  // Set the timeout
  *     }
  *
  *   } else {
  *     val initialState = ...
  *     state.update(initialState)            // Set the initial state
+ *     state.setTimeoutDuration("1 hour")    // Set the timeout
  *   }
- *   state.setTimeoutDuration("1 hour")      // Set the timeout
- *
  *   ...
  *   // return something
  * }
@@ -121,23 +122,25 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  *      @Override
  *      public String call(String key, Iterator<Integer> value, KeyedState<Integer> state) {
- *        if (state.isTimingOut) {           // If called when timing out, remove the state
+ *        if (state.hasTimedOut()) {            // If called when timing out, remove the state
  *          state.remove();
  *
- *        } else if (state.exists()) {       // If state exists, use it for processing
- *          int existingState = state.get(); // Get the existing state
- *          boolean shouldRemove = ...;      // Decide whether to remove the state
+ *        } else if (state.exists()) {            // If state exists, use it for processing
+ *          int existingState = state.get();      // Get the existing state
+ *          boolean shouldRemove = ...;           // Decide whether to remove the state
  *          if (shouldRemove) {
- *            state.remove();                // Remove the state
+ *            state.remove();                     // Remove the state
  *
  *          } else {
  *            int newState = ...;
- *            state.update(newState);        // Set the new state
+ *            state.update(newState);             // Set the new state
+ *            state.setTimeoutDuration("1 hour"); // Set the timeout
  *          }
  *
  *        } else {
- *          int initialState = ...;          // Set the initial state
+ *          int initialState = ...;               // Set the initial state
  *          state.update(initialState);
+ *          state.setTimeoutDuration("1 hour");   // Set the timeout
  *        }
  *        ...
 *         // return something
