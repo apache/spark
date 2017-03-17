@@ -841,7 +841,8 @@ class Analyzer(
       // If grouping keys have unresolved expressions, we need to replace them with resolved one
       // in SELECT clauses.
       case agg @ Aggregate(groups, aggs, child)
-          if child.resolved && aggs.forall(_.resolved) && groups.exists(!_.resolved) =>
+          if conf.groupByAliasesEnabled && child.resolved && aggs.forall(_.resolved) &&
+            groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = groups.map {
             case u: UnresolvedAttribute =>
               aggs.find(ne => resolver(ne.name, u.name)).map {

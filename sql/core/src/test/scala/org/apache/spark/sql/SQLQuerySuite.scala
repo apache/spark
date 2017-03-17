@@ -2607,11 +2607,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-14471 Aliases in SELECT could be used in GROUP BY") {
-    Seq((1, "a", 0), (2, "a", 1), (1, "a", 2)).toDF("k1", "k2", "v")
-      .createOrReplaceTempView("t")
-    checkAnswer(
-      sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY key1, key2"),
-      Row(1, "a", 2) :: Row(2, "a", 1) :: Nil)
+  test("SPARK-14471 When groupByAliasesEnabled=true, aliases in SELECT could exist in GROUP BY") {
+    withSQLConf(SQLConf.GROUP_BY_ALIASES_ENABLED.key -> "true") {
+      Seq((1, "a", 0), (2, "a", 1), (1, "a", 2)).toDF("k1", "k2", "v")
+        .createOrReplaceTempView("t")
+      checkAnswer(
+        sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY key1, key2"),
+        Row(1, "a", 2) :: Row(2, "a", 1) :: Nil)
+    }
+    withSQLConf(SQLConf.GROUP_BY_ALIASES_ENABLED.key -> "false") {
+      Seq((1, "a", 0), (2, "a", 1), (1, "a", 2)).toDF("k1", "k2", "v")
+        .createOrReplaceTempView("t")
+      val errMsg = intercept[AnalysisException] {
+        sql("SELECT k1 AS key1, k2 AS key2, SUM(v) FROM t GROUP BY key1, key2")
+      }
+      assert(errMsg.getMessage.startsWith("cannot resolve"))
+    }
   }
 }
