@@ -54,7 +54,6 @@ class DictVectorizerSuite
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(indexer)
-
     val transformed = indexer.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]

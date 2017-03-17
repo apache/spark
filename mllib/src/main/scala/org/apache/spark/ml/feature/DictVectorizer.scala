@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.{SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
@@ -65,56 +66,33 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
 
   override def fit(dataset: Dataset[_]): DictVectorizerModel = {
 
-    //scalastyle:off
 
-    println(inputCols)
-    println($(inputCols) mkString "-")
-
-    //scalastyle: on
     dataset.na.drop($(inputCols)).show()
 
     val diest_df = dataset.na.drop($(inputCols))
     var labels = ArrayBuilder.make[String]
 
-    dataset.schema($(inputCols).toSet).foreach(p=>p.dataType match {
-      case IntegerType => {
-        labels += p.name
-      }
-      case StringType => {
-        val s = dataset.select(p.name).rdd.map(_.getString(0)).countByValue().toSeq.sortBy(-_._2).map(key=>p.name+sep+key._1)
-        labels ++= s
-      }
-      case ArrayType(StringType, _) => {
-        val s = dataset.select(p.name).rdd.map(_.getAs[Seq[String]](0)).flatMap(y => y).countByValue().toSeq.sortBy(-_._2).map(key=>p.name+sep+key._1)
-        labels ++= s
-      }
-      case ArrayType(t, true) => t match {
+    dataset.schema($(inputCols).toSet).foreach(p => p.dataType match {
+      case IntegerType => labels += p.name
+      case StringType => labels ++= dataset.select(p.name).rdd.
+          map(_.getString(0)).countByValue().toSeq.sortBy(-_._2).map(key => p.name + sep + key._1)
+        case ArrayType(StringType, _) => labels ++= dataset.select(p.name).
+          rdd.map(_.getAs[Seq[String]](0)).flatMap(y => y).
+          countByValue().toSeq.sortBy(-_._2).map(key => p.name + sep + key._1)
+          case ArrayType(t, true) => t match {
         case IntegerType => false
         case DoubleType => false
         case LongType => false
       }
-      case _ => false
+      case _ =>
+        throw new SparkException(s"un supported column : ${p.name}.  To handle unseen labels, " +
+          s"set Param handleInvalid to ${DictVectorizer.KEEP_INVALID}.")
+
     })
-    println(labels.result().mkString(","))
 
-    for (col <- $(inputCols)){
-      println(col)
-      println(dataset.schema(col))
-      dataset.schema(col).dataType match {
-        case StringType => {
-          println(diest_df.select(col).rdd.countByValue())
-        }
-        case ArrayType(StringType, true) => {
-          println("shit shit shit")
-          diest_df.rdd.map(row=>{
-            println(row.getAs[Array[String]](col))
-          }).count()
-        }
+    // println(labels.result().mkString(","))
 
-      }
-    }
-
-    new DictVectorizerModel("x", Array("xx"))
+    new DictVectorizerModel("x", labels.result())
   }
 
   override def copy(extra: ParamMap): DictVectorizer = defaultCopy(extra)
