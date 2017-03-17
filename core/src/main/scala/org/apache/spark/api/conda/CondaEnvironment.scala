@@ -45,8 +45,8 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
   val condaEnvDir: Path = rootPath.resolve("envs").resolve(envName)
 
   def activatedEnvironment(startEnv: Map[String, String] = Map.empty): Map[String, String] = {
-    require(!startEnv.contains("PATH"),
-      s"It's not allowed to define PATH in the startEnv, but found: ${startEnv("PATH")}")
+    require(!startEnv.contains("PATH"), "Defining PATH in a CondaEnvironment's startEnv is " +
+      s"prohibited; found PATH=${startEnv("PATH")}")
     import collection.JavaConverters._
     val newVars = System.getenv().asScala.toIterator ++ startEnv ++ List(
       "CONDA_PREFIX" -> condaEnvDir.toString,
