@@ -118,9 +118,7 @@ class StreamExecution(
   }
 
   /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata =
-    OffsetSeqMetadata(conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
-      sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS).toString))
+  protected var offsetSeqMetadata = OffsetSeqMetadata()
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -262,6 +260,11 @@ class StreamExecution(
 
       // Isolated spark session to run the batches with.
       val sparkSessionToRunBatches = sparkSession.cloneSession()
+      // Adaptive execution can change num shuffle partitions, disallow
+      sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
+        conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
+          sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)))
 
       if (state.compareAndSet(INITIALIZING, ACTIVE)) {
         // Unblock `awaitInitialization`
@@ -395,33 +398,25 @@ class StreamExecution(
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
 
-        // initialize metadata
-        val shufflePartitionsSparkSession: Int = sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-        offsetSeqMetadata = {
-          if (nextOffsets.metadata.isEmpty) {
-            OffsetSeqMetadata(
-              batchWatermarkMs = 0,
-              batchTimestampMs = 0,
-              conf = Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsSparkSession.toString))
-          } else {
-            val metadata = nextOffsets.metadata.get
-            val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
-              // For backward compatibility, if # partitions was not recorded in the offset log,
-              // then ensure it is not missing. The new value is picked up from the conf.
-              logWarning("Number of shuffle partitions from previous run not found in checkpoint. "
-                + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
-              shufflePartitionsSparkSession
-            })
-            OffsetSeqMetadata(metadata.batchWatermarkMs, metadata.batchTimestampMs,
-              metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
-          }
-        }
-
-        // Reset confs to disallow change in number of partitions
-        sparkSessionToRunBatches.conf.set(
-          SQLConf.SHUFFLE_PARTITIONS.key,
-          offsetSeqMetadata.conf(SQLConf.SHUFFLE_PARTITIONS.key))
-        sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+        // update offset metadata
+        nextOffsets.metadata.foreach(metadata => {
+          val shufflePartitionsSparkSession: Int =
+            sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+          val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
+            // For backward compatibility, if # partitions was not recorded in the offset log,
+            // then ensure it is not missing. The new value is picked up from the conf.
+            logWarning("Number of shuffle partitions from previous run not found in checkpoint. "
+              + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
+            shufflePartitionsSparkSession
+          })
+          offsetSeqMetadata = OffsetSeqMetadata(
+            metadata.batchWatermarkMs,
+            metadata.batchTimestampMs,
+            metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
+          // Update conf with correct number of shuffle partitions
+          sparkSessionToRunBatches.conf.set(
+            SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
+        })
 
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
           s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
