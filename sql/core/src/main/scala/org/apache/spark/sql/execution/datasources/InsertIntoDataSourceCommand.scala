@@ -42,8 +42,9 @@ case class InsertIntoDataSourceCommand(
     val df = sparkSession.internalCreateDataFrame(data.queryExecution.toRdd, logicalRelation.schema)
     relation.insert(df, overwrite.enabled)
 
-    // Invalidate the cache.
-    sparkSession.sharedState.cacheManager.invalidateCache(logicalRelation)
+    // Re-cache all cached plans(including this relation itself, if it's cached) that refer to this
+    // data source relation.
+    sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
 
     Seq.empty[Row]
   }
