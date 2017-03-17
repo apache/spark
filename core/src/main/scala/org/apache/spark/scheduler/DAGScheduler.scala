@@ -1334,14 +1334,20 @@ class DAGScheduler(
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
-            if (env.blockManager.externalShuffleServiceEnabled) {
-              removeExecutorAndUnregisterOutputOnHost(bmAddress.executorId,
-                bmAddress.host, Some(task.epoch))
+            val hostToUnregisterOutputs = if (env.blockManager.externalShuffleServiceEnabled) {
+              // We had a fetch failure with the external shuffle service, so we
+              // assume all shuffle data on the node is bad.
+              Some(bmAddress.host)
+            } else {
+              // Deregister shuffle data just for one executor (we don't have any
+              // reason to believe shuffle data has been lost for the entire host).
+              None
             }
-            else {
-              removeExecutorAndUnregisterOutputOnExecutor(bmAddress.executorId,
-                true, Some(task.epoch))
-            }
+            removeExecutorAndUnregisterOutputs(
+              execId = bmAddress.executorId,
+              fileLost = true,
+              hostToUnregisterOutputs = hostToUnregisterOutputs,
+              maybeEpoch = Some(task.epoch))
           }
         }
 
@@ -1375,16 +1381,23 @@ class DAGScheduler(
    */
   private[scheduler] def handleExecutorLost(
       execId: String,
-      fileLost: Boolean) {
-    removeExecutorAndUnregisterOutputOnExecutor(execId,
-      fileLost || !env.blockManager.externalShuffleServiceEnabled, None)
+      workerLost: Boolean): Unit = {
+    // if the cluster manager explicitly tells us that the entire worker was lost, then
+    // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
+    // from a Standalone cluster, where the shuffle service lives in the Worker.)
+    val filesLost = workerLost || !env.blockManager.externalShuffleServiceEnabled
+    removeExecutorAndUnregisterOutputs(
+      execId = execId,
+      fileLost = filesLost,
+      hostToUnregisterOutputs = None,
+      maybeEpoch = None)
   }
 
-
-  private[scheduler] def removeExecutorAndUnregisterOutputOnExecutor(
+  private def removeExecutorAndUnregisterOutputs(
       execId: String,
       fileLost: Boolean,
-      maybeEpoch: Option[Long] = None) {
+      hostToUnregisterOutputs: Option[String],
+      maybeEpoch: Option[Long] = None): Unit = {
     val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
     if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
       failedEpoch(execId) = currentEpoch
@@ -1396,33 +1409,6 @@ class DAGScheduler(
         mapOutputTracker.removeOutputsOnExecutor(execId)
         clearCacheLocs()
       }
-    } else {
-      logDebug("Additional executor lost message for " + execId +
-        "(epoch " + currentEpoch + ")")
-    }
-  }
-
-  private[scheduler] def removeExecutorAndUnregisterOutputOnHost(
-      execId: String,
-      host: String,
-      maybeEpoch: Option[Long] = None) {
-    val currentEpoch = maybeEpoch.getOrElse(mapOutputTracker.getEpoch)
-    if (!failedEpoch.contains(execId) || failedEpoch(execId) < currentEpoch) {
-      failedEpoch(execId) = currentEpoch
-      logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
-      blockManagerMaster.removeExecutor(execId)
-      for ((shuffleId, stage) <- shuffleIdToMapStage) {
-        logInfo("Shuffle files lost for host: %s (epoch %d)".format(host, currentEpoch))
-        stage.removeOutputsOnHost(host)
-        mapOutputTracker.registerMapOutputs(
-          shuffleId,
-          stage.outputLocInMapOutputTrackerFormat(),
-          changeEpoch = true)
-      }
-      if (shuffleIdToMapStage.isEmpty) {
-        mapOutputTracker.incrementEpoch()
-      }
-      clearCacheLocs()
     } else {
       logDebug("Additional executor lost message for " + execId +
         "(epoch " + currentEpoch + ")")
@@ -1718,11 +1704,12 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
       dagScheduler.handleExecutorAdded(execId, host)
 
     case ExecutorLost(execId, reason) =>
-      val filesLost = reason match {
-        case SlaveLost(_, true) => true
+      val workerLost = reason match {
+        case SlaveLost(_, true) =>
+          true
         case _ => false
       }
-      dagScheduler.handleExecutorLost(execId, filesLost)
+      dagScheduler.handleExecutorLost(execId, workerLost)
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
