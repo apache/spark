@@ -118,7 +118,9 @@ class StreamExecution(
   }
 
   /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata = OffsetSeqMetadata()
+  protected var offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
+    conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
+      sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS).toString))
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
