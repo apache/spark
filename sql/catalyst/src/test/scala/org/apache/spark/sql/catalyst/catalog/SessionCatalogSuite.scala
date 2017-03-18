@@ -1412,7 +1412,8 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(!exists(db.locationUri, "my_table"))
       assert(exists(db.locationUri, "your_table"))
 
-      catalog.externalCatalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
+      catalog.externalCatalog.dropTable(
+        "db1", "your_table", ignoreIfNotExists = false, purge = false)
       assert(!exists(db.locationUri, "your_table"))
 
       val externalTable = CatalogTable(
