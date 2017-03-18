@@ -317,7 +317,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
     val packageName = s"scala_$schedulingMode"
     val className = "DummyClass"
-    val jarPath = TestUtils.createDummyJar(tempDir, packageName, className)
+    val jarURI = TestUtils.createDummyJar(tempDir, packageName, className)
 
     // ensure we reset the classloader after the test completes
     val originalClassLoader = Thread.currentThread.getContextClassLoader
@@ -328,7 +328,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       test(s"jar can be added and used driver side in $schedulingMode") {
         sc = new SparkContext(master, "test")
         Thread.currentThread().setContextClassLoader(loader)
-        sc.addJar(jarPath, addToCurrentClassLoader = true)
+        sc.addJar(jarURI, addToCurrentClassLoader = true)
         val cl = Utils.getContextOrSparkClassLoader
         cl.loadClass(s"$packageName.$className")
       }
