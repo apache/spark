@@ -267,6 +267,7 @@ class InMemoryCatalog(
   protected override def renameTable(
       tableIdentifier: TableIdentifier,
       newTableDefinition: CatalogTable): Unit = synchronized {
+    assert(tableIdentifier.database.isDefined)
     val db = tableIdentifier.database.get
     val oldName = tableIdentifier.table
     val newName = newTableDefinition.identifier.table
