@@ -29,9 +29,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
-import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
+import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -69,6 +70,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameReader = {
@@ -100,6 +107,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 1.4.0
    */
   def options(options: scala.collection.Map[String, String]): DataFrameReader = {
@@ -109,6 +122,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Adds input options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 1.4.0
    */
@@ -261,7 +280,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file and returns the results as a `DataFrame`.
+   * Loads JSON files and returns the results as a `DataFrame`.
    *
    * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
    * default. For JSON (one record per file), set the `wholeFile` option to true.
@@ -304,8 +323,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps.</li>
    * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * </ul>
@@ -359,24 +376,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    val createParser = CreateJacksonParser.string _
 
     val schema = userSpecifiedSchema.getOrElse {
-      JsonInferSchema.infer(
-        jsonDataset.rdd,
-        parsedOptions,
-        createParser)
+      TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
 
-    // Check a field requirement for corrupt records here to throw an exception in a driver side
-    schema.getFieldIndex(parsedOptions.columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
-      val f = schema(corruptFieldIndex)
-      if (f.dataType != StringType || !f.nullable) {
-        throw new AnalysisException(
-          "The field for corrupt records must be string type and nullable")
-      }
-    }
+    verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
 
+    val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
       val parser = new JacksonParser(schema, parsedOptions)
       iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
@@ -399,7 +406,52 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a CSV file and returns the result as a `DataFrame`.
+   * Loads an `Dataset[String]` storing CSV rows and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
+   * it determines the columns as string types and it reads only the first line to determine the
+   * names and the number of fields.
+   *
+   * @param csvDataset input Dataset with one CSV row per record
+   * @since 2.2.0
+   */
+  def csv(csvDataset: Dataset[String]): DataFrame = {
+    val parsedOptions: CSVOptions = new CSVOptions(
+      extraOptions.toMap,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val filteredLines: Dataset[String] =
+      CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
+    val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
+
+    val schema = userSpecifiedSchema.getOrElse {
+      TextInputCSVDataSource.inferFromDataset(
+        sparkSession,
+        csvDataset,
+        maybeFirstLine,
+        parsedOptions)
+    }
+
+    verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+
+    val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
+      filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
+    }.getOrElse(filteredLines.rdd)
+
+    val parsed = linesWithoutHeader.mapPartitions { iter =>
+      val parser = new UnivocityParser(schema, parsedOptions)
+      iter.flatMap(line => parser.parse(line))
+    }
+
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+  }
+
+  /**
+   * Loads CSV files and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
@@ -439,8 +491,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
@@ -510,7 +560,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads an ORC file and returns the result as a `DataFrame`.
+   * Loads ORC files and returns the result as a `DataFrame`.
    *
    * @param paths input paths
    * @since 2.0.0
@@ -601,6 +651,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
       throw new AnalysisException(s"User specified schema not supported with `$operation`")
+    }
+  }
+
+  /**
+   * A convenient function for schema validation in datasources supporting
+   * `columnNameOfCorruptRecord` as an option.
+   */
+  private def verifyColumnNameOfCorruptRecord(
+      schema: StructType,
+      columnNameOfCorruptRecord: String): Unit = {
+    schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = schema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
     }
   }
 

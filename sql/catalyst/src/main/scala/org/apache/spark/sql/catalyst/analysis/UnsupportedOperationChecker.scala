@@ -51,6 +51,37 @@ object UnsupportedOperationChecker {
       subplan.collect { case a: Aggregate if a.isStreaming => a }
     }
 
+    val mapGroupsWithStates = plan.collect {
+      case f: FlatMapGroupsWithState if f.isStreaming && f.isMapGroupsWithState => f
+    }
+
+    // Disallow multiple `mapGroupsWithState`s.
+    if (mapGroupsWithStates.size >= 2) {
+      throwError(
+        "Multiple mapGroupsWithStates are not supported on a streaming DataFrames/Datasets")(plan)
+    }
+
+    val flatMapGroupsWithStates = plan.collect {
+      case f: FlatMapGroupsWithState if f.isStreaming && !f.isMapGroupsWithState => f
+    }
+
+    // Disallow mixing `mapGroupsWithState`s and `flatMapGroupsWithState`s
+    if (mapGroupsWithStates.nonEmpty && flatMapGroupsWithStates.nonEmpty) {
+      throwError(
+        "Mixing mapGroupsWithStates and flatMapGroupsWithStates are not supported on a " +
+          "streaming DataFrames/Datasets")(plan)
+    }
+
+    // Only allow multiple `FlatMapGroupsWithState(Append)`s in append mode.
+    if (flatMapGroupsWithStates.size >= 2 && (
+      outputMode != InternalOutputModes.Append ||
+        flatMapGroupsWithStates.exists(_.outputMode != InternalOutputModes.Append)
+      )) {
+      throwError(
+        "Multiple flatMapGroupsWithStates are not supported when they are not all in append mode" +
+          " or the output mode is not append on a streaming DataFrames/Datasets")(plan)
+    }
+
     // Disallow multiple streaming aggregations
     val aggregates = collectStreamingAggregates(plan)
 
@@ -116,9 +147,49 @@ object UnsupportedOperationChecker {
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
-        case m: MapGroupsWithState if collectStreamingAggregates(m).nonEmpty =>
-          throwError("(map/flatMap)GroupsWithState is not supported after aggregation on a " +
-            "streaming DataFrame/Dataset")
+        // mapGroupsWithState: Allowed only when no aggregation + Update output mode
+        case m: FlatMapGroupsWithState if m.isStreaming && m.isMapGroupsWithState =>
+          if (collectStreamingAggregates(plan).isEmpty) {
+            if (outputMode != InternalOutputModes.Update) {
+              throwError("mapGroupsWithState is not supported with " +
+                s"$outputMode output mode on a streaming DataFrame/Dataset")
+            } else {
+              // Allowed when no aggregation + Update output mode
+            }
+          } else {
+            throwError("mapGroupsWithState is not supported with aggregation " +
+              "on a streaming DataFrame/Dataset")
+          }
+
+        // flatMapGroupsWithState without aggregation
+        case m: FlatMapGroupsWithState
+          if m.isStreaming && collectStreamingAggregates(plan).isEmpty =>
+          m.outputMode match {
+            case InternalOutputModes.Update =>
+              if (outputMode != InternalOutputModes.Update) {
+                throwError("flatMapGroupsWithState in update mode is not supported with " +
+                  s"$outputMode output mode on a streaming DataFrame/Dataset")
+              }
+            case InternalOutputModes.Append =>
+              if (outputMode != InternalOutputModes.Append) {
+                throwError("flatMapGroupsWithState in append mode is not supported with " +
+                  s"$outputMode output mode on a streaming DataFrame/Dataset")
+              }
+          }
+
+        // flatMapGroupsWithState(Update) with aggregation
+        case m: FlatMapGroupsWithState
+          if m.isStreaming && m.outputMode == InternalOutputModes.Update
+            && collectStreamingAggregates(plan).nonEmpty =>
+          throwError("flatMapGroupsWithState in update mode is not supported with " +
+            "aggregation on a streaming DataFrame/Dataset")
+
+        // flatMapGroupsWithState(Append) with aggregation
+        case m: FlatMapGroupsWithState
+          if m.isStreaming && m.outputMode == InternalOutputModes.Append
+            && collectStreamingAggregates(m).nonEmpty =>
+          throwError("flatMapGroupsWithState in append mode is not supported after " +
+            s"aggregation on a streaming DataFrame/Dataset")
 
         case d: Deduplicate if collectStreamingAggregates(d).nonEmpty =>
           throwError("dropDuplicates is not supported after aggregation on a " +

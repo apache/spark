@@ -1364,6 +1364,18 @@ test_that("column functions", {
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
   expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
+
+  # check if array type in string is correctly supported.
+  jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
+  df <- as.DataFrame(list(list("people" = jsonArr)))
+  schema <- structType(structField("name", "string"))
+  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
+  expect_equal(ncol(arr), 1)
+  expect_equal(nrow(arr), 1)
+  expect_is(arr[[1]][[1]], "list")
+  expect_equal(length(arr$arrcol[[1]]), 2)
+  expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
+  expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
 })
 
 test_that("column binary mathfunctions", {
@@ -1849,6 +1861,13 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned2, "SparkDataFrame")
   expect_equal(count(unioned2), 12)
   expect_equal(first(unioned2)$name, "Michael")
+
+  df3 <- df2
+  names(df3)[1] <- "newName"
+  expect_error(rbind(df, df3),
+               "Names of input data frames are different.")
+  expect_error(rbind(df, df2, df3),
+               "Names of input data frames are different.")
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
@@ -2585,8 +2604,8 @@ test_that("coalesce, repartition, numPartitions", {
 
   df2 <- repartition(df1, 10)
   expect_equal(getNumPartitions(df2), 10)
-  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
-  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 7)
   expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 

@@ -518,37 +518,26 @@ class ALSSuite
   }
 
   test("read/write") {
-    import ALSSuite._
-    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
-    val als = new ALS()
-    allEstimatorParamSettings.foreach { case (p, v) =>
-      als.set(als.getParam(p), v)
-    }
     val spark = this.spark
     import spark.implicits._
-    val model = als.fit(ratings.toDF())
+    import ALSSuite._
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
 
-    // Test Estimator save/load
-    val als2 = testDefaultReadWrite(als)
-    allEstimatorParamSettings.foreach { case (p, v) =>
-      val param = als.getParam(p)
-      assert(als.get(param).get === als2.get(param).get)
-    }
-
-    // Test Model save/load
-    val model2 = testDefaultReadWrite(model)
-    allModelParamSettings.foreach { case (p, v) =>
-      val param = model.getParam(p)
-      assert(model.get(param).get === model2.get(param).get)
-    }
-    assert(model.rank === model2.rank)
     def getFactors(df: DataFrame): Set[(Int, Array[Float])] = {
       df.select("id", "features").collect().map { case r =>
         (r.getInt(0), r.getAs[Array[Float]](1))
       }.toSet
     }
-    assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
-    assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+
+    def checkModelData(model: ALSModel, model2: ALSModel): Unit = {
+      assert(model.rank === model2.rank)
+      assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
+      assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+    }
+
+    val als = new ALS()
+    testEstimatorAndModelReadWrite(als, ratings.toDF(), allEstimatorParamSettings,
+      allModelParamSettings, checkModelData)
   }
 
   test("input type validation") {

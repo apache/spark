@@ -97,6 +97,7 @@ private[hive] class HiveClientImpl(
     case hive.v1_1 => new Shim_v1_1()
     case hive.v1_2 => new Shim_v1_2()
     case hive.v2_0 => new Shim_v2_0()
+    case hive.v2_1 => new Shim_v2_1()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -278,6 +279,8 @@ private[hive] class HiveClientImpl(
     state.getConf.setClassLoader(clientLoader.classLoader)
     // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
+    // Replace conf in the thread local Hive with current conf
+    Hive.get(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
@@ -453,7 +456,7 @@ private[hive] class HiveClientImpl(
     val hiveTable = toHiveTable(table, Some(conf))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
-    client.alterTable(qualifiedTableName, hiveTable)
+    shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
   override def createPartitions(
@@ -533,7 +536,7 @@ private[hive] class HiveClientImpl(
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
     val hiveTable = toHiveTable(getTable(db, table), Some(conf))
-    client.alterPartitions(table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
   }
 
   /**

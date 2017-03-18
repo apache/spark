@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -117,7 +118,9 @@ class StreamExecution(
   }
 
   /** Metadata associated with the offset seq of a batch in the query. */
-  protected var offsetSeqMetadata = OffsetSeqMetadata()
+  protected var offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
+    conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
+      sparkSession.conf.get(SQLConf.SHUFFLE_PARTITIONS).toString))
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -264,6 +267,15 @@ class StreamExecution(
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
+
+      // Isolated spark session to run the batches with.
+      val sparkSessionToRunBatches = sparkSession.cloneSession()
+      // Adaptive execution can change num shuffle partitions, disallow
+      sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      offsetSeqMetadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0,
+        conf = Map(SQLConf.SHUFFLE_PARTITIONS.key ->
+          sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)))
+
       if (state.compareAndSet(INITIALIZING, ACTIVE)) {
         // Unblock `awaitInitialization`
         initializationLatch.countDown()
@@ -276,7 +288,7 @@ class StreamExecution(
               reportTimeTaken("triggerExecution") {
                 if (currentBatchId < 0) {
                   // We'll do this initialization only once
-                  populateStartOffsets()
+                  populateStartOffsets(sparkSessionToRunBatches)
                   logDebug(s"Stream running from $committedOffsets to $availableOffsets")
                 } else {
                   constructNextBatch()
@@ -284,7 +296,7 @@ class StreamExecution(
                 if (dataAvailable) {
                   currentStatus = currentStatus.copy(isDataAvailable = true)
                   updateStatusMessage("Processing new data")
-                  runBatch()
+                  runBatch(sparkSessionToRunBatches)
                 }
               }
               // Report trigger as finished and construct progress object.
@@ -369,6 +381,13 @@ class StreamExecution(
           }
         }
       } finally {
+        awaitBatchLock.lock()
+        try {
+          // Wake up any threads that are waiting for the stream to progress.
+          awaitBatchLockCondition.signalAll()
+        } finally {
+          awaitBatchLock.unlock()
+        }
         terminationLatch.countDown()
       }
     }
@@ -396,16 +415,36 @@ class StreamExecution(
    *    Identify a brand new batch
    *  DONE
    */
-  private def populateStartOffsets(): Unit = {
+  private def populateStartOffsets(sparkSessionToRunBatches: SparkSession): Unit = {
     offsetLog.getLatest() match {
       case Some((latestBatchId, nextOffsets)) =>
         // First assume that we are re-executing the latest batch in the offset log
         currentBatchId = latestBatchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
-        offsetSeqMetadata = nextOffsets.metadata.getOrElse(OffsetSeqMetadata())
+
+        // update offset metadata
+        nextOffsets.metadata.foreach { metadata =>
+          val shufflePartitionsSparkSession: Int =
+            sparkSessionToRunBatches.conf.get(SQLConf.SHUFFLE_PARTITIONS)
+          val shufflePartitionsToUse = metadata.conf.getOrElse(SQLConf.SHUFFLE_PARTITIONS.key, {
+            // For backward compatibility, if # partitions was not recorded in the offset log,
+            // then ensure it is not missing. The new value is picked up from the conf.
+            logWarning("Number of shuffle partitions from previous run not found in checkpoint. "
+              + s"Using the value from the conf, $shufflePartitionsSparkSession partitions.")
+            shufflePartitionsSparkSession
+          })
+          offsetSeqMetadata = OffsetSeqMetadata(
+            metadata.batchWatermarkMs, metadata.batchTimestampMs,
+            metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitionsToUse.toString))
+          // Update conf with correct number of shuffle partitions
+          sparkSessionToRunBatches.conf.set(
+            SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
+        }
+
         offsetLog.get(latestBatchId - 1).foreach { lastOffsets =>
           committedOffsets = lastOffsets.toStreamProgress(sources)
         }
+
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
          * i.e., committedBatchId + 1
@@ -488,8 +527,7 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      // Current batch timestamp in milliseconds
-      offsetSeqMetadata.batchTimestampMs = triggerClock.getTimeMillis()
+      var batchWatermarkMs = offsetSeqMetadata.batchWatermarkMs
       // Update the eventTime watermark if we find one in the plan.
       if (lastExecution != null) {
         lastExecution.executedPlan.collect {
@@ -497,16 +535,19 @@ class StreamExecution(
             logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
             e.eventTimeStats.value.max - e.delayMs
         }.headOption.foreach { newWatermarkMs =>
-          if (newWatermarkMs > offsetSeqMetadata.batchWatermarkMs) {
+          if (newWatermarkMs > batchWatermarkMs) {
             logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
-            offsetSeqMetadata.batchWatermarkMs = newWatermarkMs
+            batchWatermarkMs = newWatermarkMs
           } else {
             logDebug(
               s"Event time didn't move: $newWatermarkMs < " +
-                s"${offsetSeqMetadata.batchWatermarkMs}")
+                s"$batchWatermarkMs")
           }
         }
       }
+      offsetSeqMetadata = offsetSeqMetadata.copy(
+        batchWatermarkMs = batchWatermarkMs,
+        batchTimestampMs = triggerClock.getTimeMillis()) // Current batch timestamp in milliseconds
 
       updateStatusMessage("Writing offsets to log")
       reportTimeTaken("walCommit") {
@@ -550,8 +591,9 @@ class StreamExecution(
 
   /**
    * Processes any data available between `availableOffsets` and `committedOffsets`.
+   * @param sparkSessionToRunBatch Isolated [[SparkSession]] to run this batch with.
    */
-  private def runBatch(): Unit = {
+  private def runBatch(sparkSessionToRunBatch: SparkSession): Unit = {
     // Request unprocessed data from all sources.
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
@@ -596,7 +638,7 @@ class StreamExecution(
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
-        sparkSession,
+        sparkSessionToRunBatch,
         triggerLogicalPlan,
         outputMode,
         checkpointFile("state"),
@@ -606,7 +648,7 @@ class StreamExecution(
     }
 
     val nextBatch =
-      new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(sparkSessionToRunBatch, lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
     reportTimeTaken("addBatch") {
       sink.addBatch(currentBatchId, nextBatch)
