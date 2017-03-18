@@ -196,50 +196,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = true, purge = false)
   }
 
-  test("rename table") {
-    val catalog = newBasicCatalog()
-    assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    catalog.renameTable("db2", "tbl1", "tblone")
-    assert(catalog.listTables("db2").toSet == Set("tblone", "tbl2"))
-  }
-
-  test("rename table when database/table does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.renameTable("unknown_db", "unknown_table", "unknown_table")
-    }
-    intercept[AnalysisException] {
-      catalog.renameTable("db2", "unknown_table", "unknown_table")
-    }
-  }
-
-  test("rename table when destination table already exists") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.renameTable("db2", "tbl1", "tbl2")
-    }
-  }
-
-  test("alter table") {
-    val catalog = newBasicCatalog()
-    val tbl1 = catalog.getTable("db2", "tbl1")
-    catalog.alterTable(tbl1.copy(properties = Map("toh" -> "frem")))
-    val newTbl1 = catalog.getTable("db2", "tbl1")
-    assert(!tbl1.properties.contains("toh"))
-    assert(newTbl1.properties.size == tbl1.properties.size + 1)
-    assert(newTbl1.properties.get("toh") == Some("frem"))
-  }
-
-  test("alter table when database/table does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.alterTable(newTable("tbl1", "unknown_db"))
-    }
-    intercept[AnalysisException] {
-      catalog.alterTable(newTable("unknown_table", "db2"))
-    }
-  }
-
   test("alter table schema") {
     val catalog = newBasicCatalog()
     val tbl1 = catalog.getTable("db2", "tbl1")
@@ -710,18 +666,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.listFunctions("db2", "func*").toSet == Set("func1", "func2"))
   }
 
-  // --------------------------------------------------------------------------
-  // File System operations
-  // --------------------------------------------------------------------------
-
-  private def exists(uri: URI, children: String*): Boolean = {
-    val base = new Path(uri)
-    val finalPath = children.foldLeft(base) {
-      case (parent, child) => new Path(parent, child)
-    }
-    base.getFileSystem(new Configuration()).exists(finalPath)
-  }
-
   test("create/drop database should create/delete the directory") {
     val catalog = newBasicCatalog()
     val db = newDb("mydb")
@@ -730,40 +674,6 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
     catalog.dropDatabase("mydb", ignoreIfNotExists = false, cascade = false)
     assert(!exists(db.locationUri))
-  }
-
-  test("create/drop/rename table should create/delete/rename the directory") {
-    val catalog = newBasicCatalog()
-    val db = catalog.getDatabase("db1")
-    val table = CatalogTable(
-      identifier = TableIdentifier("my_table", Some("db1")),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("a", "int").add("b", "string"),
-      provider = Some(defaultProvider)
-    )
-
-    catalog.createTable(table, ignoreIfExists = false)
-    assert(exists(db.locationUri, "my_table"))
-
-    catalog.renameTable("db1", "my_table", "your_table")
-    assert(!exists(db.locationUri, "my_table"))
-    assert(exists(db.locationUri, "your_table"))
-
-    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
-    assert(!exists(db.locationUri, "your_table"))
-
-    val externalTable = CatalogTable(
-      identifier = TableIdentifier("external_table", Some("db1")),
-      tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat(
-        Some(Utils.createTempDir().toURI),
-        None, None, None, false, Map.empty),
-      schema = new StructType().add("a", "int").add("b", "string"),
-      provider = Some(defaultProvider)
-    )
-    catalog.createTable(externalTable, ignoreIfExists = false)
-    assert(!exists(db.locationUri, "external_table"))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
@@ -954,4 +864,15 @@ abstract class CatalogTestUtils {
     catalog.listPartitions(db, table).map(_.spec).toSet == parts.map(_.spec).toSet
   }
 
+  // --------------------------------------------------------------------------
+  // File System operations
+  // --------------------------------------------------------------------------
+
+  def exists(uri: URI, children: String*): Boolean = {
+    val base = new Path(uri)
+    val finalPath = children.foldLeft(base) {
+      case (parent, child) => new Path(parent, child)
+    }
+    base.getFileSystem(new Configuration()).exists(finalPath)
+  }
 }

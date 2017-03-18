@@ -299,6 +299,7 @@ class InMemoryCatalog(
   override def alterTable(
       tableIdentifier: TableIdentifier,
       newTableDefinition: CatalogTable): Unit = synchronized {
+    assert(tableIdentifier.database.isDefined)
     if (newTableDefinition.identifier != tableIdentifier) {
       renameTable(tableIdentifier, newTableDefinition)
     } else {

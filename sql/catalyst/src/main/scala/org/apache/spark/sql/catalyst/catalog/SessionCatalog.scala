@@ -533,21 +533,29 @@ class SessionCatalog(
         // for Hive serde tables.
         val hasPathOption = CaseInsensitiveMap(oldTable.storage.properties).contains("path")
         val storageWithNewPath =
-          if (oldTable.tableType == CatalogTableType.MANAGED && hasPathOption) {
-          // If it's a managed table with path option and we are renaming it, then the path option
-          // becomes inaccurate and we need to update it according to the new table name.
-          val newTablePath = defaultTablePath(TableIdentifier(newName.table, Some(db)))
-          CatalogUtils.updateLocationInStorageProps(
-            oldTable, Some(CatalogUtils.URIToString(newTablePath)))
-        } else {
-          oldTable.storage
-        }
+          if (oldTable.tableType == CatalogTableType.MANAGED) {
+            val newTablePath = defaultTablePath(TableIdentifier(newName.table, Some(db)))
+            // If it's a managed table with path option and we are renaming it, then the path option
+            // becomes inaccurate and we need to update it according to the new table name.
+            if (hasPathOption) {
+              CatalogUtils.updateLocationInStorageProps(
+              oldTable, Some(CatalogUtils.URIToString(newTablePath)))
+            } else if (externalCatalog.isInstanceOf[InMemoryCatalog]) {
+              // For hive metastore, there is no need to set the newTablePath
+              oldTable.storage.copy(locationUri = Some(newTablePath))
+            } else oldTable.storage
+          } else {
+            oldTable.storage
+          }
 
         val newTable = oldTable.copy(
           identifier = TableIdentifier(newName.table, Some(db)),
           storage = storageWithNewPath)
 
-        externalCatalog.alterTable(oldName, newTable)
+        val oldTableIdentifier =
+          if (!oldName.database.isDefined) oldName.copy(database = Some(db)) else oldName
+
+        externalCatalog.alterTable(oldTableIdentifier, newTable)
       } else {
         if (newName.database.isDefined) {
           throw new AnalysisException(
