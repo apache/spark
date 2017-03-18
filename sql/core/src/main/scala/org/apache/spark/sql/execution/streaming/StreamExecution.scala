@@ -273,7 +273,7 @@ class StreamExecution(
 
           val continueToRun =
             if (isActive) {
-              val hasNewData = reportTimeTaken("triggerExecution") {
+              reportTimeTaken("triggerExecution") {
                 if (currentBatchId < 0) {
                   // We'll do this initialization only once
                   populateStartOffsets()
@@ -285,18 +285,16 @@ class StreamExecution(
                   currentStatus = currentStatus.copy(isDataAvailable = true)
                   updateStatusMessage("Processing new data")
                   runBatch()
-                  true
-                } else {
-                  false
                 }
               }
-              /* We need to do the steps below outside of reportTimeTaken because of
-               * the case where hasNewData == false, causing a sleep. */
               // Report trigger as finished and construct progress object.
-              finishTrigger(hasNewData)
-              if (hasNewData) {
-                /* We'll increase currentBatchId after we complete processing
-                 * current batch's data */
+              finishTrigger(dataAvailable)
+              if (dataAvailable) {
+                // Update committed offsets.
+                committedOffsets ++= availableOffsets
+                logDebug(s"Commit log write ${currentBatchId}")
+                batchCommitLog.add(currentBatchId, null)
+                // We'll increase currentBatchId after we complete processing current batch's data
                 currentBatchId += 1
               } else {
                 currentStatus = currentStatus.copy(isDataAvailable = false)
@@ -307,8 +305,6 @@ class StreamExecution(
             } else {
               false
             }
-
-          // committedOffsets ++= availableOffsets
           updateStatusMessage("Waiting for next trigger")
           continueToRun
         })
@@ -615,10 +611,6 @@ class StreamExecution(
     reportTimeTaken("addBatch") {
       sink.addBatch(currentBatchId, nextBatch)
     }
-    // Update committed offsets.
-    committedOffsets ++= availableOffsets
-    logDebug(s"Commit log write ${currentBatchId}")
-    batchCommitLog.add(currentBatchId, null)
 
     awaitBatchLock.lock()
     try {

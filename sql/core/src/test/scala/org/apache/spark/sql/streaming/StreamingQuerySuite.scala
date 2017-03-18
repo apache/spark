@@ -304,7 +304,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
         assert(progress.sources.length === 1)
         assert(progress.sources(0).description contains "MemoryStream")
-        assert(progress.sources(0).startOffset === "0")
+        assert(progress.sources(0).startOffset === null)
         assert(progress.sources(0).endOffset !== null)
         assert(progress.sources(0).processedRowsPerSecond === 2.0)
 
