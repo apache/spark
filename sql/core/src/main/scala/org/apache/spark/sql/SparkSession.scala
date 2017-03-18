@@ -40,10 +40,10 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, SESSION_STATE_IMPLEMENTATION}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
@@ -805,6 +805,7 @@ object SparkSession {
      */
     def enableHiveSupport(): Builder = synchronized {
       if (hiveClassesArePresent) {
+        config(SESSION_STATE_IMPLEMENTATION.key, "hive")
         config(CATALOG_IMPLEMENTATION.key, "hive")
       } else {
         throw new IllegalArgumentException(
@@ -964,9 +965,10 @@ object SparkSession {
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
 
   private def sessionStateClassName(conf: SparkConf): String = {
-    conf.get(CATALOG_IMPLEMENTATION) match {
+    conf.get(SESSION_STATE_IMPLEMENTATION) match {
       case "hive" => HIVE_SESSION_STATE_CLASS_NAME
       case "in-memory" => classOf[SessionState].getCanonicalName
+      case name => name
     }
   }
 

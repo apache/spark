@@ -39,7 +39,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
  */
-private[sql] class SessionState(sparkSession: SparkSession) {
+class SessionState(sparkSession: SparkSession) {
 
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
