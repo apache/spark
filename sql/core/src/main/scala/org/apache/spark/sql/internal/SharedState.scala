@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.internal
 
+import java.net.URL
 import java.util.Locale
 
 import scala.reflect.ClassTag
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, SparkUrlStreamHandlerFactory, Utils}
 
 
 /**
@@ -148,6 +149,8 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
 }
 
 object SharedState {
+
+  URL.setURLStreamHandlerFactory(new SparkUrlStreamHandlerFactory())
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
