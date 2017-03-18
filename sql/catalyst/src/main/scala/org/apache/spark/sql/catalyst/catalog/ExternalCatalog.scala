@@ -98,6 +98,13 @@ abstract class ExternalCatalog {
       newTableDefinition: CatalogTable): Unit
 
   /**
+   * We can use alterTable to do the following commands:
+   * 1.Rename a table
+   * 2.Alter a table whose database and name match the ones specified in `tableDefinition`
+   */
+  def alterTable(tableIdentifier: TableIdentifier, newTableDefinition: CatalogTable): Unit
+
+  /**
    * Alter a table whose database and name match the ones specified in `tableDefinition`, assuming
    * the table exists. Note that, even though we can specify database in `tableDefinition`, it's
    * used to identify the table, not to alter the table's database, which is not allowed.
@@ -105,8 +112,6 @@ abstract class ExternalCatalog {
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(tableIdentifier: TableIdentifier, newTableDefinition: CatalogTable): Unit
-
   protected def alterSameTable(tableDefinition: CatalogTable): Unit
 
   /**
