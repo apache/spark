@@ -36,7 +36,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    Some(DataType.fromJson(options("dataSchema")).asInstanceOf[StructType])
+    Some(DataType.fromString(options("dataSchema")).asInstanceOf[StructType])
   }
 
   override def prepareWrite(

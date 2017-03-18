@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.util.Utils
 
 /**
@@ -102,6 +103,13 @@ abstract class DataType extends AbstractDataType {
 object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
+
+  // Until Spark-2.1, we use json strings for defining schemas in user-facing APIs.
+  // Since we add an user-friendly API in the DDL parser, we employ DDL formats for the case.
+  // To keep back-compatibility, we use `fromJson` first, and then try the new API.
+  def fromString(text: String): DataType = {
+    try { fromJson(text) } catch { case _: Throwable => CatalystSqlParser.parseTableSchema(text) }
+  }
 
   private val nonDecimalNameToType = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
