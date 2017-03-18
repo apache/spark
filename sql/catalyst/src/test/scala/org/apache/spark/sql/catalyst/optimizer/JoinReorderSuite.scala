@@ -42,7 +42,8 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder(conf)) :: Nil
+        CostBasedJoinReorder(conf),
+        ColumnPruning) :: Nil
   }
 
   /** Set up tables and columns for testing */
@@ -97,12 +98,11 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
         (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
 
-    // The cost of original plan (use only cardinality to simplify explanation):
+    // The cost of original plan:
     // cost = cost(t1 J t2) = 1000 * 20 / 5 = 4000
     // In contrast, the cost of the best plan:
     // cost = cost(t1 J t3) = 1000 * 100 / 100 = 1000 < 4000
-    // so (t1 J t3) J t2 is better (has lower cost, i.e. intermediate result size) than
-    // the original order (t1 J t2) J t3.
+    // so (t1 J t3) J t2 is better than the original order (t1 J t2) J t3.
     val bestPlan =
       t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
       .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
@@ -152,7 +152,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         (nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
         (nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
 
-    // The cost of original plan (use only cardinality to simplify explanation):
+    // The cost of original plan:
     // cost(t1 J t4) = 1000 * 2000 / 2 = 1000000, cost(t1t4 J t2) = 1000000 * 20 / 5 = 4000000,
     // cost = cost(t1 J t4) + cost(t1t4 J t2) = 5000000
     // In contrast, the cost of the best plan (a bushy tree):
