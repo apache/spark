@@ -705,7 +705,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     withTempDir { dir =>
       // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
-      // is prefixed with 'jar:', and it is a illegal parameter for Path, so here we copy it
+      // starts with 'jar:', and it is a illegal parameter for Path, so here we copy it
       // to a temp file.
       val tmpFile = new File(dir, "tmp")
       Files.copy(csvFile, tmpFile.toPath)
