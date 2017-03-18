@@ -272,13 +272,14 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        q.batchCommitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
       },
       StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
-      // The commit log should ensure that we do not run another batch
-      CheckLastBatch(),
+      // The commit log blown, causing the last batch to re-run
+      CheckLastBatch((20L, 1), (85L, 1)),
       AssertOnQuery { q =>
         clock.getTimeMillis() == 90000L
       },
@@ -323,13 +324,14 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        q.batchCommitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true
       },
       StartStream(ProcessingTime("10 day"), triggerClock = clock),
-      // Commit log should prevent batch from running again
-      CheckLastBatch(),
+      // Commit log blown, causing a re-run of the last batch
+      CheckLastBatch((20L, 1), (85L, 1)),
 
       // advance clock to 100 days, should retain keys >= 90
       AddData(inputData, 85L, 90L, 100L, 105L),
