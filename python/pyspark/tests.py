@@ -35,6 +35,7 @@ import threading
 import hashlib
 
 from py4j.protocol import Py4JJavaError
+from py4j.java_gateway import JavaClass
 try:
     import xmlrunner
 except ImportError:
@@ -434,6 +435,19 @@ class AddFileTests(PySparkTestCase):
         self.assertNotEqual(path, download_path)
         with open(download_path) as test_file:
             self.assertEqual("Hello World!\n", test_file.readline())
+
+    def test_add_jar(self):
+        jvm = self.sc._jvm
+        # We shouldn't be able to load anything from the package before it is added
+        self.assertFalse(isinstance(jvm.pysparktests.DummyClass, JavaClass))
+        # Generate and compile the test jar
+        destDir = os.path.join(SPARK_HOME, "python/test_support/jar")
+        jarName = jvm.org.apache.spark.TestUtils.createDummyJar(
+            destDir, "pysparktests", "DummyClass")
+        # Load the new jar
+        self.sc.addJar(jarName, True)
+        # Try and load the class
+        self.assertTrue(isinstance(jvm.pysparktests.DummyClass, JavaClass))
 
     def test_add_file_recursively_locally(self):
         path = os.path.join(SPARK_HOME, "python/test_support/hello")
