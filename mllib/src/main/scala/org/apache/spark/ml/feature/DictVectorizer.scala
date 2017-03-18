@@ -18,16 +18,19 @@
 package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
+
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkException
+
 import org.apache.spark.annotation.Since
+import org.apache.spark.SparkException
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
-import org.apache.spark.ml.feature.DictVectorizerModel.DictVectorizerModelWriter
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -40,7 +43,11 @@ private[feature] trait DictVectorizerBase extends Params with HasInputCols with 
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(DictVectorizer.supportedHandleInvalids))
 
-  setDefault(handleInvalid, DictVectorizer.ERROR_INVALID)
+  setDefault(handleInvalid, DictVectorizer.SKIP_INVALID)
+
+  val sepToken: Param[String] = new Param[String](this, "sepToken", "split colum names with value")
+
+  setDefault(sepToken, DictVectorizer.DEFAULT_SEP_TOKEN)
 
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val fields = schema($(inputCols).toSet)
@@ -54,7 +61,7 @@ private[feature] trait DictVectorizerBase extends Params with HasInputCols with 
 }
 
 
-class DictVectorizer(override val uid: String, val sep: String = "=")
+class DictVectorizer(override val uid: String)
   extends Estimator[DictVectorizerModel]
     with HasInputCols with HasOutputCol with DefaultParamsWritable with DictVectorizerBase{
   def this() = this(Identifiable.randomUID("dictVec"))
@@ -65,7 +72,7 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
 
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
-
+  def setSepToken(value: String): this.type = set(sepToken, value)
 
   override def fit(dataset: Dataset[_]): DictVectorizerModel = {
     // dataset.na.drop($(inputCols)).show()
@@ -76,10 +83,11 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
     dataset.schema($(inputCols).toSet).foreach(p => p.dataType match {
       case IntegerType => labels += p.name
       case StringType => labels ++= dataset.select(p.name).rdd.
-          map(_.getString(0)).countByValue().toSeq.sortBy(-_._2).map(key => p.name + sep + key._1)
+          map(_.getString(0)).countByValue().
+            toSeq.sortBy(-_._2).map(key => p.name + $(sepToken) + key._1)
         case ArrayType(StringType, _) => labels ++= dataset.select(p.name).
           rdd.map(_.getAs[Seq[String]](0)).flatMap(y => y).
-          countByValue().toSeq.sortBy(-_._2).map(key => p.name + sep + key._1)
+          countByValue().toSeq.sortBy(-_._2).map(key => p.name + $(sepToken) + key._1)
           case ArrayType(t, true) => t match {
         case IntegerType => false
         case DoubleType => false
@@ -91,10 +99,8 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
 
     })
 
-    require(labels.result().length > 0,
-      "The vocabulary size should be > 0. Lower minDF as necessary.")
-    copyValues(new DictVectorizerModel(uid, labels.result(), sep).setParent(this))
-    // new DictVectorizerModel("x", labels.result())
+    require(labels.result().length > 0)
+    copyValues(new DictVectorizerModel(uid, labels.result()).setParent(this))
   }
 
   override def copy(extra: ParamMap): DictVectorizer = defaultCopy(extra)
@@ -104,15 +110,16 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
   }
 }
 
-class DictVectorizerModel( val uid: String, val vocabulary: Array[String],
-                          val sep: String = "=") extends Model[DictVectorizerModel]
+class DictVectorizerModel( val uid: String, val vocabulary: Array[String])
+  extends Model[DictVectorizerModel]
     with DictVectorizerBase with MLWritable{
 
+  import org.apache.spark.ml.feature.DictVectorizerModel._
 
 
-  private val labelToIndex: OpenHashMap[String, Double] = {
+  private val labelToIndex: OpenHashMap[String, Int] = {
     val n = vocabulary.length
-    val map = new OpenHashMap[String, Double](n)
+    val map = new OpenHashMap[String, Int](n)
     var i = 0
     while (i < n) {
       map.update(vocabulary(i), i)
@@ -121,22 +128,58 @@ class DictVectorizerModel( val uid: String, val vocabulary: Array[String],
     map
   }
 
+  def getSepToken: String = $(sepToken)
+
   def this(vocabulary: Array[String]) = this(Identifiable.randomUID("dictVec"), vocabulary)
 
   override def copy(extra: ParamMap): DictVectorizerModel = {
-    val copied = new DictVectorizerModel(uid, vocabulary, sep)
+    val copied = new DictVectorizerModel(uid, vocabulary)
     copyValues(copied, extra).setParent(parent)
   }
 
+
   override def transform(dataset: Dataset[_]): DataFrame = {
-    // scalastyle:off
+    def vec(r: Row): Vector = {
+      val indices = ArrayBuilder.make[Int]
+      val values = ArrayBuilder.make[Double]
+
+      dataset.schema($(inputCols).toSet).foreach(p => p.dataType match {
+        case IntegerType =>
+          val v = r.getAs[Int](p.name)
+
+          if ( v != 0 )
+           {
+             indices += labelToIndex(p.name)
+             values += v
+           }
+        case StringType =>
+          val v = r.getAs[String](p.name)
+          indices += labelToIndex(p.name +
+            $(sepToken) + v)
+          values += 1.0
+        case ArrayType(StringType, _) =>
+          val v = r.getAs[Seq[String]](p.name)
+          v.foreach {
+            s =>
+              indices += labelToIndex(p.name +
+                $(sepToken) + s)
+              values += 1.0
+          }
+      })
+
+      Vectors.sparse(labelToIndex.size, indices.result(), values.result()).compressed
+    }
+
+    val vectorizer = udf {
+      r: Row => vec(r)
+    }
 
 
     val os = validateAndTransformSchema((dataset.schema($(inputCols).toSet)))
-    println($(inputCols))
 
-    val inputFields = $(inputCols).map(c => dataset.schema(c))
-    dataset.select(getOutputCol)
+    // dataset.select($(inputCols).head, $(inputCols).tail: _*)
+    val args = $(inputCols).map { c => dataset(c)}
+    dataset.select(col("*"), vectorizer(struct(args: _*)).as($(outputCol)))
   }
 
 
@@ -158,11 +201,39 @@ object DictVectorizerModel extends MLReadable[DictVectorizerModel] {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.vocabulary, instance.sep)
+      val data = Data(instance.vocabulary, instance.getSepToken)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
+
+    private[feature] def assemble(vv: Any*): Vector = {
+      val indices = ArrayBuilder.make[Int]
+      val values = ArrayBuilder.make[Double]
+      var cur = 0
+      vv.foreach {
+        case v: Double =>
+          if (v != 0.0) {
+            indices += cur
+            values += v
+          }
+          cur += 1
+        case vec: Vector =>
+          vec.foreachActive { case (i, v) =>
+            if (v != 0.0) {
+              indices += cur + i
+              values += v
+            }
+          }
+          cur += vec.size
+        case null =>
+          // TODO: output Double.NaN?
+          throw new SparkException("Values to assemble cannot be null.")
+        case o =>
+          throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
+      }
+      Vectors.sparse(cur, indices.result(), values.result()).compressed
+    }
 
   private class DictVectorizerModelReader extends MLReader[DictVectorizerModel] {
 
@@ -175,7 +246,7 @@ object DictVectorizerModel extends MLReadable[DictVectorizerModel] {
         .select("vocabulary", "sep")
         .head()
       val vocabulary = data.getAs[Seq[String]](0).toArray
-      val sep = data.getAs[Seq[String]](1)
+      val sep = data.getAs[String](1)
       val model = new DictVectorizerModel(metadata.uid, vocabulary)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -195,6 +266,7 @@ object DictVectorizer extends DefaultParamsReadable[DictVectorizer] {
   private[feature] val SKIP_INVALID: String = "skip"
   private[feature] val ERROR_INVALID: String = "error"
   private[feature] val KEEP_INVALID: String = "keep"
+  private[feature] val DEFAULT_SEP_TOKEN: String = "="
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 

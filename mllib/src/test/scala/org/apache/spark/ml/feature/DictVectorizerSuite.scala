@@ -37,7 +37,7 @@ class DictVectorizerSuite
     ParamsSuite.checkParams(modelWithoutUid)
   }
 
-  test("DictVectorizer") {
+  test("DictVectorizer fits") {
     val data = Seq(
       (0, "a", "x", Seq("x", "xx")),
       (1, "b", "x", Seq("x")),
@@ -47,27 +47,48 @@ class DictVectorizerSuite
       (5, "c", "x", Seq("x", "xx")))
 
     val df = data.toDF("id", "label", "name", "hobbies")
-    val indexer = new DictVectorizer()
+    val vec = new DictVectorizer()
       .setInputCols(Array("label", "id", "name", "hobbies"))
       .setOutputCol("labelIndex")
       .fit(df)
 
     // copied model must have the same parent.
-    // scalastyle:off
 
-    MLTestingUtils.checkCopy(indexer)
+    MLTestingUtils.checkCopy(vec)
 
-    val transformed = indexer.transform(df)
-
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("a", "c", "b", "x"))
-    val output = transformed.select("id", "labelIndex").rdd.map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
-    // a -> 0, b -> 2, c -> 1
-    val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
-    assert(output === expected)
+    assert(vec.vocabulary === Array("id", "label=a", "label=c",
+      "label=b", "name=x", "hobbies=x", "hobbies=xx"))
   }
+
+  test("DictVectorizer transforms") {
+      val data = Seq(
+        (0, "a", "x", Seq("x", "xx")),
+        (1, "b", "x", Seq("x")),
+        (2, "c", "x", Seq("x", "xx")),
+        (3, "a", "x", Seq("x", "xx")),
+        (4, "a", "x", Seq("x", "xx")),
+        (5, "c", "x", Seq("x", "xx")))
+
+      val df = data.toDF("id", "label", "name", "hobbies")
+      val vec = new DictVectorizer()
+        .setInputCols(Array("label", "id", "name", "hobbies"))
+        .setOutputCol("labelIndex")
+        .fit(df)
+
+    val transformed = vec.transform(df)
+    transformed.show()
+    }
+//    val transformed = indexer.transform(df)
+//
+//    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+//      .asInstanceOf[NominalAttribute]
+//    assert(attr.values.get === Array("a", "c", "b", "x"))
+//    val output = transformed.select("id", "labelIndex").rdd.map { r =>
+//      (r.getInt(0), r.getDouble(1))
+//    }.collect().toSet
+//    // a -> 0, b -> 2, c -> 1
+//    val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
+//    assert(output === expected)
+
 }
 
