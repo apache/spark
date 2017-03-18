@@ -17,142 +17,6 @@ application. See the [Deploying](#deploying) subsection below.
 
 ## Reading Data from Kafka
 
-Each row in the source has the following schema:
-<table class="table">
-<tr><th>Column</th><th>Type</th></tr>
-<tr>
-  <td>key</td>
-  <td>binary</td>
-</tr>
-<tr>
-  <td>value</td>
-  <td>binary</td>
-</tr>
-<tr>
-  <td>topic</td>
-  <td>string</td>
-</tr>
-<tr>
-  <td>partition</td>
-  <td>int</td>
-</tr>
-<tr>
-  <td>offset</td>
-  <td>long</td>
-</tr>
-<tr>
-  <td>timestamp</td>
-  <td>long</td>
-</tr>
-<tr>
-  <td>timestampType</td>
-  <td>int</td>
-</tr>
-</table>
-
-The following options must be set for the Kafka source
-for both batch and streaming queries.
-
-<table class="table">
-<tr><th>Option</th><th>value</th><th>meaning</th></tr>
-<tr>
-  <td>assign</td>
-  <td>json string {"topicA":[0,1],"topicB":[2,4]}</td>
-  <td>Specific TopicPartitions to consume.
-  Only one of "assign", "subscribe" or "subscribePattern"
-  options can be specified for Kafka source.</td>
-</tr>
-<tr>
-  <td>subscribe</td>
-  <td>A comma-separated list of topics</td>
-  <td>The topic list to subscribe.
-  Only one of "assign", "subscribe" or "subscribePattern"
-  options can be specified for Kafka source.</td>
-</tr>
-<tr>
-  <td>subscribePattern</td>
-  <td>Java regex string</td>
-  <td>The pattern used to subscribe to topic(s).
-  Only one of "assign, "subscribe" or "subscribePattern"
-  options can be specified for Kafka source.</td>
-</tr>
-<tr>
-  <td>kafka.bootstrap.servers</td>
-  <td>A comma-separated list of host:port</td>
-  <td>The Kafka "bootstrap.servers" configuration.</td>
-</tr>
-</table>
-
-The following configurations are optional:
-
-<table class="table">
-<tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
-<tr>
-  <td>startingOffsets</td>
-  <td>"earliest", "latest" (streaming only), or json string
-  """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """
-  </td>
-  <td>"latest" for streaming, "earliest" for batch</td>
-  <td>streaming and batch</td>
-  <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
-  "latest" which is just from the latest offsets, or a json string specifying a starting offset for
-  each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
-  Note: For batch queries, latest (either implicitly or by using -1 in json) is not allowed.
-  For streaming queries, this only applies when a new query is started, and that resuming will
-  always pick up from where the query left off. Newly discovered partitions during a query will start at
-  earliest.</td>
-</tr>
-<tr>
-  <td>endingOffsets</td>
-  <td>latest or json string
-  {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}}
-  </td>
-  <td>latest</td>
-  <td>batch query</td>
-  <td>The end point when a batch query is ended, either "latest" which is just referred to the
-  latest, or a json string specifying an ending offset for each TopicPartition.  In the json, -1
-  as an offset can be used to refer to latest, and -2 (earliest) as an offset is not allowed.</td>
-</tr>
-<tr>
-  <td>failOnDataLoss</td>
-  <td>true or false</td>
-  <td>true</td>
-  <td>streaming query</td>
-  <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
-  offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
-  as you expected. Batch queries will always fail if it fails to read any data from the provided
-  offsets due to lost data.</td>
-</tr>
-<tr>
-  <td>kafkaConsumer.pollTimeoutMs</td>
-  <td>long</td>
-  <td>512</td>
-  <td>streaming and batch</td>
-  <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
-</tr>
-<tr>
-  <td>fetchOffset.numRetries</td>
-  <td>int</td>
-  <td>3</td>
-  <td>streaming and batch</td>
-  <td>Number of times to retry before giving up fetching Kafka offsets.</td>
-</tr>
-<tr>
-  <td>fetchOffset.retryIntervalMs</td>
-  <td>long</td>
-  <td>10</td>
-  <td>streaming and batch</td>
-  <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
-</tr>
-<tr>
-  <td>maxOffsetsPerTrigger</td>
-  <td>long</td>
-  <td>none</td>
-  <td>streaming and batch</td>
-  <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
-</tr>
-</table>
-
 ### Creating a Kafka Source for Streaming Queries
 
 <div class="codetabs">
@@ -374,11 +238,148 @@ ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 </div>
 </div>
 
+Each row in the source has the following schema:
+<table class="table">
+<tr><th>Column</th><th>Type</th></tr>
+<tr>
+  <td>key</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>value</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>topic</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>partition</td>
+  <td>int</td>
+</tr>
+<tr>
+  <td>offset</td>
+  <td>long</td>
+</tr>
+<tr>
+  <td>timestamp</td>
+  <td>long</td>
+</tr>
+<tr>
+  <td>timestampType</td>
+  <td>int</td>
+</tr>
+</table>
+
+The following options must be set for the Kafka source
+for both batch and streaming queries.
+
+<table class="table">
+<tr><th>Option</th><th>value</th><th>meaning</th></tr>
+<tr>
+  <td>assign</td>
+  <td>json string {"topicA":[0,1],"topicB":[2,4]}</td>
+  <td>Specific TopicPartitions to consume.
+  Only one of "assign", "subscribe" or "subscribePattern"
+  options can be specified for Kafka source.</td>
+</tr>
+<tr>
+  <td>subscribe</td>
+  <td>A comma-separated list of topics</td>
+  <td>The topic list to subscribe.
+  Only one of "assign", "subscribe" or "subscribePattern"
+  options can be specified for Kafka source.</td>
+</tr>
+<tr>
+  <td>subscribePattern</td>
+  <td>Java regex string</td>
+  <td>The pattern used to subscribe to topic(s).
+  Only one of "assign, "subscribe" or "subscribePattern"
+  options can be specified for Kafka source.</td>
+</tr>
+<tr>
+  <td>kafka.bootstrap.servers</td>
+  <td>A comma-separated list of host:port</td>
+  <td>The Kafka "bootstrap.servers" configuration.</td>
+</tr>
+</table>
+
+The following configurations are optional:
+
+<table class="table">
+<tr><th>Option</th><th>value</th><th>default</th><th>query type</th><th>meaning</th></tr>
+<tr>
+  <td>startingOffsets</td>
+  <td>"earliest", "latest" (streaming only), or json string
+  """ {"topicA":{"0":23,"1":-1},"topicB":{"0":-2}} """
+  </td>
+  <td>"latest" for streaming, "earliest" for batch</td>
+  <td>streaming and batch</td>
+  <td>The start point when a query is started, either "earliest" which is from the earliest offsets,
+  "latest" which is just from the latest offsets, or a json string specifying a starting offset for
+  each TopicPartition.  In the json, -2 as an offset can be used to refer to earliest, -1 to latest.
+  Note: For batch queries, latest (either implicitly or by using -1 in json) is not allowed.
+  For streaming queries, this only applies when a new query is started, and that resuming will
+  always pick up from where the query left off. Newly discovered partitions during a query will start at
+  earliest.</td>
+</tr>
+<tr>
+  <td>endingOffsets</td>
+  <td>latest or json string
+  {"topicA":{"0":23,"1":-1},"topicB":{"0":-1}}
+  </td>
+  <td>latest</td>
+  <td>batch query</td>
+  <td>The end point when a batch query is ended, either "latest" which is just referred to the
+  latest, or a json string specifying an ending offset for each TopicPartition.  In the json, -1
+  as an offset can be used to refer to latest, and -2 (earliest) as an offset is not allowed.</td>
+</tr>
+<tr>
+  <td>failOnDataLoss</td>
+  <td>true or false</td>
+  <td>true</td>
+  <td>streaming query</td>
+  <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
+  offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
+  as you expected. Batch queries will always fail if it fails to read any data from the provided
+  offsets due to lost data.</td>
+</tr>
+<tr>
+  <td>kafkaConsumer.pollTimeoutMs</td>
+  <td>long</td>
+  <td>512</td>
+  <td>streaming and batch</td>
+  <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
+</tr>
+<tr>
+  <td>fetchOffset.numRetries</td>
+  <td>int</td>
+  <td>3</td>
+  <td>streaming and batch</td>
+  <td>Number of times to retry before giving up fetching Kafka offsets.</td>
+</tr>
+<tr>
+  <td>fetchOffset.retryIntervalMs</td>
+  <td>long</td>
+  <td>10</td>
+  <td>streaming and batch</td>
+  <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
+</tr>
+<tr>
+  <td>maxOffsetsPerTrigger</td>
+  <td>long</td>
+  <td>none</td>
+  <td>streaming and batch</td>
+  <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
+</tr>
+</table>
+
 ## Writing Data to Kafka
 
+Here, we describe the support for writing Streaming Queries and Batch Queries to Apache Kafka. Take note that 
 Apache Kafka only supports at least once write semantics. Consequently, when writing---either Streaming Queries
 or Batch Queries---to Kafka, some records may be duplicated; this can happen, for example, if Kafka needs
-to retry a message that was not acknowledged by a Broker, even though that Broker received and wrote the message.
+to retry a message that was not acknowledged by a Broker, even though that Broker received and wrote the message record.
 Structured Streaming cannot prevent such duplicates from occurring due to these Kafka write semantics. However, 
 if writing the query is successful, then you can assume that the query output was written at least once. A possible
 solution to remove duplicates when reading the written data could be to introduce a primary (unique) key 
