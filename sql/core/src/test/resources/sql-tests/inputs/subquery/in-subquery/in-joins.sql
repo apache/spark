@@ -79,7 +79,7 @@ GROUP BY  t1a,
           t3a,
           t3b,
           t3c
-ORDER BY  t1a DESC;
+ORDER BY  t1a DESC, t3b DESC;
 
 -- TC 01.03
 SELECT     Count(DISTINCT(t1a))

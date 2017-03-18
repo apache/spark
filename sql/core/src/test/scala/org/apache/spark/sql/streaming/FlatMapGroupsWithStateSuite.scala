@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 /** Class to check custom state types */
 case class RunningCount(count: Long)
 
-class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
+class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
 
   import testImplicits._
 
@@ -119,9 +119,9 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(stateFunc) // State: Int, Out: (Str, Str)
+        .flatMapGroupsWithState(stateFunc, Update) // State: Int, Out: (Str, Str)
 
-    testStream(result, Append)(
+    testStream(result, Update)(
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
@@ -162,9 +162,9 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(stateFunc) // State: Int, Out: (Str, Str)
+        .flatMapGroupsWithState(stateFunc, Update) // State: Int, Out: (Str, Str)
 
-    testStream(result, Append)(
+    testStream(result, Update)(
       AddData(inputData, "a", "a", "b"),
       CheckLastBatch(("a", "1"), ("a", "2"), ("b", "1")),
       StopStream,
@@ -185,7 +185,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       Iterator((key, values.size))
     }
     checkAnswer(
-      Seq("a", "a", "b").toDS.groupByKey(x => x).flatMapGroupsWithState(stateFunc).toDF,
+      Seq("a", "a", "b").toDS.groupByKey(x => x).flatMapGroupsWithState(stateFunc, Update).toDF,
       Seq(("a", 2), ("b", 1)).toDF)
   }
 
@@ -210,7 +210,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
         .groupByKey(x => x)
         .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
 
-    testStream(result, Append)(
+    testStream(result, Update)(
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
@@ -230,7 +230,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  test("mapGroupsWithState - streaming + aggregation") {
+  test("flatMapGroupsWithState - streaming + aggregation") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
@@ -238,10 +238,10 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
         state.remove()
-        (key, "-1")
+        Iterator(key -> "-1")
       } else {
         state.update(RunningCount(count))
-        (key, count.toString)
+        Iterator(key -> count.toString)
       }
     }
 
@@ -249,7 +249,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
+        .flatMapGroupsWithState(stateFunc, Append) // Types = State: MyState, Out: (Str, Str)
         .groupByKey(_._1)
         .count()
 
@@ -290,7 +290,7 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
 
   testQuietly("StateStore.abort on task failure handling") {
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
-      if (MapGroupsWithStateSuite.failInTask) throw new Exception("expected failure")
+      if (FlatMapGroupsWithStateSuite.failInTask) throw new Exception("expected failure")
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       state.update(RunningCount(count))
       (key, count)
@@ -303,11 +303,11 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
         .mapGroupsWithState(stateFunc) // Types = State: MyState, Out: (Str, Str)
 
     def setFailInTask(value: Boolean): AssertOnQuery = AssertOnQuery { q =>
-      MapGroupsWithStateSuite.failInTask = value
+      FlatMapGroupsWithStateSuite.failInTask = value
       true
     }
 
-    testStream(result, Append)(
+    testStream(result, Update)(
       setFailInTask(false),
       AddData(inputData, "a"),
       CheckLastBatch(("a", 1L)),
@@ -322,14 +322,23 @@ class MapGroupsWithStateSuite extends StreamTest with BeforeAndAfterAll {
     )
   }
 
-  private def assertNumStateRows(total: Long, updated: Long): AssertOnQuery = AssertOnQuery { q =>
-    val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
-    assert(progressWithData.stateOperators(0).numRowsTotal === total, "incorrect total rows")
-    assert(progressWithData.stateOperators(0).numRowsUpdated === updated, "incorrect updates rows")
-    true
+  test("disallow complete mode") {
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
+      Iterator[String]()
+    }
+
+    var e = intercept[IllegalArgumentException] {
+      MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(stateFunc, Complete)
+    }
+    assert(e.getMessage === "The output mode of function should be append or update")
+
+    e = intercept[IllegalArgumentException] {
+      MemoryStream[String].toDS().groupByKey(x => x).flatMapGroupsWithState(stateFunc, "complete")
+    }
+    assert(e.getMessage === "The output mode of function should be append or update")
   }
 }
 
-object MapGroupsWithStateSuite {
+object FlatMapGroupsWithStateSuite {
   var failInTask = true
 }

@@ -21,13 +21,15 @@ import java.util.concurrent.Callable
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -208,18 +210,19 @@ case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
 
 /**
- * Replaces [[SimpleCatalogRelation]] with data source table if its table provider is not hive.
+ * Replaces [[CatalogRelation]] with data source table if its table provider is not hive.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+  private def readDataSourceTable(r: CatalogRelation): LogicalPlan = {
+    val table = r.tableMeta
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val cache = sparkSession.sessionState.catalog.tableRelationCache
     val withHiveSupport =
       sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive"
 
-    cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
+    val plan = cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
-        val pathOption = table.storage.locationUri.map("path" -> _)
+        val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
         val dataSource =
           DataSource(
             sparkSession,
@@ -233,19 +236,25 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             // TODO: improve `InMemoryCatalog` and remove this limitation.
             catalogTable = if (withHiveSupport) Some(table) else None)
 
-        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false),
+        LogicalRelation(
+          dataSource.resolveRelation(checkFilesExist = false),
           catalogTable = Some(table))
       }
-    })
+    }).asInstanceOf[LogicalRelation]
+
+    // It's possible that the table schema is empty and need to be inferred at runtime. We should
+    // not specify expected outputs for this case.
+    val expectedOutputs = if (r.output.isEmpty) None else Some(r.output)
+    plan.copy(expectedOutputAttributes = expectedOutputs)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
-        if DDLUtils.isDatasourceTable(s.metadata) =>
-      i.copy(table = readDataSourceTable(s.metadata))
+    case i @ InsertIntoTable(r: CatalogRelation, _, _, _, _)
+        if DDLUtils.isDatasourceTable(r.tableMeta) =>
+      i.copy(table = readDataSourceTable(r))
 
-    case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-      readDataSourceTable(s.metadata)
+    case r: CatalogRelation if DDLUtils.isDatasourceTable(r.tableMeta) =>
+      readDataSourceTable(r)
   }
 }
 

@@ -296,6 +296,25 @@ object SQLConf {
       .longConf
       .createWithDefault(250 * 1024 * 1024)
 
+  object HiveCaseSensitiveInferenceMode extends Enumeration {
+    val INFER_AND_SAVE, INFER_ONLY, NEVER_INFER = Value
+  }
+
+  val HIVE_CASE_SENSITIVE_INFERENCE = buildConf("spark.sql.hive.caseSensitiveInferenceMode")
+    .doc("Sets the action to take when a case-sensitive schema cannot be read from a Hive " +
+      "table's properties. Although Spark SQL itself is not case-sensitive, Hive compatible file " +
+      "formats such as Parquet are. Spark SQL must use a case-preserving schema when querying " +
+      "any table backed by files containing case-sensitive field names or queries may not return " +
+      "accurate results. Valid options include INFER_AND_SAVE (the default mode-- infer the " +
+      "case-sensitive schema from the underlying data files and write it back to the table " +
+      "properties), INFER_ONLY (infer the schema but don't attempt to write it to the table " +
+      "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
+      "instead of inferring).")
+    .stringConf
+    .transform(_.toUpperCase())
+    .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
+    .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
       "to produce the partition columns instead of table scans. It applies when all the columns " +
@@ -402,11 +421,13 @@ object SQLConf {
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.threshold")
-      .doc("The maximum number of files allowed for listing files at driver side. If the number " +
-        "of detected files exceeds this value during partition discovery, it tries to list the " +
+      .doc("The maximum number of paths allowed for listing files at driver side. If the number " +
+        "of detected paths exceeds this value during partition discovery, it tries to list the " +
         "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
         "LibSVM data sources.")
       .intConf
+      .checkValue(parallel => parallel >= 0, "The maximum number of paths allowed for listing " +
+        "files at driver side must not be negative")
       .createWithDefault(32)
 
   val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =
@@ -666,6 +687,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val JOIN_REORDER_ENABLED =
+    buildConf("spark.sql.cbo.joinReorder.enabled")
+      .doc("Enables join reorder in CBO.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val JOIN_REORDER_DP_THRESHOLD =
+    buildConf("spark.sql.cbo.joinReorder.dp.threshold")
+      .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
+      .intConf
+      .createWithDefault(12)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -674,6 +707,10 @@ object SQLConf {
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
+  }
+
+  object Replaced {
+    val MAPREDUCE_JOB_REDUCES = "mapreduce.job.reduces"
   }
 }
 
@@ -773,6 +810,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
+
+  def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
+    HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
@@ -878,6 +918,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
   override def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
+  override def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
+
+  override def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -996,6 +1040,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def clear(): Unit = {
     settings.clear()
+  }
+
+  override def clone(): SQLConf = {
+    val result = new SQLConf
+    getAllConfs.foreach {
+      case(k, v) => if (v ne null) result.setConfString(k, v)
+    }
+    result
   }
 }
 

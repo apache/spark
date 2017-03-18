@@ -187,4 +187,22 @@ class SQLConfEntrySuite extends SparkFunSuite {
     }
     assert(e2.getMessage === "The maximum size of the cache must not be negative")
   }
+
+  test("clone SQLConf") {
+    val original = new SQLConf
+    val key = "spark.sql.SQLConfEntrySuite.clone"
+    assert(original.getConfString(key, "noentry") === "noentry")
+
+    // inheritance
+    original.setConfString(key, "orig")
+    val clone = original.clone()
+    assert(original ne clone)
+    assert(clone.getConfString(key, "noentry") === "orig")
+
+    // independence
+    clone.setConfString(key, "clone")
+    assert(original.getConfString(key, "noentry") === "orig")
+    original.setConfString(key, "dontcopyme")
+    assert(clone.getConfString(key, "noentry") === "clone")
+  }
 }

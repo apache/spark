@@ -132,7 +132,7 @@ The `Pipeline.fit()` method is called on the original `DataFrame`, which has raw
 The `Tokenizer.transform()` method splits the raw text documents into words, adding a new column with words to the `DataFrame`.
 The `HashingTF.transform()` method converts the words column into feature vectors, adding a new column with those vectors to the `DataFrame`.
 Now, since `LogisticRegression` is an `Estimator`, the `Pipeline` first calls `LogisticRegression.fit()` to produce a `LogisticRegressionModel`.
-If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s `transform()`
+If the `Pipeline` had more `Estimator`s, it would call the `LogisticRegressionModel`'s `transform()`
 method on the `DataFrame` before passing the `DataFrame` to the next stage.
 
 A `Pipeline` is an `Estimator`.

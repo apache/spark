@@ -19,12 +19,11 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
-import java.util.Arrays
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.math.{max, min}
+import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -32,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
+import org.apache.spark.util.collection.MedianHeap
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -64,6 +64,8 @@ private[spark] class TaskSetManager(
 
   // Limit of bytes for total size of results (default is 1GB)
   val maxResultSize = Utils.getMaxResultSize(conf)
+
+  val speculationEnabled = conf.getBoolean("spark.speculation", false)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -143,18 +145,10 @@ private[spark] class TaskSetManager(
   // Task index, start and finish time for each task attempt (indexed by task ID)
   val taskInfos = new HashMap[Long, TaskInfo]
 
-  val successfulTaskIdsSet = new scala.collection.mutable.TreeSet[Long] {
-    override val ordering: Ordering[Long] = new Ordering[Long] {
-      override def compare(tid0: Long, tid1: Long): Int = {
-        ((taskInfos(tid0).duration - taskInfos(tid1).duration).toInt, tid0 - tid1) match {
-          case (0, 0) => 0
-          case (diffDuration, diffTid)
-            if diffDuration > 0 || (diffDuration == 0 && diffTid > 0) => 1
-          case _ => -1
-        }
-      }
-    }
-  }.empty
+  // Use a MedianHeap to record durations of successful tasks so we know when to launch
+  // speculative tasks. This is only used when speculation is enabled, to avoid the overhead
+  // of inserting into the heap when the heap won't be used.
+  val successfulTaskDurations = new MedianHeap()
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
@@ -682,7 +676,7 @@ private[spark] class TaskSetManager(
    */
   def handleTaskGettingResult(tid: Long): Unit = {
     val info = taskInfos(tid)
-    info.markGettingResult()
+    info.markGettingResult(clock.getTimeMillis())
     sched.dagScheduler.taskGettingResult(info)
   }
 
@@ -712,15 +706,13 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_], finishTime: Long = 0L): Unit = {
     val info = taskInfos(tid)
     val index = info.index
-    if (finishTime != 0L) {
-      info.markFinished(TaskState.FINISHED, finishTime)
-    } else {
-      info.markFinished(TaskState.FINISHED)
+
+    info.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    if (speculationEnabled) {
+      val startTime = System.currentTimeMillis()
+      successfulTaskDurations.insert(info.duration)
+      handleSuccessfulTasksCost.addAndGet(System.currentTimeMillis() - startTime)
     }
-    val start = System.currentTimeMillis()
-    successfulTaskIdsSet += tid
-    val end = System.currentTimeMillis()
-    handleSuccessfulTasksCost.addAndGet(end - start)
 
     removeRunningTask(tid)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
@@ -765,8 +757,7 @@ private[spark] class TaskSetManager(
       return
     }
     removeRunningTask(tid)
-    info.markFinished(state)
-    successfulTaskIdsSet -= tid
+    info.markFinished(state, clock.getTimeMillis())
     val index = info.index
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
@@ -901,7 +892,8 @@ private[spark] class TaskSetManager(
     // and we are not using an external shuffle server which could serve the shuffle outputs.
     // The reason is the next stage wouldn't be able to fetch the data from this dead executor
     // so we would need to rerun these tasks on other executors.
-    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled) {
+    if (tasks(0).isInstanceOf[ShuffleMapTask] && !env.blockManager.externalShuffleServiceEnabled
+        && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
         if (successful(index)) {
@@ -933,8 +925,6 @@ private[spark] class TaskSetManager(
    * Check for tasks to be speculated and return true if there are any. This is called periodically
    * by the TaskScheduler.
    *
-   * TODO: To make this scale to large jobs, we need to maintain a list of running tasks, so that
-   * we don't scan the whole task set. It might also help to make this sorted by launch time.
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
@@ -945,29 +935,17 @@ private[spark] class TaskSetManager(
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
-    val successfulTaskIdsSize = successfulTaskIdsSet.size
-    if (successfulTaskIdsSize >= minFinishedForSpeculation && successfulTaskIdsSize > 0) {
-      val time = clock.getTimeMillis()
-      var medianDuration: Long = 0L
 
-      val startTime = System.currentTimeMillis()
-      if (newAlgorithm) {
-        medianDuration = taskInfos(successfulTaskIdsSet.slice(
-        successfulTaskIdsSize / 2, successfulTaskIdsSize / 2 + 1).head).duration
-      } else {
-        val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
-        Arrays.sort(durations)
-        val medianDuration =
-          durations(min((0.5 * tasksSuccessful).round.toInt, durations.length - 1))
-      }
-      val endTime = System.currentTimeMillis()
-      println(s"Time cost: ${endTime - startTime}")
+    if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
+      val time = clock.getTimeMillis()
+      var medianDuration = successfulTaskDurations.median
 
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
-      for ((tid, info) <- taskInfos) {
+      for (tid <- runningTasksSet) {
+        val info = taskInfos(tid)
         val index = info.index
         if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
           !speculatableTasks.contains(index)) {

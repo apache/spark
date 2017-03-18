@@ -254,7 +254,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
       verbose: Boolean,
-      prefix: String = ""): StringBuilder = {
+      prefix: String = "",
+      addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "")
   }
 }
@@ -428,7 +429,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
       verbose: Boolean,
-      prefix: String = ""): StringBuilder = {
+      prefix: String = "",
+      addSuffix: Boolean = false): StringBuilder = {
     child.generateTreeString(depth, lastChildren, builder, verbose, "*")
   }
 }

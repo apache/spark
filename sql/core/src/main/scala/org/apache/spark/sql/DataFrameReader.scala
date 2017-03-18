@@ -29,10 +29,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.JsonInferSchema
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -261,10 +262,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a JSON file and returns the results as a `DataFrame`.
+   * Loads JSON files and returns the results as a `DataFrame`.
    *
-   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
-   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
+   * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
+   * default. For JSON (one record per file), set the `wholeFile` option to true.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -286,8 +287,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * during parsing.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
+   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
+   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
+   *     during parsing. When inferring a schema, it implicitly adds a `columnNameOfCorruptRecord`
+   *     field in an output schema.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -323,6 +327,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param jsonRDD input RDD with one JSON object per record
    * @since 1.4.0
    */
+  @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: JavaRDD[String]): DataFrame = json(jsonRDD.rdd)
 
   /**
@@ -335,7 +340,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param jsonRDD input RDD with one JSON object per record
    * @since 1.4.0
    */
+  @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
+    json(sparkSession.createDataset(jsonRDD)(Encoders.STRING))
+  }
+
+  /**
+   * Loads a `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   *
+   * Unless the schema is specified using `schema` function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param jsonDataset input Dataset with one JSON object per record
+   * @since 2.2.0
+   */
+  def json(jsonDataset: Dataset[String]): DataFrame = {
     val parsedOptions = new JSONOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
@@ -344,12 +364,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val schema = userSpecifiedSchema.getOrElse {
       JsonInferSchema.infer(
-        jsonRDD,
+        jsonDataset.rdd,
         parsedOptions,
         createParser)
     }
 
-    val parsed = jsonRDD.mapPartitions { iter =>
+    verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+
+    val parsed = jsonDataset.rdd.mapPartitions { iter =>
       val parser = new JacksonParser(schema, parsedOptions)
       iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
     }
@@ -371,7 +393,52 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a CSV file and returns the result as a `DataFrame`.
+   * Loads an `Dataset[String]` storing CSV rows and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
+   * it determines the columns as string types and it reads only the first line to determine the
+   * names and the number of fields.
+   *
+   * @param csvDataset input Dataset with one CSV row per record
+   * @since 2.2.0
+   */
+  def csv(csvDataset: Dataset[String]): DataFrame = {
+    val parsedOptions: CSVOptions = new CSVOptions(
+      extraOptions.toMap,
+      sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val filteredLines: Dataset[String] =
+      CSVUtils.filterCommentAndEmpty(csvDataset, parsedOptions)
+    val maybeFirstLine: Option[String] = filteredLines.take(1).headOption
+
+    val schema = userSpecifiedSchema.getOrElse {
+      TextInputCSVDataSource.inferFromDataset(
+        sparkSession,
+        csvDataset,
+        maybeFirstLine,
+        parsedOptions)
+    }
+
+    verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+
+    val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
+      filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
+    }.getOrElse(filteredLines.rdd)
+
+    val parsed = linesWithoutHeader.mapPartitions { iter =>
+      val parser = new UnivocityParser(schema, parsedOptions)
+      iter.flatMap(line => parser.parse(line))
+    }
+
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+  }
+
+  /**
+   * Loads CSV files and returns the result as a `DataFrame`.
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
@@ -422,12 +489,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
-   *       a schema is set by user, it sets `null` for extra fields.</li>
+   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
+   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
+   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
+   *     during parsing. When a length of parsed CSV tokens is shorter than an expected length
+   *     of a schema, it sets `null` for extra fields.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
    * </li>
+   * <li>`columnNameOfCorruptRecord` (default is the value specified in
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
    * @since 2.0.0
    */
@@ -474,7 +549,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads an ORC file and returns the result as a `DataFrame`.
+   * Loads ORC files and returns the result as a `DataFrame`.
    *
    * @param paths input paths
    * @since 2.0.0
@@ -565,6 +640,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
       throw new AnalysisException(s"User specified schema not supported with `$operation`")
+    }
+  }
+
+  /**
+   * A convenient function for schema validation in datasources supporting
+   * `columnNameOfCorruptRecord` as an option.
+   */
+  private def verifyColumnNameOfCorruptRecord(
+      schema: StructType,
+      columnNameOfCorruptRecord: String): Unit = {
+    schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
+      val f = schema(corruptFieldIndex)
+      if (f.dataType != StringType || !f.nullable) {
+        throw new AnalysisException(
+          "The field for corrupt records must be string type and nullable")
+      }
     }
   }
 

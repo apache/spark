@@ -280,7 +280,7 @@ setMethod("dtypes",
 
 #' Column Names of SparkDataFrame
 #'
-#' Return all column names as a list.
+#' Return a vector of column names.
 #'
 #' @param x a SparkDataFrame.
 #'
@@ -338,7 +338,7 @@ setMethod("colnames",
           })
 
 #' @param value a character vector. Must have the same length as the number
-#'              of columns in the SparkDataFrame.
+#'              of columns to be renamed.
 #' @rdname columns
 #' @aliases colnames<-,SparkDataFrame-method
 #' @name colnames<-
@@ -1804,6 +1804,10 @@ setClassUnion("numericOrcharacter", c("numeric", "character"))
 #' @note [[ since 1.4.0
 setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i) {
+            if (length(i) > 1) {
+              warning("Subset index has length > 1. Only the first index is used.")
+              i <- i[1]
+            }
             if (is.numeric(i)) {
               cols <- columns(x)
               i <- cols[[i]]
@@ -1817,6 +1821,10 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 #' @note [[<- since 2.1.1
 setMethod("[[<-", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i, value) {
+            if (length(i) > 1) {
+              warning("Subset index has length > 1. Only the first index is used.")
+              i <- i[1]
+            }
             if (is.numeric(i)) {
               cols <- columns(x)
               i <- cols[[i]]
@@ -2634,6 +2642,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
 #' and another SparkDataFrame. This is equivalent to \code{UNION ALL} in SQL.
+#' Input SparkDataFrames can have different schemas (names and data types).
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
@@ -2677,7 +2686,8 @@ setMethod("unionAll",
 
 #' Union two or more SparkDataFrames
 #'
-#' Union two or more SparkDataFrames. This is equivalent to \code{UNION ALL} in SQL.
+#' Union two or more SparkDataFrames by row. As in R's \code{rbind}, this method
+#' requires that the input SparkDataFrames have the same column names.
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #'
@@ -2701,6 +2711,10 @@ setMethod("unionAll",
 setMethod("rbind",
           signature(... = "SparkDataFrame"),
           function(x, ..., deparse.level = 1) {
+            nm <- lapply(list(x, ...), names)
+            if (length(unique(nm)) != 1) {
+              stop("Names of input data frames are different.")
+            }
             if (nargs() == 3) {
               union(x, ...)
             } else {
