@@ -198,7 +198,6 @@ case class AlterTableAddColumnsCommand(
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table ${table.quotedString}", e)
     }
-
     catalog.refreshTable(table)
     catalog.alterTableSchema(
       table, catalogTable.schema.copy(fields = catalogTable.schema.fields ++ columns))

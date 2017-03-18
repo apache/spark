@@ -1877,11 +1877,11 @@ class HiveDDLSuite
           sql("SELECT * FROM tab WHERE c3 = 1"),
           Seq(Row(1, 2, null, 1))
         )
-        assert(sql("SELECT * FROM tab").schema
+        assert(spark.table("tab").schema
           .contains(StructField("c4", IntegerType)))
         sql("INSERT INTO tab PARTITION (c3=2) VALUES (2, 3, 4)")
         checkAnswer(
-          sql("SELECT * FROM tab"),
+          spark.table("tab"),
           Seq(Row(1, 2, null, 1), Row(2, 3, 4, 2))
         )
         checkAnswer(
@@ -1902,7 +1902,7 @@ class HiveDDLSuite
           sql("SELECT * FROM tab WHERE c4 IS NULL"),
           Seq(Row(1, 2, null))
         )
-        assert(sql("SELECT * FROM tab").schema
+        assert(spark.table("tab").schema
           .contains(StructField("c4", IntegerType)))
         sql("INSERT INTO tab VALUES (2, 3, 4)")
         checkAnswer(
@@ -1910,7 +1910,7 @@ class HiveDDLSuite
           Seq(Row(2, 3, 4))
         )
         checkAnswer(
-          sql("SELECT * FROM tab"),
+          spark.table("tab"),
           Seq(Row(1, 2, null), Row(2, 3, 4))
         )
       }
@@ -1932,45 +1932,36 @@ class HiveDDLSuite
   }
 
   Seq("true", "false").foreach { caseSensitive =>
-    test(s"alter add columns with existing partition column name - caseSensitive $caseSensitive") {
-      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
+    test(s"alter add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         withTable("tab") {
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
           if (caseSensitive == "false") {
-            val e = intercept[AnalysisException] {
+            // duplicating partitioning column name
+            val e1 = intercept[AnalysisException] {
               sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
             }.getMessage
-            assert(e.contains("Found duplicate column(s)"))
-          } else {
-            // hive catalog will still complains that c1 is duplicate column name because hive
-            // identifiers are case insensitive.
-            val e = intercept[AnalysisException] {
-              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
-            }.getMessage
-            assert(e.contains("HiveException"))
-          }
-        }
-      }
-    }
-  }
+            assert(e1.contains("Found duplicate column(s)"))
 
-  Seq("true", "false").foreach { caseSensitive =>
-    test(s"alter add columns with existing column name - caseSensitive $caseSensitive") {
-      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
-        withTable("t1") {
-          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
-          if (caseSensitive == "false") {
-            val e = intercept[AnalysisException] {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            // duplicating data column name
+            val e2 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
             }.getMessage
-            assert(e.contains("Found duplicate column(s)"))
+            assert(e2.contains("Found duplicate column(s)"))
           } else {
             // hive catalog will still complains that c1 is duplicate column name because hive
             // identifiers are case insensitive.
-            val e = intercept[AnalysisException] {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            val e1 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
             }.getMessage
-            assert(e.contains("HiveException"))
+            assert(e1.contains("HiveException"))
+
+            // hive catalog will still complains that c1 is duplicate column name because hive
+            // identifiers are case insensitive.
+            val e2 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e2.contains("HiveException"))
           }
         }
       }

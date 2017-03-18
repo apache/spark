@@ -165,26 +165,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
   }
-
-  Seq("true", "false").foreach { caseSensitive =>
-    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
-      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
-        withTable("t1") {
-          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
-          if (caseSensitive == "false") {
-            val e = intercept[AnalysisException] {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-            }.getMessage
-            assert(e.contains("Found duplicate column(s)"))
-          } else {
-            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-            assert(sql("SELECT * FROM t1").schema
-              .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
-          }
-        }
-      }
-    }
-  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2205,7 +2185,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("INSERT INTO t1 VALUES (1)")
         sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
         checkAnswer(
-          sql("SELECT * FROM t1"),
+          spark.table("t1"),
           Seq(Row(1, null))
         )
         checkAnswer(
@@ -2229,7 +2209,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
         sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
         checkAnswer(
-          sql("SELECT * FROM t1"),
+          spark.table("t1"),
           Seq(Row(1, null, 2))
         )
         checkAnswer(
@@ -2251,7 +2231,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter datasource table add columns - text format not supported") {
     withTable("t1") {
-      sql(s"CREATE TABLE t1 (c1 int) USING text")
+      sql("CREATE TABLE t1 (c1 int) USING text")
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
       }.getMessage
@@ -2297,6 +2277,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val originViewSchema = sql("SELECT * FROM v1").schema
         sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
         assert(sql("SELECT * FROM v1").schema == originViewSchema)
+      }
+    }
+  }
+
+  Seq("true", "false").foreach { caseSensitive =>
+    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (c1 int) USING PARQUET")
+          if (caseSensitive == "false") {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            if (isUsingHiveMetastore) {
+              // hive catalog will still complains that c1 is duplicate column name because hive
+              // identifiers are case insensitive.
+              val e = intercept[AnalysisException] {
+                sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              }.getMessage
+              assert(e.contains("HiveException"))
+            } else {
+              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+              assert(spark.table("t1").schema
+                .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+            }
+          }
+        }
       }
     }
   }

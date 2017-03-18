@@ -162,6 +162,20 @@ class SessionCatalog(
       throw new TableAlreadyExistsException(db = db, table = name.table)
     }
   }
+
+  private def checkDuplication(fields: Seq[StructField]): Unit = {
+    val columnNames = if (conf.caseSensitiveAnalysis) {
+      fields.map(_.name)
+    } else {
+      fields.map(_.name.toLowerCase)
+    }
+    if (columnNames.distinct.length != columnNames.length) {
+      val duplicateColumns = columnNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }
+      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
+    }
+  }
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -314,44 +328,31 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
+    checkDuplication(newSchema)
+
     val catalogTable = externalCatalog.getTable(db, table)
     val oldSchema = catalogTable.schema
 
-    // no supporting dropping columns yet
-    if (!oldSchema.forall(f => columnNameResolved(newSchema, f.name ))) {
+    // not supporting dropping columns yet
+    val nonExistentColumnNames = oldSchema.map(_.name).filterNot(columnNameResolved(newSchema, _))
+    if (nonExistentColumnNames.nonEmpty) {
       throw new AnalysisException(
         s"""
-          |Some existing schema fields are not present in the new schema.
-          |We don't support dropping columns yet.
+           |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
+           |not present in the new schema. We don't support dropping columns yet.
          """.stripMargin)
     }
 
-    checkDuplication(newSchema)
     // make sure partition columns are at the end
     val partitionSchema = catalogTable.partitionSchema
     val reorderedSchema = newSchema
       .filterNot(f => columnNameResolved(partitionSchema, f.name)) ++ partitionSchema
 
-    externalCatalog.alterTableSchema(
-      db, table, oldSchema.copy(fields = reorderedSchema.toArray))
+    externalCatalog.alterTableSchema(db, table, StructType(reorderedSchema))
   }
 
   private def columnNameResolved(schema: StructType, colName: String): Boolean = {
-    schema.fields.map(_.name).find(conf.resolver(_, colName)).isDefined
-  }
-
-  private def checkDuplication(fields: Seq[StructField]): Unit = {
-    val columnNames = if (conf.caseSensitiveAnalysis) {
-      fields.map(_.name)
-    } else {
-      fields.map(_.name.toLowerCase)
-    }
-    if (columnNames.distinct.length != columnNames.length) {
-      val duplicateColumns = columnNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
-    }
+    schema.fields.map(_.name).exists(conf.resolver(_, colName))
   }
 
   /**
