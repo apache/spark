@@ -2608,7 +2608,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14471 When groupByAliasesEnabled=true, aliases in SELECT could exist in GROUP BY") {
-    withSQLConf(SQLConf.GROUP_BY_ALIASES_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.GROUP_BY_ALIASES_ENABLED.key -> "true",
+        SQLConf.GROUP_BY_ORDINAL.key -> "true") {
       Seq((1, "a", 0), (2, "a", 1), (1, "a", 2)).toDF("k1", "k2", "v")
         .createOrReplaceTempView("t")
       checkAnswer(
