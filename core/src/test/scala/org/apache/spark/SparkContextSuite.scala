@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.MalformedURLException
+import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -26,6 +26,8 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 
 import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
@@ -536,6 +538,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
     }
+  }
+
+  test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
+    "open streams to help debugging") {
+    val fs = new DebugFilesystem()
+    fs.initialize(new URI("file:///"), new Configuration())
+    val file = File.createTempFile("SPARK19446", "temp")
+    Files.write(Array.ofDim[Byte](1000), file)
+    val path = new Path("file:///" + file.getCanonicalPath)
+    val stream = fs.open(path)
+    val exc = intercept[RuntimeException] {
+      DebugFilesystem.assertNoOpenStreams()
+    }
+    assert(exc != null)
+    assert(exc.getCause() != null)
+    stream.close()
   }
 
 }

@@ -222,18 +222,21 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val df = session.sql(sql)
       val schema = df.schema
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x"))
+      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
+        .replaceAll("Location: .*/sql/core/", "Location: sql/core/")
+        .replaceAll("Created: .*\n", "Created: \n")
+        .replaceAll("Last Access: .*\n", "Last Access: \n"))
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
 
     } catch {
-      case a: AnalysisException if a.plan.nonEmpty =>
+      case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
-        (StructType(Seq.empty),
-          Seq(a.getClass.getName, a.getSimpleMessage.replaceAll("#\\d+", "#x")))
+        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
+        (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))

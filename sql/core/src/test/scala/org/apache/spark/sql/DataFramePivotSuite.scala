@@ -216,4 +216,18 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       Row("d", 15000.0, 48000.0) :: Row("J", 20000.0, 30000.0) :: Nil
     )
   }
+
+  test("pivot with null should not throw NPE") {
+    checkAnswer(
+      Seq(Tuple1(None), Tuple1(Some(1))).toDF("a").groupBy($"a").pivot("a").count(),
+      Row(null, 1, null) :: Row(1, null, 1) :: Nil)
+  }
+
+  test("pivot with null and aggregate type not supported by PivotFirst returns correct result") {
+    checkAnswer(
+      Seq(Tuple1(None), Tuple1(Some(1))).toDF("a")
+        .withColumn("b", expr("array(a, 7)"))
+        .groupBy($"a").pivot("a").agg(min($"b")),
+      Row(null, Seq(null, 7), null) :: Row(1, null, Seq(1, 7)) :: Nil)
+  }
 }

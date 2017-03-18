@@ -23,11 +23,13 @@ import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.ParseModes
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, ParseModes}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -330,7 +332,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Return a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   extended = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
@@ -480,23 +482,71 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]] with the specified schema.
+ * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
+       {"a":1, "b":0.8}
+      > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"2015-08-26 00:00:00.0"}
+  """)
+// scalastyle:on line.size.limit
 case class JsonToStruct(
-    schema: StructType,
+    schema: DataType,
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
   override def nullable: Boolean = true
 
-  def this(schema: StructType, options: Map[String, String], child: Expression) =
+  def this(schema: DataType, options: Map[String, String], child: Expression) =
     this(schema, options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression, schema: Expression) =
+    this(
+      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      options = Map.empty[String, String],
+      child = child,
+      timeZoneId = None)
+
+  def this(child: Expression, schema: Expression, options: Expression) =
+    this(
+      schema = JsonExprUtils.validateSchemaLiteral(schema),
+      options = JsonExprUtils.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
+
+  override def checkInputDataTypes(): TypeCheckResult = schema match {
+    case _: StructType | ArrayType(_: StructType, _) =>
+      super.checkInputDataTypes()
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
+  }
+
+  @transient
+  lazy val rowSchema = schema match {
+    case st: StructType => st
+    case ArrayType(st: StructType, _) => st
+  }
+
+  // This converts parsed rows to the desired output by the given schema.
+  @transient
+  lazy val converter = schema match {
+    case _: StructType =>
+      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
+    case ArrayType(_: StructType, _) =>
+      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+  }
 
   @transient
   lazy val parser =
     new JacksonParser(
-      schema,
+      rowSchema,
       new JSONOptions(options + ("mode" -> ParseModes.FAIL_FAST_MODE), timeZoneId.get))
 
   override def dataType: DataType = schema
@@ -505,11 +555,32 @@ case class JsonToStruct(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
+    // When input is,
+    //   - `null`: `null`.
+    //   - invalid json: `null`.
+    //   - empty string: `null`.
+    //
+    // When the schema is array,
+    //   - json array: `Array(Row(...), ...)`
+    //   - json object: `Array(Row(...))`
+    //   - empty json array: `Array()`.
+    //   - empty json object: `Array(Row(null))`.
+    //
+    // When the schema is a struct,
+    //   - json object/array with single element: `Row(...)`
+    //   - json array with multiple elements: `null`
+    //   - empty json array: `null`.
+    //   - empty json object: `Row(null)`.
+
+    // We need `null` if the input string is an empty string. `JacksonParser` can
+    // deal with this but produces `Nil`.
+    if (json.toString.trim.isEmpty) return null
+
     try {
-      parser.parse(
+      converter(parser.parse(
         json.asInstanceOf[UTF8String],
         CreateJacksonParser.utf8String,
-        identity[UTF8String]).headOption.orNull
+        identity[UTF8String]))
     } catch {
       case _: SparkSQLJsonProcessingException => null
     }
@@ -521,6 +592,17 @@ case class JsonToStruct(
 /**
  * Converts a [[StructType]] to a json output string.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       {"a":1,"b":2}
+      > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":"26/08/2015"}
+  """)
+// scalastyle:on line.size.limit
 case class StructToJson(
     options: Map[String, String],
     child: Expression,
@@ -529,6 +611,14 @@ case class StructToJson(
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
+
+  // Used in `FunctionRegistry`
+  def this(child: Expression) = this(Map.empty, child, None)
+  def this(child: Expression, options: Expression) =
+    this(
+      options = JsonExprUtils.convertToMapData(options),
+      child = child,
+      timeZoneId = None)
 
   @transient
   lazy val writer = new CharArrayWriter()
@@ -569,4 +659,26 @@ case class StructToJson(
   }
 
   override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
+}
+
+object JsonExprUtils {
+
+  def validateSchemaLiteral(exp: Expression): StructType = exp match {
+    case Literal(s, StringType) => CatalystSqlParser.parseTableSchema(s.toString)
+    case e => throw new AnalysisException(s"Expected a string literal instead of $e")
+  }
+
+  def convertToMapData(exp: Expression): Map[String, String] = exp match {
+    case m: CreateMap
+        if m.dataType.acceptsType(MapType(StringType, StringType, valueContainsNull = false)) =>
+      val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
+      ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
+        key.toString -> value.toString
+      }
+    case m: CreateMap =>
+      throw new AnalysisException(
+        s"A type of keys and values in map() must be string, but got ${m.dataType}")
+    case _ =>
+      throw new AnalysisException("Must use a map() function for options")
+  }
 }

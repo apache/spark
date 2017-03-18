@@ -489,12 +489,12 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
       Thread.sleep(200)
     }
 
-    // giving enough time for replication complete and locks released
-    Thread.sleep(500)
-
-    val newLocations = master.getLocations(blockId).toSet
+    val newLocations = eventually(timeout(5 seconds), interval(10 millis)) {
+      val _newLocations = master.getLocations(blockId).toSet
+      assert(_newLocations.size === replicationFactor)
+      _newLocations
+    }
     logInfo(s"New locations : $newLocations")
-    assert(newLocations.size === replicationFactor)
     // there should only be one common block manager between initial and new locations
     assert(newLocations.intersect(blockLocations.toSet).size === 1)
 

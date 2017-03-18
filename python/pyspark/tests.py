@@ -58,6 +58,7 @@ else:
     from StringIO import StringIO
 
 
+from pyspark import keyword_only
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -1036,6 +1037,12 @@ class RDDTests(ReusedPySparkTestCase):
         zeros = len([x for x in l if x == 0])
         self.assertTrue(zeros == 0)
 
+    def test_repartition_on_textfile(self):
+        path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
+        rdd = self.sc.textFile(path)
+        result = rdd.repartition(1).collect()
+        self.assertEqual(u"Hello World!", result[0])
+
     def test_distinct(self):
         rdd = self.sc.parallelize((1, 2, 3)*10, 10)
         self.assertEqual(rdd.getNumPartitions(), 10)
@@ -1347,7 +1354,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
-        oldconf = {"mapred.input.dir": hellopath}
+        oldconf = {"mapreduce.input.fileinputformat.inputdir": hellopath}
         hello = self.sc.hadoopRDD("org.apache.hadoop.mapred.TextInputFormat",
                                   "org.apache.hadoop.io.LongWritable",
                                   "org.apache.hadoop.io.Text",
@@ -1366,7 +1373,7 @@ class InputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")
-        newconf = {"mapred.input.dir": hellopath}
+        newconf = {"mapreduce.input.fileinputformat.inputdir": hellopath}
         hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
                                         "org.apache.hadoop.io.LongWritable",
                                         "org.apache.hadoop.io.Text",
@@ -1515,12 +1522,12 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
         conf = {
             "mapred.output.format.class": "org.apache.hadoop.mapred.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.hadoop.io.MapWritable",
-            "mapred.output.dir": basepath + "/olddataset/"
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.hadoop.io.MapWritable",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/olddataset/"
         }
         self.sc.parallelize(dict_data).saveAsHadoopDataset(conf)
-        input_conf = {"mapred.input.dir": basepath + "/olddataset/"}
+        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/olddataset/"}
         result = self.sc.hadoopRDD(
             "org.apache.hadoop.mapred.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
@@ -1547,14 +1554,14 @@ class OutputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(result, data)
 
         conf = {
-            "mapreduce.outputformat.class":
+            "mapreduce.job.outputformat.class":
                 "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.hadoop.io.Text",
-            "mapred.output.dir": basepath + "/newdataset/"
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.hadoop.io.Text",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/newdataset/"
         }
         self.sc.parallelize(data).saveAsNewAPIHadoopDataset(conf)
-        input_conf = {"mapred.input.dir": basepath + "/newdataset/"}
+        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/newdataset/"}
         new_dataset = sorted(self.sc.newAPIHadoopRDD(
             "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
@@ -1584,16 +1591,16 @@ class OutputFormatTests(ReusedPySparkTestCase):
         self.assertEqual(result, array_data)
 
         conf = {
-            "mapreduce.outputformat.class":
+            "mapreduce.job.outputformat.class":
                 "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
-            "mapred.output.dir": basepath + "/newdataset/"
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/newdataset/"
         }
         self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(
             conf,
             valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
-        input_conf = {"mapred.input.dir": basepath + "/newdataset/"}
+        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/newdataset/"}
         new_dataset = sorted(self.sc.newAPIHadoopRDD(
             "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
             "org.apache.hadoop.io.IntWritable",
@@ -1663,18 +1670,19 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
         conf4 = {
             "mapred.output.format.class": "org.apache.hadoop.mapred.SequenceFileOutputFormat",
-            "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.value.class": "org.apache.hadoop.io.IntWritable",
-            "mapred.output.dir": basepath + "/reserialize/dataset"}
+            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.job.output.value.class": "org.apache.hadoop.io.IntWritable",
+            "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/dataset"}
         rdd.saveAsHadoopDataset(conf4)
         result4 = sorted(self.sc.sequenceFile(basepath + "/reserialize/dataset").collect())
         self.assertEqual(result4, data)
 
-        conf5 = {"mapreduce.outputformat.class":
+        conf5 = {"mapreduce.job.outputformat.class":
                  "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-                 "mapred.output.key.class": "org.apache.hadoop.io.IntWritable",
-                 "mapred.output.value.class": "org.apache.hadoop.io.IntWritable",
-                 "mapred.output.dir": basepath + "/reserialize/newdataset"}
+                 "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
+                 "mapreduce.job.output.value.class": "org.apache.hadoop.io.IntWritable",
+                 "mapreduce.output.fileoutputformat.outputdir": basepath + "/reserialize/newdataset"
+                 }
         rdd.saveAsNewAPIHadoopDataset(conf5)
         result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)
@@ -2158,6 +2166,44 @@ class ConfTests(unittest.TestCase):
             rdd = sc.parallelize(l, 4)
             self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
             sc.stop()
+
+
+class KeywordOnlyTests(unittest.TestCase):
+    class Wrapped(object):
+        @keyword_only
+        def set(self, x=None, y=None):
+            if "x" in self._input_kwargs:
+                self._x = self._input_kwargs["x"]
+            if "y" in self._input_kwargs:
+                self._y = self._input_kwargs["y"]
+            return x, y
+
+    def test_keywords(self):
+        w = self.Wrapped()
+        x, y = w.set(y=1)
+        self.assertEqual(y, 1)
+        self.assertEqual(y, w._y)
+        self.assertIsNone(x)
+        self.assertFalse(hasattr(w, "_x"))
+
+    def test_non_keywords(self):
+        w = self.Wrapped()
+        self.assertRaises(TypeError, lambda: w.set(0, y=1))
+
+    def test_kwarg_ownership(self):
+        # test _input_kwargs is owned by each class instance and not a shared static variable
+        class Setter(object):
+            @keyword_only
+            def set(self, x=None, other=None, other_x=None):
+                if "other" in self._input_kwargs:
+                    self._input_kwargs["other"].set(x=self._input_kwargs["other_x"])
+                self._x = self._input_kwargs["x"]
+
+        a = Setter()
+        b = Setter()
+        a.set(x=1, other=b, other_x=2)
+        self.assertEqual(a._x, 1)
+        self.assertEqual(b._x, 2)
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

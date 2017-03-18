@@ -1431,7 +1431,12 @@ private class LogisticAggregator(
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val gradientSumArray = Array.fill[Double](coefficientSize)(0.0D)
+  @transient private lazy val coefficientsArray: Array[Double] = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
+      s"got type ${bcCoefficients.value.getClass}.)")
+  }
+  private lazy val gradientSumArray = new Array[Double](coefficientSize)
 
   if (multinomial && numClasses <= 2) {
     logInfo(s"Multinomial logistic regression for binary classification yields separate " +
@@ -1447,7 +1452,7 @@ private class LogisticAggregator(
       label: Double): Unit = {
 
     val localFeaturesStd = bcFeaturesStd.value
-    val localCoefficients = bcCoefficients.value
+    val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
     val margin = - {
       var sum = 0.0
@@ -1491,7 +1496,7 @@ private class LogisticAggregator(
       logistic regression without pivoting.
      */
     val localFeaturesStd = bcFeaturesStd.value
-    val localCoefficients = bcCoefficients.value
+    val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
 
     // marginOfLabel is margins(label) in the formula

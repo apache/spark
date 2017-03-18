@@ -23,6 +23,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
+import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -110,7 +111,8 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(Arrays.asList("hello"), filtered.collectAsList());
 
 
-    Dataset<Integer> mapped = ds.map((MapFunction<String, Integer>) v -> v.length(), Encoders.INT());
+    Dataset<Integer> mapped =
+      ds.map((MapFunction<String, Integer>) String::length, Encoders.INT());
     Assert.assertEquals(Arrays.asList(5, 5), mapped.collectAsList());
 
     Dataset<String> parMapped = ds.mapPartitions((MapPartitionsFunction<String, String>) it -> {
@@ -157,17 +159,17 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
-    KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(
-        (MapFunction<String, Integer>) v -> v.length(),
-      Encoders.INT());
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
 
-    Dataset<String> mapped = grouped.mapGroups((MapGroupsFunction<Integer, String, String>) (key, values) -> {
-      StringBuilder sb = new StringBuilder(key.toString());
-      while (values.hasNext()) {
-        sb.append(values.next());
-      }
-      return sb.toString();
-    }, Encoders.STRING());
+    Dataset<String> mapped = grouped.mapGroups(
+      (MapGroupsFunction<Integer, String, String>) (key, values) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      }, Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(mapped.collectAsList()));
 
@@ -204,12 +206,14 @@ public class JavaDatasetSuite implements Serializable {
           }
           return Collections.singletonList(sb.toString()).iterator();
         },
+      OutputMode.Append(),
       Encoders.LONG(),
       Encoders.STRING());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
-    Dataset<Tuple2<Integer, String>> reduced = grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);
+    Dataset<Tuple2<Integer, String>> reduced =
+      grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);
 
     Assert.assertEquals(
       asSet(tuple2(1, "a"), tuple2(3, "foobar")),
@@ -1286,5 +1290,92 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<EmptyBean> df = spark.createDataset(data, Encoders.bean(EmptyBean.class));
     Assert.assertEquals(df.schema().length(), 0);
     Assert.assertEquals(df.collectAsList().size(), 1);
+  }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference3Bean implements Serializable {
+    private CircularReference3Bean[] child;
+
+    public CircularReference3Bean[] getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference3Bean[] child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference4Bean implements Serializable {
+    private Map<String, CircularReference5Bean> child;
+
+    public Map<String, CircularReference5Bean> getChild() {
+      return child;
+    }
+
+    public void setChild(Map<String, CircularReference5Bean> child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference5Bean implements Serializable {
+    private String id;
+    private List<CircularReference4Bean> child;
+
+    public String getId() {
+      return id;
+    }
+
+    public List<CircularReference4Bean> getChild() {
+      return child;
+    }
+
+    public void setId(String id) {
+      this.id = id;
+    }
+
+    public void setChild(List<CircularReference4Bean> child) {
+      this.child = child;
+    }
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean1() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean2() {
+    CircularReference3Bean bean = new CircularReference3Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class));
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean3() {
+    CircularReference4Bean bean = new CircularReference4Bean();
+    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
   }
 }
