@@ -258,7 +258,7 @@ class LevelDBTypeInfo<T> {
     }
 
     long getCount(byte[] key) throws Exception {
-      byte[] data = db.db.get(key);
+      byte[] data = db.db().get(key);
       return data != null ? db.serializer.deserializeLong(data) : 0;
     }
 

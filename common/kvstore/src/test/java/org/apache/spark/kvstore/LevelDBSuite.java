@@ -62,8 +62,8 @@ public class LevelDBSuite {
 
     db = new LevelDB(dbpath);
     assertEquals(LevelDB.STORE_VERSION,
-      db.serializer.deserializeLong(db.db.get(LevelDB.STORE_VERSION_KEY)));
-    db.db.put(LevelDB.STORE_VERSION_KEY, db.serializer.serialize(LevelDB.STORE_VERSION + 1));
+      db.serializer.deserializeLong(db.db().get(LevelDB.STORE_VERSION_KEY)));
+    db.db().put(LevelDB.STORE_VERSION_KEY, db.serializer.serialize(LevelDB.STORE_VERSION + 1));
     db.close();
     db = null;
 
@@ -256,7 +256,7 @@ public class LevelDBSuite {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;
 
-    DBIterator it = db.db.iterator();
+    DBIterator it = db.db().iterator();
     it.seek(prefix);
 
     while (it.hasNext()) {

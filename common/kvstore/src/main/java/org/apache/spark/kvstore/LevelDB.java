@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -48,11 +49,10 @@ public class LevelDB implements KVStore {
   /** DB key where app metadata is stored. */
   private static final byte[] METADATA_KEY = "__meta__".getBytes(UTF_8);
 
-  final DB db;
+  final AtomicReference<DB> _db;
   final KVStoreSerializer serializer;
 
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
-  private boolean closed;
 
   public LevelDB(File path) throws IOException {
     this(path, new KVStoreSerializer());
@@ -64,16 +64,16 @@ public class LevelDB implements KVStore {
 
     Options options = new Options();
     options.createIfMissing(!path.exists());
-    this.db = JniDBFactory.factory.open(path, options);
+    this._db = new AtomicReference<>(JniDBFactory.factory.open(path, options));
 
-    byte[] versionData = db.get(STORE_VERSION_KEY);
+    byte[] versionData = db().get(STORE_VERSION_KEY);
     if (versionData != null) {
       long version = serializer.deserializeLong(versionData);
       if (version != STORE_VERSION) {
         throw new UnsupportedStoreVersionException();
       }
     } else {
-      db.put(STORE_VERSION_KEY, serializer.serialize(STORE_VERSION));
+      db().put(STORE_VERSION_KEY, serializer.serialize(STORE_VERSION));
     }
   }
 
@@ -91,13 +91,13 @@ public class LevelDB implements KVStore {
     if (value != null) {
       put(METADATA_KEY, value);
     } else {
-      db.delete(METADATA_KEY);
+      db().delete(METADATA_KEY);
     }
   }
 
   @Override
   public <T> T get(byte[] key, Class<T> klass) throws Exception {
-    byte[] data = db.get(key);
+    byte[] data = db().get(key);
     if (data == null) {
       throw new NoSuchElementException(new String(key, UTF_8));
     }
@@ -107,12 +107,12 @@ public class LevelDB implements KVStore {
   @Override
   public void put(byte[] key, Object value) throws Exception {
     Preconditions.checkArgument(value != null, "Null values are not allowed.");
-    db.put(key, serializer.serialize(value));
+    db().put(key, serializer.serialize(value));
   }
 
   @Override
   public void delete(byte[] key) throws Exception {
-    db.delete(key);
+    db().delete(key);
   }
 
   @Override
@@ -167,7 +167,7 @@ public class LevelDB implements KVStore {
     try {
       LevelDBTypeInfo<?> ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(naturalKey);
-      byte[] data = db.get(key);
+      byte[] data = db().get(key);
       if (data != null) {
         Object existing = serializer.deserialize(data, type);
         synchronized (ti) {
@@ -201,14 +201,14 @@ public class LevelDB implements KVStore {
   }
 
   @Override
-  public synchronized void close() throws IOException {
-    if (closed) {
+  public void close() throws IOException {
+    DB _db = this._db.getAndSet(null);
+    if (_db == null) {
       return;
     }
 
     try {
-      db.close();
-      closed = true;
+      _db.close();
     } catch (IOException ioe) {
       throw ioe;
     } catch (Exception e) {
@@ -227,6 +227,19 @@ public class LevelDB implements KVStore {
       }
     }
     return idx;
+  }
+
+  /**
+   * Try to avoid use-after close since that has the tendency of crashing the JVM. This doesn't
+   * prevent methods that retrieved the instance from using it after close, but hopefully will
+   * catch most cases; otherwise, we'll need some kind of locking.
+   */
+  DB db() {
+    DB _db = this._db.get();
+    if (_db == null) {
+      throw new IllegalStateException("DB is closed.");
+    }
+    return _db;
   }
 
   private void removeInstance(LevelDBTypeInfo<?> ti, LevelDBWriteBatch batch, Object instance)

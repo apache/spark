@@ -52,7 +52,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.type = type;
     this.ti = null;
     this.index = null;
-    this.it = db.db.iterator();
+    this.it = db.db().iterator();
     this.indexKeyPrefix = keyPrefix;
     this.end = null;
     it.seek(keyPrefix);
@@ -64,7 +64,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   LevelDBIterator(LevelDB db, KVStoreView<T> params) throws Exception {
     this.db = db;
     this.ascending = params.ascending;
-    this.it = db.db.iterator();
+    this.it = db.db().iterator();
     this.type = params.type;
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
@@ -157,7 +157,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   }
 
   @Override
-  public void close() throws IOException {
+  public synchronized void close() throws IOException {
     if (!closed) {
       it.close();
       closed = true;

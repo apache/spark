@@ -38,7 +38,7 @@ class LevelDBWriteBatch {
 
   LevelDBWriteBatch(LevelDB db) {
     this.db = db;
-    this.batch = db.db.createWriteBatch();
+    this.batch = db.db().createWriteBatch();
     this.deltas = new HashMap<>();
   }
 
@@ -69,7 +69,7 @@ class LevelDBWriteBatch {
       }
 
       byte[] key = e.getKey().key;
-      byte[] data = db.db.get(key);
+      byte[] data = db.db().get(key);
       long count = data != null ? db.serializer.deserializeLong(data) : 0L;
       long newCount = count + delta;
 
@@ -80,7 +80,7 @@ class LevelDBWriteBatch {
       }
     }
 
-    db.db.write(batch, new WriteOptions().sync(sync));
+    db.db().write(batch, new WriteOptions().sync(sync));
   }
 
   void close() throws IOException {
