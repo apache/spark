@@ -703,7 +703,7 @@ private[spark] class TaskSetManager(
    */
   val handleSuccessfulTasksCost = new AtomicLong(0L)
 
-  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_], finishTime: Long = 0L): Unit = {
+  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
 

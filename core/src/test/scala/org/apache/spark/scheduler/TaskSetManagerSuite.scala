@@ -1130,8 +1130,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     val random = new Random()
     for (id <- 0 until tasksNum - 1) {
-      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)),
-        random.nextInt(3600000))
+      clock.setTime(random.nextInt(360000) + 1)
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
       assert(sched.endedTasks(id) === Success)
     }
     // scalastyle:off
