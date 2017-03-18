@@ -218,8 +218,8 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       CheckLastBatch((10, 5)),
       StopStream,
       AssertOnQuery { q => // purge commit and clear the sink
-        val commit = q.commitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
-        q.commitLog.purge(commit)
+        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        q.batchCommitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },

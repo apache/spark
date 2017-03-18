@@ -168,27 +168,24 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AddData(inputData, 1, 2),
       StartStream(trigger = OneTime()),
       CheckAnswer(6, 3),
-      AssertOnQuery(_.isActive === false),
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
         // both commit log and offset log contain the same (latest) batch id
-        q.commitLog.getLatest().map(_._1).getOrElse(-1L) ==
+        q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) ==
           q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
       },
       AssertOnQuery { q =>
         // blow away commit log and sink result
-        q.commitLog.purge(1)
+        q.batchCommitLog.purge(1)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
       StartStream(trigger = OneTime()),
       CheckAnswer(6, 3), // ensure we fall back to offset log and reprocess batch
-      AssertOnQuery(_.isActive === false),
       StopStream,
       AddData(inputData, 3),
       StartStream(trigger = OneTime()),
       CheckLastBatch(2), // commit log should be back in place
-      AssertOnQuery(_.isActive === false),
       StopStream,
       AddData(inputData, 0),
       StartStream(trigger = OneTime()),
@@ -282,6 +279,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AdvanceManualClock(500), // time = 1100 to unblock job
       AssertOnQuery { _ => clock.getTimeMillis() === 1100 },
       CheckAnswer(2),
+      AssertStreamExecThreadToWaitForClock(),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
@@ -306,7 +304,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
         assert(progress.sources.length === 1)
         assert(progress.sources(0).description contains "MemoryStream")
-        assert(progress.sources(0).startOffset === null)
+        assert(progress.sources(0).startOffset === "0")
         assert(progress.sources(0).endOffset !== null)
         assert(progress.sources(0).processedRowsPerSecond === 2.0)
 
@@ -320,6 +318,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       AddData(inputData, 1, 2),
       AdvanceManualClock(100), // allow another trigger
+      AssertStreamExecThreadToWaitForClock(),
       CheckAnswer(4),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),

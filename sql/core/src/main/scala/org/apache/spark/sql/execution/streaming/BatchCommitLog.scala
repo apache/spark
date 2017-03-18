@@ -25,54 +25,55 @@ import scala.io.{Source => IOSource}
 import org.apache.spark.sql.SparkSession
 
 /**
- * Used to write log files that represent commit points in structured streaming.
- * A log file will be written immediately after the successful completion of a
+ * Used to write log files that represent batch commit points in structured streaming.
+ * A commit log file will be written immediately after the successful completion of a
  * batch, and before processing the next batch. Here is an execution summary:
  * - trigger batch 1
  * - obtain batch 1 offsets and write to offset log
  * - process batch 1
- * - write batch 1 to commit log
+ * - write batch 1 to completion log
  * - trigger batch 2
  * - obtain bactch 2 offsets and write to offset log
  * - process batch 2
- * - write batch 2 to commit log
+ * - write batch 2 to completion log
  * ....
  *
- * The current format of the commit log is:
+ * The current format of the batch completion log is:
  * line 1: version
  * line 2: metadata (optional json string)
  */
-class OffsetCommitLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[Option[String]](sparkSession, path) {
+class BatchCommitLog(sparkSession: SparkSession, path: String)
+  extends HDFSMetadataLog[String](sparkSession, path) {
 
-  override protected def deserialize(in: InputStream): Option[String] = {
+  override protected def deserialize(in: InputStream): String = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
-      throw new IllegalStateException("Incomplete log file")
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
     val version = lines.next().trim.toInt
-    if (OffsetCommitLog.VERSION < version) {
+    if (BatchCommitLog.VERSION < version) {
       throw new IllegalStateException(s"Incompatible log file version ${version}")
     }
     // read metadata
     lines.next().trim match {
-      case OffsetCommitLog.SERIALIZED_VOID => None
-      case metadata => Some(metadata)
+      case BatchCommitLog.SERIALIZED_VOID => null
+      case metadata => metadata
     }
   }
 
-  override protected def serialize(metadata: Option[String], out: OutputStream): Unit = {
+  override protected def serialize(metadata: String, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(OffsetCommitLog.VERSION.toString.getBytes(UTF_8))
+    out.write(BatchCommitLog.VERSION.toString.getBytes(UTF_8))
     out.write('\n')
 
     // write metadata or void
-    out.write(metadata.getOrElse(OffsetCommitLog.SERIALIZED_VOID).getBytes(UTF_8))
+    out.write((if (metadata == null) BatchCommitLog.SERIALIZED_VOID else metadata)
+      .getBytes(UTF_8))
   }
 }
 
-object OffsetCommitLog {
+object BatchCommitLog {
   private val VERSION = 1
   private val SERIALIZED_VOID = "{}"
 }

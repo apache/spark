@@ -315,6 +315,18 @@ class ProcessingTime(Trigger):
             self.interval)
 
 
+class OneTime():
+    """A trigger that runs a query once and then exits.
+
+    .. note:: Experimental
+
+    .. versionadded:: 2.1
+    """
+
+    def _to_java_trigger(self, sqlContext):
+        return sqlContext._sc._jvm.org.apache.spark.sql.streaming.OneTime.create()
+
+
 class DataStreamReader(OptionUtils):
     """
     Interface used to load a streaming :class:`DataFrame` from external storage systems
