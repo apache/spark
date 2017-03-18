@@ -2919,7 +2919,7 @@ compare_list <- function(list1, list2) {
   expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
 }
 
-# This should always be the last test in this test file.
+# This should always be the **very last test** in this test file.
 test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
   # Check that it is not creating any extra file.
   # Does not check the tempdir which would be cleaned up after.
@@ -2929,8 +2929,17 @@ test_that("No extra files are created in SPARK_HOME by starting session and maki
   # first, ensure derby.log is not there
   expect_false("derby.log" %in% filesAfter)
   # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  # note: currently all other test files have enableHiveSupport = F, so we capture the list of files
+  # before creating a SparkSession with enableHiveSupport = T at the top of this test file
+  # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
+  # any test is run in run-all.R (sparkRFilesBefore).
+  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
+  # same as before any test is run.
   compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
   # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
+  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
   compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
 })
 
