@@ -406,10 +406,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     runEvent(ExecutorAdded("exec-hostA2", "hostA"))
     runEvent(ExecutorAdded("exec-hostB", "hostB"))
     val firstRDD = new MyRDD(sc, 3, Nil)
-    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
     val firstShuffleId = firstShuffleDep.shuffleId
     val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
     // map stage1 completes successfully, with one task on each executor

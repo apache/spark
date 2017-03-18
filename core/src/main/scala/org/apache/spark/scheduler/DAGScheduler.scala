@@ -1410,8 +1410,7 @@ class DAGScheduler(
         clearCacheLocs()
       }
     } else {
-      logDebug("Additional executor lost message for " + execId +
-        "(epoch " + currentEpoch + ")")
+      logDebug("Additional executor lost message for %s (epoch %d)".format(execId, currentEpoch))
     }
   }
 
