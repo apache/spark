@@ -1801,7 +1801,7 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
-   * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   *             an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String): Unit = {
     addJar(path, false)
@@ -1810,10 +1810,11 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
-   * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   *             an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    * @param addToCurrentClassLoader if true will add the jar to the current threads' classloader.
-   * In general adding to the current threads' class loader will impact all other application
-   * threads unless they have explicitly changed their class loader.
+   *                                In general adding to the current threads' class loader will
+   *                                impact all other application threads unless they have explicitly
+   *                                changed their class loader.
    */
   @DeveloperApi
   def addJar(path: String, addToCurrentClassLoader: Boolean) {

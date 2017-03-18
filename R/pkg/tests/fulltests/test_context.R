@@ -170,7 +170,7 @@ test_that("spark.lapply should perform simple transforms", {
 test_that("add jar should work and allow usage of the jar on the driver node", {
   sparkR.sparkContext()
 
-  destDir <- paste0(tempdir(), "/", "testjar")
+  destDir <- file.path(tempdir(), "testjar")
   jarName <- callJStatic("org.apache.spark.TestUtils", "createDummyJar",
       destDir, "sparkrTests", "DummyClassForAddJarTest")
 
