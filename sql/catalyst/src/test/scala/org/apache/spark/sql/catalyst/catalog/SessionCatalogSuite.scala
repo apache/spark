@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -418,6 +420,15 @@ abstract class SessionCatalogSuite extends PlanTest {
       assert(catalog.getTempView("tbl3") == Option(tempTable))
       assert(catalog.getTempView("tbl4").isEmpty)
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl4"))
+    }
+  }
+
+  test("rename table when destination table already exists") {
+    withBasicCatalog { catalog =>
+      intercept[AnalysisException] {
+        catalog.renameTable(
+          TableIdentifier("tbl1", Some("db2")), TableIdentifier("tbl2", Some("db2")))
+      }
     }
   }
 
@@ -1379,6 +1390,43 @@ abstract class SessionCatalogSuite extends PlanTest {
       } finally {
         catalog.reset()
       }
+    }
+  }
+
+
+  test("create/drop/rename table should create/delete/rename the directory") {
+    withBasicCatalog { catalog =>
+      val db = catalog.externalCatalog.getDatabase("db1")
+      val table = CatalogTable(
+        identifier = TableIdentifier("my_table", Some("db1")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("a", "int").add("b", "string"),
+        provider = Some(defaultProvider)
+      )
+
+      catalog.createTable(table, ignoreIfExists = false)
+      assert(exists(db.locationUri, "my_table"))
+
+      catalog.renameTable(
+        TableIdentifier("my_table", Some("db1")), TableIdentifier("your_table", Some("db1")))
+      assert(!exists(db.locationUri, "my_table"))
+      assert(exists(db.locationUri, "your_table"))
+
+      catalog.externalCatalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
+      assert(!exists(db.locationUri, "your_table"))
+
+      val externalTable = CatalogTable(
+        identifier = TableIdentifier("external_table", Some("db1")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat(
+          Some(Utils.createTempDir().toURI),
+          None, None, None, false, Map.empty),
+        schema = new StructType().add("a", "int").add("b", "string"),
+        provider = Some(defaultProvider)
+      )
+      catalog.createTable(externalTable, ignoreIfExists = false)
+      assert(!exists(db.locationUri, "external_table"))
     }
   }
 }

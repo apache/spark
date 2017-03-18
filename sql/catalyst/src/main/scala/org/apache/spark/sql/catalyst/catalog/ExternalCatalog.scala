@@ -92,7 +92,11 @@ abstract class ExternalCatalog {
 
   def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
-  def renameTable(db: String, oldName: String, newName: String): Unit
+  def renameTable(
+      db: String,
+      oldName: String,
+      newName: String,
+      newTablePath: Option[String]): Unit
 
   /**
    * Alter a table whose database and name match the ones specified in `tableDefinition`, assuming
