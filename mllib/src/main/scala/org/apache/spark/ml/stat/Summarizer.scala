@@ -17,17 +17,17 @@
 
 package org.apache.spark.ml.stat
 
-import org.apache.spark.SparkException
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
-import scala.collection.mutable
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
+import org.apache.spark.ml.linalg.{BLAS, SQLDataTypes, Vector, Vectors}
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -231,7 +231,7 @@ object SummaryBuilderImpl extends Logging {
     var l1: Array[Double] = null,
     var totalCount: Long = 0,
     var totalWeightSum: Double = 0.0,
-    var weightSquareSum: Array[Double] = null,
+    var totalWeightSquareSum: Double = 0.0,
     var weightSum: Array[Double] = null,
     var nnz: Array[Long] = null,
     var max: Array[Double] = null,
@@ -249,7 +249,6 @@ object SummaryBuilderImpl extends Logging {
           case ComputeM2n => b.copy(m2n = Array.empty)
           case ComputeM2 => b.copy(m2 = Array.empty)
           case ComputeL1 => b.copy(l1 = Array.empty)
-          case ComputeWeightSquareSum => b.copy(weightSquareSum = Array.empty)
           case ComputeWeightSum => b.copy(weightSum = Array.empty)
           case ComputeNNZ => b.copy(nnz = Array.empty)
           case ComputeMax => b.copy(max = Array.empty)
@@ -278,13 +277,180 @@ object SummaryBuilderImpl extends Logging {
     }
 
     def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
-      ???
+      val startN = buffer.n
+      if (startN == -1) {
+        buffer.n = v.size
+      } else {
+        require(startN == v.size,
+          s"Trying to insert a vector of size $v into a buffer that " +
+            s"has been sized with $startN")
+      }
+      val n = buffer.n
+      assert(n > 0, n)
+      // Always update the following fields.
+      buffer.totalWeightSum += w
+      buffer.totalCount += 1
+      buffer.totalWeightSquareSum += w * w
+      // All the fields that we compute on demand:
+      // TODO: the most common case is dense vectors. In that case we should
+      // directly use BLAS instructions instead of iterating through a scala iterator.
+      v.foreachActive { (index, value) =>
+        if (value != 0.0) {
+          if (buffer.max != null && buffer.max(index) < value) {
+            buffer.max(index) = value
+          }
+          if (buffer.min != null && buffer.min(index) > value) {
+            buffer.min(index) = value
+          }
+
+          if (buffer.mean != null) {
+            val prevMean = buffer.mean(index)
+            val diff = value - prevMean
+            buffer.mean(index) += w * diff / (buffer.weightSum(index) + w)
+            if (buffer.m2n != null) {
+              buffer.m2n(index) += w * (value - buffer.mean(index)) * diff
+            }
+          }
+          if (buffer.m2 != null) {
+            buffer.m2(index) += w * value * value
+          }
+          if (buffer.l1 != null) {
+            buffer.l1(index) += w * math.abs(value)
+          }
+          if (buffer.weightSum != null) {
+            buffer.weightSum(index) += w
+          }
+          if (buffer.nnz != null) {
+            buffer.nnz(index) += 1
+          }
+        }
+      }
     }
 
     @throws[SparkException]("When the buffers are not compatible")
     def mergeBuffers(buffer: Buffer, other: Buffer): Buffer = {
-      ???
+      if (buffer.n == -1) {
+        // buffer is not initialized.
+        if (other.n == -1) {
+          // Both are not initialized.
+          buffer
+        } else {
+          // other is initialized
+          other
+        }
+      } else {
+        // Buffer is initialized.
+        if (other.n == -1) {
+          buffer
+        } else {
+          mergeBuffers0(buffer, other)
+          buffer
+        }
+      }
     }
+
+    private def axpy(a: Double, x: Array[Double], y: Array[Double]): Unit = {
+      BLAS.axpy(a, Vectors.dense(x), Vectors.dense(y))
+    }
+
+    private def b(x: Array[Double]): BV[Double] = Vectors.dense(x).asBreeze
+
+    private def bl(x: Array[Long]): BV[Long] = BV.apply(x)
+
+    private def maxInPlace(x: Array[Double], y: Array[Double]): Unit = {
+      var i = 0
+      while(i < x.length) {
+        // Note: do not use conditions, it is wrong when handling NaNs.
+        x(i) = Math.max(x(i), y(i))
+        i += 1
+      }
+    }
+
+    private def minInPlace(x: Array[Double], y: Array[Double]): Unit = {
+      var i = 0
+      while(i < x.length) {
+        // Note: do not use conditions, it is wrong when handling NaNs.
+        x(i) = Math.min(x(i), y(i))
+        i += 1
+      }
+    }
+
+
+    /**
+     * Merges other into buffer.
+     */
+    private def mergeBuffers0(buffer: Buffer, other: Buffer): Unit = {
+      // Each buffer needs to be properly initialized.
+      require(buffer.n > 0 && other.n > 0, (buffer.n, other.n))
+      require(buffer.n == other.n, (buffer.n, other.n))
+      // Mandatory scalar values
+      buffer.totalWeightSquareSum += other.totalWeightSquareSum
+      buffer.totalWeightSum += other.totalWeightSum
+      buffer.totalCount += buffer.totalCount
+      // Keep the original weight sums.
+      val weightSum1 = if (buffer.weightSum == null) null else { buffer.weightSum.clone() }
+      val weightSum2 = if (other.weightSum == null) null else { other.weightSum.clone() }
+
+      val weightSum = if (weightSum1 == null) null else {
+        require(weightSum2 != null)
+        val arr: Array[Double] = Array.ofDim(buffer.n)
+        b(arr) :+= b(weightSum1) :- b(weightSum1)
+        arr
+      }
+
+
+      // Since the operations are dense, we can directly use BLAS calls here.
+      val deltaMean: Array[Double] = if (buffer.mean != null) {
+        require(other.mean != null)
+        val arr: Array[Double] = Array.ofDim(buffer.n)
+        b(arr) :+= b(other.mean) :- b(buffer.mean)
+        arr
+      } else { null }
+
+      if (buffer.mean != null) {
+        require(other.mean != null)
+        require(weightSum != null)
+        b(buffer.mean) :+= b(deltaMean) :* (b(weightSum2) / b(weightSum))
+      }
+
+      if (buffer.m2n != null) {
+        require(other.m2n != null)
+        val w = (b(weightSum1) :* b(weightSum2)) :/ b(weightSum)
+        b(buffer.m2n) :+= b(other.m2n) :+ (b(deltaMean) :* b(deltaMean)) :* w
+      }
+
+      if (buffer.m2 != null) {
+        require(other.m2 != null)
+        b(buffer.m2) :+= b(other.m2)
+      }
+
+      if (buffer.l1 != null) {
+        require(other.l1 != null)
+        b(buffer.l1) :+= b(other.l1)
+      }
+
+      if (buffer.max != null) {
+        require(other.max != null)
+        maxInPlace(buffer.max, other.max)
+      }
+
+      if (buffer.min != null) {
+        require(other.min != null)
+        minInPlace(buffer.min, other.min)
+      }
+
+      if (buffer.nnz != null) {
+        require(other.nnz != null)
+        bl(buffer.nnz) :+= bl(other.nnz)
+      }
+
+      if (buffer.weightSum != null) {
+        require(other.weightSum != null)
+        b(buffer.weightSum) :+= b(other.weightSum)
+      }
+    }
+
+
 
 
   }
