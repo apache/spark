@@ -1931,18 +1931,31 @@ class HiveDDLSuite
     }
   }
 
-  test("alter table add columns with existing partition column name") {
-    withTable("tab") {
-      sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE tab ADD COLUMNS (c2 string)")
-      }.getMessage
-      assert(e.contains("Found duplicate column(s)"))
+  Seq("true", "false").foreach { caseSensitive =>
+    test(s"alter add columns with existing partition column name - caseSensitive $caseSensitive") {
+      withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
+        withTable("tab") {
+          sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
+          if (caseSensitive == "false") {
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
+            }.getMessage
+            assert(e.contains("Found duplicate column(s)"))
+          } else {
+            // hive catalog will still complains that c1 is duplicate column name because hive
+            // identifiers are case insensitive.
+            val e = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
+            }.getMessage
+            assert(e.contains("HiveException"))
+          }
+        }
+      }
     }
   }
 
   Seq("true", "false").foreach { caseSensitive =>
-    test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
+    test(s"alter add columns with existing column name - caseSensitive $caseSensitive") {
       withSQLConf(("spark.sql.caseSensitive", caseSensitive)) {
         withTable("t1") {
           sql("CREATE TABLE t1 (c1 int) USING PARQUET")

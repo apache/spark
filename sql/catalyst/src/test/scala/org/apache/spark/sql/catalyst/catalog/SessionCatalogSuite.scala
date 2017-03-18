@@ -455,9 +455,8 @@ abstract class SessionCatalogSuite extends PlanTest {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
-      sessionCatalog.alterTableAddColumns(
-        TableIdentifier("t1", Some("default")),
-        Seq(StructField("c3", IntegerType)), false)
+      sessionCatalog.alterTableSchema(
+        TableIdentifier("t1", Some("default")), oldTab.schema.add("c3", IntegerType))
 
       val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       // construct the expected table schema

@@ -190,7 +190,7 @@ case class AlterTableAddColumnsCommand(
     columns: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    verifyAlterTableAddColumn(catalog, table)
+    val catalogTable = verifyAlterTableAddColumn(catalog, table)
 
     try {
       sparkSession.catalog.uncacheTable(table.quotedString)
@@ -199,11 +199,9 @@ case class AlterTableAddColumnsCommand(
         log.warn(s"Exception when attempting to uncache table ${table.quotedString}", e)
     }
 
-    // Invalidate the table last, otherwise uncaching the table would load the logical plan
-    // back into the hive metastore cache
     catalog.refreshTable(table)
-    catalog.alterTableAddColumns(
-      table, columns, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+    catalog.alterTableSchema(
+      table, catalogTable.schema.copy(fields = catalogTable.schema.fields ++ columns))
 
     Seq.empty[Row]
   }
@@ -215,7 +213,7 @@ case class AlterTableAddColumnsCommand(
    */
   private def verifyAlterTableAddColumn(
       catalog: SessionCatalog,
-      table: TableIdentifier): Unit = {
+      table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
     if (catalogTable.tableType == CatalogTableType.VIEW) {
@@ -243,6 +241,7 @@ case class AlterTableAddColumnsCommand(
          """.stripMargin)
       }
     }
+    catalogTable
   }
 }
 

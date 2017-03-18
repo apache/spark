@@ -297,31 +297,51 @@ class SessionCatalog(
   }
 
   /**
-   * Alter the schema of a table identified by the provided table identifier to add new columns
+   * Alter the schema of a table identified by the provided table identifier. The new schema
+   * should still contain the existing bucket columns and partition columns used by the table. This
+   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
+   * as the schema itself).
+   *
    * @param identifier TableIdentifier
-   * @param columns new columns
-   * @param caseSensitive enforce case sensitivity for column names
+   * @param newSchema Updated schema to be used for the table (must contain existing partition and
+   *                  bucket columns)
    */
-  def alterTableAddColumns(
+  def alterTableSchema(
       identifier: TableIdentifier,
-      columns: Seq[StructField],
-      caseSensitive: Boolean): Unit = {
+      newSchema: StructType): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-
     val catalogTable = externalCatalog.getTable(db, table)
+    val oldSchema = catalogTable.schema
+
+    // no supporting dropping columns yet
+    if (!oldSchema.forall(f => columnNameResolved(newSchema, f.name ))) {
+      throw new AnalysisException(
+        s"""
+          |Some existing schema fields are not present in the new schema.
+          |We don't support dropping columns yet.
+         """.stripMargin)
+    }
+
+    checkDuplication(newSchema)
+    // make sure partition columns are at the end
     val partitionSchema = catalogTable.partitionSchema
-    // reorder schema columns w.r.t partition columns
-    val newSchemaFields = catalogTable.dataSchema.fields ++ columns ++ partitionSchema.fields
-    checkDuplication(newSchemaFields, caseSensitive)
-    externalCatalog.alterTableSchema(db, table, catalogTable.schema.copy(fields = newSchemaFields))
+    val reorderedSchema = newSchema
+      .filterNot(f => columnNameResolved(partitionSchema, f.name)) ++ partitionSchema
+
+    externalCatalog.alterTableSchema(
+      db, table, oldSchema.copy(fields = reorderedSchema.toArray))
   }
 
-  private def checkDuplication(fields: Seq[StructField], caseSensitive: Boolean): Unit = {
-    val columnNames = if (caseSensitive) {
+  private def columnNameResolved(schema: StructType, colName: String): Boolean = {
+    schema.fields.map(_.name).find(conf.resolver(_, colName)).isDefined
+  }
+
+  private def checkDuplication(fields: Seq[StructField]): Unit = {
+    val columnNames = if (conf.caseSensitiveAnalysis) {
       fields.map(_.name)
     } else {
       fields.map(_.name.toLowerCase)
@@ -330,8 +350,7 @@ class SessionCatalog(
       val duplicateColumns = columnNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => x
       }
-      throw new AnalysisException(
-        s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
+      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
     }
   }
 
