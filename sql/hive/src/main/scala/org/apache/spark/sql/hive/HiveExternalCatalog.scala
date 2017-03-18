@@ -475,11 +475,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Alter a table whose name that matches the one specified in `tableDefinition`,
-   * assuming the table exists.
-   *
-   * Note: As of now, this doesn't support altering table schema, partition column names and bucket
-   * specification. We will ignore them even if users do specify different values for these fields.
+   * We can use alterTable to do the following commands:
+   * 1.Rename a table
+   * 2.Alter a table whose database and name match the ones specified in `tableDefinition`
    */
   override def alterTable(
       tableIdentifier: TableIdentifier,
@@ -491,6 +489,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  /**
+   * Alter a table whose name that matches the one specified in `tableDefinition`,
+   * assuming the table exists.
+   *
+   * Note: As of now, this doesn't support altering table schema, partition column names and bucket
+   * specification. We will ignore them even if users do specify different values for these fields.
+   */
   protected override def alterSameTable(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
