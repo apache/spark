@@ -331,7 +331,6 @@ spark.addFile <- function(path, recursive = FALSE) {
 #' @rdname spark.addJar
 #' @param path The path of the jar to be added
 #' @param addToCurrentClassLoader Whether to add the jar to the current driver classloader.
-#' Default is FALSE.
 #' @export
 #' @examples
 #'\dontrun{
@@ -339,10 +338,9 @@ spark.addFile <- function(path, recursive = FALSE) {
 #'}
 #' @note spark.addJar since 2.2.0
 spark.addJar <- function(path, addToCurrentClassLoader = FALSE) {
-  sc <- getSparkContext()
   normalizedPath <- suppressWarnings(normalizePath(path))
-  scala_sc <- callJMethod(sc, "sc")
-  invisible(callJMethod(scala_sc, "addJar", normalizedPath, addToCurrentClassLoader))
+  sc <- callJMethod(getSparkContext(), "sc")
+  invisible(callJMethod(sc, "addJar", normalizedPath, addToCurrentClassLoader))
 }
 
 
