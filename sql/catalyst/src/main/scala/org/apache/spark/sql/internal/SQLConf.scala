@@ -710,6 +710,15 @@ object SQLConf {
       .intConf
       .createWithDefault(12)
 
+  val JOIN_REORDER_CARD_WEIGHT =
+    buildConf("spark.sql.cbo.joinReorder.card.weight")
+      .internal()
+      .doc("The weight of cardinality (number of rows) for plan cost comparison in join reorder: " +
+        "rows * weight + size * (1 - weight).")
+      .doubleConf
+      .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
+      .createWithDefault(0.7)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -966,6 +975,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
+
+  def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 

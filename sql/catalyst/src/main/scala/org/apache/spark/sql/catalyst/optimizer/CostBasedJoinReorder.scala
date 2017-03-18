@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike}
 import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -31,19 +31,21 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * We may have several join reorder algorithms in the future. This class is the entry of these
  * algorithms, and chooses which one to use.
  */
-case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
+case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
-      val result = plan transform {
-        case p @ Project(projectList, j @ Join(_, _, _: InnerLike, _)) =>
-          reorder(p, p.outputSet)
-        case j @ Join(_, _, _: InnerLike, _) =>
+      val result = plan transformDown {
+        // Start reordering with a joinable item, which is an InnerLike join with conditions.
+        case j @ Join(_, _, _: InnerLike, Some(cond)) =>
           reorder(j, j.outputSet)
+        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond)))
+          if projectList.forall(_.isInstanceOf[Attribute]) =>
+          reorder(p, p.outputSet)
       }
       // After reordering is finished, convert OrderedJoin back to Join
-      result transform {
+      result transformDown {
         case oj: OrderedJoin => oj.join
       }
     }
@@ -56,7 +58,7 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
       // We also need to check if costs of all items can be evaluated.
       if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
           items.forall(_.stats(conf).rowCount.isDefined)) {
-        JoinReorderDP.search(conf, items, conditions, output).getOrElse(plan)
+        JoinReorderDP.search(conf, items, conditions, output)
       } else {
         plan
       }
@@ -70,25 +72,26 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
    */
   private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
     plan match {
-      case Join(left, right, _: InnerLike, cond) =>
+      case Join(left, right, _: InnerLike, Some(cond)) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left)
         val (rightPlans, rightConditions) = extractInnerJoins(right)
-        (leftPlans ++ rightPlans, cond.toSet.flatMap(splitConjunctivePredicates) ++
+        (leftPlans ++ rightPlans, splitConjunctivePredicates(cond).toSet ++
           leftConditions ++ rightConditions)
-      case Project(projectList, join) if projectList.forall(_.isInstanceOf[Attribute]) =>
-        extractInnerJoins(join)
+      case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond)))
+        if projectList.forall(_.isInstanceOf[Attribute]) =>
+        extractInnerJoins(j)
       case _ =>
         (Seq(plan), Set())
     }
   }
 
   private def replaceWithOrderedJoin(plan: LogicalPlan): LogicalPlan = plan match {
-    case j @ Join(left, right, _: InnerLike, cond) =>
+    case j @ Join(left, right, _: InnerLike, Some(cond)) =>
       val replacedLeft = replaceWithOrderedJoin(left)
       val replacedRight = replaceWithOrderedJoin(right)
       OrderedJoin(j.copy(left = replacedLeft, right = replacedRight))
-    case p @ Project(_, join) =>
-      p.copy(child = replaceWithOrderedJoin(join))
+    case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond))) =>
+      p.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
   }
@@ -128,10 +131,10 @@ case class CostBasedJoinReorder(conf: CatalystConf) extends Rule[LogicalPlan] wi
 object JoinReorderDP extends PredicateHelper {
 
   def search(
-      conf: CatalystConf,
+      conf: SQLConf,
       items: Seq[LogicalPlan],
       conditions: Set[Expression],
-      topOutput: AttributeSet): Option[LogicalPlan] = {
+      topOutput: AttributeSet): LogicalPlan = {
 
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
@@ -140,26 +143,22 @@ object JoinReorderDP extends PredicateHelper {
       case (item, id) => Set(id) -> JoinPlan(Set(id), item, Set(), Cost(0, 0))
     }.toMap)
 
-    for (lev <- 1 until items.length) {
+    // Build plans for next levels until the last level has only one plan. This plan contains
+    // all items that can be joined, so there's no need to continue.
+    while (foundPlans.size < items.length && foundPlans.last.size > 1) {
       // Build plans for the next level.
       foundPlans += searchLevel(foundPlans, conf, conditions, topOutput)
     }
 
-    val plansLastLevel = foundPlans(items.length - 1)
-    if (plansLastLevel.isEmpty) {
-      // Failed to find a plan, fall back to the original plan
-      None
-    } else {
-      // There must be only one plan at the last level, which contains all items.
-      assert(plansLastLevel.size == 1 && plansLastLevel.head._1.size == items.length)
-      Some(plansLastLevel.head._2.plan)
-    }
+    // The last level must have one and only one plan, because all items are joinable.
+    assert(foundPlans.size == items.length && foundPlans.last.size == 1)
+    foundPlans.last.head._2.plan
   }
 
   /** Find all possible plans at the next level, based on existing levels. */
   private def searchLevel(
       existingLevels: Seq[JoinPlanMap],
-      conf: CatalystConf,
+      conf: SQLConf,
       conditions: Set[Expression],
       topOutput: AttributeSet): JoinPlanMap = {
 
@@ -185,11 +184,14 @@ object JoinReorderDP extends PredicateHelper {
           // Should not join two overlapping item sets.
           if (oneSidePlan.itemIds.intersect(otherSidePlan.itemIds).isEmpty) {
             val joinPlan = buildJoin(oneSidePlan, otherSidePlan, conf, conditions, topOutput)
-            // Check if it's the first plan for the item set, or it's a better plan than
-            // the existing one due to lower cost.
-            val existingPlan = nextLevel.get(joinPlan.itemIds)
-            if (existingPlan.isEmpty || joinPlan.cost.lessThan(existingPlan.get.cost)) {
-              nextLevel.update(joinPlan.itemIds, joinPlan)
+            if (joinPlan.isDefined) {
+              val newJoinPlan = joinPlan.get
+              // Check if it's the first plan for the item set, or it's a better plan than
+              // the existing one due to lower cost.
+              val existingPlan = nextLevel.get(newJoinPlan.itemIds)
+              if (existingPlan.isEmpty || newJoinPlan.betterThan(existingPlan.get, conf)) {
+                nextLevel.update(newJoinPlan.itemIds, newJoinPlan)
+              }
             }
           }
         }
@@ -203,64 +205,46 @@ object JoinReorderDP extends PredicateHelper {
   private def buildJoin(
       oneJoinPlan: JoinPlan,
       otherJoinPlan: JoinPlan,
-      conf: CatalystConf,
+      conf: SQLConf,
       conditions: Set[Expression],
-      topOutput: AttributeSet): JoinPlan = {
+      topOutput: AttributeSet): Option[JoinPlan] = {
 
     val onePlan = oneJoinPlan.plan
     val otherPlan = otherJoinPlan.plan
-    // Now both onePlan and otherPlan become intermediate joins, so the cost of the
-    // new join should also include their own cardinalities and sizes.
-    val newCost = if (isCartesianProduct(onePlan) || isCartesianProduct(otherPlan)) {
-      // We consider cartesian product very expensive, thus set a very large cost for it.
-      // This enables to plan all the cartesian products at the end, because having a cartesian
-      // product as an intermediate join will significantly increase a plan's cost, making it
-      // impossible to be selected as the best plan for the items, unless there's no other choice.
-      Cost(
-        rows = BigInt(Long.MaxValue) * BigInt(Long.MaxValue),
-        size = BigInt(Long.MaxValue) * BigInt(Long.MaxValue))
-    } else {
-      val onePlanStats = onePlan.stats(conf)
-      val otherPlanStats = otherPlan.stats(conf)
-      Cost(
-        rows = oneJoinPlan.cost.rows + onePlanStats.rowCount.get +
-          otherJoinPlan.cost.rows + otherPlanStats.rowCount.get,
-        size = oneJoinPlan.cost.size + onePlanStats.sizeInBytes +
-          otherJoinPlan.cost.size + otherPlanStats.sizeInBytes)
-    }
-
-    // Put the deeper side on the left, tend to build a left-deep tree.
-    val (left, right) = if (oneJoinPlan.itemIds.size >= otherJoinPlan.itemIds.size) {
-      (onePlan, otherPlan)
-    } else {
-      (otherPlan, onePlan)
-    }
     val joinConds = conditions
       .filterNot(l => canEvaluate(l, onePlan))
       .filterNot(r => canEvaluate(r, otherPlan))
       .filter(e => e.references.subsetOf(onePlan.outputSet ++ otherPlan.outputSet))
-    // We use inner join whether join condition is empty or not. Since cross join is
-    // equivalent to inner join without condition.
-    val newJoin = Join(left, right, Inner, joinConds.reduceOption(And))
-    val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
-    val remainingConds = conditions -- collectedJoinConds
-    val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
-    val neededFromNewJoin = newJoin.outputSet.filter(neededAttr.contains)
-    val newPlan =
-      if ((newJoin.outputSet -- neededFromNewJoin).nonEmpty) {
-        Project(neededFromNewJoin.toSeq, newJoin)
+    if (joinConds.isEmpty) {
+      // Cartesian product is very expensive, so we exclude them from candidate plans.
+      // This also significantly reduces the search space.
+      None
+    } else {
+      // Put the deeper side on the left, tend to build a left-deep tree.
+      val (left, right) = if (oneJoinPlan.itemIds.size >= otherJoinPlan.itemIds.size) {
+        (onePlan, otherPlan)
       } else {
-        newJoin
+        (otherPlan, onePlan)
       }
+      val newJoin = Join(left, right, Inner, joinConds.reduceOption(And))
+      val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
+      val remainingConds = conditions -- collectedJoinConds
+      val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
+      val neededFromNewJoin = newJoin.outputSet.filter(neededAttr.contains)
+      val newPlan =
+        if ((newJoin.outputSet -- neededFromNewJoin).nonEmpty) {
+          Project(neededFromNewJoin.toSeq, newJoin)
+        } else {
+          newJoin
+        }
 
-    val itemIds = oneJoinPlan.itemIds.union(otherJoinPlan.itemIds)
-    JoinPlan(itemIds, newPlan, collectedJoinConds, newCost)
-  }
-
-  private def isCartesianProduct(plan: LogicalPlan): Boolean = plan match {
-    case Join(_, _, _, None) => true
-    case Project(_, Join(_, _, _, None)) => true
-    case _ => false
+      val itemIds = oneJoinPlan.itemIds.union(otherJoinPlan.itemIds)
+      // Now the root node of onePlan/otherPlan becomes an intermediate join (if it's a non-leaf
+      // item), so the cost of the new join should also include its own cost.
+      val newPlanCost = oneJoinPlan.planCost + oneJoinPlan.rootCost(conf) +
+        otherJoinPlan.planCost + otherJoinPlan.rootCost(conf)
+      Some(JoinPlan(itemIds, newPlan, collectedJoinConds, newPlanCost))
+    }
   }
 
   /** Map[set of item ids, join plan for these items] */
@@ -272,26 +256,39 @@ object JoinReorderDP extends PredicateHelper {
    * @param itemIds Set of item ids participating in this partial plan.
    * @param plan The plan tree with the lowest cost for these items found so far.
    * @param joinConds Join conditions included in the plan.
-   * @param cost The cost of this plan is the sum of costs of all intermediate joins.
+   * @param planCost The cost of this plan tree is the sum of costs of all intermediate joins.
    */
-  case class JoinPlan(itemIds: Set[Int], plan: LogicalPlan, joinConds: Set[Expression], cost: Cost)
+  case class JoinPlan(
+      itemIds: Set[Int],
+      plan: LogicalPlan,
+      joinConds: Set[Expression],
+      planCost: Cost) {
+
+    /** Get the cost of the root node of this plan tree. */
+    def rootCost(conf: SQLConf): Cost = {
+      if (itemIds.size > 1) {
+        val rootStats = plan.stats(conf)
+        Cost(rootStats.rowCount.get, rootStats.sizeInBytes)
+      } else {
+        // If the plan is a leaf item, it has zero cost.
+        Cost(0, 0)
+      }
+    }
+
+    def betterThan(other: JoinPlan, conf: SQLConf): Boolean = {
+      if (other.planCost.rows == 0 || other.planCost.size == 0) {
+        false
+      } else {
+        val relativeRows = BigDecimal(this.planCost.rows) / BigDecimal(other.planCost.rows)
+        val relativeSize = BigDecimal(this.planCost.size) / BigDecimal(other.planCost.size)
+        relativeRows * conf.joinReorderCardWeight +
+          relativeSize * (1 - conf.joinReorderCardWeight) < 1
+      }
+    }
+  }
 }
 
 /** This class defines the cost model. */
 case class Cost(rows: BigInt, size: BigInt) {
-  /**
-   * An empirical value for the weights of cardinality (number of rows) in the cost formula:
-   * cost = rows * weight + size * (1 - weight), usually cardinality is more important than size.
-   */
-  val weight = 0.7
-
-  def lessThan(other: Cost): Boolean = {
-    if (other.rows == 0 || other.size == 0) {
-      false
-    } else {
-      val relativeRows = BigDecimal(rows) / BigDecimal(other.rows)
-      val relativeSize = BigDecimal(size) / BigDecimal(other.size)
-      relativeRows * weight + relativeSize * (1 - weight) < 1
-    }
-  }
+  def +(other: Cost): Cost = Cost(this.rows + other.rows, this.size + other.size)
 }
