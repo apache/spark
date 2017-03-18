@@ -1393,7 +1393,6 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
-
   test("create/drop/rename table should create/delete/rename the directory") {
     withBasicCatalog { catalog =>
       val db = catalog.externalCatalog.getDatabase("db1")
