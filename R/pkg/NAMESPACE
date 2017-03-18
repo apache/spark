@@ -121,6 +121,7 @@ exportMethods("arrange",
               "insertInto",
               "intersect",
               "isLocal",
+              "isStreaming",
               "join",
               "limit",
               "merge",
@@ -169,6 +170,7 @@ exportMethods("arrange",
               "write.json",
               "write.orc",
               "write.parquet",
+              "write.stream",
               "write.text",
               "write.ml")
 
@@ -365,6 +367,7 @@ export("as.DataFrame",
        "read.json",
        "read.orc",
        "read.parquet",
+       "read.stream",
        "read.text",
        "spark.lapply",
        "spark.addFile",
@@ -401,6 +404,16 @@ export("partitionBy",
 
 export("windowPartitionBy",
        "windowOrderBy")
+
+exportClasses("StreamingQuery")
+
+export("awaitTermination",
+       "isActive",
+       "lastProgress",
+       "queryName",
+       "status",
+       "stopQuery")
+
 
 S3method(print, jobj)
 S3method(print, structField)

@@ -823,7 +823,16 @@ captureJVMException <- function(e, method) {
     stacktrace <- rawmsg
   }
 
-  if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
+  # StreamingQueryException could wrap an IllegalArgumentException, so look for that first
+  if (any(grep("org.apache.spark.sql.streaming.StreamingQueryException: ", stacktrace))) {
+    msg <- strsplit(stacktrace, "org.apache.spark.sql.streaming.StreamingQueryException: ",
+                    fixed = TRUE)[[1]]
+    # Extract "Error in ..." message.
+    rmsg <- msg[1]
+    # Extract the first message of JVM exception.
+    first <- strsplit(msg[2], "\r?\n\tat")[[1]][1]
+    stop(paste0(rmsg, "streaming query error - ", first), call. = FALSE)
+  } else if (any(grep("java.lang.IllegalArgumentException: ", stacktrace))) {
     msg <- strsplit(stacktrace, "java.lang.IllegalArgumentException: ", fixed = TRUE)[[1]]
     # Extract "Error in ..." message.
     rmsg <- msg[1]
