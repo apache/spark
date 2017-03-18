@@ -18,16 +18,18 @@
 package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
-
-import org.apache.spark.{SparkException}
+import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.feature.DictVectorizerModel.DictVectorizerModelWriter
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OpenHashMap
 
 
 
@@ -43,7 +45,8 @@ private[feature] trait DictVectorizerBase extends Params with HasInputCols with 
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val fields = schema($(inputCols).toSet)
     require(fields.map(_.dataType).forall{
-      case df => df.isInstanceOf[NumericType] || df.isInstanceOf[StringType]
+      case df => (df.isInstanceOf[NumericType] ||
+        df.isInstanceOf[StringType] || df.isInstanceOf[ArrayType])
     })
     val attrGroup = new AttributeGroup($(outputCol))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
@@ -65,9 +68,7 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
 
 
   override def fit(dataset: Dataset[_]): DictVectorizerModel = {
-
-
-    dataset.na.drop($(inputCols)).show()
+    // dataset.na.drop($(inputCols)).show()
 
     val diest_df = dataset.na.drop($(inputCols))
     var labels = ArrayBuilder.make[String]
@@ -90,9 +91,10 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
 
     })
 
-    // println(labels.result().mkString(","))
-
-    new DictVectorizerModel("x", labels.result())
+    require(labels.result().length > 0,
+      "The vocabulary size should be > 0. Lower minDF as necessary.")
+    copyValues(new DictVectorizerModel(uid, labels.result(), sep).setParent(this))
+    // new DictVectorizerModel("x", labels.result())
   }
 
   override def copy(extra: ParamMap): DictVectorizer = defaultCopy(extra)
@@ -104,17 +106,35 @@ class DictVectorizer(override val uid: String, val sep: String = "=")
 
 class DictVectorizerModel( val uid: String, val vocabulary: Array[String],
                           val sep: String = "=") extends Model[DictVectorizerModel]
-    with DictVectorizerBase{
+    with DictVectorizerBase with MLWritable{
 
 
-  def this(labels: Array[String]) = this(Identifiable.randomUID("dictVec"), labels)
+
+  private val labelToIndex: OpenHashMap[String, Double] = {
+    val n = vocabulary.length
+    val map = new OpenHashMap[String, Double](n)
+    var i = 0
+    while (i < n) {
+      map.update(vocabulary(i), i)
+      i += 1
+    }
+    map
+  }
+
+  def this(vocabulary: Array[String]) = this(Identifiable.randomUID("dictVec"), vocabulary)
 
   override def copy(extra: ParamMap): DictVectorizerModel = {
-    defaultCopy(extra)
+    val copied = new DictVectorizerModel(uid, vocabulary, sep)
+    copyValues(copied, extra).setParent(parent)
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
+    // scalastyle:off
+
+
     val os = validateAndTransformSchema((dataset.schema($(inputCols).toSet)))
+    println($(inputCols))
+
     val inputFields = $(inputCols).map(c => dataset.schema(c))
     dataset.select(getOutputCol)
   }
@@ -123,7 +143,52 @@ class DictVectorizerModel( val uid: String, val vocabulary: Array[String],
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+
+  override def write: MLWriter = new DictVectorizerModelWriter(this)
 }
+
+@Since("1.6.0")
+object DictVectorizerModel extends MLReadable[DictVectorizerModel] {
+
+  private[DictVectorizerModel]
+  class DictVectorizerModelWriter(instance: DictVectorizerModel) extends MLWriter {
+
+    private case class Data(labels: Array[String], sep: String)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.vocabulary, instance.sep)
+      val dataPath = new Path(path, "data").toString
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class DictVectorizerModelReader extends MLReader[DictVectorizerModel] {
+
+    private val className = classOf[DictVectorizerModel].getName
+
+    override def load(path: String): DictVectorizerModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sparkSession.read.parquet(dataPath)
+        .select("vocabulary", "sep")
+        .head()
+      val vocabulary = data.getAs[Seq[String]](0).toArray
+      val sep = data.getAs[Seq[String]](1)
+      val model = new DictVectorizerModel(metadata.uid, vocabulary)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[DictVectorizerModel] = new DictVectorizerModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): DictVectorizerModel = super.load(path)
+}
+
 
 
 object DictVectorizer extends DefaultParamsReadable[DictVectorizer] {

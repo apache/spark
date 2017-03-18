@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -53,8 +53,12 @@ class DictVectorizerSuite
       .fit(df)
 
     // copied model must have the same parent.
+    // scalastyle:off
+
     MLTestingUtils.checkCopy(indexer)
+
     val transformed = indexer.transform(df)
+
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("a", "c", "b", "x"))
