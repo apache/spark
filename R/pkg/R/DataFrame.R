@@ -3622,7 +3622,7 @@ setMethod("write.stream",
 #' \code{setCheckpointDir}
 #'
 #' @param eager whether to checkpoint this SparkDataFrame immediately
-#' @return a checkpointed SparkDataFrame
+#' @return a new checkpointed SparkDataFrame
 #' @family SparkDataFrame functions
 #' @aliases checkpoint,SparkDataFrame-method
 #' @rdname checkpoint
