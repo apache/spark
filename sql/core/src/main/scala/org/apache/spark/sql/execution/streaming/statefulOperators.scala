@@ -19,17 +19,18 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalKeyedState}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalKeyedState, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DataType, NullType, StructType}
+import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
 
@@ -255,94 +256,6 @@ case class StateStoreSaveExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
-
-
-/** Physical operator for executing streaming flatMapGroupsWithState. */
-case class FlatMapGroupsWithStateExec(
-    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
-    keyDeserializer: Expression,
-    valueDeserializer: Expression,
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
-    outputObjAttr: Attribute,
-    stateId: Option[OperatorStateId],
-    stateDeserializer: Expression,
-    stateSerializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter {
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  /** Distribute by grouping attributes */
-  override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
-
-  /** Ordering needed for using GroupingIterator */
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsWithStateStore[InternalRow](
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      getStateId.batchId,
-      groupingAttributes.toStructType,
-      child.output.toStructType,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
-        val numTotalStateRows = longMetric("numTotalStateRows")
-        val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-        val numOutputRows = longMetric("numOutputRows")
-
-        // Generate a iterator that returns the rows grouped by the grouping function
-        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-
-        // Converters to and from object and rows
-        val getKeyObj = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-        val getValueObj = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
-        val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
-        val getStateObj =
-          ObjectOperator.deserializeRowToObject(stateDeserializer)
-        val outputStateObj = ObjectOperator.serializeObjectToRow(stateSerializer)
-
-        // For every group, get the key, values and corresponding state and call the function,
-        // and return an iterator of rows
-        val allRowsIterator = groupedIter.flatMap { case (keyRow, valueRowIter) =>
-
-          val key = keyRow.asInstanceOf[UnsafeRow]
-          val keyObj = getKeyObj(keyRow)                         // convert key to objects
-          val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
-          val stateObjOption = store.get(key).map(getStateObj)   // get existing state if any
-          val wrappedState = new KeyedStateImpl(stateObjOption)
-          val mappedIterator = func(keyObj, valueObjIter, wrappedState).map { obj =>
-            numOutputRows += 1
-            getOutputRow(obj) // convert back to rows
-          }
-
-          // Return an iterator of rows generated this key,
-          // such that fully consumed, the updated state value will be saved
-          CompletionIterator[InternalRow, Iterator[InternalRow]](
-            mappedIterator, {
-              // When the iterator is consumed, then write changes to state
-              if (wrappedState.isRemoved) {
-                store.remove(key)
-                numUpdatedStateRows += 1
-              } else if (wrappedState.isUpdated) {
-                store.put(key, outputStateObj(wrappedState.get))
-                numUpdatedStateRows += 1
-              }
-            })
-        }
-
-        // Return an iterator of all the rows generated by all the keys, such that when fully
-        // consumer, all the state updates will be committed by the state store
-        CompletionIterator[InternalRow, Iterator[InternalRow]](allRowsIterator, {
-          store.commit()
-          numTotalStateRows += store.numKeys()
-        })
-      }
-  }
-}
-
 
 /** Physical operator for executing streaming Deduplicate. */
 case class StreamingDeduplicateExec(

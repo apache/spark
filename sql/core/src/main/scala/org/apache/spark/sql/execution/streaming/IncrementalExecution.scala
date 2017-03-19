@@ -37,13 +37,13 @@ class IncrementalExecution(
     val outputMode: OutputMode,
     val checkpointLocation: String,
     val currentBatchId: Long,
-    val currentEventTimeWatermark: Long)
+    offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // TODO: make this always part of planning.
   val streamingExtraStrategies =
     sparkSession.sessionState.planner.StatefulAggregationStrategy +:
-    sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
+    sparkSession.sessionState.planner.FlatMapGroupsWithStateStrategy +:
     sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.planner.StreamingDeduplicationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
@@ -88,12 +88,13 @@ class IncrementalExecution(
           keys,
           Some(stateId),
           Some(outputMode),
-          Some(currentEventTimeWatermark),
+          Some(offsetSeqMetadata.batchWatermarkMs),
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))
+
       case StreamingDeduplicateExec(keys, child, None, None) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
@@ -102,13 +103,12 @@ class IncrementalExecution(
           keys,
           child,
           Some(stateId),
-          Some(currentEventTimeWatermark))
-      case FlatMapGroupsWithStateExec(
-             f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
+          Some(offsetSeqMetadata.batchWatermarkMs))
+
+      case m: FlatMapGroupsWithStateExec =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
-        FlatMapGroupsWithStateExec(
-          f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
+        m.copy(stateId = Some(stateId), batchTimestampMs = offsetSeqMetadata.batchTimestampMs)
     }
   }
 

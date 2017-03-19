@@ -15,24 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
-
-import java.io.Serializable;
-import java.util.Iterator;
+package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.streaming.KeyedState;
+import org.apache.spark.sql.catalyst.plans.logical.NoTimeout$;
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout;
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
 
 /**
- * ::Experimental::
- * Base interface for a map function used in
- * {@link org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroupsWithState(
- * FlatMapGroupsWithStateFunction, org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}.
- * @since 2.1.1
+ * Represents the type of timeouts possible for the Dataset operations
+ * `mapGroupsWithState` and `flatMapGroupsWithState`. See documentation on
+ * `KeyedState` for more details.
+ *
+ * @since 2.2.0
  */
 @Experimental
 @InterfaceStability.Evolving
-public interface FlatMapGroupsWithStateFunction<K, V, S, R> extends Serializable {
-  Iterator<R> call(K key, Iterator<V> values, KeyedState<S> state) throws Exception;
+public class KeyedStateTimeout {
+
+  /** Timeout based on processing time.  */
+  public static KeyedStateTimeout ProcessingTimeTimeout() { return ProcessingTimeTimeout$.MODULE$; }
+
+  /** No timeout */
+  public static KeyedStateTimeout NoTimeout() { return NoTimeout$.MODULE$; }
 }

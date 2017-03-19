@@ -22,7 +22,7 @@ import java.util.Iterator;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.KeyedState;
+import org.apache.spark.sql.streaming.KeyedState;
 
 /**
  * ::Experimental::
