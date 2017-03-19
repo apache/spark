@@ -45,15 +45,21 @@ private[feature] trait DictVectorizerBase extends Params with HasInputCols with 
 
   setDefault(handleInvalid, DictVectorizer.SKIP_INVALID)
 
-  val sepToken: Param[String] = new Param[String](this, "sepToken", "split colum names with value")
+  val sepToken: Param[String] = new Param[String](this, "sepToken",
+    "split token between column names and column value")
 
   setDefault(sepToken, DictVectorizer.DEFAULT_SEP_TOKEN)
 
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val fields = schema($(inputCols).toSet)
     require(fields.map(_.dataType).forall{
-      case df => (df.isInstanceOf[NumericType] ||
-        df.isInstanceOf[StringType] || df.isInstanceOf[ArrayType])
+      case df: NumericType => true
+      case df: StringType => true
+      case df: ArrayType => df match {
+        case ArrayType(_: NumericType, _) => false
+        case ArrayType(StringType, _) => true
+      }
+      case df: Vector => false
     })
     val attrGroup = new AttributeGroup($(outputCol))
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
@@ -75,7 +81,6 @@ class DictVectorizer(override val uid: String)
   def setSepToken(value: String): this.type = set(sepToken, value)
 
   override def fit(dataset: Dataset[_]): DictVectorizerModel = {
-    // dataset.na.drop($(inputCols)).show()
 
     val diest_df = dataset.na.drop($(inputCols))
     var labels = ArrayBuilder.make[String]
@@ -143,31 +148,43 @@ class DictVectorizerModel( val uid: String, val vocabulary: Array[String])
       val indices = ArrayBuilder.make[Int]
       val values = ArrayBuilder.make[Double]
 
-      dataset.schema($(inputCols).toSet).foreach(p => p.dataType match {
-        case IntegerType =>
-          val v = r.getAs[Int](p.name)
-
-          if ( v != 0 )
-           {
-             indices += labelToIndex(p.name)
-             values += v
-           }
-        case StringType =>
-          val v = r.getAs[String](p.name)
-          indices += labelToIndex(p.name +
-            $(sepToken) + v)
-          values += 1.0
-        case ArrayType(StringType, _) =>
-          val v = r.getAs[Seq[String]](p.name)
-          v.foreach {
-            s =>
-              indices += labelToIndex(p.name +
-                $(sepToken) + s)
-              values += 1.0
-          }
+      dataset.schema($(inputCols).toSet).foreach(p => {
+        p.dataType match {
+          case _: NumericType =>
+            val v = r.getAs[Int](p.name)
+            if ( v != 0 )
+            {
+              indices += labelToIndex(p.name)
+              values += v
+            }
+          case StringType =>
+            val v = r.getAs[String](p.name)
+            indices += labelToIndex(p.name +
+              $(sepToken) + v)
+            values += 1.0
+          case ArrayType(_: NumericType, _) =>
+            val v = r.getAs[Seq[Double]](p.name)
+            for(i <- 0 to v.length)
+            {
+              if (v(i) != 0)
+              {
+                indices += 1
+              }
+            }
+          case ArrayType(StringType, _) =>
+            val v = r.getAs[Seq[String]](p.name)
+            v.foreach {
+              s =>
+                indices += labelToIndex(p.name +
+                  $(sepToken) + s)
+                values += 1.0
+            }
+        }
       })
 
-      Vectors.sparse(labelToIndex.size, indices.result(), values.result()).compressed
+      val indices_and_values = (indices.result() zip(values.result()) sortBy(_._1)).unzip
+
+      Vectors.sparse(labelToIndex.size, indices_and_values._1, indices_and_values._2).compressed
     }
 
     val vectorizer = udf {
@@ -197,43 +214,16 @@ object DictVectorizerModel extends MLReadable[DictVectorizerModel] {
   private[DictVectorizerModel]
   class DictVectorizerModelWriter(instance: DictVectorizerModel) extends MLWriter {
 
-    private case class Data(labels: Array[String], sep: String)
+    private case class Data(labels: Array[String])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.vocabulary, instance.getSepToken)
+      val data = Data(instance.vocabulary)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
-    private[feature] def assemble(vv: Any*): Vector = {
-      val indices = ArrayBuilder.make[Int]
-      val values = ArrayBuilder.make[Double]
-      var cur = 0
-      vv.foreach {
-        case v: Double =>
-          if (v != 0.0) {
-            indices += cur
-            values += v
-          }
-          cur += 1
-        case vec: Vector =>
-          vec.foreachActive { case (i, v) =>
-            if (v != 0.0) {
-              indices += cur + i
-              values += v
-            }
-          }
-          cur += vec.size
-        case null =>
-          // TODO: output Double.NaN?
-          throw new SparkException("Values to assemble cannot be null.")
-        case o =>
-          throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
-      }
-      Vectors.sparse(cur, indices.result(), values.result()).compressed
-    }
 
   private class DictVectorizerModelReader extends MLReader[DictVectorizerModel] {
 
@@ -243,10 +233,9 @@ object DictVectorizerModel extends MLReadable[DictVectorizerModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
-        .select("vocabulary", "sep")
+        .select("vocabulary")
         .head()
       val vocabulary = data.getAs[Seq[String]](0).toArray
-      val sep = data.getAs[String](1)
       val model = new DictVectorizerModel(metadata.uid, vocabulary)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

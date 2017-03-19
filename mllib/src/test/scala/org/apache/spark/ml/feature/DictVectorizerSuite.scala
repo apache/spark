@@ -19,10 +19,13 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Row
+
 
 class DictVectorizerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -63,11 +66,9 @@ class DictVectorizerSuite
   test("DictVectorizer transforms") {
       val data = Seq(
         (0, "a", "x", Seq("x", "xx")),
-        (1, "b", "x", Seq("x")),
-        (2, "c", "x", Seq("x", "xx")),
-        (3, "a", "x", Seq("x", "xx")),
-        (4, "a", "x", Seq("x", "xx")),
-        (5, "c", "x", Seq("x", "xx")))
+        (0, "a", "x", Seq("x", "xx")),
+        (0, "a", "x", Seq("x", "xx")),
+        (0, "a", "x", Seq("x", "xx")))
 
       val df = data.toDF("id", "label", "name", "hobbies")
       val vec = new DictVectorizer()
@@ -77,6 +78,14 @@ class DictVectorizerSuite
 
     val transformed = vec.transform(df)
     transformed.show()
+    // scalastyle:off
+    println(transformed.schema)
+
+    transformed.select("labelIndex").collect().foreach {
+      case Row(v: VectorUDT) =>
+        println(v)
+    }
+
     }
 //    val transformed = indexer.transform(df)
 //
