@@ -137,6 +137,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           // after we just removed it. It's not really an error condition so we should
           // not log warning here. Otherwise there may be a lot of noise especially if
           // we explicitly remove executors (SPARK-4134).
+          executorLastSeen(executorId) = clock.getTimeMillis()
           logDebug(s"Received heartbeat from unknown executor $executorId")
           context.reply(HeartbeatResponse(reregisterBlockManager = true))
         }
