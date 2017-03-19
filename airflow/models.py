@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -44,7 +45,6 @@ import textwrap
 import traceback
 import warnings
 import hashlib
-
 from urllib.parse import urlparse
 
 from sqlalchemy import (
@@ -66,6 +66,7 @@ from airflow.dag.base_dag import BaseDag, BaseDagBag
 from airflow.ti_deps.deps.not_in_retry_period_dep import NotInRetryPeriodDep
 from airflow.ti_deps.deps.prev_dagrun_dep import PrevDagrunDep
 from airflow.ti_deps.deps.trigger_rule_dep import TriggerRuleDep
+
 from airflow.ti_deps.dep_context import DepContext, QUEUE_DEPS, RUN_DEPS
 from airflow.utils.dates import cron_presets, date_range as utils_date_range
 from airflow.utils.db import provide_session
@@ -85,13 +86,17 @@ XCOM_RETURN_KEY = 'return_value'
 
 Stats = settings.Stats
 
-ENCRYPTION_ON = False
-try:
+
+def get_fernet():
+    """
+    Deferred load of Fernet key.
+
+    This function could fail either because Cryptography is not installed
+    or because the Fernet key is invalid.
+    """
     from cryptography.fernet import Fernet
-    FERNET = Fernet(configuration.get('core', 'FERNET_KEY').encode('utf-8'))
-    ENCRYPTION_ON = True
-except:
-    pass
+    return Fernet(configuration.get('core', 'FERNET_KEY').encode('utf-8'))
+
 
 if 'mysql' in settings.SQL_ALCHEMY_CONN:
     LongText = LONGTEXT
@@ -572,18 +577,21 @@ class Connection(Base):
 
     def get_password(self):
         if self._password and self.is_encrypted:
-            if not ENCRYPTION_ON:
+            try:
+                fernet = get_fernet()
+            except:
                 raise AirflowException(
                     "Can't decrypt encrypted password for login={}, \
                     FERNET_KEY configuration is missing".format(self.login))
-            return FERNET.decrypt(bytes(self._password, 'utf-8')).decode()
+            return fernet.decrypt(bytes(self._password, 'utf-8')).decode()
         else:
             return self._password
 
     def set_password(self, value):
         if value:
             try:
-                self._password = FERNET.encrypt(bytes(value, 'utf-8')).decode()
+                fernet = get_fernet()
+                self._password = fernet.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_encrypted = True
             except NameError:
                 self._password = value
@@ -596,18 +604,21 @@ class Connection(Base):
 
     def get_extra(self):
         if self._extra and self.is_extra_encrypted:
-            if not ENCRYPTION_ON:
+            try:
+                fernet = get_fernet()
+            except:
                 raise AirflowException(
                     "Can't decrypt `extra` params for login={},\
                     FERNET_KEY configuration is missing".format(self.login))
-            return FERNET.decrypt(bytes(self._extra, 'utf-8')).decode()
+            return fernet.decrypt(bytes(self._extra, 'utf-8')).decode()
         else:
             return self._extra
 
     def set_extra(self, value):
         if value:
             try:
-                self._extra = FERNET.encrypt(bytes(value, 'utf-8')).decode()
+                fernet = get_fernet()
+                self._extra = fernet.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_extra_encrypted = True
             except NameError:
                 self._extra = value
@@ -3556,18 +3567,21 @@ class Variable(Base):
 
     def get_val(self):
         if self._val and self.is_encrypted:
-            if not ENCRYPTION_ON:
+            try:
+                fernet = get_fernet()
+            except:
                 raise AirflowException(
                     "Can't decrypt _val for key={}, FERNET_KEY configuration \
                     missing".format(self.key))
-            return FERNET.decrypt(bytes(self._val, 'utf-8')).decode()
+            return fernet.decrypt(bytes(self._val, 'utf-8')).decode()
         else:
             return self._val
 
     def set_val(self, value):
         if value:
             try:
-                self._val = FERNET.encrypt(bytes(value, 'utf-8')).decode()
+                fernet = get_fernet()
+                self._val = fernet.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_encrypted = True
             except NameError:
                 self._val = value

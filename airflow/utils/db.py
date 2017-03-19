@@ -22,15 +22,10 @@ from functools import wraps
 import logging
 import os
 
-from alembic.config import Config
-from alembic import command
-from alembic.migration import MigrationContext
-
 from sqlalchemy import event, exc
 from sqlalchemy.pool import Pool
 
 from airflow import settings
-
 
 def provide_session(func):
     """
@@ -284,6 +279,10 @@ def initdb():
 
 
 def upgradedb():
+    # alembic adds significant import time, so we import it lazily
+    from alembic import command
+    from alembic.config import Config
+
     logging.info("Creating tables")
     current_dir = os.path.dirname(os.path.abspath(__file__))
     package_dir = os.path.normpath(os.path.join(current_dir, '..'))
@@ -299,6 +298,8 @@ def resetdb():
     Clear out the database
     '''
     from airflow import models
+    # alembic adds significant import time, so we import it lazily
+    from alembic.migration import MigrationContext
 
     logging.info("Dropping tables that exist")
     models.Base.metadata.drop_all(settings.engine)
