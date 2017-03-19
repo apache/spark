@@ -235,9 +235,9 @@ case class AlterTableAddColumnsCommand(
         case s =>
           throw new AnalysisException(
             s"""
-               |ALTER ADD COLUMNS does not support datasource table with type $s.
-               |You must drop and re-create the table for adding the new columns. Tables: $table
-         """.stripMargin)
+              |ALTER ADD COLUMNS does not support datasource table with type $s.
+              |You must drop and re-create the table for adding the new columns. Tables: $table
+             """.stripMargin)
       }
     }
     catalogTable

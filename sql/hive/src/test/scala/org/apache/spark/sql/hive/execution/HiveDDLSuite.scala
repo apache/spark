@@ -1873,6 +1873,7 @@ class HiveDDLSuite
 
         sql("INSERT INTO tab PARTITION (c3=1) VALUES (1, 2)")
         sql("ALTER TABLE tab ADD COLUMNS (c4 int)")
+
         checkAnswer(
           sql("SELECT * FROM tab WHERE c3 = 1"),
           Seq(Row(1, 2, null, 1))
@@ -1888,6 +1889,10 @@ class HiveDDLSuite
           sql("SELECT * FROM tab WHERE c3 = 2 AND c4 IS NOT NULL"),
           Seq(Row(2, 3, 4, 2))
         )
+
+        sql("ALTER TABLE tab ADD COLUMNS (c5 char(10))")
+        assert(spark.table("tab").schema.find(_.name == "c5")
+          .get.metadata.getString("HIVE_TYPE_STRING") == "char(10)")
       }
     }
   }

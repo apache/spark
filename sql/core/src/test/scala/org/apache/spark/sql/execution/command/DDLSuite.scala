@@ -165,6 +165,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
     }
   }
+
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2178,7 +2179,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  Seq("parquet", "json", "csv").foreach { provider =>
+  val supportedNativeFileFormatsForAlterTableAddColumns = Seq("parquet", "json", "csv")
+
+  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - $provider") {
       withTable("t1") {
         sql(s"CREATE TABLE t1 (c1 int) USING $provider")
@@ -2202,7 +2205,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  Seq("parquet", "json", "csv").foreach { provider =>
+  supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - partitioned - $provider") {
       withTable("t1") {
         sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
