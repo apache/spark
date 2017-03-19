@@ -230,4 +230,13 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         .groupBy($"a").pivot("a").agg(min($"b")),
       Row(null, Seq(null, 7), null) :: Row(1, null, Seq(1, 7)) :: Nil)
   }
+
+  test("pivot with timestamp and count should not print internal representation") {
+    val timestamp = "2012-12-31 16:00:10.011"
+    val df = Seq(java.sql.Timestamp.valueOf(timestamp)).toDF("a").groupBy("a").pivot("a").count()
+    val expected = StructType(
+      StructField("a", TimestampType) ::
+      StructField(timestamp, LongType) :: Nil)
+    assert(df.schema == expected)
+  }
 }

@@ -486,14 +486,16 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
+          val scalaValue = CatalystTypeConverters.convertToScala(value.value, value.dataType)
+          val stringValue = Option(scalaValue).getOrElse("null").toString
           if (singleAgg) {
-            value.toString
+            stringValue
           } else {
             val suffix = aggregate match {
               case n: NamedExpression => n.name
               case _ => toPrettySQL(aggregate)
             }
-            value + "_" + suffix
+            stringValue + "_" + suffix
           }
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
