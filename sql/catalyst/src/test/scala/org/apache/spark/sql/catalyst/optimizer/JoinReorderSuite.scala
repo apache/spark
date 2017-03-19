@@ -38,7 +38,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        ReorderJoin,
+        ReorderJoin(conf),
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::

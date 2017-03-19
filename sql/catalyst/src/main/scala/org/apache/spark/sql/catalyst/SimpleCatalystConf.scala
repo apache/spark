@@ -40,9 +40,6 @@ case class SimpleCatalystConf(
     override val cboEnabled: Boolean = false,
     override val joinReorderEnabled: Boolean = false,
     override val joinReorderDPThreshold: Int = 12,
-    override val starSchemaDetection: Boolean = false,
-    override val starSchemaFTRatio: Double = 0.9,
-    override val ndvMaxError: Double = 0.05,
     override val warehousePath: String = "/user/hive/warehouse",
     override val sessionLocalTimeZone: String = TimeZone.getDefault().getID,
     override val maxNestedViewDepth: Int = 100)

@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Phys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Encapsulates star-schema join detection.
  */
-case class StarSchemaDetection(conf: CatalystConf) extends PredicateHelper {
+case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
 
   /**
    * Star schema consists of one or more fact tables referencing a number of dimension
@@ -110,13 +110,11 @@ case class StarSchemaDetection(conf: CatalystConf) extends PredicateHelper {
             // This restriction will be lifted when the algorithm is generalized
             // to return multiple star plans.
             emptyStarJoinPlan
-          case TableAccessCardinality(factTable, _) :: _ =>
+          case TableAccessCardinality(factTable, _) :: rest =>
             // Find the fact table joins.
-            val allFactJoins = input.filterNot { plan =>
-              plan eq factTable
-            }.filter { plan =>
-              val joinCond = findJoinConditions(factTable, plan, conditions)
-              joinCond.nonEmpty
+            val allFactJoins = rest.collect { case TableAccessCardinality(plan, _)
+                if findJoinConditions(factTable, plan, conditions).nonEmpty =>
+              plan
             }
 
             // Find the corresponding join conditions.
@@ -125,10 +123,12 @@ case class StarSchemaDetection(conf: CatalystConf) extends PredicateHelper {
               joinCond
             }
 
-            // Verify if the join columns have valid statistics
+            // Verify if the join columns have valid statistics.
+            // Heuristically, only consider equi-joins between a fact and a dimension table
+            // to avoid expanding joins.
             val areStatsAvailable = allFactJoins.forall { dimTable =>
               allFactJoinCond.exists {
-                case BinaryComparison(lhs: AttributeReference, rhs: AttributeReference) =>
+                case Equality(lhs: AttributeReference, rhs: AttributeReference) =>
                   val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
                   val factCol = if (factTable.outputSet.contains(lhs)) lhs else rhs
                   hasStatistics(dimCol, dimTable) && hasStatistics(factCol, factTable)
@@ -140,12 +140,10 @@ case class StarSchemaDetection(conf: CatalystConf) extends PredicateHelper {
               emptyStarJoinPlan
             } else {
               // Find the subset of dimension tables. A dimension table is assumed to be in
-              // RI relationship with the fact table. Also, only consider equi-joins
-              // between a fact and a dimension table.
+              // RI relationship with the fact table.
               val eligibleDimPlans = allFactJoins.filter { dimTable =>
                 allFactJoinCond.exists {
-                  case cond @ BinaryComparison(lhs: AttributeReference, rhs: AttributeReference)
-                    if cond.isInstanceOf[EqualTo] || cond.isInstanceOf[EqualNullSafe] =>
+                  case cond @ Equality(lhs: AttributeReference, rhs: AttributeReference) =>
                     val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
                     isUnique(dimCol, dimTable)
                   case _ => false
@@ -360,7 +358,7 @@ case class StarSchemaDetection(conf: CatalystConf) extends PredicateHelper {
  *
  * If star schema detection is enabled, reorder the star join plans based on heuristics.
  */
-case class ReorderJoin(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
+case class ReorderJoin(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Join a list of plans together and push down the conditions into them.
    *
