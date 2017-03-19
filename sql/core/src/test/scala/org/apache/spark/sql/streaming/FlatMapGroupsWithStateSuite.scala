@@ -464,6 +464,61 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     checkAnswer(df, Seq(("a", 2), ("b", 1)).toDF)
   }
 
+  test("flatMapGroupsWithState - streaming with processing time timeout") {
+    // Function to maintain running count up to 2, and then remove the count
+    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => {
+      if (state.hasTimedOut) {
+        state.remove()
+        Iterator((key, "-1"))
+      } else {
+        val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+        state.update(RunningCount(count))
+        state.setTimeoutDuration("10 seconds")
+        Iterator((key, count.toString))
+      }
+    }
+
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    val timeout = KeyedStateTimeout.ProcessingTimeTimeout
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, timeout)(stateFunc)
+
+    testStream(result, Update)(
+      StartStream(ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      CheckLastBatch(("a", "1")),
+      assertNumStateRows(total = 1, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(1 * 1000),
+      CheckLastBatch(("b", "1")),
+      assertNumStateRows(total = 2, updated = 1),
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch(("a", "-1"), ("b", "2")),
+      assertNumStateRows(total = 1, updated = 2),
+
+      StopStream,
+      StartStream(ProcessingTime("1 second"), triggerClock = clock),
+
+      AddData(inputData, "c"),
+      AdvanceManualClock(20 * 1000),
+      CheckLastBatch(("b", "-1"), ("c", "1")),
+      assertNumStateRows(total = 1, updated = 2),
+
+      AddData(inputData, "c"),
+      AdvanceManualClock(20 * 1000),
+      CheckLastBatch(("c", "2")),
+      assertNumStateRows(total = 1, updated = 1)
+    )
+  }
+
   test("mapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
