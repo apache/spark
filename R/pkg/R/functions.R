@@ -2438,8 +2438,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' from_json
 #'
 #' Parses a column containing a JSON string into a Column of \code{structType} with the specified
-#' \code{schema} or array of \code{structType} if \code{asJsonArray} is enabled. If the string
-#' is unparseable, the Column will contains the value NA.
+#' \code{schema} or array of \code{structType} if \code{asJsonArray} is set to \code{TRUE}.
+#' If the string is unparseable, the Column will contains the value NA.
 #'
 #' @param x Column containing the JSON string.
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
