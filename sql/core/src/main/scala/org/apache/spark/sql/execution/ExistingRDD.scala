@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 object RDDConversions {
@@ -70,7 +70,20 @@ object RDDConversions {
 object ExternalRDD {
 
   def apply[T: Encoder](rdd: RDD[T], session: SparkSession): LogicalPlan = {
-    val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
+    val attr = {
+      val attr = CatalystSerde.generateObjAttr[T]
+      // Since ExpressionEncoder[T].deserializer is not resolved here,
+      // cannot access ExpressionEncoder[T].deserializer.nullable.
+      // We infer nullability from DataType
+      attr.dataType match {
+        case BooleanType => attr
+        case _: IntegralType => attr
+        case FloatType | DoubleType => attr
+        case DecimalType.Fixed(p, s) if p <= Decimal.MAX_LONG_DIGITS => attr
+        case _ => attr.withNullability(true)
+      }
+    }
+    val externalRdd = ExternalRDD(attr, rdd)(session)
     CatalystSerde.serialize[T](externalRdd)
   }
 }
