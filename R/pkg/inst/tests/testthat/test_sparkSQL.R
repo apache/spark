@@ -844,7 +844,6 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
 test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
   checkpointDir <- file.path(tempdir(), "cproot")
   expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
-  # check error case
 
   setCheckpointDir(checkpointDir)
   df <- read.json(jsonPath)
