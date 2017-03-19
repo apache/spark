@@ -35,8 +35,6 @@
 #' For \code{hadoopVersion = "without"}, [Hadoop version] in the filename is then
 #' \code{without-hadoop}.
 #'
-#' Note: Java should be in path or JAVA_HOME should be set for Spark to work.
-#'
 #' @param hadoopVersion Version of Hadoop to install. Default is \code{"2.7"}. It can take other
 #'                      version number in the format of "x.y" where x and y are integer.
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
@@ -105,7 +103,6 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
-    checkJava()
     if (releaseUrl != "") {
       message(paste(packageName, "found, setting SPARK_HOME to", packageLocalDir))
     } else {
@@ -292,6 +289,7 @@ sparkCachePath <- function() {
   normalizePath(path, mustWork = FALSE)
 }
 
+
 installInstruction <- function(mode) {
   if (mode == "remote") {
     paste0("Connecting to a remote Spark master. ",
@@ -306,12 +304,5 @@ installInstruction <- function(mode) {
            "contact the administrators of the cluster.")
   } else {
     stop(paste0("No instruction found for ", mode, " mode."))
-  }
-}
-
-checkJava <- function() {
-  java <- "java"
-  if (nchar(Sys.which(java)[[java]]) == 0 && nchar(Sys.getenv("JAVA_HOME")) == 0) {
-    stop("Java not found. Please make sure it is installed and in path or set JAVA_HOME.")
   }
 }
