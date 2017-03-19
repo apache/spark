@@ -632,18 +632,22 @@ object JdbcUtils extends Logging {
           rowCount += 1
           if (rowCount % batchSize == 0) {
             stmt.executeBatch()
+            if (supportsTransactions) {
+              conn.commit()
+             }
             rowCount = 0
           }
         }
         if (rowCount > 0) {
           stmt.executeBatch()
+          if (supportsTransactions) {
+            conn.commit()
+          }
         }
       } finally {
         stmt.close()
       }
-      if (supportsTransactions) {
-        conn.commit()
-      }
+      
       committed = true
       Iterator.empty
     } catch {
