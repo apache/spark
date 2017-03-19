@@ -3621,6 +3621,7 @@ setMethod("write.stream",
 #' exponentially. It will be saved to files inside the checkpoint directory set with
 #' \code{setCheckpointDir}
 #'
+#' @param x A SparkDataFrame
 #' @param eager whether to checkpoint this SparkDataFrame immediately
 #' @return a new checkpointed SparkDataFrame
 #' @family SparkDataFrame functions
@@ -3635,7 +3636,6 @@ setMethod("write.stream",
 #' df <- checkpoint(df)
 #' }
 #' @note checkpoint since 2.2.0
-#' @note experimental
 setMethod("checkpoint",
           signature(x = "SparkDataFrame"),
           function(x, eager = TRUE) {
