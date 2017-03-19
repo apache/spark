@@ -51,9 +51,9 @@ Collate:
     'serialize.R'
     'sparkR.R'
     'stats.R'
+    'streaming.R'
     'types.R'
     'utils.R'
     'window.R'
-    'streaming.R'
 RoxygenNote: 5.0.1
 VignetteBuilder: knitr
