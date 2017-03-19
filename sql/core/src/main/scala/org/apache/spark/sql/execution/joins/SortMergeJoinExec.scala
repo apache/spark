@@ -81,16 +81,15 @@ case class SortMergeJoinExec(
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
-    case RightOuter =>
-      // For right outer join, values of the left key will be filled with nulls if it can't
-      // match the value of the right key, so `nullOrdering` of the left key can't be guaranteed.
-      // We should output right key order here.
-      requiredOrders(rightKeys)
-    case FullOuter =>
-      // Neither left key nor right key guarantees `nullOrdering` after full outer join.
-      Nil
-    case _ =>
-      requiredOrders(leftKeys)
+    // For left and right outer joins, the output is ordered by the streamed input's join keys.
+    case LeftOuter => requiredOrders(leftKeys)
+    case RightOuter => requiredOrders(rightKeys)
+    // There are null rows in both streams, so there is no order.
+    case FullOuter => Nil
+    case _: InnerLike | LeftExistence(_) => requiredOrders(leftKeys)
+    case x =>
+      throw new IllegalArgumentException(
+        s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
