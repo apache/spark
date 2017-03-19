@@ -29,7 +29,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F, _}
-import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JSONOptions, JacksonParser}
+import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.DataSource
