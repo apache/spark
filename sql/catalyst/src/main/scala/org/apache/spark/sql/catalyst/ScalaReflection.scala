@@ -311,7 +311,7 @@ object ScalaReflection extends ScalaReflection {
           case NoSymbol => classOf[Seq[_]]
           case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
-        CollectObjects(mapFunction, getPath, dataType, cls)
+        MapObjects(mapFunction, getPath, dataType, cls)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
