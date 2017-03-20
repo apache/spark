@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = """
-      _FUNC_(expr, n, k, accuracy) - Estimates the top-k n-grams in rows that consist of sequences
+    _FUNC_(expr, n, k, accuracy) - Estimates the top-k n-grams in rows that consist of sequences
       of strings, represented as arrays of strings, or arrays of arrays of strings. 'accuracy' is an
       optional precision factor that controls memory usage.
       The parameter 'n' specifies what type of n-grams are being estimated. Unigrams are n = 1, and
@@ -55,12 +55,13 @@ import org.apache.spark.unsafe.types.UTF8String
        {["abc","abc"]:1.0},
        {["bcd","abc"]:1.0}]
   """)
-case class NGrams(child: Expression,
-                  nExpression: Expression,
-                  kExpression: Expression,
-                  accuracyExpression: Expression,
-                  override val mutableAggBufferOffset: Int,
-                  override val inputAggBufferOffset: Int)
+case class NGrams(
+    child: Expression,
+    nExpression: Expression,
+    kExpression: Expression,
+    accuracyExpression: Expression,
+    override val mutableAggBufferOffset: Int,
+    override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[NGramBuffer] with ImplicitCastInputTypes  {
 
   def this(child: Expression, nExpression: Expression, kExpression: Expression,
