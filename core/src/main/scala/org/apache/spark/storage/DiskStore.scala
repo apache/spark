@@ -32,6 +32,7 @@ import io.netty.util.AbstractReferenceCounted
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.{ByteBufferInputStream, Utils}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -113,9 +114,7 @@ private[spark] class DiskStore(
           // For small files, directly read rather than memory map.
           Utils.tryWithSafeFinally {
             val buf = ByteBuffer.allocate(blockSize.toInt)
-            while (buf.hasRemaining()) {
-              channel.read(buf)
-            }
+            JavaUtils.readFully(channel, buf)
             buf.flip()
             new ByteBufferBlockData(new ChunkedByteBuffer(buf))
           } {
@@ -192,10 +191,7 @@ private class EncryptedBlockData(
         val chunkSize = math.min(remaining, Int.MaxValue)
         val chunk = allocator(chunkSize.toInt)
         remaining -= chunkSize
-
-        while (chunk.hasRemaining()) {
-          source.read(chunk)
-        }
+        JavaUtils.readFully(source, chunk)
         chunk.flip()
         chunks += chunk
       }

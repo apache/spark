@@ -32,7 +32,7 @@ import org.apache.commons.crypto.stream._
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.network.util.CryptoUtils
+import org.apache.spark.network.util.{CryptoUtils, JavaUtils}
 
 /**
  * A util class for manipulating IO encryption and decryption streams.
@@ -100,11 +100,7 @@ private[spark] object CryptoStreamUtils extends Logging {
       key: Array[Byte]): ReadableByteChannel = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     val buf = ByteBuffer.wrap(iv)
-    while (buf.hasRemaining()) {
-      if (channel.read(buf) < 0) {
-        throw new EOFException("Failed to read IV from channel.")
-      }
-    }
+    JavaUtils.readFully(channel, buf)
 
     val params = new CryptoParams(key, sparkConf)
     new CryptoInputStream(params.transformation, params.conf, channel, params.keySpec,
