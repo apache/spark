@@ -374,7 +374,8 @@ case class DataSource(
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = partitionSchema,
-          dataSchema = dataSchema,
+          dataSchema =
+            if (format.isInstanceOf[ParquetFileFormat]) dataSchema else dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
           caseInsensitiveOptions)(sparkSession)

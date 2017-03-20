@@ -190,6 +190,11 @@ private[parquet] class ParquetRowConverter(
     var i = 0
     while (i < currentRow.numFields) {
       fieldConverters(i).updater.end()
+      if (currentRow.isNullAt(i) && !catalystType(i).nullable) {
+        throw new UnsupportedOperationException(
+          "Should not contain null for non-nullable " + catalystType(i).dataType +
+          " schema at column index " + i)
+      }
       i += 1
     }
     updater.set(currentRow)

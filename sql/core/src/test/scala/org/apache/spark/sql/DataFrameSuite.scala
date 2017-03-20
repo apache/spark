@@ -737,24 +737,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("loadWithSchema") {
-    withTempDir { dir =>
-      val field = "id"
-      val df = spark.range(0, 5, 1, 1).toDF(field)
-      val result = Array(Row(0L), Row(1L), Row(2L), Row(3L), Row(4L))
-
-      Seq("parquet", "json").foreach { fmt =>
-        val path = new File(dir, fmt).getCanonicalPath
-
-        val schema = StructType(Seq(StructField(field, LongType, false)))
-        df.write.format(fmt).mode("overwrite").save(path)
-        val dfRead = spark.read.format(fmt).schema(schema).load(path)
-        assert(dfRead.collect === result)
-        assert(dfRead.schema.equals(schema))
-      }
-    }
-  }
-
   ignore("show") {
     // This test case is intended ignored, but to make sure it compiles correctly
     testData.select($"*").show()

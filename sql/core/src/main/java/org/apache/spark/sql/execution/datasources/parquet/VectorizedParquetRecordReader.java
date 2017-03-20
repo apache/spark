@@ -91,6 +91,11 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private ColumnarBatch columnarBatch;
 
   /**
+   * Schema corresponds to columnarBatch
+   */
+  private StructType columnarBatchSchema;
+
+  /**
    * If true, this class returns batches instead of rows.
    */
   private boolean returnColumnarBatch;
@@ -178,6 +183,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     }
 
+    columnarBatchSchema = batchSchema;
     columnarBatch = ColumnarBatch.allocate(batchSchema, memMode);
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
@@ -228,6 +234,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     for (int i = 0; i < columnReaders.length; ++i) {
       if (columnReaders[i] == null) continue;
       columnReaders[i].readBatch(num, columnarBatch.column(i));
+      StructField schema = columnarBatchSchema.fields()[i];
+      if (columnarBatch.column(i).anyNullsSet() && !schema.nullable()) {
+        throw new UnsupportedOperationException(
+          "Should not contain null for non-nullable " + schema.dataType() +
+          " schema at column index " + i);
+      }
     }
     rowsReturned += num;
     columnarBatch.setNumRows(num);
