@@ -24,33 +24,33 @@ application. See the [Deploying](#deploying) subsection below.
 {% highlight scala %}
 
 // Subscribe to 1 topic
-val ds = spark
+val df = spark
   .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to multiple topics
-val ds = spark
+val df = spark
   .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1,topic2")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to a pattern
-val ds = spark
+val df = spark
   .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribePattern", "topic.*")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 {% endhighlight %}
@@ -59,31 +59,31 @@ ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic
-Dataset<Row> ds = spark
+DataFrame<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to multiple topics
-Dataset<Row> ds = spark
+DataFrame<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1,topic2")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to a pattern
-Dataset<Row> ds = spark
+DataFrame<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribePattern", "topic.*")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
@@ -91,31 +91,31 @@ ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight python %}
 
 # Subscribe to 1 topic
-ds = spark \
+df = spark \
   .readStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "topic1") \
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to multiple topics
-ds = spark \
+df = spark \
   .readStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "topic1,topic2") \
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern
-ds = spark \
+df = spark \
   .readStream \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribePattern", "topic.*") \
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
@@ -130,17 +130,17 @@ you can create an Dataset/DataFrame for a defined range of offsets.
 {% highlight scala %}
 
 // Subscribe to 1 topic defaults to the earliest and latest offsets
-val ds = spark
+val df = spark
   .read
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to multiple topics, specifying explicit Kafka offsets
-val ds = spark
+val df = spark
   .read
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -148,11 +148,11 @@ val ds = spark
   .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""")
   .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 // Subscribe to a pattern, at the earliest and latest offsets
-val ds = spark
+val df = spark
   .read
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -160,7 +160,7 @@ val ds = spark
   .option("startingOffsets", "earliest")
   .option("endingOffsets", "latest")
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
   .as[(String, String)]
 
 {% endhighlight %}
@@ -169,16 +169,16 @@ ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic defaults to the earliest and latest offsets
-Dataset<Row> ds = spark
+DataFrame<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
   .load();
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to multiple topics, specifying explicit Kafka offsets
-Dataset<Row> ds = spark
+DataFrame<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -186,10 +186,10 @@ Dataset<Row> ds = spark
   .option("startingOffsets", "{\"topic1\":{\"0\":23,\"1\":-2},\"topic2\":{\"0\":-2}}")
   .option("endingOffsets", "{\"topic1\":{\"0\":50,\"1\":-1},\"topic2\":{\"0\":-1}}")
   .load();
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to a pattern, at the earliest and latest offsets
-Dataset<Row> ds = spark
+DataFrame<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -197,7 +197,7 @@ Dataset<Row> ds = spark
   .option("startingOffsets", "earliest")
   .option("endingOffsets", "latest")
   .load();
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 {% endhighlight %}
 </div>
@@ -205,16 +205,16 @@ ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 {% highlight python %}
 
 # Subscribe to 1 topic defaults to the earliest and latest offsets
-ds = spark \
+df = spark \
   .read \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
   .option("subscribe", "topic1") \
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to multiple topics, specifying explicit Kafka offsets
-ds = spark \
+df = spark \
   .read \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -222,10 +222,10 @@ ds = spark \
   .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""") \
   .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""") \
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 # Subscribe to a pattern, at the earliest and latest offsets
-ds = spark \
+df = spark \
   .read \
   .format("kafka") \
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
@@ -233,7 +233,7 @@ ds = spark \
   .option("startingOffsets", "earliest") \
   .option("endingOffsets", "latest") \
   .load()
-ds.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% endhighlight %}
 </div>
 </div>
@@ -385,7 +385,7 @@ if writing the query is successful, then you can assume that the query output wa
 solution to remove duplicates when reading the written data could be to introduce a primary (unique) key 
 that can be used to perform de-duplication when reading.
 
-Each row being written to Kafka has the following schema:
+The Dataframe being written to Kafka should have the following columns in schema:
 <table class="table">
 <tr><th>Column</th><th>Type</th></tr>
 <tr>
