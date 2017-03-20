@@ -531,6 +531,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         key: String,
         values: Iterator[(String, Long)],
         state: KeyedState[Long]) => {
+      val timeoutDelay = 5
       if (key != "a") {
         Iterator.empty
       } else {
@@ -540,17 +541,17 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         } else {
           val valuesSeq = values.toSeq
           val maxEventTime = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
-          val timeoutDelay = 5 * 1000
+          val timeoutTimestampMs = maxEventTime + timeoutDelay
           state.update(maxEventTime)
-          state.setTimeoutTimestamp(maxEventTime + timeoutDelay)
-          Iterator((key, (maxEventTime / 1000).toInt))
+          state.setTimeoutTimestamp(timeoutTimestampMs * 1000)
+          Iterator((key, maxEventTime.toInt))
         }
       }
     }
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
-        .select($"_1".as("key"), $"_2".multiply(1000).cast("timestamp").as("eventTime"))
+        .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .select($"key", $"eventTime".cast("long"))
         .as[(String, Long)]
@@ -564,7 +565,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       AddData(inputData, ("dummy", 35)),  // Should set watermark = 35 - 10 = 25s
       CheckLastBatch(),
       AddData(inputData, ("dummy", 25)),  // Should keep watermark to 35 - 10 = 25s
-      CheckLastBatch(("a", -1))          // Should remove state for "a" and emit -1
+      CheckLastBatch(("a", -1))           // Should remove state for "a" and emit -1
     )
   }
 
