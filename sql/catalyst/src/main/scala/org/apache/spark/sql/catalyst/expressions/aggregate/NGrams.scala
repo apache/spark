@@ -45,15 +45,15 @@ import org.apache.spark.unsafe.types.UTF8String
       factor 'accuracy' specifies how much memory to use for estimation; more memory will give
       more accurate frequency counts, but could crash the JVM. The value will be the max between
       'accuracy'(0 if it's not specified) and 1000/k, which indicates the max number of n-grams
-      which're kept in the internal HashMap.
-      The output is an array of maps with the top-k n-grams.
+      which are kept in the internal HashMap.
+      The output is an array of maps with the top-k n-grams and corresponding frequency.
   """,
   extended = """
     Examples:
       > SELECT ngrams(array('abc', 'abc', 'bcd', 'abc', 'bcd'), 2, 4);
-       [{"ngram":["abc","bcd"], "estfrequency":2.0},
-       {"ngram":["abc","abc"], "estfrequency":1.0},
-       {"ngram":["bcd","abc"], "estfrequency":1.0}]
+       [["abc","bcd"]:2.0},
+       {["abc","abc"]:1.0},
+       {["bcd","abc"]:1.0}]
   """)
 case class NGrams(child: Expression,
                   nExpression: Expression,
