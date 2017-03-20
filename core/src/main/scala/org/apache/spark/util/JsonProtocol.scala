@@ -805,6 +805,8 @@ private[spark] object JsonProtocol {
       readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
       readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
       readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
+      readMetrics.incRemoteBytesReadToMem((readJson \ "Remote Bytes Read To Mem").extract[Long])
+      readMetrics.incRemoteBytesReadToDisk((readJson \ "Remote Bytes Read To Disk").extract[Long])
       readMetrics.incLocalBytesRead(
         Utils.jsonOption(readJson \ "Local Bytes Read").map(_.extract[Long]).getOrElse(0L))
       readMetrics.incFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
