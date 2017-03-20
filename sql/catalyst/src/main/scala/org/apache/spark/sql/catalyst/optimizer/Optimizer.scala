@@ -82,7 +82,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
       PushProjectionThroughUnion,
-      ReorderJoin,
+      ReorderJoin(conf),
       EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
