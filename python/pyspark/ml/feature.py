@@ -877,12 +877,12 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
     .. note:: Experimental
 
     Imputation estimator for completing missing values, either using the mean or the median
-    of the column in which the missing values are located. The input column should be of
+    of the columns in which the missing values are located. The input columns should be of
     DoubleType or FloatType. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
 
     Note that the mean/median value is computed after filtering out missing values.
-    All Null values in the input column are treated as missing, and so are also imputed. For
+    All Null values in the input columns are treated as missing, and so are also imputed. For
     computing median, :py:meth:`approxQuantile` is used with a relative error of 0.001.
 
     >>> df = spark.createDataFrame([(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0),
