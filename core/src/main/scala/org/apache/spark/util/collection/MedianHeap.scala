@@ -31,28 +31,28 @@ import scala.collection.mutable.PriorityQueue
  * return the average of the two top values of heaps. Otherwise we return the top of the
  * heap which has one more element.
  */
-
 private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
-  // Stores all the numbers less than the current median in a smallerHalf,
-  // i.e median is the maximum, at the root
+  /**
+   * Stores all the numbers less than the current median in a smallerHalf,
+   * i.e median is the maximum, at the root.
+   */
   private[this] var smallerHalf = PriorityQueue.empty[Double](ord)
 
-  // Stores all the numbers greater than the current median in a largerHalf,
-  // i.e median is the minimum, at the root
+  /**
+   * Stores all the numbers greater than the current median in a largerHalf,
+   * i.e median is the minimum, at the root.
+   */
   private[this] var largerHalf = PriorityQueue.empty[Double](ord.reverse)
 
-  // Returns if there is no element in MedianHeap.
   def isEmpty(): Boolean = {
     smallerHalf.isEmpty && largerHalf.isEmpty
   }
 
-  // Size of MedianHeap.
   def size(): Int = {
     smallerHalf.size + largerHalf.size
   }
 
-  // Insert a new number into MedianHeap.
   def insert(x: Double): Unit = {
     // If both heaps are empty, we arbitrarily insert it into a heap, let's say, the largerHalf.
     if (isEmpty) {
@@ -69,7 +69,6 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
     rebalance()
   }
 
-  // Re-balance the heaps.
   private[this] def rebalance(): Unit = {
     if (largerHalf.size - smallerHalf.size > 1) {
       smallerHalf.enqueue(largerHalf.dequeue())
@@ -79,7 +78,6 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
     }
   }
 
-  // Returns the median of the numbers.
   def median: Double = {
     if (isEmpty) {
       throw new NoSuchElementException("MedianHeap is empty.")
