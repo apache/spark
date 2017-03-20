@@ -28,7 +28,7 @@ import org.apache.spark.network.protocol.Encoders;
 /**
  * Server's response to client's challenge.
  *
- * @see README.md
+ * see README.md
  */
 public class ServerResponse implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */
