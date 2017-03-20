@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
@@ -699,21 +699,28 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create temporary view using") {
-    val csvFile =
-      Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
-    withView("testview") {
-      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
-        "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
-        s"OPTIONS (PATH '$csvFile')")
+    // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
+    // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
+    // to a temp file by withResourceTempPath
+    withResourceTempPath("test-data/cars.csv") { tmpFile =>
+      withView("testview") {
+        sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
+          "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+          s"OPTIONS (PATH '$tmpFile')")
 
-      checkAnswer(
-        sql("select c1, c2 from testview order by c1 limit 1"),
+        checkAnswer(
+          sql("select c1, c2 from testview order by c1 limit 1"),
           Row("1997", "Ford") :: Nil)
 
-      // Fails if creating a new view with the same name
-      intercept[TempTableAlreadyExistsException] {
-        sql(s"CREATE TEMPORARY VIEW testview USING " +
-          s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
+        // Fails if creating a new view with the same name
+        intercept[TempTableAlreadyExistsException] {
+          sql(
+            s"""
+               |CREATE TEMPORARY VIEW testview
+               |USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+               |OPTIONS (PATH '$tmpFile')
+             """.stripMargin)
+        }
       }
     }
   }

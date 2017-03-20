@@ -50,7 +50,8 @@ object GridPageRank {
           inNbrs(ind).map( nbr => oldPr(nbr) / outDegree(nbr)).sum
       }
     }
-    (0L until (nRows * nCols)).zip(pr)
+    val prSum = pr.sum
+    (0L until (nRows * nCols)).zip(pr.map(_ * pr.length / prSum))
   }
 
 }
@@ -68,26 +69,34 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val nVertices = 100
       val starGraph = GraphGenerators.starGraph(sc, nVertices).cache()
       val resetProb = 0.15
+      val tol = 0.0001
+      val numIter = 2
       val errorTol = 1.0e-5
 
-      val staticRanks1 = starGraph.staticPageRank(numIter = 2, resetProb).vertices
-      val staticRanks2 = starGraph.staticPageRank(numIter = 3, resetProb).vertices.cache()
+      val staticRanks = starGraph.staticPageRank(numIter, resetProb).vertices.cache()
+      val staticRanks2 = starGraph.staticPageRank(numIter + 1, resetProb).vertices
 
-      // Static PageRank should only take 3 iterations to converge
-      val notMatching = staticRanks1.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
+      // Static PageRank should only take 2 iterations to converge
+      val notMatching = staticRanks.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
         if (pr1 != pr2) 1 else 0
       }.map { case (vid, test) => test }.sum()
       assert(notMatching === 0)
 
-      val staticErrors = staticRanks2.map { case (vid, pr) =>
-        val p = math.abs(pr - (resetProb + (1.0 - resetProb) * (resetProb * (nVertices - 1)) ))
-        val correct = (vid > 0 && pr == resetProb) || (vid == 0L && p < 1.0E-5)
-        if (!correct) 1 else 0
-      }
-      assert(staticErrors.sum === 0)
+      val dynamicRanks = starGraph.pageRank(tol, resetProb).vertices.cache()
+      assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
 
-      val dynamicRanks = starGraph.pageRank(0, resetProb).vertices.cache()
-      assert(compareRanks(staticRanks2, dynamicRanks) < errorTol)
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(make_star(100, mode = "in"))
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(x, 0) for x in range(1,100)]))
+      // We multiply by the number of vertices to account for difference in normalization
+      val centerRank = 0.462394787 * nVertices
+      val othersRank = 0.005430356 * nVertices
+      val igraphPR = centerRank +: Seq.fill(nVertices - 1)(othersRank)
+      val ranks = VertexRDD(sc.parallelize(0L until nVertices zip igraphPR))
+      assert(compareRanks(staticRanks, ranks) < errorTol)
+      assert(compareRanks(dynamicRanks, ranks) < errorTol)
+
     }
   } // end of test Star PageRank
 
@@ -96,51 +105,62 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val nVertices = 100
       val starGraph = GraphGenerators.starGraph(sc, nVertices).cache()
       val resetProb = 0.15
+      val tol = 0.0001
+      val numIter = 2
       val errorTol = 1.0e-5
 
-      val staticRanks1 = starGraph.staticPersonalizedPageRank(0, numIter = 1, resetProb).vertices
-      val staticRanks2 = starGraph.staticPersonalizedPageRank(0, numIter = 2, resetProb)
-        .vertices.cache()
+      val staticRanks = starGraph.staticPersonalizedPageRank(0, numIter, resetProb).vertices.cache()
 
-      // Static PageRank should only take 2 iterations to converge
-      val notMatching = staticRanks1.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
-        if (pr1 != pr2) 1 else 0
-      }.map { case (vid, test) => test }.sum
-      assert(notMatching === 0)
+      val dynamicRanks = starGraph.personalizedPageRank(0, tol, resetProb).vertices.cache()
+      assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
 
-      val staticErrors = staticRanks2.map { case (vid, pr) =>
-        val correct = (vid > 0 && pr == 0.0) ||
-          (vid == 0 && pr == resetProb)
-        if (!correct) 1 else 0
-      }
-      assert(staticErrors.sum === 0)
-
-      val dynamicRanks = starGraph.personalizedPageRank(0, 0, resetProb).vertices.cache()
-      assert(compareRanks(staticRanks2, dynamicRanks) < errorTol)
-
-      val parallelStaticRanks1 = starGraph
-        .staticParallelPersonalizedPageRank(Array(0), 1, resetProb).mapVertices {
+      val parallelStaticRanks = starGraph
+        .staticParallelPersonalizedPageRank(Array(0), numIter, resetProb).mapVertices {
           case (vertexId, vector) => vector(0)
         }.vertices.cache()
-      assert(compareRanks(staticRanks1, parallelStaticRanks1) < errorTol)
+      assert(compareRanks(staticRanks, parallelStaticRanks) < errorTol)
 
-      val parallelStaticRanks2 = starGraph
-        .staticParallelPersonalizedPageRank(Array(0, 1), 2, resetProb).mapVertices {
-          case (vertexId, vector) => vector(0)
-        }.vertices.cache()
-      assert(compareRanks(staticRanks2, parallelStaticRanks2) < errorTol)
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(make_star(100, mode = "in"),  personalized = c(1, rep(0, 99)), algo = "arpack")
+      // NOTE: We use the arpack algorithm as prpack (the default) redistributes rank to all
+      // vertices uniformly instead of just to the personalization source.
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(x, 0) for x in range(1,100)]),
+      //   personalization=dict([(x, 1 if x == 0 else 0) for x in range(0,100)]))
+      // We multiply by the number of vertices to account for difference in normalization
+      val igraphPR0 = 1.0 +: Seq.fill(nVertices - 1)(0.0)
+      val ranks0 = VertexRDD(sc.parallelize(0L until nVertices zip igraphPR0))
+      assert(compareRanks(staticRanks, ranks0) < errorTol)
+      assert(compareRanks(dynamicRanks, ranks0) < errorTol)
+
 
       // We have one outbound edge from 1 to 0
-      val otherStaticRanks2 = starGraph.staticPersonalizedPageRank(1, numIter = 2, resetProb)
+      val otherStaticRanks = starGraph.staticPersonalizedPageRank(1, numIter, resetProb)
         .vertices.cache()
-      val otherDynamicRanks = starGraph.personalizedPageRank(1, 0, resetProb).vertices.cache()
-      val otherParallelStaticRanks2 = starGraph
-        .staticParallelPersonalizedPageRank(Array(0, 1), 2, resetProb).mapVertices {
+      val otherDynamicRanks = starGraph.personalizedPageRank(1, tol, resetProb).vertices.cache()
+      val otherParallelStaticRanks = starGraph
+        .staticParallelPersonalizedPageRank(Array(0, 1), numIter, resetProb).mapVertices {
           case (vertexId, vector) => vector(1)
         }.vertices.cache()
-      assert(compareRanks(otherDynamicRanks, otherStaticRanks2) < errorTol)
-      assert(compareRanks(otherStaticRanks2, otherParallelStaticRanks2) < errorTol)
-      assert(compareRanks(otherDynamicRanks, otherParallelStaticRanks2) < errorTol)
+      assert(compareRanks(otherDynamicRanks, otherStaticRanks) < errorTol)
+      assert(compareRanks(otherStaticRanks, otherParallelStaticRanks) < errorTol)
+      assert(compareRanks(otherDynamicRanks, otherParallelStaticRanks) < errorTol)
+
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(make_star(100, mode = "in"),
+      //   personalized = c(0, 1, rep(0, 98)), algo = "arpack")
+      // NOTE: We use the arpack algorithm as prpack (the default) redistributes rank to all
+      // vertices uniformly instead of just to the personalization source.
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(x, 0) for x in range(1,100)]),
+      //   personalization=dict([(x, 1 if x == 1 else 0) for x in range(0,100)]))
+      val centerRank = 0.4594595
+      val sourceRank = 0.5405405
+      val igraphPR1 = centerRank +: sourceRank +: Seq.fill(nVertices - 2)(0.0)
+      val ranks1 = VertexRDD(sc.parallelize(0L until nVertices zip igraphPR1))
+      assert(compareRanks(otherStaticRanks, ranks1) < errorTol)
+      assert(compareRanks(otherDynamicRanks, ranks1) < errorTol)
+      assert(compareRanks(otherParallelStaticRanks, ranks1) < errorTol)
     }
   } // end of test Star PersonalPageRank
 
@@ -226,6 +246,52 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val ranks = VertexRDD(sc.parallelize(1L to 4L zip igraphPR))
       assert(compareRanks(staticRanks, ranks) < errorTol)
       assert(compareRanks(dynamicRanks, ranks) < errorTol)
+
+    }
+  }
+
+  test("Loop with sink PageRank") {
+    withSpark { sc =>
+      val edges = sc.parallelize((1L, 2L) :: (2L, 3L) :: (3L, 1L) :: (1L, 4L) :: Nil)
+      val g = Graph.fromEdgeTuples(edges, 1)
+      val resetProb = 0.15
+      val tol = 0.0001
+      val numIter = 20
+      val errorTol = 1.0e-5
+
+      val staticRanks = g.staticPageRank(numIter, resetProb).vertices.cache()
+      val dynamicRanks = g.pageRank(tol, resetProb).vertices.cache()
+
+      assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
+
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(graph_from_literal( A -+ B -+ C -+ A -+ D))
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(1,2),(2,3),(3,1),(1,4)]))
+      // We multiply by the number of vertices to account for difference in normalization
+      val igraphPR = Seq(0.3078534, 0.2137622, 0.2646223, 0.2137622).map(_ * 4)
+      val ranks = VertexRDD(sc.parallelize(1L to 4L zip igraphPR))
+      assert(compareRanks(staticRanks, ranks) < errorTol)
+      assert(compareRanks(dynamicRanks, ranks) < errorTol)
+
+      val p1staticRanks = g.staticPersonalizedPageRank(1, numIter, resetProb).vertices.cache()
+      val p1dynamicRanks = g.personalizedPageRank(1, tol, resetProb).vertices.cache()
+      val p1parallelDynamicRanks =
+        g.staticParallelPersonalizedPageRank(Array(1, 2, 3, 4), numIter, resetProb)
+        .vertices.mapValues(v => v(0)).cache()
+
+      // Computed in igraph 1.0 w/ R bindings:
+      // > page_rank(graph_from_literal( A -+ B -+ C -+ A -+ D), personalized = c(1, 0, 0, 0),
+      //   algo = "arpack")
+      // NOTE: We use the arpack algorithm as prpack (the default) redistributes rank to all
+      // vertices uniformly instead of just to the personalization source.
+      // Alternatively in NetworkX 1.11:
+      // > nx.pagerank(nx.DiGraph([(1,2),(2,3),(3,1),(1,4)]), personalization={1:1, 2:0, 3:0, 4:0})
+      val igraphPR2 = Seq(0.4522329, 0.1921990, 0.1633691, 0.1921990)
+      val ranks2 = VertexRDD(sc.parallelize(1L to 4L zip igraphPR2))
+      assert(compareRanks(p1staticRanks, ranks2) < errorTol)
+      assert(compareRanks(p1dynamicRanks, ranks2) < errorTol)
+      assert(compareRanks(p1parallelDynamicRanks, ranks2) < errorTol)
 
     }
   }
