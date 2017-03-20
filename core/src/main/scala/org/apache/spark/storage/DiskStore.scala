@@ -67,11 +67,17 @@ private[spark] class DiskStore(
     var threwException: Boolean = true
     try {
       writeFunc(out)
-      Files.write(out.getCount().toString(), diskManager.getMetadataFile(blockId), UTF_8)
+      Files.write(out.getCount.toString(), diskManager.getMetadataFile(blockId), UTF_8)
       threwException = false
     } finally {
       try {
-        Closeables.close(out, threwException)
+        out.close()
+      } catch {
+        case ioe: IOException =>
+          if (!threwException) {
+            threwException = true
+            throw ioe
+          }
       } finally {
          if (threwException) {
           remove(blockId)
@@ -107,7 +113,7 @@ private[spark] class DiskStore(
           // For small files, directly read rather than memory map.
           Utils.tryWithSafeFinally {
             val buf = ByteBuffer.allocate(blockSize.toInt)
-            while (buf.remaining() > 0) {
+            while (buf.hasRemaining()) {
               channel.read(buf)
             }
             buf.flip()
@@ -159,7 +165,8 @@ private[spark] class DiskStore(
       }.getOrElse(out)
     } catch {
       case e: Exception =>
-        out.close()
+        Closeables.close(out, true)
+        file.delete()
         throw e
     }
   }
@@ -186,7 +193,7 @@ private class EncryptedBlockData(
         val chunk = allocator(chunkSize.toInt)
         remaining -= chunkSize
 
-        while (chunk.remaining() > 0) {
+        while (chunk.hasRemaining()) {
           source.read(chunk)
         }
         chunk.flip()
@@ -223,9 +230,11 @@ private class EncryptedBlockData(
       // all bytes into memory to send the block to the remote executor, so it's ok to do this
       // as long as the block fits in a Java array.
       assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
+      val bytes = new Array[Byte](blockSize.toInt)
       val is = toInputStream()
       try {
-        ByteBuffer.wrap(ByteStreams.toByteArray(is))
+        ByteStreams.readFully(is, bytes)
+        ByteBuffer.wrap(bytes)
       } finally {
         Closeables.close(is, true)
       }
@@ -263,12 +272,12 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
     var written = 0L
     var lastWrite = -1L
     while (lastWrite != 0) {
-      if (buffer.remaining() == 0) {
+      if (!buffer.hasRemaining()) {
         buffer.clear()
         source.read(buffer)
         buffer.flip()
       }
-      if (buffer.remaining() > 0) {
+      if (buffer.hasRemaining()) {
         lastWrite = target.write(buffer)
         written += lastWrite
       } else {
@@ -287,7 +296,7 @@ private class CountingWritableChannel(sink: WritableByteChannel) extends Writabl
 
   private var count = 0L
 
-  def getCount(): Long = count
+  def getCount: Long = count
 
   override def write(src: ByteBuffer): Int = {
     val written = sink.write(src)

@@ -25,6 +25,7 @@ import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
 import scala.collection.JavaConverters._
 
+import com.google.common.io.ByteStreams
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
 
@@ -67,7 +68,7 @@ private[spark] object CryptoStreamUtils extends Logging {
     val params = new CryptoParams(key, sparkConf)
     val iv = createInitializationVector(params.conf)
     val buf = ByteBuffer.wrap(iv)
-    while (buf.remaining() > 0) {
+    while (buf.hasRemaining()) {
       channel.write(buf)
     }
 
@@ -84,15 +85,7 @@ private[spark] object CryptoStreamUtils extends Logging {
       sparkConf: SparkConf,
       key: Array[Byte]): InputStream = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
-    var read = 0
-    while (read < iv.length) {
-      val _read = is.read(iv, 0, iv.length)
-      if (_read < 0) {
-        throw new EOFException("Failed to read IV from stream.")
-      }
-      read += _read
-    }
-
+    ByteStreams.readFully(is, iv)
     val params = new CryptoParams(key, sparkConf)
     new CryptoInputStream(params.transformation, params.conf, is, params.keySpec,
       new IvParameterSpec(iv))
@@ -107,8 +100,7 @@ private[spark] object CryptoStreamUtils extends Logging {
       key: Array[Byte]): ReadableByteChannel = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     val buf = ByteBuffer.wrap(iv)
-    buf.clear()
-    while (buf.remaining() > 0) {
+    while (buf.hasRemaining()) {
       if (channel.read(buf) < 0) {
         throw new EOFException("Failed to read IV from channel.")
       }
@@ -160,7 +152,7 @@ private[spark] object CryptoStreamUtils extends Logging {
 
     override def write(src: ByteBuffer): Int = {
       val count = src.remaining()
-      while (src.remaining() > 0) {
+      while (src.hasRemaining()) {
         sink.write(src)
       }
       count
