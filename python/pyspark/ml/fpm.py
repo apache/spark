@@ -81,7 +81,8 @@ class HasItemsCol(Params):
     Mixin for param itemsCol: items column name.
     """
 
-    itemsCol = Param(Params._dummy(), "itemsCol", "items column name.", typeConverter=TypeConverters.toString)
+    itemsCol = Param(Params._dummy(), "itemsCol",
+                     "items column name.", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasItemsCol, self).__init__()
