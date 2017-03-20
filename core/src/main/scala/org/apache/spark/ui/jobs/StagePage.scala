@@ -572,7 +572,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           <h4>
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Aggregated Metrics by Executor</a>
-            ({executorTable.toNodeSeq.size})
+            ({executorTable.toNodeSeq.size} executors supplied)
           </h4>
         </span>
         <div class="aggregated-metrics collapsible-table">
