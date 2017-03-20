@@ -26,39 +26,39 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "BlockManager"
 
-  private def registerGauge[T](name: String, f: BlockManagerMaster => T): Unit = {
-    metricRegistry.register(name, new Gauge[T] {
-      override def getValue: T = f(blockManager.master)
+  private def registerGauge(name: String, f: BlockManagerMaster => Long): Unit = {
+    metricRegistry.register(name, new Gauge[Long] {
+      override def getValue: Long = f(blockManager.master) / 1024 / 1024
     })
   }
 
   registerGauge(MetricRegistry.name("memory", "maxMem_MB"),
-    _.getStorageStatus.map(_.maxMem).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.maxMem).sum)
 
   registerGauge(MetricRegistry.name("memory", "maxOnHeapMem_MB"),
-    _.getStorageStatus.map(_.maxOnHeapMem).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.maxOnHeapMem).sum)
 
   registerGauge(MetricRegistry.name("memory", "maxOffHeapMem_MB"),
-    _.getStorageStatus.map(_.maxOffHeapMem).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.maxOffHeapMem).sum)
 
   registerGauge(MetricRegistry.name("memory", "remainingMem_MB"),
-    _.getStorageStatus.map(_.memRemaining).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.memRemaining).sum)
 
   registerGauge(MetricRegistry.name("memory", "remainingOnHeapMem_MB"),
-    _.getStorageStatus.map(_.onHeapMemRemaining).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.onHeapMemRemaining).sum)
 
   registerGauge(MetricRegistry.name("memory", "remainingOffHeapMem_MB"),
-    _.getStorageStatus.map(_.offHeapMemRemaining).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.offHeapMemRemaining).sum)
 
   registerGauge(MetricRegistry.name("memory", "memUsed_MB"),
-    _.getStorageStatus.map(_.memUsed).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.memUsed).sum)
 
   registerGauge(MetricRegistry.name("memory", "onHeapMemUsed_MB"),
-    _.getStorageStatus.map(_.onHeapMemUsed).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.onHeapMemUsed).sum)
 
   registerGauge(MetricRegistry.name("memory", "offHeapMemUsed_MB"),
-    _.getStorageStatus.map(_.offHeapMemUsed).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.offHeapMemUsed).sum)
 
   registerGauge(MetricRegistry.name("disk", "diskSpaceUsed_MB"),
-    _.getStorageStatus.map(_.diskUsed).sum / 1024 / 1024)
+    _.getStorageStatus.map(_.diskUsed).sum)
 }

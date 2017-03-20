@@ -172,6 +172,15 @@ function totalDurationColor(totalGCTime, totalDuration) {
     return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
 }
 
+function memoryUsageTooltip(onHeap, maxOnHeap, offHeap, maxOffHeap, onHeapSum, offHeapSum, type) {
+    return ("<span data-toggle='tooltip' title='" +
+        "On Heap Memory (" + formatBytes(onHeap, type) +
+        " / " + formatBytes(maxOnHeap, type) + ") " +
+        "Off Heap Memory (" + formatBytes(offHeap, type) +
+        " / " + formatBytes(maxOffHeap, type) + ")'>" +
+        formatBytes(onHeapSum, type) + " / " + formatBytes(offHeapSum, type) + "</span>");
+}
+
 $(document).ready(function () {
     $.extend($.fn.dataTable.defaults, {
         stateSave: true,
@@ -394,12 +403,14 @@ $(document).ready(function () {
                         {data: 'rddBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.onHeapMemoryUsed, type) + ' / ' + formatBytes(row.maxOnHeapMemory, type)) : row.maxOnHeapMemory
-                            }
-                        },
-                        {
-                            data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.offHeapMemoryUsed, type) + ' / ' + formatBytes(row.maxOffHeapMemory, type)) : row.maxOffHeapMemory
+                                if (type !== 'display')
+                                    return row.maxOnHeapMemory + row.maxOffHeapMemory;
+                                else
+                                    var memoryUsed = row.onHeapMemoryUsed + row.offHeapMemoryUsed
+                                    var maxMemory = row.maxOnHeapMemory + row.maxOffHeapMemory
+                                    return memoryUsageTooltip(row.onHeapMemoryUsed, row.maxOnHeapMemory,
+                                        row.offHeapMemoryUsed, row.maxOffHeapMemory, memoryUsed, maxMemory, type);
+
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
@@ -471,12 +482,14 @@ $(document).ready(function () {
                         {data: 'allRDDBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.allOnHeapMemoryUsed, type) + ' / ' + formatBytes(row.allOnHeapMaxMemory, type)) : row.allOnHeapMemoryUsed;
-                            }
-                        },
-                        {
-                            data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.allOffHeapMemoryUsed, type) + ' / ' + formatBytes(row.allOffHeapMaxMemory, type)) : row.allOffHeapMemoryUsed;
+                                if (type !== 'display')
+                                    return row.allOnHeapMemoryUsed + row.allOffHeapMemoryUsed;
+                                else
+                                    var memoryUsed = row.allOnHeapMemoryUsed + row.allOffHeapMemoryUsed
+                                    var maxMemory = row.allOnHeapMaxMemory + row.allOffHeapMaxMemory
+                                    return memoryUsageTooltip(row.allOnHeapMemoryUsed, row.allOnHeapMaxMemory,
+                                        row.allOffHeapMemoryUsed, row.allOffHeapMaxMemory, memoryUsed, maxMemory, type);
+
                             }
                         },
                         {data: 'allDiskUsed', render: formatBytes},
