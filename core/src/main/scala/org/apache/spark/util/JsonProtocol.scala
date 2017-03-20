@@ -21,6 +21,7 @@ import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.mutable.LinkedHashMap
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -330,12 +331,25 @@ private[spark] object JsonProtocol {
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
+        ("Remote Bytes Read To Mem" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToMem) ~
+        ("Remote Bytes Read To Disk" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
+    val linkedHashMap = LinkedHashMap[String, Long]()
+    taskMetrics.shuffleWriteMetrics.blockSizeDistribution.zipWithIndex.foreach {
+      case (size, index) =>
+        linkedHashMap.put(s"Shuffle Write Block Size Distribution $index", size)
+    }
     val shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
-        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
+        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten) ~
+        ("Shuffle Write Average Block Size" -> taskMetrics.shuffleWriteMetrics.averageBlockSize) ~
+        ("Shuffle Write Underestimated Blocks Num" ->
+          taskMetrics.shuffleWriteMetrics.underestimatedBlocksNum) ~
+        ("Shuffle Write Underestimated Blocks Size" ->
+          taskMetrics.shuffleWriteMetrics.underestimatedBlocksSize) ++ linkedHashMap
+
     val inputMetrics: JValue =
       ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
         ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
@@ -807,6 +821,17 @@ private[spark] object JsonProtocol {
       writeMetrics.incRecordsWritten(
         Utils.jsonOption(writeJson \ "Shuffle Records Written").map(_.extract[Long]).getOrElse(0L))
       writeMetrics.incWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
+      (0 until 9).foreach {
+        case i =>
+          writeMetrics.incBlockSizeDistribution((writeJson \
+            s"Shuffle Write Block Size Distribution $i").extract[Long])
+      }
+      writeMetrics.setAverageBlockSize(
+        (writeJson \ "Shuffle Write Average Block Size").extract[Long])
+      writeMetrics.setUnderestimatedBlocksNum(
+        (writeJson \ "Shuffle Write Underestimated Blocks Num").extract[Long])
+      writeMetrics.incUnderestimatedBlocksSize(
+        (writeJson \ "Shuffle Write Underestimated Blocks Size").extract[Long])
     }
 
     // Output metrics

@@ -1914,160 +1914,174 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 14,
-      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_MEM}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 15,
-      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ_TO_DISK}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 16,
-      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 17,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 18,
-      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 19,
-      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 20,
-      |          "Name": "${shuffleWrite.AVERAGE_BLOCK_SIZE}",
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 21,
-      |          "Name": "${shuffleWrite.UNDERESTIMATED_BLOCKS_NUM}",
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 22,
-      |          "Name": "${shuffleWrite.UNDERESTIMATED_BLOCKS_SIZE}",
+      |          "Name": "${shuffleWrite.AVERAGE_BLOCK_SIZE}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 23,
+      |          "Name": "${shuffleWrite.UNDERESTIMATED_BLOCKS_NUM}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 24,
+      |          "Name": "${shuffleWrite.UNDERESTIMATED_BLOCKS_SIZE}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 25,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 26,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 25,
+      |          "ID": 27,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 26,
+      |          "ID": 28,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 27,
+      |          "ID": 29,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 28,
+      |          "ID": 30,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}0",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 29,
+      |          "ID": 31,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}1",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 30,
+      |          "ID": 32,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}2",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 31,
+      |          "ID": 33,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}3",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 32,
+      |          "ID": 34,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}4",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 33,
+      |          "ID": 35,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}5",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 34,
+      |          "ID": 36,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}6",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 35,
+      |          "ID": 37,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}7",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 36,
+      |          "ID": 38,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}8",
       |          "Update": 0,
       |          "Internal": true,

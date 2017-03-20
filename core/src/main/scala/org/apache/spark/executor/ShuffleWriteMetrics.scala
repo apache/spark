@@ -114,6 +114,10 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
     _underestimatedBlocksNum.add(1)
   }
 
+  private[spark] def setUnderestimatedBlocksNum(value: Long) = {
+    _underestimatedBlocksNum.setValue(value)
+  }
+
   private[spark] def incUnderestimatedBlocksSize(v: Long) = {
     _underestimatedBlocksSize.add(v)
   }
