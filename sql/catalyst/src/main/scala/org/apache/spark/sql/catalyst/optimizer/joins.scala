@@ -124,11 +124,12 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
             }
 
             // Verify if the join columns have valid statistics.
-            // Heuristically, only consider equi-joins between a fact and a dimension table
-            // to avoid expanding joins.
+            // Allow any relational comparison between the tables. Later
+            // we will heuristically choose a subset of equi-join
+            // tables.
             val areStatsAvailable = allFactJoins.forall { dimTable =>
               allFactJoinCond.exists {
-                case Equality(lhs: AttributeReference, rhs: AttributeReference) =>
+                case BinaryComparison(lhs: AttributeReference, rhs: AttributeReference) =>
                   val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
                   val factCol = if (factTable.outputSet.contains(lhs)) lhs else rhs
                   hasStatistics(dimCol, dimTable) && hasStatistics(factCol, factTable)
@@ -139,8 +140,9 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
             if (!areStatsAvailable) {
               emptyStarJoinPlan
             } else {
-              // Find the subset of dimension tables. A dimension table is assumed to be in
-              // RI relationship with the fact table.
+              // Find the subset of dimension tables. A dimension table is assumed to be in a
+              // RI relationship with the fact table. Only consider equi-joins
+              // between a fact and a dimension table to avoid expanding joins.
               val eligibleDimPlans = allFactJoins.filter { dimTable =>
                 allFactJoinCond.exists {
                   case cond @ Equality(lhs: AttributeReference, rhs: AttributeReference) =>
