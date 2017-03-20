@@ -21,7 +21,7 @@ import java.sql.Date
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTimeout}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.execution.streaming.KeyedStateImpl._
 import org.apache.spark.sql.streaming.{KeyedState, KeyedStateTimeout}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -145,9 +145,10 @@ private[sql] class KeyedStateImpl[S](
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestampMs: Long): Unit = {
-    if (timeoutConf == NoTimeout) {
+    if (timeoutConf != EventTimeTimeout) {
       throw new UnsupportedOperationException(
-        "Cannot set timeout timestamp without enabling timeouts in map/flatMapGroupsWithState")
+        "Cannot set timeout timestamp without enabling event time timeout in " +
+          "map/flatMapGroupsWithState")
     }
     if (!defined) {
       throw new IllegalStateException(

@@ -100,19 +100,18 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     for (initState <- Seq(None, Some(5))) {
       // for different initial state
       implicit val state = new KeyedStateImpl(initState, 1000, NoTimeout, hasTimedOut = false)
-      testTimeoutDurationNotAllowed[UnsupportedOperationException]
-      testTimeoutTimestampNotAllowed[UnsupportedOperationException]
+      testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+      testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
     }
   }
 
   test("KeyedState - setTimeout**** with ProcessingTimeTimeout") {
     implicit var state: KeyedStateImpl[Int] = null
 
-    // ========== With ProcessingTimeTimeout ==========
-    state = new KeyedStateImpl(None, 1000, ProcessingTimeTimeout, hasTimedOut = false)
+    state = new KeyedStateImpl[Int](None, 1000, ProcessingTimeTimeout, hasTimedOut = false)
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    testTimeoutDurationNotAllowed[IllegalStateException]
-    testTimeoutTimestampNotAllowed[IllegalStateException]
+    testTimeoutDurationNotAllowed[IllegalStateException](state)
+    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     state.update(5)
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
@@ -120,34 +119,35 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration("2 second")
     assert(state.getTimeoutTimestamp === 3000)
+    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     state.remove()
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    testTimeoutDurationNotAllowed[IllegalStateException]
-    testTimeoutTimestampNotAllowed[IllegalStateException]
+    testTimeoutDurationNotAllowed[IllegalStateException](state)
+    testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
   }
 
   test("KeyedState - setTimeout**** with EventTimeTimeout") {
-    // ========== With EventTimeTimeout ==========
     implicit val state = new KeyedStateImpl[Int](None, 1000, EventTimeTimeout, hasTimedOut = false)
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    testTimeoutDurationNotAllowed[UnsupportedOperationException]
-    testTimeoutTimestampNotAllowed[IllegalStateException]
+    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[IllegalStateException](state)
 
     state.update(5)
     state.setTimeoutTimestamp(10000)
     assert(state.getTimeoutTimestamp === 10000)
     state.setTimeoutTimestamp(new Date(20000))
     assert(state.getTimeoutTimestamp === 20000)
+    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
 
     state.remove()
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    testTimeoutDurationNotAllowed[UnsupportedOperationException]
-    testTimeoutTimestampNotAllowed[IllegalStateException]
+    testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
+    testTimeoutTimestampNotAllowed[IllegalStateException](state)
   }
 
   test("KeyedState - illegal params to setTimeout****") {
-    implicit var state: KeyedStateImpl[Int] = null
+    var state: KeyedStateImpl[Int] = null
 
     // Test setTimeout****() with illegal values
     def testIllegalTimeout(body: => Unit): Unit = {
@@ -161,6 +161,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testIllegalTimeout { state.setTimeoutDuration("-2 second") }
     testIllegalTimeout { state.setTimeoutDuration("-1 month") }
     testIllegalTimeout { state.setTimeoutDuration("1 month -1 day") }
+
+    state = new KeyedStateImpl(Some(5), 1000, EventTimeTimeout, hasTimedOut = false)
     testIllegalTimeout { state.setTimeoutTimestamp(-10000) }
   }
 
@@ -799,20 +801,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       }.get
   }
 
-  def testTimeoutDurationNotAllowed[T <: Exception: Manifest](
-      implicit state: KeyedStateImpl[_]): Unit = {
+  def testTimeoutDurationNotAllowed[T <: Exception: Manifest](state: KeyedStateImpl[_]): Unit = {
+    val prevTimestamp = state.getTimeoutTimestamp
     intercept[T] { state.setTimeoutDuration(1000) }
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === prevTimestamp)
     intercept[T] { state.setTimeoutDuration("2 second") }
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === prevTimestamp)
   }
 
-  def testTimeoutTimestampNotAllowed[T <: Exception: Manifest](
-      implicit state: KeyedStateImpl[_]): Unit = {
+  def testTimeoutTimestampNotAllowed[T <: Exception: Manifest](state: KeyedStateImpl[_]): Unit = {
+    val prevTimestamp = state.getTimeoutTimestamp
     intercept[T] { state.setTimeoutTimestamp(1000) }
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === prevTimestamp)
     intercept[T] { state.setTimeoutTimestamp(new Date(1000)) }
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    assert(state.getTimeoutTimestamp === prevTimestamp)
   }
 
   def newStateStore(): StateStore = new MemoryStateStore()

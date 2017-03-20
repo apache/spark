@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -57,6 +57,8 @@ case class FlatMapGroupsWithStateExec(
     eventTimeWatermarkMs: Option[Long],
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter {
 
+  import KeyedStateImpl._
+
   private val isTimeoutEnabled = timeoutConfig != NoTimeout
   private val timestampTimeoutAttribute =
     AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
@@ -64,8 +66,6 @@ case class FlatMapGroupsWithStateExec(
     val encSchemaAttribs = stateEncoder.schema.toAttributes
     if (isTimeoutEnabled) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
   }
-
-  import KeyedStateImpl._
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =

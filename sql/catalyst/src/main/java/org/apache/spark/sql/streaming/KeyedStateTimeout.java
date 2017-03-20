@@ -19,9 +19,7 @@ package org.apache.spark.sql.streaming;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.catalyst.plans.logical.NoTimeout$;
-import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout;
-import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
+import org.apache.spark.sql.catalyst.plans.logical.*;
 
 /**
  * Represents the type of timeouts possible for the Dataset operations
@@ -36,6 +34,9 @@ public class KeyedStateTimeout {
 
   /** Timeout based on processing time.  */
   public static KeyedStateTimeout ProcessingTimeTimeout() { return ProcessingTimeTimeout$.MODULE$; }
+
+  /** Timeout based on event time.  */
+  public static KeyedStateTimeout EventTimeTimeout() { return EventTimeTimeout$.MODULE$; }
 
   /** No timeout */
   public static KeyedStateTimeout NoTimeout() { return NoTimeout$.MODULE$; }
