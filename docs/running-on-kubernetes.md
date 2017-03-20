@@ -127,15 +127,23 @@ Spark supports using TLS to encrypt the traffic in this bootstrapping process. I
 whenever possible. 
 
 See the [security page](security.html) and [configuration](configuration.html) sections for more information on
-configuring TLS; use the prefix `spark.ssl.kubernetes.submission` in configuring the TLS-related fields in the context
+configuring TLS; use the prefix `spark.ssl.kubernetes.driversubmitserver` in configuring the TLS-related fields in the context
 of submitting to Kubernetes. For example, to set the trustStore used when the local machine communicates with the driver
-pod in starting the application, set `spark.ssl.kubernetes.submission.trustStore`.
+pod in starting the application, set `spark.ssl.kubernetes.driversubmitserver.trustStore`.
 
 One note about the keyStore is that it can be specified as either a file on the client machine or a file in the
-container image's disk. Thus `spark.ssl.kubernetes.submission.keyStore` can be a URI with a scheme of either `file:`
+container image's disk. Thus `spark.ssl.kubernetes.driversubmitserver.keyStore` can be a URI with a scheme of either `file:`
 or `local:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
 the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
 `local:`, the file is assumed to already be on the container's disk at the appropriate path.
+
+Finally, the submission server and client can be configured to use PEM files instead of Java keyStores. When using
+this mode, set `spark.ssl.kubernetes.driversubmitserver.keyPem` and
+`spark.ssl.kubernetes.driversubmitserver.serverCertPem` to configure the key and certificate files on the driver
+submission server. These files can be uploaded from the submitter's machine if they have no scheme or a scheme of
+`file:`, or they can be located on the container's disk if they have the scheme `local:`. The client's certificate
+file should be provided via setting `spark.ssl.kubernetes.driversubmitserver.clientCertPem`, and this file must be
+located on the submitting machine's local disk.
 
 ### Submission of Local Files through Ingress/External controller
 

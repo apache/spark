@@ -197,25 +197,50 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(60L)
 
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_KEYSTORE =
-    ConfigBuilder("spark.ssl.kubernetes.submission.keyStore")
+  private[spark] val KUBERNETES_DRIVER_SUBMIT_SSL_KEYSTORE =
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.keyStore")
       .doc("KeyStore file for the driver submission server listening on SSL. Can be pre-mounted" +
         " on the driver container or uploaded from the submitting client.")
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE =
-    ConfigBuilder("spark.ssl.kubernetes.submission.trustStore")
+  private[spark] val KUBERNETES_DRIVER_SUBMIT_SSL_TRUSTSTORE =
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.trustStore")
       .doc("TrustStore containing certificates for communicating to the driver submission server" +
         " over SSL.")
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_SUBMIT_SSL_ENABLED =
-    ConfigBuilder("spark.ssl.kubernetes.submission.enabled")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.enabled")
       .doc("Whether or not to use SSL when sending the application dependencies to the driver pod.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val DRIVER_SUBMIT_SSL_KEY_PEM =
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.keyPem")
+      .doc("Key PEM file that the driver submission server will use when setting up TLS" +
+        " connections. Can be pre-mounted on the driver pod's disk or uploaded from the" +
+        " submitting client's machine.")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_SUBMIT_SSL_SERVER_CERT_PEM =
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.serverCertPem")
+      .doc("Certificate PEM file that is associated with the key PEM file" +
+        " the submission server uses to set up TLS connections. Can be pre-mounted" +
+        " on the driver pod's disk or uploaded from the submitting client's machine.")
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM =
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.clientCertPem")
+      .doc("Certificate pem file that the submission client uses to connect to the submission" +
+        " server over TLS. This should often be the same as the server certificate, but can be" +
+        " different if the submission client will contact the driver through a proxy instead of" +
+        " the driver service directly.")
+      .stringConf
+      .createOptional
 
   private[spark] val KUBERNETES_DRIVER_SERVICE_NAME =
     ConfigBuilder("spark.kubernetes.driver.service.name")

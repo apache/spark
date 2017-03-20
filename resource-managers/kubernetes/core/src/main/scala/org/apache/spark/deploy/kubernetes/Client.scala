@@ -161,7 +161,7 @@ private[spark] class Client(
           driverServiceManager.handleSubmissionError(
             new SparkException("Submission shutting down early...")))
         try {
-          val sslConfigurationProvider = new SslConfigurationProvider(
+          val sslConfigurationProvider = new DriverSubmitSslConfigurationProvider(
             sparkConf, kubernetesAppId, kubernetesClient, kubernetesResourceCleaner)
           val submitServerSecret = kubernetesClient.secrets().createNew()
             .withNewMetadata()
@@ -182,7 +182,7 @@ private[spark] class Client(
           configureOwnerReferences(
             kubernetesClient,
             submitServerSecret,
-            sslConfiguration.sslSecrets,
+            sslConfiguration.sslSecret,
             driverPod,
             driverService)
           submitApplicationToDriverServer(
@@ -209,7 +209,6 @@ private[spark] class Client(
           Utils.tryLogNonFatalError {
             driverServiceManager.stop()
           }
-
           // Remove the shutdown hooks that would be redundant
           Utils.tryLogNonFatalError {
             ShutdownHookManager.removeShutdownHook(resourceCleanShutdownHook)
@@ -236,7 +235,7 @@ private[spark] class Client(
   private def submitApplicationToDriverServer(
       kubernetesClient: KubernetesClient,
       driverServiceManager: DriverServiceManager,
-      sslConfiguration: SslConfiguration,
+      sslConfiguration: DriverSubmitSslConfiguration,
       driverService: Service,
       submitterLocalFiles: Iterable[String],
       submitterLocalJars: Iterable[String],
@@ -298,7 +297,7 @@ private[spark] class Client(
       customLabels: Map[String, String],
       customAnnotations: Map[String, String],
       submitServerSecret: Secret,
-      sslConfiguration: SslConfiguration): (Pod, Service) = {
+      sslConfiguration: DriverSubmitSslConfiguration): (Pod, Service) = {
     val driverKubernetesSelectors = (Map(
       SPARK_DRIVER_LABEL -> kubernetesAppId,
       SPARK_APP_ID_LABEL -> kubernetesAppId,
@@ -349,7 +348,7 @@ private[spark] class Client(
   private def configureOwnerReferences(
       kubernetesClient: KubernetesClient,
       submitServerSecret: Secret,
-      sslSecrets: Array[Secret],
+      sslSecret: Option[Secret],
       driverPod: Pod,
       driverService: Service): Service = {
     val driverPodOwnerRef = new OwnerReferenceBuilder()
@@ -359,7 +358,7 @@ private[spark] class Client(
       .withKind(driverPod.getKind)
       .withController(true)
       .build()
-    sslSecrets.foreach(secret => {
+    sslSecret.foreach(secret => {
       val updatedSecret = kubernetesClient.secrets().withName(secret.getMetadata.getName).edit()
         .editMetadata()
         .addToOwnerReferences(driverPodOwnerRef)
@@ -425,10 +424,10 @@ private[spark] class Client(
       driverKubernetesSelectors: Map[String, String],
       customAnnotations: Map[String, String],
       submitServerSecret: Secret,
-      sslConfiguration: SslConfiguration): Pod = {
+      sslConfiguration: DriverSubmitSslConfiguration): Pod = {
     val containerPorts = buildContainerPorts()
     val probePingHttpGet = new HTTPGetActionBuilder()
-      .withScheme(if (sslConfiguration.sslOptions.enabled) "HTTPS" else "HTTP")
+      .withScheme(if (sslConfiguration.enabled) "HTTPS" else "HTTP")
       .withPath("/v1/submissions/ping")
       .withNewPort(SUBMISSION_SERVER_PORT_NAME)
       .build()
@@ -452,7 +451,7 @@ private[spark] class Client(
             .withSecretName(submitServerSecret.getMetadata.getName)
             .endSecret()
           .endVolume()
-        .addToVolumes(sslConfiguration.sslPodVolumes: _*)
+        .addToVolumes(sslConfiguration.sslPodVolume.toSeq: _*)
         .withServiceAccount(serviceAccount.getOrElse("default"))
         .addNewContainer()
           .withName(DRIVER_CONTAINER_NAME)
@@ -463,7 +462,7 @@ private[spark] class Client(
             .withMountPath(secretDirectory)
             .withReadOnly(true)
             .endVolumeMount()
-          .addToVolumeMounts(sslConfiguration.sslPodVolumeMounts: _*)
+          .addToVolumeMounts(sslConfiguration.sslPodVolumeMount.toSeq: _*)
           .addNewEnv()
             .withName(ENV_SUBMISSION_SECRET_LOCATION)
             .withValue(s"$secretDirectory/$SUBMISSION_APP_SECRET_NAME")
@@ -661,7 +660,7 @@ private[spark] class Client(
       kubernetesClient: KubernetesClient,
       driverServiceManager: DriverServiceManager,
       service: Service,
-      sslConfiguration: SslConfiguration): KubernetesSparkRestApi = {
+      sslConfiguration: DriverSubmitSslConfiguration): KubernetesSparkRestApi = {
     val serviceUris = driverServiceManager.getDriverServiceSubmissionServerUris(service)
     require(serviceUris.nonEmpty, "No uris found to contact the driver!")
     HttpClientUtil.createClient[KubernetesSparkRestApi](

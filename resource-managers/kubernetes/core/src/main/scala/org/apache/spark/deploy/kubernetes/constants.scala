@@ -36,6 +36,8 @@ package object constants {
   private[spark] val SUBMISSION_SSL_KEYSTORE_SECRET_NAME = "spark-submission-server-keystore"
   private[spark] val SUBMISSION_SSL_SECRETS_PREFIX = "spark-submission-server-ssl"
   private[spark] val SUBMISSION_SSL_SECRETS_VOLUME_NAME = "spark-submission-server-ssl-secrets"
+  private[spark] val SUBMISSION_SSL_KEY_PEM_SECRET_NAME = "spark-submission-server-key-pem"
+  private[spark] val SUBMISSION_SSL_CERT_PEM_SECRET_NAME = "spark-submission-server-cert-pem"
 
   // Default and fixed ports
   private[spark] val SUBMISSION_SERVER_PORT = 7077
@@ -57,6 +59,8 @@ package object constants {
   private[spark] val ENV_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE =
       "SPARK_SUBMISSION_KEYSTORE_KEY_PASSWORD_FILE"
   private[spark] val ENV_SUBMISSION_KEYSTORE_TYPE = "SPARK_SUBMISSION_KEYSTORE_TYPE"
+  private[spark] val ENV_SUBMISSION_KEY_PEM_FILE = "SPARK_SUBMISSION_KEY_PEM_FILE"
+  private[spark] val ENV_SUBMISSION_CERT_PEM_FILE = "SPARK_SUBMISSION_CERT_PEM_FILE"
   private[spark] val ENV_SUBMISSION_USE_SSL = "SPARK_SUBMISSION_USE_SSL"
   private[spark] val ENV_EXECUTOR_PORT = "SPARK_EXECUTOR_PORT"
   private[spark] val ENV_DRIVER_URL = "SPARK_DRIVER_URL"
@@ -74,7 +78,7 @@ package object constants {
 
   // Miscellaneous
   private[spark] val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
-  private[spark] val KUBERNETES_SUBMIT_SSL_NAMESPACE = "kubernetes.submission"
+  private[spark] val DRIVER_SUBMIT_SSL_NAMESPACE = "kubernetes.driversubmitserver"
   private[spark] val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   private[spark] val MEMORY_OVERHEAD_FACTOR = 0.10
   private[spark] val MEMORY_OVERHEAD_MIN = 384L

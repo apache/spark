@@ -72,8 +72,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   private val NAMESPACE = UUID.randomUUID().toString.replaceAll("-", "")
   private var minikubeKubernetesClient: KubernetesClient = _
   private var clientConfig: Config = _
-  private var keyStoreFile: File = _
-  private var trustStoreFile: File = _
   private var sparkConf: SparkConf = _
 
   override def beforeAll(): Unit = {
@@ -86,13 +84,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .done()
     minikubeKubernetesClient = Minikube.getKubernetesClient.inNamespace(NAMESPACE)
     clientConfig = minikubeKubernetesClient.getConfiguration
-    val (keyStore, trustStore) = SSLUtils.generateKeyStoreTrustStorePair(
-      Minikube.getMinikubeIp,
-      "changeit",
-      "changeit",
-      "changeit")
-    keyStoreFile = keyStore
-    trustStoreFile = trustStore
   }
 
   before {
@@ -182,9 +173,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Run a simple example") {
-    // We'll make assertions based on spark rest api, so we need to turn on
-    // spark.ui.enabled explicitly since the scalatest-maven-plugin would set it
-    // to false by default.
     new Client(
       sparkConf = sparkConf,
       mainClass = SPARK_PI_MAIN_CLASS,
@@ -265,11 +253,30 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Enable SSL on the driver submit server") {
-    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_KEYSTORE, s"file://${keyStoreFile.getAbsolutePath}")
-    sparkConf.set("spark.ssl.kubernetes.submission.keyStorePassword", "changeit")
-    sparkConf.set("spark.ssl.kubernetes.submission.keyPassword", "changeit")
-    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE,
+    val (keyStoreFile, trustStoreFile) = SSLUtils.generateKeyStoreTrustStorePair(
+      Minikube.getMinikubeIp,
+      "changeit",
+      "changeit",
+      "changeit")
+    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_SSL_KEYSTORE, s"file://${keyStoreFile.getAbsolutePath}")
+    sparkConf.set("spark.ssl.kubernetes.driversubmitserver.keyStorePassword", "changeit")
+    sparkConf.set("spark.ssl.kubernetes.driversubmitserver.keyPassword", "changeit")
+    sparkConf.set(KUBERNETES_DRIVER_SUBMIT_SSL_TRUSTSTORE,
       s"file://${trustStoreFile.getAbsolutePath}")
+    sparkConf.set("spark.ssl.kubernetes.driversubmitserver.trustStorePassword", "changeit")
+    sparkConf.set(DRIVER_SUBMIT_SSL_ENABLED, true)
+    new Client(
+      sparkConf = sparkConf,
+      mainClass = SPARK_PI_MAIN_CLASS,
+      mainAppResource = SUBMITTER_LOCAL_MAIN_APP_RESOURCE,
+      appArgs = Array.empty[String]).run()
+  }
+
+  test("Enable SSL on the driver submit server using PEM files") {
+    val (keyPem, certPem) = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
+    sparkConf.set(DRIVER_SUBMIT_SSL_KEY_PEM, s"file://${keyPem.getAbsolutePath}")
+    sparkConf.set(DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM, s"file://${certPem.getAbsolutePath}")
+    sparkConf.set(DRIVER_SUBMIT_SSL_SERVER_CERT_PEM, s"file://${certPem.getAbsolutePath}")
     sparkConf.set(DRIVER_SUBMIT_SSL_ENABLED, true)
     new Client(
       sparkConf = sparkConf,
