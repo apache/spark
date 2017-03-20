@@ -123,6 +123,30 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     assert(getDataFromFiles(provider, version = 2) === Set("b" -> 2, "c" -> 4))
   }
 
+  test("filter and concurrent updates") {
+    val provider = newStoreProvider()
+
+    // Verify state before starting a new set of updates
+    assert(provider.latestIterator.isEmpty)
+    val store = provider.getStore(0)
+    put(store, "a", 1)
+    put(store, "b", 2)
+
+    // Updates should work while iterating of filtered entries
+    val filtered = store.filter { case (keyRow, _) => rowToString(keyRow) == "a" }
+    filtered.foreach { case (keyRow, valueRow) =>
+      store.put(keyRow, intToRow(rowToInt(valueRow) + 1))
+    }
+    assert(get(store, "a") === Some(2))
+
+    // Removes should work while iterating of filtered entries
+    val filtered2 = store.filter { case (keyRow, _) => rowToString(keyRow) == "b" }
+    filtered2.foreach { case (keyRow, _) =>
+      store.remove(keyRow)
+    }
+    assert(get(store, "b") === None)
+  }
+
   test("updates iterator with all combos of updates and removes") {
     val provider = newStoreProvider()
     var currentVersion: Int = 0

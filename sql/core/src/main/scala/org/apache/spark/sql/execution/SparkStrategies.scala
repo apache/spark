@@ -329,22 +329,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Strategy to convert [[FlatMapGroupsWithState]] logical operator to physical operator
    * in streaming plans. Conversion for batch plans is handled by [[BasicOperators]].
    */
-  object MapGroupsWithStateStrategy extends Strategy {
+  object FlatMapGroupsWithStateStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
-          f,
-          keyDeser,
-          valueDeser,
-          groupAttr,
-          dataAttr,
-          outputAttr,
-          stateDeser,
-          stateSer,
-          outputMode,
-          child,
-          _) =>
+        func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
+        timeout, child) =>
         val execPlan = FlatMapGroupsWithStateExec(
-          f, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateDeser, stateSer,
+          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, outputMode,
+          timeout, batchTimestampMs = KeyedStateImpl.NO_BATCH_PROCESSING_TIMESTAMP,
           planLater(child))
         execPlan :: Nil
       case _ =>
@@ -392,7 +384,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
       case logical.FlatMapGroupsWithState(
-          f, key, value, grouping, data, output, _, _, _, child, _) =>
+          f, key, value, grouping, data, output, _, _, _, _, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, output, planLater(child)) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
