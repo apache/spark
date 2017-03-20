@@ -616,13 +616,15 @@ case class DescribeTableCommand(
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
- *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards';
+ *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
+ *   [PARTITION(partition_spec)];
  * }}}
  */
 case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String],
-    isExtended: Boolean = false) extends RunnableCommand {
+    isExtended: Boolean = false,
+    partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
 
   // The result of SHOW TABLES/SHOW TABLE has three basic columns: database, tableName and
   // isTemporary. If `isExtended` is true, append column `information` to the output columns.
@@ -642,18 +644,34 @@ case class ShowTablesCommand(
     // instead of calling tables in sparkSession.
     val catalog = sparkSession.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    val tables =
-      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-    tables.map { tableIdent =>
-      val database = tableIdent.database.getOrElse("")
-      val tableName = tableIdent.table
-      val isTemp = catalog.isTemporaryTable(tableIdent)
-      if (isExtended) {
-        val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
-        Row(database, tableName, isTemp, s"${information}\n")
-      } else {
-        Row(database, tableName, isTemp)
+    if (partitionSpec.isEmpty) {
+      // Show the information of tables.
+      val tables =
+        tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+      tables.map { tableIdent =>
+        val database = tableIdent.database.getOrElse("")
+        val tableName = tableIdent.table
+        val isTemp = catalog.isTemporaryTable(tableIdent)
+        if (isExtended) {
+          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
+          Row(database, tableName, isTemp, s"$information\n")
+        } else {
+          Row(database, tableName, isTemp)
+        }
       }
+    } else {
+      // Show the information of partitions.
+      //
+      // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
+      // should have been thrown by the sql parser.
+      val tableIdent = TableIdentifier(tableIdentifierPattern.get, Some(db))
+      val table = catalog.getTableMetadata(tableIdent).identifier
+      val partition = catalog.getPartition(tableIdent, partitionSpec.get)
+      val database = table.database.getOrElse("")
+      val tableName = table.table
+      val isTemp = catalog.isTemporaryTable(table)
+      val information = partition.toString
+      Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
   }
 }
