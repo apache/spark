@@ -259,8 +259,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object ReservoirSampleStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReservoirSample(keys, child, k, true) =>
-        StreamingReservoirSampleExec(keys, PlanLater(child), k) :: Nil
+      case ReservoirSample(keys, child, reservoirSize, true) =>
+        StreamingReservoirSampleExec(keys, PlanLater(child), reservoirSize) :: Nil
 
       case _ => Nil
     }
@@ -421,8 +421,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.window.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.ReservoirSample(keys, child, k, false) =>
-        execution.ReservoirSampleExec(k, PlanLater(child)) :: Nil
+      case logical.ReservoirSample(keys, child, reservoirSize, false) =>
+        execution.ReservoirSampleExec(reservoirSize, PlanLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScanExec(output, data) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>

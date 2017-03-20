@@ -848,7 +848,7 @@ case class Sample(
 case class ReservoirSample(
     keys: Seq[Attribute],
     child: LogicalPlan,
-    k: Int,
+    reservoirSize: Int,
     streaming: Boolean = false)
   extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows

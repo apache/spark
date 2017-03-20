@@ -2029,9 +2029,9 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def reservoir(k: Int): Dataset[T] = withTypedPlan {
+  def reservoir(reservoirSize: Int): Dataset[T] = withTypedPlan {
     val allColumns = queryExecution.analyzed.output
-    ReservoirSample(allColumns, logicalPlan, k, isStreaming)
+    ReservoirSample(allColumns, logicalPlan, reservoirSize, isStreaming)
   }
 
   /**

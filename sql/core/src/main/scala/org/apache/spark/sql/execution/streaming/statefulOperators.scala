@@ -330,12 +330,12 @@ object StreamingDeduplicateExec {
 /**
  * Physical operator for executing streaming Sampling.
  *
- * @param k random sample k elements.
+ * @param reservoirSize number of random sample elements.
  */
 case class StreamingReservoirSampleExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
-    k: Int,
+    reservoirSize: Int,
     stateId: Option[OperatorStateId] = None,
     eventTimeWatermark: Option[Long] = None,
     outputMode: Option[OutputMode] = None)
@@ -378,13 +378,13 @@ case class StreamingReservoirSampleExec(
 
       baseIterator.foreach { r =>
         count += 1
-        if (numSamples < k) {
+        if (numSamples < reservoirSize) {
           numSamples += 1
           store.put(enc.toRow(numSamples.toString).asInstanceOf[UnsafeRow],
             r.asInstanceOf[UnsafeRow])
         } else {
           val randomIdx = (rand.nextDouble() * (numRecordsInPart + count)).toLong
-          if (randomIdx <= k) {
+          if (randomIdx <= reservoirSize) {
             val replacementIdx = enc.toRow(randomIdx.toString).asInstanceOf[UnsafeRow]
             store.put(replacementIdx, r.asInstanceOf[UnsafeRow])
           }
@@ -421,7 +421,7 @@ case class StreamingReservoirSampleExec(
       }
     }.repartition(1).mapPartitions(it => {
       SamplingUtils.reservoirSampleWithWeight(
-        it.map(item => (item, item.getLong(keyExpressions.size))), k)
+        it.map(item => (item, item.getLong(keyExpressions.size))), reservoirSize)
         .map(row =>
           UnsafeProjection.create(fieldTypes)
             .apply(InternalRow.fromSeq(row.toSeq(fieldTypes)))

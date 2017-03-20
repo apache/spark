@@ -658,7 +658,7 @@ object SubqueryExec {
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
-case class ReservoirSampleExec(k: Int, child: SparkPlan) extends UnaryExecNode {
+case class ReservoirSampleExec(reservoirSize: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -666,11 +666,11 @@ case class ReservoirSampleExec(k: Int, child: SparkPlan) extends UnaryExecNode {
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute()
       .mapPartitions(it => {
-        val (sample, count) = SamplingUtils.reservoirSampleAndCount(it, k)
+        val (sample, count) = SamplingUtils.reservoirSampleAndCount(it, reservoirSize)
         sample.map((_, count)).toIterator
       })
       .repartition(1)
       .mapPartitions(it => {
-        SamplingUtils.reservoirSampleWithWeight(it, k).iterator})
+        SamplingUtils.reservoirSampleWithWeight(it, reservoirSize).iterator})
   }
 }
