@@ -175,7 +175,7 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
-      .autoShutdown()
+      .autoShutdown(true)
       .addAppArgs("proc");
     final Process app = launcher.launch();
 
@@ -197,15 +197,11 @@ public class SparkLauncherSuite {
     launcher
       .setMaster("local")
       .setAppResource(SparkLauncher.NO_RESOURCE)
-      .addSparkArg(opts.CONF,
-        String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
         "-Dfoo=bar -Dtest.appender=childproc")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
-      .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
       .launchAsThread(true)
-      .autoShutdown()
       .addAppArgs("proc");
     final Process app = launcher.launch();
 

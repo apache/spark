@@ -210,7 +210,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     finalState should be (SparkAppHandle.State.FAILED)
   }
 
-  test("monitor app using launcher library for thread") {
+  test("monitor app running in thread using launcher library") {
     val env = new JHashMap[String, String]()
     env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
 
@@ -254,7 +254,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode("cluster")
-      .autoShutdown()
+      .autoShutdown(true)
       .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
       .startApplication()
@@ -292,7 +292,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .setMaster("yarn")
       .setDeployMode("cluster")
       .launchAsThread(true)
-      .autoShutdown()
+      .autoShutdown(true)
       .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
       .startApplication()

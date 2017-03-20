@@ -58,17 +58,16 @@ private[spark] abstract class LauncherBackend extends Logging {
     _isConnected = true
     if (stopOnShutdown) {
       logDebug("Adding shutdown hook") // force eager creation of logger
-      var _shutdownHookRef = ShutdownHookManager.addShutdownHook(
+      ShutdownHookManager.addShutdownHook(
         ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
         logInfo("Invoking onStopRequest() from shutdown hook")
         try {
           if (_isConnected) {
             onStopRequest()
           }
-        }
-        catch {
-          case anotherIOE: IOException =>
-            logError("Error while running LauncherBackend shutdownHook...", anotherIOE)
+        } catch {
+          case ioException: IOException =>
+            logError("Error while running LauncherBackend shutdownHook...", ioException)
         }
       }
     }

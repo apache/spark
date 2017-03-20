@@ -67,9 +67,9 @@ private[spark] class Client(
   import YarnSparkHadoopUtil._
 
   def this(
-    clientArgs: ClientArguments,
-    spConf: SparkConf,
-    sysEnv: scala.collection.immutable.Map[String, String]) =
+      clientArgs: ClientArguments,
+      spConf: SparkConf,
+      sysEnv: scala.collection.immutable.Map[String, String]) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf, sysEnv)
 
   def this(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: SparkConf) =
@@ -83,12 +83,6 @@ private[spark] class Client(
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
 
-  private val launcherServerPort : Int =
-    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_PORT, "0").toInt
-  private val launcherServerSecret : String =
-    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, "")
-  private val launcherServerStopIfShutdown : Boolean =
-    sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, "false").toBoolean
   // AM related configurations
   private val amMemory = if (isClusterMode) {
     sparkConf.get(DRIVER_MEMORY).toInt
@@ -160,6 +154,11 @@ private[spark] class Client(
    */
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
+    val launcherServerPort: Int = sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_PORT, "0").toInt
+    val launcherServerSecret: String =
+      sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, "")
+    val launcherServerStopIfShutdown: Boolean =
+      sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, "false").toBoolean
     try {
       if (launcherServerSecret != null && launcherServerSecret != "" && launcherServerPort != 0) {
         launcherBackend.connect(

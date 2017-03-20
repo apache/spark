@@ -51,10 +51,10 @@
  * </pre>
  *
  * <p>
- * Here is example of launching application in thread mode for yarn cluster mode
- * with the stop if launcher shutdown option enabled. Showing use case of both
- * {@link org.apache.spark.launcher.SparkLauncher#stopOnShutdown} and
- * {@link org.apache.spark.launcher.SparkLauncher#launchAsThread} methods
+ * Here is example of launching application in thread mode for YARN cluster mode
+ * with the auto shutdown option enabled. Showing use case of both
+ * {@link org.apache.spark.launcher.SparkLauncher#autoShutdown()} and
+ * {@link org.apache.spark.launcher.SparkLauncher#launchAsThread(boolean)} methods
  * </p>
  *
  * <pre>

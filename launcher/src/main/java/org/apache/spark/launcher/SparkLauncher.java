@@ -101,7 +101,7 @@ public class SparkLauncher {
 
   static final Map<String, String> launcherConfig = new HashMap<>();
 
-  private boolean stopOnShutdown = false;
+  private boolean autoShutdown = false;
 
   /** Flag to decide on launching spark-submit as a child process or a thread **/
   private boolean launchAsThread = false;
@@ -119,15 +119,18 @@ public class SparkLauncher {
     launcherConfig.put(name, value);
   }
 
+
+
   /**
    * Specifies that Spark Application be stopped if current process goes away.
-   * It tries stop/kill Spark Application if {@link LauncherServer} goes away.
+   * It tries stop/kill Spark Application if launching process goes away.
    *
    * @since 2.2.0
+   * @param autoShutdown Flag for shutdown Spark Application if launcher process goes away.
    * @return This launcher.
    */
-  public SparkLauncher autoShutdown() {
-    this.stopOnShutdown = true;
+  public SparkLauncher autoShutdown(boolean autoShutdown) {
+    this.autoShutdown = autoShutdown;
     return this;
   }
 
@@ -136,6 +139,7 @@ public class SparkLauncher {
    * this feature is currently supported only for YARN cluster deployment mode.
    *
    * @since 2.2.0
+   * @param launchAsThread Flag for launching app as a thread.
    * @return This launcher.
    */
   public SparkLauncher launchAsThread(boolean launchAsThread) {
@@ -559,7 +563,8 @@ public class SparkLauncher {
     return startApplicationAsChildProc(listeners);
   }
 
-  private SparkAppHandle startApplicationAsChildProc(SparkAppHandle.Listener[] listeners) throws IOException {
+  private SparkAppHandle startApplicationAsChildProc(SparkAppHandle.Listener[] listeners)
+      throws IOException {
     ChildProcAppHandle handle = LauncherServer.newAppHandle();
     for (SparkAppHandle.Listener l : listeners) {
       handle.addListener(l);
@@ -579,7 +584,8 @@ public class SparkLauncher {
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
-    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_IF_SHUTDOWN, String.valueOf(stopOnShutdown));
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_IF_SHUTDOWN,
+        String.valueOf(autoShutdown));
     try {
       handle.setChildProc(pb.start(), loggerName);
     } catch (IOException ioe) {
@@ -589,7 +595,8 @@ public class SparkLauncher {
     return handle;
   }
 
-  private SparkAppHandle startApplicationAsThread(SparkAppHandle.Listener... listeners) throws IOException {
+  private SparkAppHandle startApplicationAsThread(SparkAppHandle.Listener... listeners)
+      throws IOException {
     ChildThreadAppHandle handle = LauncherServer.newAppThreadHandle();
     for (SparkAppHandle.Listener l : listeners) {
       handle.addListener(l);
@@ -598,22 +605,23 @@ public class SparkLauncher {
     String appName = getAppName();
     setConf(LAUNCHER_INTERNAL_PORT, String.valueOf(LauncherServer.getServerInstance().getPort()));
     setConf(LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, handle.getSecret());
-    setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(stopOnShutdown));
+    setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(autoShutdown));
     try {
       // It is important that SparkSubmit class is available in the classpath.
       // Trying to see if method is available in the classpath else throws Exception.
       Method main = SparkSubmitRunner.getSparkSubmitMain();
-      Thread submitJobThread = new Thread(new SparkSubmitRunner(main, builder.buildSparkSubmitArgs()));
+      Thread submitJobThread = new Thread(new SparkSubmitRunner(main,
+          builder.buildSparkSubmitArgs()));
       submitJobThread.setName(appName);
       submitJobThread.setDaemon(true);
       handle.setChildThread(submitJobThread);
       submitJobThread.start();
     } catch (ClassNotFoundException cnfe) {
-      throw new IOException("Please make sure the spark jar containing SparkSubmit is in the classpath.",
-          cnfe);
+      throw new IOException("Please make sure the spark jar " +
+          "containing SparkSubmit is in the classpath.", cnfe);
     } catch (NoSuchMethodException nsme) {
-      throw new IOException("Please make sure the spark jar containing SparkSubmit version is correct.",
-          nsme);
+      throw new IOException("Please make sure the spark jar containing SparkSubmit " +
+          "version is correct.", nsme);
     }
     return handle;
   }
