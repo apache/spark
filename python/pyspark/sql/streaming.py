@@ -320,7 +320,7 @@ class OneTime():
 
     .. note:: Experimental
 
-    .. versionadded:: 2.1
+    .. versionadded:: 2.2
     """
 
     def _to_java_trigger(self, sqlContext):

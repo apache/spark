@@ -304,8 +304,8 @@ class StreamExecution(
               if (dataAvailable) {
                 // Update committed offsets.
                 committedOffsets ++= availableOffsets
-                logDebug(s"Commit log write ${currentBatchId}")
                 batchCommitLog.add(currentBatchId, null)
+                logDebug(s"batch ${currentBatchId} committed")
                 // We'll increase currentBatchId after we complete processing current batch's data
                 currentBatchId += 1
               } else {
@@ -418,9 +418,15 @@ class StreamExecution(
   private def populateStartOffsets(sparkSessionToRunBatches: SparkSession): Unit = {
     offsetLog.getLatest() match {
       case Some((latestBatchId, nextOffsets)) =>
-        // First assume that we are re-executing the latest batch in the offset log
+        /* First assume that we are re-executing the latest known batch
+         * in the offset log */
         currentBatchId = latestBatchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
+        /* Initialize committed offsets to a committed batch, which at this
+         * is the second latest batch id in the offset log. */
+        offsetLog.get(latestBatchId - 1).foreach { secondLatestBatchId =>
+          committedOffsets = secondLatestBatchId.toStreamProgress(sources)
+        }
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>
@@ -441,44 +447,37 @@ class StreamExecution(
             SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
         }
 
-        offsetLog.get(latestBatchId - 1).foreach { lastOffsets =>
-          committedOffsets = lastOffsets.toStreamProgress(sources)
-        }
-
         /* identify the current batch id: if commit log indicates we successfully processed the
          * latest batch id in the offset log, then we can safely move to the next batch
-         * i.e., committedBatchId + 1
-         */
+         * i.e., committedBatchId + 1 */
         batchCommitLog.getLatest() match {
-          case Some((completionBatchId, _))
-            if latestBatchId == completionBatchId => {
-            /* The last batch was successfully committed, so we can safely process a
-             * new next batch but first:
-             * Make a call to getBatch using the offsets from previous batch.
-             * because certain sources (e.g., KafkaSource) assume on restart the last
-             * batch will be executed before getOffset is called again.
-             */
-            availableOffsets.foreach {
-              case (source, end)
-                if committedOffsets.get(source).map(_ != end).getOrElse(true) =>
-                val start = committedOffsets.get(source)
-                logDebug(s"Initializing offset retrieval from $source " +
-                  s"at start $start end $end")
-                source.getBatch(start, end)
-              case _ =>
+          case Some((latestCommittedBatchId, _)) =>
+            if (latestBatchId == latestCommittedBatchId) {
+              /* The last batch was successfully committed, so we can safely process a
+               * new next batch but first:
+               * Make a call to getBatch using the offsets from previous batch.
+               * because certain sources (e.g., KafkaSource) assume on restart the last
+               * batch will be executed before getOffset is called again. */
+              availableOffsets.foreach { ao: (Source, Offset) =>
+                val (source, end) = ao
+                if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
+                  val start = committedOffsets.get(source)
+                  source.getBatch(start, end)
+                }
+              }
+              currentBatchId = latestCommittedBatchId + 1
+              committedOffsets ++= availableOffsets
+              // Construct a new batch be recomputing availableOffsets
+              constructNextBatch()
+            } else if (latestCommittedBatchId < latestBatchId - 1) {
+              logWarning(s"Batch completion log latest batch id is " +
+                s"${latestCommittedBatchId}, which is not trailing " +
+                s"batchid $latestBatchId by one")
             }
-            currentBatchId = completionBatchId + 1
-            committedOffsets ++= availableOffsets
-            // Construct a new batch be recomputing availableOffsets
-            constructNextBatch()
-          }
-          case Some((completionBatchId, _)) if completionBatchId + 1 != latestBatchId =>
-            logWarning(s"batch completion log latest batch id is ${completionBatchId}, " +
-              s"which is not trailing batchid $latestBatchId by one")
-          case _ => logInfo("no commit log present")
+          case None => logInfo("no commit log present")
         }
-        logDebug(s"Resuming with committed offsets $committedOffsets " +
-          s"and available offsets $availableOffsets")
+        logDebug(s"Resuming at batch $currentBatchId with committed offsets " +
+          s"$committedOffsets and available offsets $availableOffsets")
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0

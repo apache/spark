@@ -51,10 +51,7 @@ class BatchCommitLog(sparkSession: SparkSession, path: String)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
-    val version = lines.next().trim.toInt
-    if (BatchCommitLog.VERSION < version) {
-      throw new IllegalStateException(s"Incompatible log file version ${version}")
-    }
+    parseVersion(lines.next().trim, BatchCommitLog.VERSION)
     // read metadata
     lines.next().trim match {
       case BatchCommitLog.SERIALIZED_VOID => null

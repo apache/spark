@@ -42,12 +42,12 @@ sealed trait Trigger
  *
  * Scala Example:
  * {{{
- *   df.write.trigger(OneTime)
+ *   df.writeStream.trigger(OneTime)
  * }}}
  *
  * Java Example:
  * {{{
- *   df.write.trigger(OneTime.create())
+ *   df.writeStream.trigger(OneTime.create())
  * }}}
  *
  * @since 2.2.0
@@ -71,10 +71,10 @@ object OneTime {
    *
    * Example:
    * {{{
-   *   df.write.trigger(OneTime.create())
+   *   df.writeStream.trigger(OneTime.create())
    * }}}
    *
-   * @since 2.0.0
+   * @since 2.2.0
    */
   def create(): OneTime = {
     apply()
@@ -88,18 +88,18 @@ object OneTime {
  *
  * Scala Example:
  * {{{
- *   df.write.trigger(ProcessingTime("10 seconds"))
+ *   df.writeStream.trigger(ProcessingTime("10 seconds"))
  *
  *   import scala.concurrent.duration._
- *   df.write.trigger(ProcessingTime(10.seconds))
+ *   df.writeStream.trigger(ProcessingTime(10.seconds))
  * }}}
  *
  * Java Example:
  * {{{
- *   df.write.trigger(ProcessingTime.create("10 seconds"))
+ *   df.writeStream.trigger(ProcessingTime.create("10 seconds"))
  *
  *   import java.util.concurrent.TimeUnit
- *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+ *   df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
  * }}}
  *
  * @since 2.0.0
@@ -125,7 +125,7 @@ object ProcessingTime {
    *
    * Example:
    * {{{
-   *   df.write.trigger(ProcessingTime("10 seconds"))
+   *   df.writeStream.trigger(ProcessingTime("10 seconds"))
    * }}}
    *
    * @since 2.0.0
@@ -155,7 +155,7 @@ object ProcessingTime {
    * Example:
    * {{{
    *   import scala.concurrent.duration._
-   *   df.write.trigger(ProcessingTime(10.seconds))
+   *   df.writeStream.trigger(ProcessingTime(10.seconds))
    * }}}
    *
    * @since 2.0.0
@@ -169,7 +169,7 @@ object ProcessingTime {
    *
    * Example:
    * {{{
-   *   df.write.trigger(ProcessingTime.create("10 seconds"))
+   *   df.writeStream.trigger(ProcessingTime.create("10 seconds"))
    * }}}
    *
    * @since 2.0.0
@@ -184,7 +184,7 @@ object ProcessingTime {
    * Example:
    * {{{
    *   import java.util.concurrent.TimeUnit
-   *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *   df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.0.0
