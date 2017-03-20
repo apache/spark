@@ -19,6 +19,7 @@ package org.apache.spark.deploy.rest.kubernetes
 import java.io.{File, FileOutputStream, StringReader}
 import java.net.URI
 import java.nio.file.Paths
+import java.security.SecureRandom
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
@@ -26,10 +27,11 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import com.google.common.base.Charsets
 import com.google.common.io.{BaseEncoding, ByteStreams, Files}
 import org.apache.commons.codec.binary.Base64
+import org.apache.commons.lang3.RandomStringUtils
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SSLOptions}
+import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.rest._
@@ -44,7 +46,9 @@ private case class KubernetesSparkRestServerArguments(
     keyStoreFile: Option[String] = None,
     keyStorePasswordFile: Option[String] = None,
     keyStoreType: Option[String] = None,
-    keyPasswordFile: Option[String] = None) {
+    keyPasswordFile: Option[String] = None,
+    keyPemFile: Option[String] = None,
+    certPemFile: Option[String] = None) {
   def validate(): KubernetesSparkRestServerArguments = {
     require(host.isDefined, "Hostname not set via --hostname.")
     require(port.isDefined, "Port not set via --port")
@@ -83,6 +87,12 @@ private object KubernetesSparkRestServerArguments {
         case "--keystore-key-password-file" :: value :: tail =>
           args = tail
           resolvedArguments.copy(keyPasswordFile = Some(value))
+        case "--key-pem-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(keyPemFile = Some(value))
+        case "--cert-pem-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(certPemFile = Some(value))
         // TODO polish usage message
         case Nil => resolvedArguments
         case unknown => throw new IllegalStateException(s"Unknown argument(s) found: $unknown")
@@ -377,26 +387,43 @@ private[spark] class KubernetesSparkRestServer(
 
 private[spark] object KubernetesSparkRestServer {
   private val barrier = new CountDownLatch(1)
+  private val SECURE_RANDOM = new SecureRandom()
 
   def main(args: Array[String]): Unit = {
     val parsedArguments = KubernetesSparkRestServerArguments.fromArgsArray(args)
     val secretFile = new File(parsedArguments.secretFile.get)
-    if (!secretFile.isFile) {
-      throw new IllegalArgumentException(s"Secret file specified by --secret-file" +
-        " is not a file, or does not exist.")
-    }
+    require(secretFile.isFile, "Secret file specified by --secret-file is not a file, or" +
+      " does not exist.")
     val sslOptions = if (parsedArguments.useSsl) {
-      val keyStorePassword = parsedArguments
-        .keyStorePasswordFile
-        .map(new File(_))
-        .map(Files.toString(_, Charsets.UTF_8))
+      validateSslOptions(parsedArguments)
       val keyPassword = parsedArguments
         .keyPasswordFile
         .map(new File(_))
         .map(Files.toString(_, Charsets.UTF_8))
+        // If key password isn't set but we're using PEM files, generate a password
+        .orElse(parsedArguments.keyPemFile.map(_ => randomPassword()))
+      val keyStorePassword = parsedArguments
+        .keyStorePasswordFile
+        .map(new File(_))
+        .map(Files.toString(_, Charsets.UTF_8))
+        // If keystore password isn't set but we're using PEM files, generate a password
+        .orElse(parsedArguments.keyPemFile.map(_ => randomPassword()))
+      val resolvedKeyStore = parsedArguments.keyStoreFile.map(new File(_)).orElse(
+        parsedArguments.keyPemFile.map(keyPemFile => {
+          parsedArguments.certPemFile.map(certPemFile => {
+            PemsToKeyStoreConverter.convertPemsToTempKeyStoreFile(
+              new File(keyPemFile),
+              new File(certPemFile),
+              "provided-key",
+              keyStorePassword,
+              keyPassword,
+              parsedArguments.keyStoreType)
+          })
+        }).getOrElse(throw new SparkException("When providing PEM files to set up TLS for the" +
+          " submission server, both the key and the certificate must be specified.")))
       new SSLOptions(
         enabled = true,
-        keyStore = parsedArguments.keyStoreFile.map(new File(_)),
+        keyStore = resolvedKeyStore,
         keyStoreType = parsedArguments.keyStoreType,
         keyStorePassword = keyStorePassword,
         keyPassword = keyPassword)
@@ -424,6 +451,26 @@ private[spark] object KubernetesSparkRestServer {
     })
     barrier.await()
     System.exit(exitCode.get())
+  }
+
+  private def validateSslOptions(parsedArguments: KubernetesSparkRestServerArguments): Unit = {
+    parsedArguments.keyStoreFile.foreach { _ =>
+      require(parsedArguments.keyPemFile.orElse(parsedArguments.certPemFile).isEmpty,
+        "Cannot provide both key/cert PEM files and a keyStore file; select one or the other" +
+          " for configuring SSL.")
+    }
+    parsedArguments.keyPemFile.foreach { _ =>
+      require(parsedArguments.certPemFile.isDefined,
+        "When providing the key PEM file, the certificate PEM file must also be provided.")
+    }
+    parsedArguments.certPemFile.foreach { _ =>
+      require(parsedArguments.keyPemFile.isDefined,
+        "When providing the certificate PEM file, the key PEM file must also be provided.")
+    }
+  }
+
+  private def randomPassword(): String = {
+    RandomStringUtils.random(1024, 0, Integer.MAX_VALUE, false, false, null, SECURE_RANDOM)
   }
 }
 
