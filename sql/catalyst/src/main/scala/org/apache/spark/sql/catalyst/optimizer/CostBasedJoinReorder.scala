@@ -51,7 +51,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
     }
   }
 
-  def reorder(plan: LogicalPlan, output: AttributeSet): LogicalPlan = {
+  private def reorder(plan: LogicalPlan, output: AttributeSet): LogicalPlan = {
     val (items, conditions) = extractInnerJoins(plan)
     // TODO: Compute the set of star-joins and use them in the join enumeration
     // algorithm to prune un-optimal plan choices.
@@ -69,7 +69,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
   }
 
   /**
-   * Extract consecutive inner joinable items and join conditions.
+   * Extracts items of consecutive inner joins and join conditions.
    * This method works for bushy trees and left/right deep trees.
    */
   private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
@@ -203,7 +203,16 @@ object JoinReorderDP extends PredicateHelper {
     nextLevel.toMap
   }
 
-  /** Build a new join node. */
+  /**
+   * Builds a new JoinPlan if the two given sides can be joined with some conditions.
+   * @param oneJoinPlan One side JoinPlan for building a new JoinPlan.
+   * @param otherJoinPlan The other side JoinPlan for building a new join node.
+   * @param conf SQLConf for statistics computation.
+   * @param conditions The overall set of join conditions.
+   * @param topOutput The output attributes of the final plan.
+   * @return Return a new JoinPlan if the two sides can be joined with some conditions. Otherwise,
+   *         return None.
+   */
   private def buildJoin(
       oneJoinPlan: JoinPlan,
       otherJoinPlan: JoinPlan,
@@ -278,10 +287,10 @@ object JoinReorderDP extends PredicateHelper {
     }
 
     def betterThan(other: JoinPlan, conf: SQLConf): Boolean = {
-      if (other.planCost.rows == 0 || other.planCost.size == 0) {
+      if (other.planCost.card == 0 || other.planCost.size == 0) {
         false
       } else {
-        val relativeRows = BigDecimal(this.planCost.rows) / BigDecimal(other.planCost.rows)
+        val relativeRows = BigDecimal(this.planCost.card) / BigDecimal(other.planCost.card)
         val relativeSize = BigDecimal(this.planCost.size) / BigDecimal(other.planCost.size)
         relativeRows * conf.joinReorderCardWeight +
           relativeSize * (1 - conf.joinReorderCardWeight) < 1
@@ -290,7 +299,11 @@ object JoinReorderDP extends PredicateHelper {
   }
 }
 
-/** This class defines the cost model. */
-case class Cost(rows: BigInt, size: BigInt) {
-  def +(other: Cost): Cost = Cost(this.rows + other.rows, this.size + other.size)
+/**
+ * This class defines the cost model for a plan.
+ * @param card Cardinality (number of rows).
+ * @param size Size in bytes.
+ */
+case class Cost(card: BigInt, size: BigInt) {
+  def +(other: Cost): Cost = Cost(this.card + other.card, this.size + other.size)
 }
