@@ -119,11 +119,13 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
  * When building m-way joins, we only keep the best plan (with the lowest cost) for the same set
  * of m items. E.g., for 3-way joins, we keep only the best plan for items {A, B, C} among
  * plans (A J B) J C, (A J C) J B and (B J C) J A.
- *
- * Thus the plans maintained for each level when reordering four items A, B, C, D are as follows:
+ * We also prune cartesian product candidates when building a new plan if there exists no join
+ * condition involving references from both left and right. This pruning strategy significantly
+ * reduces the search space.
+ * For example, given A J B J C J D, plans maintained for each level will be as follows:
  * level 0: p({A}), p({B}), p({C}), p({D})
- * level 1: p({A, B}), p({A, C}), p({A, D}), p({B, C}), p({B, D}), p({C, D})
- * level 2: p({A, B, C}), p({A, B, D}), p({A, C, D}), p({B, C, D})
+ * level 1: p({A, B}), p({B, C}), p({C, D})
+ * level 2: p({A, B, C}), p({B, C, D})
  * level 3: p({A, B, C, D})
  * where p({A, B, C, D}) is the final output plan.
  *
@@ -183,18 +185,15 @@ object JoinReorderDP extends PredicateHelper {
         }
 
         otherSideCandidates.foreach { otherSidePlan =>
-          // Should not join two overlapping item sets.
-          if (oneSidePlan.itemIds.intersect(otherSidePlan.itemIds).isEmpty) {
-            val joinPlan = buildJoin(oneSidePlan, otherSidePlan, conf, conditions, topOutput)
-            if (joinPlan.isDefined) {
-              val newJoinPlan = joinPlan.get
+          buildJoin(oneSidePlan, otherSidePlan, conf, conditions, topOutput) match {
+            case Some(newJoinPlan) =>
               // Check if it's the first plan for the item set, or it's a better plan than
               // the existing one due to lower cost.
               val existingPlan = nextLevel.get(newJoinPlan.itemIds)
               if (existingPlan.isEmpty || newJoinPlan.betterThan(existingPlan.get, conf)) {
                 nextLevel.update(newJoinPlan.itemIds, newJoinPlan)
               }
-            }
+            case None =>
           }
         }
       }
@@ -204,14 +203,15 @@ object JoinReorderDP extends PredicateHelper {
   }
 
   /**
-   * Builds a new JoinPlan if the two given sides can be joined with some conditions.
+   * Builds a new JoinPlan if there exists at least one join condition involving references from
+   * both left and right.
    * @param oneJoinPlan One side JoinPlan for building a new JoinPlan.
    * @param otherJoinPlan The other side JoinPlan for building a new join node.
    * @param conf SQLConf for statistics computation.
    * @param conditions The overall set of join conditions.
    * @param topOutput The output attributes of the final plan.
-   * @return Return a new JoinPlan if the two sides can be joined with some conditions. Otherwise,
-   *         return None.
+   * @return Builds and returns a new JoinPlan if there exists at least one join condition
+   *         involving references from both left and right. Otherwise, returns None.
    */
   private def buildJoin(
       oneJoinPlan: JoinPlan,
@@ -219,6 +219,11 @@ object JoinReorderDP extends PredicateHelper {
       conf: SQLConf,
       conditions: Set[Expression],
       topOutput: AttributeSet): Option[JoinPlan] = {
+
+    if (oneJoinPlan.itemIds.intersect(otherJoinPlan.itemIds).isEmpty) {
+      // Should not join two overlapping item sets.
+      return None
+    }
 
     val onePlan = oneJoinPlan.plan
     val otherPlan = otherJoinPlan.plan
@@ -229,33 +234,33 @@ object JoinReorderDP extends PredicateHelper {
     if (joinConds.isEmpty) {
       // Cartesian product is very expensive, so we exclude them from candidate plans.
       // This also significantly reduces the search space.
-      None
-    } else {
-      // Put the deeper side on the left, tend to build a left-deep tree.
-      val (left, right) = if (oneJoinPlan.itemIds.size >= otherJoinPlan.itemIds.size) {
-        (onePlan, otherPlan)
-      } else {
-        (otherPlan, onePlan)
-      }
-      val newJoin = Join(left, right, Inner, joinConds.reduceOption(And))
-      val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
-      val remainingConds = conditions -- collectedJoinConds
-      val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
-      val neededFromNewJoin = newJoin.outputSet.filter(neededAttr.contains)
-      val newPlan =
-        if ((newJoin.outputSet -- neededFromNewJoin).nonEmpty) {
-          Project(neededFromNewJoin.toSeq, newJoin)
-        } else {
-          newJoin
-        }
-
-      val itemIds = oneJoinPlan.itemIds.union(otherJoinPlan.itemIds)
-      // Now the root node of onePlan/otherPlan becomes an intermediate join (if it's a non-leaf
-      // item), so the cost of the new join should also include its own cost.
-      val newPlanCost = oneJoinPlan.planCost + oneJoinPlan.rootCost(conf) +
-        otherJoinPlan.planCost + otherJoinPlan.rootCost(conf)
-      Some(JoinPlan(itemIds, newPlan, collectedJoinConds, newPlanCost))
+      return None
     }
+
+    // Put the deeper side on the left, tend to build a left-deep tree.
+    val (left, right) = if (oneJoinPlan.itemIds.size >= otherJoinPlan.itemIds.size) {
+      (onePlan, otherPlan)
+    } else {
+      (otherPlan, onePlan)
+    }
+    val newJoin = Join(left, right, Inner, joinConds.reduceOption(And))
+    val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
+    val remainingConds = conditions -- collectedJoinConds
+    val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
+    val neededFromNewJoin = newJoin.outputSet.filter(neededAttr.contains)
+    val newPlan =
+      if ((newJoin.outputSet -- neededFromNewJoin).nonEmpty) {
+        Project(neededFromNewJoin.toSeq, newJoin)
+      } else {
+        newJoin
+      }
+
+    val itemIds = oneJoinPlan.itemIds.union(otherJoinPlan.itemIds)
+    // Now the root node of onePlan/otherPlan becomes an intermediate join (if it's a non-leaf
+    // item), so the cost of the new join should also include its own cost.
+    val newPlanCost = oneJoinPlan.planCost + oneJoinPlan.rootCost(conf) +
+      otherJoinPlan.planCost + otherJoinPlan.rootCost(conf)
+    Some(JoinPlan(itemIds, newPlan, collectedJoinConds, newPlanCost))
   }
 
   /** Map[set of item ids, join plan for these items] */
