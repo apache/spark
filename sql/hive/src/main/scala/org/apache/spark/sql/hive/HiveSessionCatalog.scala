@@ -150,7 +150,7 @@ private[sql] class HiveSessionCatalog(
         case ArchiveResource =>
           ResourceType.ARCHIVE
       }
-      if (System.getProperties("spark.testing") != "true") {
+      if (System.getProperties.get("spark.testing") != "true") {
         val sessionState = SessionState.get()
         val localPath = sessionState.add_resource(resourceType, resource.uri)
         ShutdownHookManager.registerShutdownDeleteDir(new File(localPath).getParentFile)
