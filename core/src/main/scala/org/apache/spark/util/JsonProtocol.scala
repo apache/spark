@@ -335,12 +335,9 @@ private[spark] object JsonProtocol {
         ("Remote Bytes Read To Disk" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
-    val linkedHashMap = LinkedHashMap[String, Long]()
-    taskMetrics.shuffleWriteMetrics.blockSizeDistribution.zipWithIndex.foreach {
-      case (size, index) =>
-        linkedHashMap.put(s"Shuffle Write Block Size Distribution $index", size)
-    }
-    val shuffleWriteMetrics: JValue =
+
+
+    var shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
         ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten) ~
@@ -348,7 +345,11 @@ private[spark] object JsonProtocol {
         ("Shuffle Write Underestimated Blocks Num" ->
           taskMetrics.shuffleWriteMetrics.underestimatedBlocksNum) ~
         ("Shuffle Write Underestimated Blocks Size" ->
-          taskMetrics.shuffleWriteMetrics.underestimatedBlocksSize) ++ linkedHashMap
+          taskMetrics.shuffleWriteMetrics.underestimatedBlocksSize) merge
+        taskMetrics.shuffleWriteMetrics.blockSizeDistribution.zipWithIndex.map {
+          case (size, index) =>
+            render(s"Shuffle Write Block Size Distribution $index" -> size.asInstanceOf[Long])
+        }.reduceLeft(_ merge _)
 
     val inputMetrics: JValue =
       ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
@@ -825,7 +826,7 @@ private[spark] object JsonProtocol {
       writeMetrics.incWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
       (0 until 9).foreach {
         case i =>
-          writeMetrics.incBlockSizeDistribution((writeJson \
+          writeMetrics.setBlockSizeDistribution(i, (writeJson \
             s"Shuffle Write Block Size Distribution $i").extract[Long])
       }
       writeMetrics.setAverageBlockSize(

@@ -106,6 +106,10 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
     }
   }
 
+  private[spark] def setBlockSizeDistribution(index: Int, value: Long): Unit = {
+    _blockSizeDistribution(index).setValue(value)
+  }
+
   private[spark] def setAverageBlockSize(avg: Long): Unit = {
     _averageBlockSize.setValue(avg)
   }

@@ -847,6 +847,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
     } else {
       val sr = t.createTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)
+      sr.incRemoteBytesReadToMem(b)
+      sr.incRemoteBytesReadToMem(d)
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
@@ -861,6 +863,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
       val sw = t.shuffleWriteMetrics
       sw.incBytesWritten(a + b + c)
       sw.incWriteTime(b + c + d)
+      sw.setBlockSizeDistribution(0, a)
+      sw.setBlockSizeDistribution(1, b)
+      sw.setBlockSizeDistribution(2, c)
+      sw.setAverageBlockSize(b)
+      sw.setUnderestimatedBlocksNum(c)
+      sw.incUnderestimatedBlocksSize(a + b + c)
       sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
@@ -1127,13 +1135,27 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
+      |      "Remote Bytes Read To Mem": 1000,
+      |      "Remote Bytes Read To Disk": 0,
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10
       |    },
-      |    "Shuffle Write Metrics": {
-      |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500,
-      |      "Shuffle Records Written": 12
+      |    "Shuffle Write Metrics" : {
+      |      "Shuffle Bytes Written" : 1200,
+      |      "Shuffle Write Time" : 1500,
+      |      "Shuffle Records Written" : 12,
+      |      "Shuffle Write Average Block Size" : 400,
+      |      "Shuffle Write Underestimated Blocks Num" : 500,
+      |      "Shuffle Write Underestimated Blocks Size" : 1200,
+      |      "Shuffle Write Block Size Distribution 0" : 300,
+      |      "Shuffle Write Block Size Distribution 1" : 400,
+      |      "Shuffle Write Block Size Distribution 2" : 500,
+      |      "Shuffle Write Block Size Distribution 3" : 0,
+      |      "Shuffle Write Block Size Distribution 4" : 0,
+      |      "Shuffle Write Block Size Distribution 5" : 0,
+      |      "Shuffle Write Block Size Distribution 6" : 0,
+      |      "Shuffle Write Block Size Distribution 7" : 0,
+      |      "Shuffle Write Block Size Distribution 8" : 0
       |    },
       |    "Input Metrics" : {
       |      "Bytes Read" : 0,
@@ -1227,13 +1249,27 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Mem" : 0,
+      |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500,
-      |      "Shuffle Records Written": 12
+      |      "Shuffle Records Written": 12,
+      |      "Shuffle Write Average Block Size" : 400,
+      |      "Shuffle Write Underestimated Blocks Num" : 500,
+      |      "Shuffle Write Underestimated Blocks Size" : 1200,
+      |      "Shuffle Write Block Size Distribution 0" : 300,
+      |      "Shuffle Write Block Size Distribution 1" : 400,
+      |      "Shuffle Write Block Size Distribution 2" : 500,
+      |      "Shuffle Write Block Size Distribution 3" : 0,
+      |      "Shuffle Write Block Size Distribution 4" : 0,
+      |      "Shuffle Write Block Size Distribution 5" : 0,
+      |      "Shuffle Write Block Size Distribution 6" : 0,
+      |      "Shuffle Write Block Size Distribution 7" : 0,
+      |      "Shuffle Write Block Size Distribution 8" : 0
       |    },
       |    "Input Metrics": {
       |      "Bytes Read": 2100,
@@ -1327,13 +1363,27 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Mem" : 0,
+      |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
       |    "Shuffle Write Metrics" : {
       |      "Shuffle Bytes Written" : 0,
       |      "Shuffle Write Time" : 0,
-      |      "Shuffle Records Written" : 0
+      |      "Shuffle Records Written" : 0,
+      |      "Shuffle Write Average Block Size" : 0,
+      |      "Shuffle Write Underestimated Blocks Num" : 0,
+      |      "Shuffle Write Underestimated Blocks Size" : 0,
+      |      "Shuffle Write Block Size Distribution 0" : 0,
+      |      "Shuffle Write Block Size Distribution 1" : 0,
+      |      "Shuffle Write Block Size Distribution 2" : 0,
+      |      "Shuffle Write Block Size Distribution 3" : 0,
+      |      "Shuffle Write Block Size Distribution 4" : 0,
+      |      "Shuffle Write Block Size Distribution 5" : 0,
+      |      "Shuffle Write Block Size Distribution 6" : 0,
+      |      "Shuffle Write Block Size Distribution 7" : 0,
+      |      "Shuffle Write Block Size Distribution 8" : 0
       |    },
       |    "Input Metrics": {
       |      "Bytes Read": 2100,
