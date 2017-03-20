@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
@@ -33,7 +33,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -43,7 +43,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -52,7 +52,36 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth
+    with HasAggregationDepth {
+
+  /**
+   * The lower bound of coefficients if fitting under bound constrained optimization.
+   * The bound vector size must be equal with the number of features in training dataset,
+   * otherwise, it throws exception.
+   * @group param
+   */
+  @Since("2.2.0")
+  val lowerBoundOfCoefficients: Param[Vector] = new Param(this, "lowerBoundOfCoefficients",
+    "The lower bound of coefficients if fitting under bound constrained optimization.")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getLowerBoundOfCoefficients: Vector = $(lowerBoundOfCoefficients)
+
+  /**
+   * The upper bound of coefficients if fitting under bound constrained optimization.
+   * The bound vector size must be equal with the number of features in training dataset,
+   * otherwise, it throws exception.
+   * @group param
+   */
+  @Since("2.2.0")
+  val upperBoundOfCoefficients: Param[Vector] = new Param(this, "upperBoundOfCoefficients",
+    "The upper bound of coefficients if fitting under bound constrained optimization.")
+
+  /** @group getParam */
+  @Since("2.2.0")
+  def getUpperBoundOfCoefficients: Vector = $(upperBoundOfCoefficients)
+}
 
 /**
  * Linear regression.
@@ -122,6 +151,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * For alpha = 1, it is an L1 penalty.
    * For alpha in (0,1), the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
+   *
+   * Note: Fitting under bound constrained optimization only supports L2 regularization,
+   * so it throws exception if getting non-zero value from this param.
    *
    * @group setParam
    */
@@ -193,10 +225,62 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /**
+   * Set the lower bound of coefficients if fitting under bound constrained optimization.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setLowerBoundOfCoefficients(value: Vector): this.type = set(lowerBoundOfCoefficients, value)
+
+  /**
+   * Set the upper bound of coefficients if fitting under bound constrained optimization.
+   *
+   * @group setParam
+   */
+  @Since("2.2.0")
+  def setUpperBoundOfCoefficients(value: Vector): this.type = set(upperBoundOfCoefficients, value)
+
+  private def usingBoundConstrainedOptimization: Boolean = {
+    isSet(lowerBoundOfCoefficients) || isSet(upperBoundOfCoefficients)
+  }
+
+  @Since("2.2.0")
+  override def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    if (usingBoundConstrainedOptimization && $(elasticNetParam) != 0.0) {
+      logError("Fitting linear regression under bound constrained optimization only supports " +
+        s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+    }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
+  }
+
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+
+    // Check params interaction is valid if fitting under bound constrained optimization.
+    if (usingBoundConstrainedOptimization) {
+      if ($(lowerBoundOfCoefficients).size != numFeatures ||
+        $(upperBoundOfCoefficients).size != numFeatures) {
+        logError("The size of coefficients bound mismatched with number of features: " +
+          s"lowerBoundOfCoefficients size = ${getLowerBoundOfCoefficients.size}, " +
+          s"upperBoundOfCoefficients size = ${getUpperBoundOfCoefficients.size}, " +
+          s"number of features = $numFeatures.")
+      }
+
+      val validBound = $(lowerBoundOfCoefficients).toArray.zip($(upperBoundOfCoefficients).toArray)
+        .forall(x => x._1 <= x._2)
+      if (!validBound) {
+        logError("LowerBoundOfCoefficients should always less than or equal to " +
+          "upperBoundOfCoefficients, but found: " +
+          s"lowerBoundOfCoefficients = $getLowerBoundOfCoefficients, " +
+          s"upperBoundOfCoefficients = $getUpperBoundOfCoefficients.")
+      }
+    }
 
     val instances: RDD[Instance] = dataset.select(
       col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -209,8 +293,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == "auto" &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
+    if (($(solver) == "auto" && numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) &&
+      !usingBoundConstrainedOptimization || $(solver) == "normal") {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -322,8 +406,30 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
       $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam, $(aggregationDepth))
 
+    var initialValues: Array[Double] = null
+
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
-      new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+      if (usingBoundConstrainedOptimization) {
+        val lowerBound = BDV[Double]($(lowerBoundOfCoefficients).toArray.zip(featuresStd)
+          .map{ case (lb, xStd) => lb * xStd / yStd })
+        val upperBound = BDV[Double]($(upperBoundOfCoefficients).toArray.zip(featuresStd)
+          .map{ case (ub, xStd) => ub * xStd / yStd })
+        initialValues = lowerBound.toArray.zip(upperBound.toArray).map { case (lb, ub) =>
+          if (lb.isInfinity && ub.isInfinity) {
+            0.0
+          } else if (lb.isInfinity) {
+            ub
+          } else if (ub.isInfinity) {
+            lb
+          } else {
+            lb + (ub - lb) / 2.0
+          }
+        }
+        new BreezeLBFGSB(lowerBound, upperBound, $(maxIter), 10, $(tol))
+      } else {
+        initialValues = Array.fill(numFeatures)(0.0)
+        new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+      }
     } else {
       val standardizationParam = $(standardization)
       def effectiveL1RegFun = (index: Int) => {
@@ -338,10 +444,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           if (featuresStd(index) != 0.0) effectiveL1RegParam / featuresStd(index) else 0.0
         }
       }
+      initialValues = Array.fill(numFeatures)(0.0)
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegFun, $(tol))
     }
 
-    val initialCoefficients = Vectors.zeros(numFeatures)
+    val initialCoefficients = Vectors.dense(initialValues)
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialCoefficients.asBreeze.toDenseVector)
 
