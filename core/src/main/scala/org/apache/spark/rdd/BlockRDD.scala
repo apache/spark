@@ -48,7 +48,6 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
         throw new Exception(s"Could not compute split, block $blockId of RDD $id not found")
-
     }
   }
 
