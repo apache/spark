@@ -24,18 +24,29 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class MultilayerPerceptronClassifierWrapper private (
-    val pipeline: PipelineModel,
-    val labelCount: Long,
-    val layers: Array[Int],
-    val weights: Array[Double]
+    val pipeline: PipelineModel
   ) extends MLWritable {
+
+  import MultilayerPerceptronClassifierWrapper._
+
+  val mlpModel: MultilayerPerceptronClassificationModel =
+    pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
+
+  val weights: Array[Double] = mlpModel.weights.toArray
+  val layers: Array[Int] = mlpModel.layers
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
+      .drop(mlpModel.getFeaturesCol)
+      .drop(mlpModel.getLabelCol)
+      .drop(PREDICTED_LABEL_INDEX_COL)
   }
 
   /**
@@ -48,20 +59,28 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 private[r] object MultilayerPerceptronClassifierWrapper
   extends MLReadable[MultilayerPerceptronClassifierWrapper] {
 
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
   def fit(
       data: DataFrame,
+      formula: String,
       blockSize: Int,
       layers: Array[Int],
       solver: String,
       maxIter: Int,
       tol: Double,
       stepSize: Double,
-      seed: String
+      seed: String,
+      initialWeights: Array[Double]
      ): MultilayerPerceptronClassifierWrapper = {
+    val rFormula = new RFormula()
+      .setFormula(formula)
+      .setForceIndexLabel(true)
+    checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema
-    val schema = data.schema
+    val (_, labels) = getFeaturesAndLabels(rFormulaModel, data)
 
     // assemble and fit the pipeline
     val mlp = new MultilayerPerceptronClassifier()
@@ -71,20 +90,25 @@ private[r] object MultilayerPerceptronClassifierWrapper
       .setMaxIter(maxIter)
       .setTol(tol)
       .setStepSize(stepSize)
-      .setPredictionCol(PREDICTED_LABEL_COL)
+      .setFeaturesCol(rFormula.getFeaturesCol)
+      .setLabelCol(rFormula.getLabelCol)
+      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     if (seed != null && seed.length > 0) mlp.setSeed(seed.toInt)
+    if (initialWeights != null) {
+      require(initialWeights.length > 0)
+      mlp.setInitialWeights(Vectors.dense(initialWeights))
+    }
+
+    val idxToStr = new IndexToString()
+      .setInputCol(PREDICTED_LABEL_INDEX_COL)
+      .setOutputCol(PREDICTED_LABEL_COL)
+      .setLabels(labels)
+
     val pipeline = new Pipeline()
-      .setStages(Array(mlp))
+      .setStages(Array(rFormulaModel, mlp, idxToStr))
       .fit(data)
 
-    val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
-    pipeline.stages.head.asInstanceOf[MultilayerPerceptronClassificationModel]
-
-    val weights = multilayerPerceptronClassificationModel.weights.toArray
-    val layersFromPipeline = multilayerPerceptronClassificationModel.layers
-    val labelCount = data.select("label").distinct().count()
-
-    new MultilayerPerceptronClassifierWrapper(pipeline, labelCount, layersFromPipeline, weights)
+    new MultilayerPerceptronClassifierWrapper(pipeline)
   }
 
   /**
@@ -100,17 +124,10 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
     override def load(path: String): MultilayerPerceptronClassifierWrapper = {
       implicit val format = DefaultFormats
-      val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
-      val rMetadata = parse(rMetadataStr)
-      val labelCount = (rMetadata \ "labelCount").extract[Long]
-      val layers = (rMetadata \ "layers").extract[Array[Int]]
-      val weights = (rMetadata \ "weights").extract[Array[Double]]
-
       val pipeline = PipelineModel.load(pipelinePath)
-      new MultilayerPerceptronClassifierWrapper(pipeline, labelCount, layers, weights)
+      new MultilayerPerceptronClassifierWrapper(pipeline)
     }
   }
 
@@ -121,10 +138,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labelCount" -> instance.labelCount) ~
-        ("layers" -> instance.layers.toSeq) ~
-        ("weights" -> instance.weights.toArray.toSeq)
+      val rMetadata = "class" -> instance.getClass.getName
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 

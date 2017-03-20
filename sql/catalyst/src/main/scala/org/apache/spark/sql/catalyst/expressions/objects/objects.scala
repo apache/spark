@@ -33,6 +33,78 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 /**
+ * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
+ */
+trait InvokeLike extends Expression with NonSQLExpression {
+
+  def arguments: Seq[Expression]
+
+  def propagateNull: Boolean
+
+  protected lazy val needNullCheck: Boolean = propagateNull && arguments.exists(_.nullable)
+
+  /**
+   * Prepares codes for arguments.
+   *
+   * - generate codes for argument.
+   * - use ctx.splitExpressions() to not exceed 64kb JVM limit while preparing arguments.
+   * - avoid some of nullabilty checking which are not needed because the expression is not
+   *   nullable.
+   * - when needNullCheck == true, short circuit if we found one of arguments is null because
+   *   preparing rest of arguments can be skipped in the case.
+   *
+   * @param ctx a [[CodegenContext]]
+   * @return (code to prepare arguments, argument string, result of argument null check)
+   */
+  def prepareArguments(ctx: CodegenContext): (String, String, String) = {
+
+    val resultIsNull = if (needNullCheck) {
+      val resultIsNull = ctx.freshName("resultIsNull")
+      ctx.addMutableState("boolean", resultIsNull, "")
+      resultIsNull
+    } else {
+      "false"
+    }
+    val argValues = arguments.map { e =>
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      argValue
+    }
+
+    val argCodes = if (needNullCheck) {
+      val reset = s"$resultIsNull = false;"
+      val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+        val expr = e.genCode(ctx)
+        val updateResultIsNull = if (e.nullable) {
+          s"$resultIsNull = ${expr.isNull};"
+        } else {
+          ""
+        }
+        s"""
+          if (!$resultIsNull) {
+            ${expr.code}
+            $updateResultIsNull
+            ${argValues(i)} = ${expr.value};
+          }
+        """
+      }
+      reset +: argCodes
+    } else {
+      arguments.zipWithIndex.map { case (e, i) =>
+        val expr = e.genCode(ctx)
+        s"""
+          ${expr.code}
+          ${argValues(i)} = ${expr.value};
+        """
+      }
+    }
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
+
+    (argCode, argValues.mkString(", "), resultIsNull)
+  }
+}
+
+/**
  * Invokes a static function, returning the result.  By default, any of the arguments being null
  * will result in returning null instead of calling the function.
  *
@@ -50,7 +122,7 @@ case class StaticInvoke(
     dataType: DataType,
     functionName: String,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression with NonSQLExpression {
+    propagateNull: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
 
@@ -62,16 +134,10 @@ case class StaticInvoke(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
     val callFunc = s"$objectName.$functionName($argString)"
-
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"boolean ${ev.isNull} = ${argGen.map(_.isNull).mkString(" || ")};"
-    } else {
-      s"boolean ${ev.isNull} = false;"
-    }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
@@ -82,9 +148,9 @@ case class StaticInvoke(
     }
 
     val code = s"""
-      ${argGen.map(_.code).mkString("\n")}
-      $setIsNull
-      final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;
+      $argCode
+      boolean ${ev.isNull} = $resultIsNull;
+      final $javaType ${ev.value} = $resultIsNull ? ${ctx.defaultValue(dataType)} : $callFunc;
       $postNullCheck
      """
     ev.copy(code = code)
@@ -103,15 +169,20 @@ case class StaticInvoke(
  * @param functionName The name of the method to call.
  * @param dataType The expected return type of the function.
  * @param arguments An optional list of expressions, whos evaluation will be passed to the function.
+ * @param propagateNull When true, and any of the arguments is null, null will be returned instead
+ *                      of calling the function.
+ * @param returnNullable When false, indicating the invoked method will always return
+ *                       non-null value.
  */
 case class Invoke(
     targetObject: Expression,
     functionName: String,
     dataType: DataType,
     arguments: Seq[Expression] = Nil,
-    propagateNull: Boolean = true) extends Expression with NonSQLExpression {
+    propagateNull: Boolean = true,
+    returnNullable : Boolean = true) extends InvokeLike {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
   override def eval(input: InternalRow): Any =
@@ -131,8 +202,8 @@ case class Invoke(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.genCode(ctx)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
@@ -164,12 +235,6 @@ case class Invoke(
       """
     }
 
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"boolean ${ev.isNull} = ${obj.isNull} || ${argGen.map(_.isNull).mkString(" || ")};"
-    } else {
-      s"boolean ${ev.isNull} = ${obj.isNull};"
-    }
-
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
     val postNullCheck = if (ctx.defaultValue(dataType) == "null") {
@@ -177,15 +242,19 @@ case class Invoke(
     } else {
       ""
     }
+
     val code = s"""
       ${obj.code}
-      ${argGen.map(_.code).mkString("\n")}
-      $setIsNull
+      boolean ${ev.isNull} = true;
       $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        $evaluate
+      if (!${obj.isNull}) {
+        $argCode
+        ${ev.isNull} = $resultIsNull;
+        if (!${ev.isNull}) {
+          $evaluate
+        }
+        $postNullCheck
       }
-      $postNullCheck
      """
     ev.copy(code = code)
   }
@@ -223,10 +292,10 @@ case class NewInstance(
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
+    outerPointer: Option[() => AnyRef]) extends InvokeLike {
   private val className = cls.getName
 
-  override def nullable: Boolean = propagateNull
+  override def nullable: Boolean = needNullCheck
 
   override def children: Seq[Expression] = arguments
 
@@ -245,52 +314,25 @@ case class NewInstance(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argIsNulls = ctx.freshName("argIsNulls")
-    ctx.addMutableState("boolean[]", argIsNulls,
-      s"$argIsNulls = new boolean[${arguments.size}];")
-    val argValues = arguments.zipWithIndex.map { case (e, i) =>
-      val argValue = ctx.freshName("argValue")
-      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
-      argValue
-    }
 
-    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
-      val expr = e.genCode(ctx)
-      expr.code + s"""
-       $argIsNulls[$i] = ${expr.isNull};
-       ${argValues(i)} = ${expr.value};
-     """
-    }
-    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
+    val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
-    var isNull = ev.isNull
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"""
-       boolean $isNull = false;
-       for (int idx = 0; idx < ${arguments.length}; idx++) {
-         if ($argIsNulls[idx]) { $isNull = true; break; }
-       }
-     """
-    } else {
-      isNull = "false"
-      ""
-    }
+    ev.isNull = resultIsNull
 
     val constructorCall = outer.map { gen =>
-      s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
+      s"${gen.value}.new ${cls.getSimpleName}($argString)"
     }.getOrElse {
-      s"new $className(${argValues.mkString(", ")})"
+      s"new $className($argString)"
     }
 
     val code = s"""
       $argCode
       ${outer.map(_.code).getOrElse("")}
-      $setIsNull
-      final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
-     """
-    ev.copy(code = code, isNull = isNull)
+      final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $constructorCall;
+    """
+    ev.copy(code = code)
   }
 
   override def toString: String = s"newInstance($cls)"
@@ -341,7 +383,7 @@ case class WrapOption(child: Expression, optType: DataType)
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
@@ -366,13 +408,15 @@ case class WrapOption(child: Expression, optType: DataType)
  * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
  * manually, but will instead be passed into the provided lambda function.
  */
-case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends LeafExpression
+case class LambdaVariable(
+    value: String,
+    isNull: String,
+    dataType: DataType,
+    nullable: Boolean = true) extends LeafExpression
   with Unevaluable with NonSQLExpression {
 
-  override def nullable: Boolean = true
-
   override def genCode(ctx: CodegenContext): ExprCode = {
-    ExprCode(code = "", value = value, isNull = isNull)
+    ExprCode(code = "", value = value, isNull = if (nullable) isNull else "false")
   }
 }
 
@@ -422,14 +466,15 @@ case class MapObjects private(
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = inputData.nullable
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def dataType: DataType = ArrayType(lambdaFunction.dataType)
+  override def dataType: DataType =
+    ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
@@ -552,7 +597,8 @@ object ExternalMapToCatalyst {
       keyType: DataType,
       keyConverter: Expression => Expression,
       valueType: DataType,
-      valueConverter: Expression => Expression): ExternalMapToCatalyst = {
+      valueConverter: Expression => Expression,
+      valueNullable: Boolean): ExternalMapToCatalyst = {
     val id = curId.getAndIncrement()
     val keyName = "ExternalMapToCatalyst_key" + id
     val valueName = "ExternalMapToCatalyst_value" + id
@@ -561,11 +607,11 @@ object ExternalMapToCatalyst {
     ExternalMapToCatalyst(
       keyName,
       keyType,
-      keyConverter(LambdaVariable(keyName, "false", keyType)),
+      keyConverter(LambdaVariable(keyName, "false", keyType, false)),
       valueName,
       valueIsNull,
       valueType,
-      valueConverter(LambdaVariable(valueName, valueIsNull, valueType)),
+      valueConverter(LambdaVariable(valueName, valueIsNull, valueType, valueNullable)),
       inputMap
     )
   }
@@ -603,7 +649,8 @@ case class ExternalMapToCatalyst private(
 
   override def foldable: Boolean = false
 
-  override def dataType: MapType = MapType(keyConverter.dataType, valueConverter.dataType)
+  override def dataType: MapType = MapType(
+    keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
@@ -855,19 +902,25 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
 
+    val javaBeanInstance = ctx.freshName("javaBean")
+    val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
+    ctx.addMutableState(beanInstanceJavaType, javaBeanInstance, "")
+
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            ${fieldGen.code}
-           ${instanceGen.value}.$setterMethod(${fieldGen.value});
+           ${javaBeanInstance}.$setterMethod(${fieldGen.value});
          """
     }
+    val initializeCode = ctx.splitExpressions(ctx.INPUT_ROW, initialize.toSeq)
 
     val code = s"""
       ${instanceGen.code}
+      this.${javaBeanInstance} = ${instanceGen.value};
       if (!${instanceGen.isNull}) {
-        ${initialize.mkString("\n")}
+        $initializeCode
       }
      """
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
@@ -877,7 +930,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 /**
  * Asserts that input values of a non-nullable child expression are not null.
  *
- * Note that there are cases where `child.nullable == true`, while we still needs to add this
+ * Note that there are cases where `child.nullable == true`, while we still need to add this
  * assertion.  Consider a nullable column `s` whose data type is a struct containing a non-nullable
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
@@ -898,7 +951,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == null) {
-      throw new RuntimeException(errMsg);
+      throw new RuntimeException(errMsg)
     }
     result
   }
@@ -908,7 +961,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the value is null.
-    val errMsgField = ctx.addReferenceObj(errMsg)
+    val errMsgField = ctx.addReferenceMinorObj(errMsg)
 
     val code = s"""
       ${childGen.code}
@@ -945,7 +998,7 @@ case class GetExternalRowField(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the field is null.
-    val errMsgField = ctx.addReferenceObj(errMsg)
+    val errMsgField = ctx.addReferenceMinorObj(errMsg)
     val row = child.genCode(ctx)
     val code = s"""
       ${row.code}
@@ -985,7 +1038,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
     // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj(errMsg)
+    val errMsgField = ctx.addReferenceMinorObj(errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
 

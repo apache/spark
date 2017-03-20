@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
-
+import org.apache.spark.sql.types.StructType
 
 /**
- * Interface for the system catalog (of columns, partitions, tables, and databases).
+ * Interface for the system catalog (of functions, partitions, tables, and databases).
  *
  * This is only used for non-temporary items, and implementations must be thread-safe as they
  * can be accessed in multiple threads. This is an external catalog because it is expected to
@@ -36,6 +36,12 @@ abstract class ExternalCatalog {
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
+    }
+  }
+
+  protected def requireTableExists(db: String, table: String): Unit = {
+    if (!tableExists(db, table)) {
+      throw new NoSuchTableException(db = db, table = table)
     }
   }
 
@@ -98,6 +104,19 @@ abstract class ExternalCatalog {
    */
   def alterTable(tableDefinition: CatalogTable): Unit
 
+  /**
+   * Alter the schema of a table identified by the provided database and table name. The new schema
+   * should still contain the existing bucket columns and partition columns used by the table. This
+   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
+   * as the schema itself).
+   *
+   * @param db Database that table to alter schema for exists in
+   * @param table Name of table to alter schema for
+   * @param schema Updated schema to be used for the table (must contain existing partition and
+   *               bucket columns)
+   */
+  def alterTableSchema(db: String, table: String, schema: StructType): Unit
+
   def getTable(db: String, table: String): CatalogTable
 
   def getTableOption(db: String, table: String): Option[CatalogTable]
@@ -108,21 +127,33 @@ abstract class ExternalCatalog {
 
   def listTables(db: String, pattern: String): Seq[String]
 
+  /**
+   * Loads data into a table.
+   *
+   * @param isSrcLocal Whether the source data is local, as defined by the "LOAD DATA LOCAL"
+   *                   HiveQL command.
+   */
   def loadTable(
       db: String,
       table: String,
       loadPath: String,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean): Unit
+      isSrcLocal: Boolean): Unit
 
+  /**
+   * Loads data into a partition.
+   *
+   * @param isSrcLocal Whether the source data is local, as defined by the "LOAD DATA LOCAL"
+   *                   HiveQL command.
+   */
   def loadPartition(
       db: String,
       table: String,
       loadPath: String,
       partition: TablePartitionSpec,
       isOverwrite: Boolean,
-      holdDDLTime: Boolean,
-      inheritTableSpecs: Boolean): Unit
+      inheritTableSpecs: Boolean,
+      isSrcLocal: Boolean): Unit
 
   def loadDynamicPartitions(
       db: String,
@@ -130,8 +161,7 @@ abstract class ExternalCatalog {
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean): Unit
+      numDP: Int): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -148,7 +178,8 @@ abstract class ExternalCatalog {
       table: String,
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit
+      purge: Boolean,
+      retainData: Boolean): Unit
 
   /**
    * Override the specs of one or many existing table partitions, assuming they exist.
@@ -183,14 +214,36 @@ abstract class ExternalCatalog {
       spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
+   * List the names of all partitions that belong to the specified table, assuming it exists.
+   *
+   * For a table with partition columns p1, p2, p3, each partition name is formatted as
+   * `p1=v1/p2=v2/p3=v3`. Each partition column name and value is an escaped path name, and can be
+   * decoded with the `ExternalCatalogUtils.unescapePathName` method.
+   *
+   * The returned sequence is sorted as strings.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned, as
+   * described in the `listPartitions` method.
+   *
+   * @param db database name
+   * @param table table name
+   * @param partialSpec partition spec
+   */
+  def listPartitionNames(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String]
+
+  /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.
    *
    * A partial partition spec may optionally be provided to filter the partitions returned.
    * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
    * then a partial spec of (a='1') will return the first two only.
+   *
    * @param db database name
    * @param table table name
-   * @param partialSpec  partition spec
+   * @param partialSpec partition spec
    */
   def listPartitions(
       db: String,
@@ -203,12 +256,14 @@ abstract class ExternalCatalog {
    *
    * @param db database name
    * @param table table name
-   * @param predicates  partition-pruning predicates
+   * @param predicates partition-pruning predicates
+   * @param defaultTimeZoneId default timezone id to parse partition values of TimestampType
    */
   def listPartitionsByFilter(
       db: String,
       table: String,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition]
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions

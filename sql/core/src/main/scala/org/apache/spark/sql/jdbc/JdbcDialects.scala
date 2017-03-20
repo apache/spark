@@ -40,8 +40,8 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * SQL dialect of a certain database or jdbc driver.
  * Lots of databases define types that aren't explicitly supported
  * by the JDBC spec.  Some JDBC drivers also report inaccurate
- * information---for instance, BIT(n>1) being reported as a BIT type is quite
- * common, even though BIT in JDBC is meant for single-bit values.  Also, there
+ * information---for instance, BIT(n{@literal >}1) being reported as a BIT type is quite
+ * common, even though BIT in JDBC is meant for single-bit values. Also, there
  * does not appear to be a standard name for an unbounded string or binary
  * type; we use BLOB and CLOB by default but override with database-specific
  * alternatives when these are absent or do not behave correctly.
@@ -134,13 +134,13 @@ abstract class JdbcDialect extends Serializable {
 
 /**
  * :: DeveloperApi ::
- * Registry of dialects that apply to every new jdbc [[org.apache.spark.sql.DataFrame]].
+ * Registry of dialects that apply to every new jdbc `org.apache.spark.sql.DataFrame`.
  *
  * If multiple matching dialects are registered then all matching ones will be
  * tried in reverse order. A user-added dialect will thus be applied first,
  * overwriting the defaults.
  *
- * Note that all new dialects are applied to new jdbc DataFrames only. Make
+ * @note All new dialects are applied to new jdbc DataFrames only. Make
  * sure to register your dialects first.
  */
 @DeveloperApi
@@ -148,7 +148,7 @@ abstract class JdbcDialect extends Serializable {
 object JdbcDialects {
 
   /**
-   * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
+   * Register a dialect for use on all new matching jdbc `org.apache.spark.sql.DataFrame`.
    * Reading an existing dialect will cause a move-to-front.
    *
    * @param dialect The new dialect.

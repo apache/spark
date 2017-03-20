@@ -18,14 +18,29 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
+import java.util.{Locale, TimeZone}
 
+import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util._
 
-private[csv] class CSVOptions(@transient private val parameters: Map[String, String])
+class CSVOptions(
+    @transient private val parameters: CaseInsensitiveMap[String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String)
   extends Logging with Serializable {
+
+  def this(
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+      this(
+        CaseInsensitiveMap(parameters),
+        defaultTimeZoneId,
+        defaultColumnNameOfCorruptRecord)
+  }
 
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
@@ -65,7 +80,7 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
     }
   }
 
-  val delimiter = CSVTypeCast.toChar(
+  val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
@@ -89,6 +104,9 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
   val permissive = ParseModes.isPermissiveMode(parseMode)
 
+  val columnNameOfCorruptRecord =
+    parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
+
   val nullValue = parameters.getOrElse("nullValue", "")
 
   val nanValue = parameters.getOrElse("nanValue", "NaN")
@@ -102,13 +120,18 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
     name.map(CompressionCodecs.getCodecClassName)
   }
 
+  val timeZone: TimeZone = TimeZone.getTimeZone(
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
+
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
-    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"))
+    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), Locale.US)
 
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
+      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)
 
@@ -123,13 +146,37 @@ private[csv] class CSVOptions(@transient private val parameters: Map[String, Str
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
-}
 
-object CSVOptions {
+  def asWriterSettings: CsvWriterSettings = {
+    val writerSettings = new CsvWriterSettings()
+    val format = writerSettings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    writerSettings.setNullValue(nullValue)
+    writerSettings.setEmptyValue(nullValue)
+    writerSettings.setSkipEmptyLines(true)
+    writerSettings.setQuoteAllFields(quoteAll)
+    writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings
+  }
 
-  def apply(): CSVOptions = new CSVOptions(Map.empty)
-
-  def apply(paramName: String, paramValue: String): CSVOptions = {
-    new CSVOptions(Map(paramName -> paramValue))
+  def asParserSettings: CsvParserSettings = {
+    val settings = new CsvParserSettings()
+    val format = settings.getFormat
+    format.setDelimiter(delimiter)
+    format.setQuote(quote)
+    format.setQuoteEscape(escape)
+    format.setComment(comment)
+    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
+    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
+    settings.setReadInputOnSeparateThread(false)
+    settings.setInputBufferSize(inputBufferSize)
+    settings.setMaxColumns(maxColumns)
+    settings.setNullValue(nullValue)
+    settings.setMaxCharsPerColumn(maxCharsPerColumn)
+    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings
   }
 }

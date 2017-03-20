@@ -291,6 +291,37 @@ class ScalaReflectionSuite extends SparkFunSuite {
       .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
   }
 
+  test("SPARK 16792: Get correct deserializer for List[_]") {
+    val listDeserializer = deserializerFor[List[Int]]
+    assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
+  }
+
+  test("serialize and deserialize arbitrary sequence types") {
+    import scala.collection.immutable.Queue
+    val queueSerializer = serializerFor[Queue[Int]](BoundReference(
+      0, ObjectType(classOf[Queue[Int]]), nullable = false))
+    assert(queueSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val queueDeserializer = deserializerFor[Queue[Int]]
+    assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
+
+    import scala.collection.mutable.ArrayBuffer
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]](BoundReference(
+      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false))
+    assert(arrayBufferSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
+
+    // Check whether conversion is skipped when using WrappedArray[_] supertype
+    // (would otherwise needlessly add overhead)
+    import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+    val seqDeserializer = deserializerFor[Seq[Int]]
+    assert(seqDeserializer.asInstanceOf[StaticInvoke].staticObject ==
+      scala.collection.mutable.WrappedArray.getClass)
+    assert(seqDeserializer.asInstanceOf[StaticInvoke].functionName == "make")
+  }
+
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
   private val typeOfComplexData = typeOf[ComplexData]
 

@@ -313,27 +313,6 @@ class CommandBuilderUtils {
   }
 
   /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  static void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
-      return;
-    }
-    for (String arg : cmd) {
-      if (arg.contains("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
-  }
-
-  /**
    * Get the major version of the java version string supplied. This method
    * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
    * version strings such as 1.7.0_79
@@ -357,7 +336,7 @@ class CommandBuilderUtils {
   static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
     File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
+    if (new File(sparkHome, "jars").isDirectory()) {
       libdir = new File(sparkHome, "jars");
       checkState(!failIfNotFound || libdir.isDirectory(),
         "Library directory '%s' does not exist.",

@@ -25,9 +25,9 @@ import scala.util.Random
 import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
-  private val epsOfTotalCount = 0.0001
+  private val epsOfTotalCount = 0.01
 
-  private val confidence = 0.99
+  private val confidence = 0.9
 
   private val seed = 42
 
@@ -72,7 +72,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
           if (ratio > epsOfTotalCount) 1 else 0
         }.sum
 
-        1D - numErrors.toDouble / numAllItems
+        1.0 - (numErrors.toDouble / numAllItems)
       }
 
       assert(
@@ -89,9 +89,7 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
       val numToMerge = 5
       val numItemsPerSketch = 100000
-      val perSketchItems = Array.fill(numToMerge, numItemsPerSketch) {
-        itemGenerator(r)
-      }
+      val perSketchItems = Array.fill(numToMerge, numItemsPerSketch) { itemGenerator(r) }
 
       val sketches = perSketchItems.map { items =>
         val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
@@ -106,11 +104,8 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
       val mergedSketch = sketches.reduce(_ mergeInPlace _)
       checkSerDe(mergedSketch)
 
-      val expectedSketch = {
-        val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
-        perSketchItems.foreach(_.foreach(sketch.add))
-        sketch
-      }
+      val expectedSketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
+      perSketchItems.foreach(_.foreach(expectedSketch.add))
 
       perSketchItems.foreach {
         _.foreach { item =>
@@ -134,6 +129,8 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   testItemType[Long]("Long") { _.nextLong() }
 
   testItemType[String]("String") { r => r.nextString(r.nextInt(20)) }
+
+  testItemType[Array[Byte]]("Byte array") { r => r.nextString(r.nextInt(60)).getBytes }
 
   test("incompatible merge") {
     intercept[IncompatibleMergeException] {

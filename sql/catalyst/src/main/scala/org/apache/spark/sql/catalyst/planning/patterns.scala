@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.annotation.tailrec
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.IntegerType
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -112,6 +108,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
       val joinKeys = predicates.flatMap {
+        case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => None
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
         // Replace null with default value for joining key, then those rows with null in it could
@@ -125,6 +122,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case other => None
       }
       val otherPredicates = predicates.filterNot {
+        case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
         case EqualTo(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
@@ -169,8 +167,8 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond) =>
       val (plans, conditions) = flattenJoin(left, joinType)
-      (plans ++ Seq((right, joinType)), conditions ++ cond.toSeq)
-
+      (plans ++ Seq((right, joinType)), conditions ++
+        cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))

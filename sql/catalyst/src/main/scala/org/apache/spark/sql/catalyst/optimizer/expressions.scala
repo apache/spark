@@ -293,6 +293,12 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
         // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
+
+      case CaseWhen(branches, _) if branches.exists(_._1 == TrueLiteral) =>
+        // a branc with a TRue condition eliminates all following branches,
+        // these branches can be pruned away
+        val (h, t) = branches.span(_._1 != TrueLiteral)
+        CaseWhen( h :+ t.head, None)
     }
   }
 }
@@ -340,7 +346,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * equivalent [[Literal]] values. This rule is more specific with
  * Null value propagation from bottom to top of the expression tree.
  */
-object NullPropagation extends Rule[LogicalPlan] {
+case class NullPropagation(conf: CatalystConf) extends Rule[LogicalPlan] {
   private def nonNullLiteral(e: Expression): Boolean = e match {
     case Literal(null, _) => false
     case _ => true
@@ -348,10 +354,10 @@ object NullPropagation extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e @ WindowExpression(Cast(Literal(0L, _), _), _) =>
-        Cast(Literal(0L), e.dataType)
+      case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ AggregateExpression(Count(exprs), _, _, _) if !exprs.exists(nonNullLiteral) =>
-        Cast(Literal(0L), e.dataType)
+        Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
       case e @ GetArrayItem(Literal(null, _), _) => Literal.create(null, e.dataType)
@@ -428,45 +434,72 @@ object FoldablePropagation extends Rule[LogicalPlan] {
       }
       case _ => Nil
     })
+    val replaceFoldable: PartialFunction[Expression, Expression] = {
+      case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+    }
 
     if (foldableMap.isEmpty) {
       plan
     } else {
       var stop = false
       CleanupAliases(plan.transformUp {
-        case u: Union =>
-          stop = true
-          u
-        case c: Command =>
-          stop = true
-          c
-        // For outer join, although its output attributes are derived from its children, they are
-        // actually different attributes: the output of outer join is not always picked from its
-        // children, but can also be null.
+        // A leaf node should not stop the folding process (note that we are traversing up the
+        // tree, starting at the leaf nodes); so we are allowing it.
+        case l: LeafNode =>
+          l
+
+        // We can only propagate foldables for a subset of unary nodes.
+        case u: UnaryNode if !stop && canPropagateFoldables(u) =>
+          u.transformExpressions(replaceFoldable)
+
+        // Allow inner joins. We do not allow outer join, although its output attributes are
+        // derived from its children, they are actually different attributes: the output of outer
+        // join is not always picked from its children, but can also be null.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
-          stop = true
-          j
+        case j @ Join(_, _, Inner, _) if !stop =>
+          j.transformExpressions(replaceFoldable)
 
-        // These 3 operators take attributes as constructor parameters, and these attributes
-        // can't be replaced by alias.
-        case m: MapGroups =>
+        // We can fold the projections an expand holds. However expand changes the output columns
+        // and often reuses the underlying attributes; so we cannot assume that a column is still
+        // foldable after the expand has been applied.
+        // TODO(hvanhovell): Expand should use new attributes as the output attributes.
+        case expand: Expand if !stop =>
+          val newExpand = expand.copy(projections = expand.projections.map { projection =>
+            projection.map(_.transform(replaceFoldable))
+          })
           stop = true
-          m
-        case f: FlatMapGroupsInR =>
-          stop = true
-          f
-        case c: CoGroup =>
-          stop = true
-          c
+          newExpand
 
-        case p: LogicalPlan if !stop => p.transformExpressions {
-          case a: AttributeReference if foldableMap.contains(a) =>
-            foldableMap(a)
-        }
+        case other =>
+          stop = true
+          other
       })
     }
+  }
+
+  /**
+   * Whitelist of all [[UnaryNode]]s for which allow foldable propagation.
+   */
+  private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
+    case _: Project => true
+    case _: Filter => true
+    case _: SubqueryAlias => true
+    case _: Aggregate => true
+    case _: Window => true
+    case _: Sample => true
+    case _: GlobalLimit => true
+    case _: LocalLimit => true
+    case _: Generate => true
+    case _: Distinct => true
+    case _: AppendColumns => true
+    case _: AppendColumnsWithObject => true
+    case _: BroadcastHint => true
+    case _: RepartitionByExpression => true
+    case _: Repartition => true
+    case _: Sort => true
+    case _: TypedFilter => true
+    case _ => false
   }
 }
 
@@ -491,8 +524,8 @@ case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Cast(e, dataType) if e.dataType == dataType => e
-    case c @ Cast(e, dataType) => (e.dataType, dataType) match {
+    case Cast(e, dataType, _) if e.dataType == dataType => e
+    case c @ Cast(e, dataType, _) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
 
 
 /**
@@ -90,7 +90,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[SparkPlan] {
+object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
@@ -126,10 +126,11 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
       plan
     } else {
       val attributeMap = mutable.HashMap[PythonUDF, Expression]()
+      val splitFilter = trySplitFilter(plan)
       // Rewrite the child that has the input required for the UDF
-      val newChildren = plan.children.map { child =>
+      val newChildren = splitFilter.children.map { child =>
         // Pick the UDF we are going to evaluate
-        val validUdfs = udfs.filter { case udf =>
+        val validUdfs = udfs.filter { udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
           udf.references.subsetOf(child.outputSet)
         }.toArray  // Turn it into an array since iterators cannot be serialized in Scala 2.10
@@ -150,7 +151,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
         sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
-      val rewritten = plan.withNewChildren(newChildren).transformExpressions {
+      val rewritten = splitFilter.withNewChildren(newChildren).transformExpressions {
         case p: PythonUDF if attributeMap.contains(p) =>
           attributeMap(p)
       }
@@ -163,6 +164,24 @@ object ExtractPythonUDFs extends Rule[SparkPlan] {
       } else {
         newPlan
       }
+    }
+  }
+
+  // Split the original FilterExec to two FilterExecs. Only push down the first few predicates
+  // that are all deterministic.
+  private def trySplitFilter(plan: SparkPlan): SparkPlan = {
+    plan match {
+      case filter: FilterExec =>
+        val (candidates, containingNonDeterministic) =
+          splitConjunctivePredicates(filter.condition).span(_.deterministic)
+        val (pushDown, rest) = candidates.partition(!hasPythonUDF(_))
+        if (pushDown.nonEmpty) {
+          val newChild = FilterExec(pushDown.reduceLeft(And), filter.child)
+          FilterExec((rest ++ containingNonDeterministic).reduceLeft(And), newChild)
+        } else {
+          filter
+        }
+      case o => o
     }
   }
 }

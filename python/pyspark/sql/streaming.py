@@ -16,6 +16,8 @@
 #
 
 import sys
+import json
+
 if sys.version >= '3':
     intlike = int
     basestring = unicode = str
@@ -26,8 +28,10 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import *
+from pyspark.sql.utils import StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
@@ -48,15 +52,29 @@ class StreamingQuery(object):
     @property
     @since(2.0)
     def id(self):
-        """The id of the streaming query. This id is unique across all queries that have been
-        started in the current process.
+        """Returns the unique id of this query that persists across restarts from checkpoint data.
+        That is, this id is generated when a query is started for the first time, and
+        will be the same every time it is restarted from checkpoint data.
+        There can only be one query with the same id active in a Spark cluster.
+        Also see, `runId`.
         """
-        return self._jsq.id()
+        return self._jsq.id().toString()
+
+    @property
+    @since(2.1)
+    def runId(self):
+        """Returns the unique id of this query that does not persist across restarts. That is, every
+        query that is started (or restarted from checkpoint) will have a different runId.
+        """
+        return self._jsq.runId().toString()
 
     @property
     @since(2.0)
     def name(self):
-        """The name of the streaming query. This name is unique across all active queries.
+        """Returns the user-specified name of the query, or null if not specified.
+        This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
+        as `dataframe.writeStream.queryName("query").start()`.
+        This name, if set, must be unique across all active queries.
         """
         return self._jsq.name()
 
@@ -87,13 +105,46 @@ class StreamingQuery(object):
         else:
             return self._jsq.awaitTermination()
 
+    @property
+    @since(2.1)
+    def status(self):
+        """
+        Returns the current status of the query.
+        """
+        return json.loads(self._jsq.status().json())
+
+    @property
+    @since(2.1)
+    def recentProgress(self):
+        """Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
+        The number of progress updates retained for each stream is configured by Spark session
+        configuration `spark.sql.streaming.numRecentProgressUpdates`.
+        """
+        return [json.loads(p.json()) for p in self._jsq.recentProgress()]
+
+    @property
+    @since(2.1)
+    def lastProgress(self):
+        """
+        Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
+        None if there were no progress updates
+        :return: a map
+        """
+        lastProgress = self._jsq.lastProgress()
+        if lastProgress:
+            return json.loads(lastProgress.json())
+        else:
+            return None
+
     @since(2.0)
     def processAllAvailable(self):
         """Blocks until all available data in the source has been processed and committed to the
-        sink. This method is intended for testing. Note that in the case of continually arriving
-        data, this method may block forever. Additionally, this method is only guaranteed to block
-        until data that has been synchronously appended data to a stream source prior to invocation.
-        (i.e. `getOffset` must immediately reflect the addition).
+        sink. This method is intended for testing.
+
+        .. note:: In the case of continually arriving data, this method may block forever.
+            Additionally, this method is only guaranteed to block until data that has been
+            synchronously appended data to a stream source prior to invocation.
+            (i.e. `getOffset` must immediately reflect the addition).
         """
         return self._jsq.processAllAvailable()
 
@@ -102,6 +153,45 @@ class StreamingQuery(object):
         """Stop this streaming query.
         """
         self._jsq.stop()
+
+    @since(2.1)
+    def explain(self, extended=False):
+        """Prints the (logical and physical) plans to the console for debugging purpose.
+
+        :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+
+        >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
+        >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
+        >>> sq.explain()
+        == Physical Plan ==
+        ...
+        >>> sq.explain(True)
+        == Parsed Logical Plan ==
+        ...
+        == Analyzed Logical Plan ==
+        ...
+        == Optimized Logical Plan ==
+        ...
+        == Physical Plan ==
+        ...
+        >>> sq.stop()
+        """
+        # Cannot call `_jsq.explain(...)` because it will print in the JVM process.
+        # We should print it in the Python process.
+        print(self._jsq.explainInternal(extended))
+
+    @since(2.1)
+    def exception(self):
+        """
+        :return: the StreamingQueryException if the query was terminated by an exception, or None.
+        """
+        if self._jsq.exception().isDefined():
+            je = self._jsq.exception().get()
+            msg = je.toString().split(': ', 1)[1]  # Drop the Java StreamingQueryException type info
+            stackTrace = '\n\t at '.join(map(lambda x: x.toString(), je.getStackTrace()))
+            return StreamingQueryException(msg, stackTrace)
+        else:
+            return None
 
 
 class StreamingQueryManager(object):
@@ -147,8 +237,6 @@ class StreamingQueryManager(object):
         True
         >>> sq.stop()
         """
-        if not isinstance(id, intlike):
-            raise ValueError("The id for the query must be an integer. Got: %s" % id)
         return StreamingQuery(self._jsqm.get(id))
 
     @since(2.0)
@@ -187,304 +275,6 @@ class StreamingQueryManager(object):
         >>> spark.streams.resetTerminated()
         """
         self._jsqm.resetTerminated()
-
-
-class StreamingQueryStatus(object):
-    """A class used to report information about the progress of a StreamingQuery.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.1
-    """
-
-    def __init__(self, jsqs):
-        self._jsqs = jsqs
-
-    def __str__(self):
-        """
-        Pretty string of this query status.
-
-        >>> print(sqs)
-        StreamingQueryStatus:
-            Query name: query
-            Query id: 1
-            Status timestamp: 123
-            Input rate: 15.5 rows/sec
-            Processing rate 23.5 rows/sec
-            Latency: 345.0 ms
-            Trigger details:
-                isDataPresentInTrigger: true
-                isTriggerActive: true
-                latency.getBatch.total: 20
-                latency.getOffset.total: 10
-                numRows.input.total: 100
-                triggerId: 5
-            Source statuses [1 source]:
-                Source 1:    MySource1
-                    Available offset: #0
-                    Input rate: 15.5 rows/sec
-                    Processing rate: 23.5 rows/sec
-                    Trigger details:
-                        numRows.input.source: 100
-                        latency.getOffset.source: 10
-                        latency.getBatch.source: 20
-            Sink status:     MySink
-                Committed offsets: [#1, -]
-        """
-        return self._jsqs.toString()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def name(self):
-        """
-        Name of the query. This name is unique across all active queries.
-
-        >>> sqs.name
-        u'query'
-        """
-        return self._jsqs.name()
-
-    @property
-    @since(2.1)
-    def id(self):
-        """
-        Id of the query. This id is unique across all queries that have been started in
-        the current process.
-
-        >>> int(sqs.id)
-        1
-        """
-        return self._jsqs.id()
-
-    @property
-    @since(2.1)
-    def timestamp(self):
-        """
-        Timestamp (ms) of when this query was generated.
-
-        >>> int(sqs.timestamp)
-        123
-        """
-        return self._jsqs.timestamp()
-
-    @property
-    @since(2.1)
-    def inputRate(self):
-        """
-        Current total rate (rows/sec) at which data is being generated by all the sources.
-
-        >>> sqs.inputRate
-        15.5
-        """
-        return self._jsqs.inputRate()
-
-    @property
-    @since(2.1)
-    def processingRate(self):
-        """
-        Current rate (rows/sec) at which the query is processing data from all the sources.
-
-        >>> sqs.processingRate
-        23.5
-        """
-        return self._jsqs.processingRate()
-
-    @property
-    @since(2.1)
-    def latency(self):
-        """
-        Current average latency between the data being available in source and the sink
-        writing the corresponding output.
-
-        >>> sqs.latency
-        345.0
-        """
-        if (self._jsqs.latency().nonEmpty()):
-            return self._jsqs.latency().get()
-        else:
-            return None
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def sourceStatuses(self):
-        """
-        Current statuses of the sources as a list.
-
-        >>> len(sqs.sourceStatuses)
-        1
-        >>> sqs.sourceStatuses[0].description
-        u'MySource1'
-        """
-        return [SourceStatus(ss) for ss in self._jsqs.sourceStatuses()]
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def sinkStatus(self):
-        """
-        Current status of the sink.
-
-        >>> sqs.sinkStatus.description
-        u'MySink'
-        """
-        return SinkStatus(self._jsqs.sinkStatus())
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def triggerDetails(self):
-        """
-        Low-level details of the currently active trigger (e.g. number of rows processed
-        in trigger, latency of intermediate steps, etc.).
-
-        If no trigger is currently active, then it will have details of the last completed trigger.
-
-        >>> sqs.triggerDetails
-        {u'triggerId': u'5', u'latency.getBatch.total': u'20', u'numRows.input.total': u'100',
-        u'isTriggerActive': u'true', u'latency.getOffset.total': u'10',
-        u'isDataPresentInTrigger': u'true'}
-        """
-        return self._jsqs.triggerDetails()
-
-
-class SourceStatus(object):
-    """
-    Status and metrics of a streaming Source.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.1
-    """
-
-    def __init__(self, jss):
-        self._jss = jss
-
-    def __str__(self):
-        """
-        Pretty string of this source status.
-
-        >>> print(sqs.sourceStatuses[0])
-        SourceStatus:    MySource1
-            Available offset: #0
-            Input rate: 15.5 rows/sec
-            Processing rate: 23.5 rows/sec
-            Trigger details:
-                numRows.input.source: 100
-                latency.getOffset.source: 10
-                latency.getBatch.source: 20
-        """
-        return self._jss.toString()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def description(self):
-        """
-        Description of the source corresponding to this status.
-
-        >>> sqs.sourceStatuses[0].description
-        u'MySource1'
-        """
-        return self._jss.description()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def offsetDesc(self):
-        """
-        Description of the current offset if known.
-
-        >>> sqs.sourceStatuses[0].offsetDesc
-        u'#0'
-        """
-        return self._jss.offsetDesc()
-
-    @property
-    @since(2.1)
-    def inputRate(self):
-        """
-        Current rate (rows/sec) at which data is being generated by the source.
-
-        >>> sqs.sourceStatuses[0].inputRate
-        15.5
-        """
-        return self._jss.inputRate()
-
-    @property
-    @since(2.1)
-    def processingRate(self):
-        """
-        Current rate (rows/sec) at which the query is processing data from the source.
-
-        >>> sqs.sourceStatuses[0].processingRate
-        23.5
-        """
-        return self._jss.processingRate()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def triggerDetails(self):
-        """
-        Low-level details of the currently active trigger (e.g. number of rows processed
-        in trigger, latency of intermediate steps, etc.).
-
-        If no trigger is currently active, then it will have details of the last completed trigger.
-
-        >>> sqs.sourceStatuses[0].triggerDetails
-        {u'numRows.input.source': u'100', u'latency.getOffset.source': u'10',
-        u'latency.getBatch.source': u'20'}
-       """
-        return self._jss.triggerDetails()
-
-
-class SinkStatus(object):
-    """
-    Status and metrics of a streaming Sink.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.1
-    """
-
-    def __init__(self, jss):
-        self._jss = jss
-
-    def __str__(self):
-        """
-        Pretty string of this source status.
-
-        >>> print(sqs.sinkStatus)
-        SinkStatus:    MySink
-            Committed offsets: [#1, -]
-        """
-        return self._jss.toString()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def description(self):
-        """
-        Description of the source corresponding to this status.
-
-        >>> sqs.sinkStatus.description
-        u'MySink'
-        """
-        return self._jss.description()
-
-    @property
-    @ignore_unicode_prefix
-    @since(2.1)
-    def offsetDesc(self):
-        """
-        Description of the current offsets up to which data has been written by the sink.
-
-        >>> sqs.sinkStatus.offsetDesc
-        u'[#1, -]'
-        """
-        return self._jss.offsetDesc()
 
 
 class Trigger(object):
@@ -583,6 +373,11 @@ class DataStreamReader(OptionUtils):
     def option(self, key, value):
         """Adds an input option for the underlying data source.
 
+        You can set the following option(s) for reading files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
+                in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
+
         .. note:: Experimental.
 
         >>> s = spark.readStream.option("x", 1)
@@ -593,6 +388,11 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def options(self, **options):
         """Adds input options for the underlying data source.
+
+        You can set the following option(s) for reading files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
+                in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
 
         .. note:: Experimental.
 
@@ -638,10 +438,13 @@ class DataStreamReader(OptionUtils):
     def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
-             mode=None, columnNameOfCorruptRecord=None, dateFormat=None,
-             timestampFormat=None):
+             mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
+             wholeFile=None):
         """
-        Loads a JSON file stream (one object per line) and returns a :class`DataFrame`.
+        Loads a JSON file stream and returns the results as a :class:`DataFrame`.
+
+        `JSON Lines <http://jsonlines.org/>`_(newline-delimited JSON) is supported by default.
+        For JSON (one record per file), set the `wholeFile` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -670,10 +473,13 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record and puts the malformed string into a new field configured by \
-                 ``columnNameOfCorruptRecord``. When a schema is set by user, it sets \
-                 ``null`` for extra fields.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                 record, and puts the malformed string into a field configured by \
+                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
+                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
+                 schema. If a schema does not have the field, it drops corrupt records during \
+                 parsing. When inferring a schema, it implicitly adds a \
+                 ``columnNameOfCorruptRecord`` field in an output schema.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -685,11 +491,13 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to date type. If None is set, it uses the
-                           default value value, ``yyyy-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+                          set, it uses the default value, ``false``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -703,7 +511,7 @@ class DataStreamReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat)
+            timestampFormat=timestampFormat, wholeFile=wholeFile)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -761,7 +569,8 @@ class DataStreamReader(OptionUtils):
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
-            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None):
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
+            columnNameOfCorruptRecord=None, wholeFile=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -806,11 +615,11 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to date type. If None is set, it uses the
-                           default value value, ``yyyy-MM-dd``.
+                           default value, ``yyyy-MM-dd``.
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -819,10 +628,23 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
-                    When a schema is set by user, it sets ``null`` for extra fields.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                  record, and puts the malformed string into a field configured by \
+                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
+                  a string type field named ``columnNameOfCorruptRecord`` in an \
+                  user-defined schema. If a schema does not have the field, it drops corrupt \
+                  records during parsing. When a length of parsed CSV tokens is shorter than \
+                  an expected length of a schema, it sets `null` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
+
+        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
+                                          created by ``PERMISSIVE`` mode. This overrides
+                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+                                          it uses the value specified in
+                                          ``spark.sql.columnNameOfCorruptRecord``.
+        :param wholeFile: parse one record, which may span multiple lines. If None is
+                          set, it uses the default value, ``false``.
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -837,7 +659,8 @@ class DataStreamReader(OptionUtils):
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
-            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode)
+            maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -874,6 +697,9 @@ class DataStreamWriter(object):
            the sink
         * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
+        * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+           written to the sink every time there are some updates. If the query doesn't contain
+           aggregations, it will be equivalent to `append` mode.
 
        .. note:: Experimental.
 
@@ -901,6 +727,11 @@ class DataStreamWriter(object):
     def option(self, key, value):
         """Adds an output option for the underlying data source.
 
+        You can set the following option(s) for writing files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to format
+                timestamps in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
+
         .. note:: Experimental.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
@@ -909,6 +740,11 @@ class DataStreamWriter(object):
     @since(2.0)
     def options(self, **options):
         """Adds output options for the underlying data source.
+
+        You can set the following option(s) for writing files:
+            * ``timeZone``: sets the string that indicates a timezone to be used to format
+                timestamps in the JSON/CSV datasources or partition values.
+                If it isn't set, it uses the default value, session local timezone.
 
        .. note:: Experimental.
         """
@@ -977,7 +813,8 @@ class DataStreamWriter(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def start(self, path=None, format=None, partitionBy=None, queryName=None, **options):
+    def start(self, path=None, format=None, outputMode=None, partitionBy=None, queryName=None,
+              **options):
         """Streams the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -988,15 +825,20 @@ class DataStreamWriter(object):
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
+        :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
+                           streaming sink.
 
-            * ``append``: Append contents of this :class:`DataFrame` to existing data.
-            * ``overwrite``: Overwrite existing data.
-            * ``ignore``: Silently ignore this operation if data already exists.
-            * ``error`` (default case): Throw an exception if data already exists.
+            * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to the
+              sink
+            * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+               every time these is some updates
+            * `update`:only the rows that were updated in the streaming DataFrame/Dataset will be
+              written to the sink every time there are some updates. If the query doesn't contain
+              aggregations, it will be equivalent to `append` mode.
         :param partitionBy: names of partitioning columns
         :param queryName: unique name for the query
         :param options: All other string options. You may want to provide a `checkpointLocation`
-            for most streams, however it is not required for a `memory` stream.
+                        for most streams, however it is not required for a `memory` stream.
 
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
@@ -1007,7 +849,7 @@ class DataStreamWriter(object):
         >>> sq.isActive
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').start(
-        ...     queryName='that_query', format='memory')
+        ...     queryName='that_query', outputMode="append", format='memory')
         >>> sq.name
         u'that_query'
         >>> sq.isActive
@@ -1015,6 +857,8 @@ class DataStreamWriter(object):
         >>> sq.stop()
         """
         self.options(**options)
+        if outputMode is not None:
+            self.outputMode(outputMode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         if format is not None:
@@ -1051,8 +895,6 @@ def _test():
     globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sqs'] = StreamingQueryStatus(
-        spark.sparkContext._jvm.org.apache.spark.sql.streaming.StreamingQueryStatus.testStatus())
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,

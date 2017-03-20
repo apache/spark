@@ -149,7 +149,8 @@ private[ui] class StagePagedTable(
   override def tableId: String = stageTag + "-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped table-head-clickable"
+    "table table-bordered table-condensed table-striped " +
+      "table-head-clickable table-cell-width-limited"
 
   override def pageSizeFormField: String = stageTag + ".pageSize"
 
@@ -353,12 +354,13 @@ private[ui] class StagePagedTable(
       val killLinkUri = s"$basePathUri/stages/stage/kill/"
       <form action={killLinkUri} method="POST" style="display:inline">
         <input type="hidden" name="id" value={s.stageId.toString}/>
-        <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
        */
-      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}&terminate=true"
+      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}"
       <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
+    } else {
+      Seq.empty
     }
 
     val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"

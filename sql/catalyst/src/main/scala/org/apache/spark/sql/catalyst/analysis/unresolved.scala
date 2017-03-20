@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, Codege
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 
 /**
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
@@ -37,10 +37,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
  */
-case class UnresolvedRelation(
-    tableIdentifier: TableIdentifier,
-    alias: Option[String] = None) extends LeafNode {
-
+case class UnresolvedRelation(tableIdentifier: TableIdentifier) extends LeafNode {
   /** Returns a `.` separated name for this relation. */
   def tableName: String = tableIdentifier.unquotedString
 
@@ -98,6 +95,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withNullability(newNullability: Boolean): UnresolvedAttribute = this
   override def withQualifier(newQualifier: Option[String]): UnresolvedAttribute = this
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
+  override def withMetadata(newMetadata: Metadata): Attribute = this
 
   override def toString: String = s"'$name"
 

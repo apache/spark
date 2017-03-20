@@ -163,12 +163,7 @@ space into words.
 
 {% highlight java %}
 // Split each line into words
-JavaDStream<String> words = lines.flatMap(
-  new FlatMapFunction<String, String>() {
-    @Override public Iterator<String> call(String x) {
-      return Arrays.asList(x.split(" ")).iterator();
-    }
-  });
+JavaDStream<String> words = lines.flatMap(x -> Arrays.asList(x.split(" ")).iterator());
 {% endhighlight %}
 
 `flatMap` is a DStream operation that creates a new DStream by
@@ -183,18 +178,8 @@ Next, we want to count these words.
 
 {% highlight java %}
 // Count each word in each batch
-JavaPairDStream<String, Integer> pairs = words.mapToPair(
-  new PairFunction<String, String, Integer>() {
-    @Override public Tuple2<String, Integer> call(String s) {
-      return new Tuple2<>(s, 1);
-    }
-  });
-JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
-  new Function2<Integer, Integer, Integer>() {
-    @Override public Integer call(Integer i1, Integer i2) {
-      return i1 + i2;
-    }
-  });
+JavaPairDStream<String, Integer> pairs = words.mapToPair(s -> new Tuple2<>(s, 1));
+JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey((i1, i2) -> i1 + i2);
 
 // Print the first ten elements of each RDD generated in this DStream to the console
 wordCounts.print();
@@ -836,11 +821,9 @@ the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 {% highlight java %}
 Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction =
-  new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
-    @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
-      Integer newSum = ...  // add the new values with the previous running count to get the new count
-      return Optional.of(newSum);
-    }
+  (values, state) -> {
+    Integer newSum = ...  // add the new values with the previous running count to get the new count
+    return Optional.of(newSum);
   };
 {% endhighlight %}
 
@@ -915,15 +898,12 @@ val cleanedDStream = wordCounts.transform { rdd =>
 {% highlight java %}
 import org.apache.spark.streaming.api.java.*;
 // RDD containing spam information
-final JavaPairRDD<String, Double> spamInfoRDD = jssc.sparkContext().newAPIHadoopRDD(...);
+JavaPairRDD<String, Double> spamInfoRDD = jssc.sparkContext().newAPIHadoopRDD(...);
 
-JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(
-  new Function<JavaPairRDD<String, Integer>, JavaPairRDD<String, Integer>>() {
-    @Override public JavaPairRDD<String, Integer> call(JavaPairRDD<String, Integer> rdd) throws Exception {
-      rdd.join(spamInfoRDD).filter(...); // join data stream with spam information to do data cleaning
-      ...
-    }
-  });
+JavaPairDStream<String, Integer> cleanedDStream = wordCounts.transform(rdd -> {
+  rdd.join(spamInfoRDD).filter(...); // join data stream with spam information to do data cleaning
+  ...
+});
 {% endhighlight %}
 
 </div>
@@ -986,15 +966,8 @@ val windowedWordCounts = pairs.reduceByKeyAndWindow((a:Int,b:Int) => (a + b), Se
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-// Reduce function adding two integers, defined separately for clarity
-Function2<Integer, Integer, Integer> reduceFunc = new Function2<Integer, Integer, Integer>() {
-  @Override public Integer call(Integer i1, Integer i2) {
-    return i1 + i2;
-  }
-};
-
 // Reduce last 30 seconds of data, every 10 seconds
-JavaPairDStream<String, Integer> windowedWordCounts = pairs.reduceByKeyAndWindow(reduceFunc, Durations.seconds(30), Durations.seconds(10));
+JavaPairDStream<String, Integer> windowedWordCounts = pairs.reduceByKeyAndWindow((i1, i2) -> i1 + i2, Durations.seconds(30), Durations.seconds(10));
 {% endhighlight %}
 
 </div>
@@ -1141,14 +1114,7 @@ val joinedStream = windowedStream.transform { rdd => rdd.join(dataset) }
 {% highlight java %}
 JavaPairRDD<String, String> dataset = ...
 JavaPairDStream<String, String> windowedStream = stream.window(Durations.seconds(20));
-JavaPairDStream<String, String> joinedStream = windowedStream.transform(
-  new Function<JavaRDD<Tuple2<String, String>>, JavaRDD<Tuple2<String, String>>>() {
-    @Override
-    public JavaRDD<Tuple2<String, String>> call(JavaRDD<Tuple2<String, String>> rdd) {
-      return rdd.join(dataset);
-    }
-  }
-);
+JavaPairDStream<String, String> joinedStream = windowedStream.transform(rdd -> rdd.join(dataset));
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1246,6 +1212,16 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  Connection connection = createNewConnection(); // executed at the driver
+  rdd.foreach(record -> {
+    connection.send(record); // executed at the worker
+  });
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(rdd):
@@ -1279,6 +1255,17 @@ dstream.foreachRDD { rdd =>
 }
 {% endhighlight %}
 </div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  rdd.foreach(record -> {
+    Connection connection = createNewConnection();
+    connection.send(record);
+    connection.close();
+  });
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendRecord(record):
@@ -1307,6 +1294,19 @@ dstream.foreachRDD { rdd =>
     connection.close()
   }
 }
+{% endhighlight %}
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  rdd.foreachPartition(partitionOfRecords -> {
+    Connection connection = createNewConnection();
+    while (partitionOfRecords.hasNext()) {
+      connection.send(partitionOfRecords.next());
+    }
+    connection.close();
+  });
+});
 {% endhighlight %}
 </div>
 <div data-lang="python" markdown="1">
@@ -1342,6 +1342,20 @@ dstream.foreachRDD { rdd =>
 {% endhighlight %}
 </div>
 
+<div data-lang="java" markdown="1">
+{% highlight java %}
+dstream.foreachRDD(rdd -> {
+  rdd.foreachPartition(partitionOfRecords -> {
+    // ConnectionPool is a static, lazily initialized pool of connections
+    Connection connection = ConnectionPool.getConnection();
+    while (partitionOfRecords.hasNext()) {
+      connection.send(partitionOfRecords.next());
+    }
+    ConnectionPool.returnConnection(connection); // return to the pool for future reuse
+  });
+});
+{% endhighlight %}
+</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 def sendPartition(iter):
@@ -1423,35 +1437,26 @@ public class JavaRow implements java.io.Serializable {
 
 JavaDStream<String> words = ... 
 
-words.foreachRDD(
-  new Function2<JavaRDD<String>, Time, Void>() {
-    @Override
-    public Void call(JavaRDD<String> rdd, Time time) {
+words.foreachRDD((rdd, time) -> {
+  // Get the singleton instance of SparkSession
+  SparkSession spark = SparkSession.builder().config(rdd.sparkContext().getConf()).getOrCreate();
 
-      // Get the singleton instance of SparkSession
-      SparkSession spark = SparkSession.builder().config(rdd.sparkContext().getConf()).getOrCreate();
+  // Convert RDD[String] to RDD[case class] to DataFrame
+  JavaRDD<JavaRow> rowRDD = rdd.map(word -> {
+    JavaRow record = new JavaRow();
+    record.setWord(word);
+    return record;
+  });
+  DataFrame wordsDataFrame = spark.createDataFrame(rowRDD, JavaRow.class);
 
-      // Convert RDD[String] to RDD[case class] to DataFrame
-      JavaRDD<JavaRow> rowRDD = rdd.map(new Function<String, JavaRow>() {
-        public JavaRow call(String word) {
-          JavaRow record = new JavaRow();
-          record.setWord(word);
-          return record;
-        }
-      });
-      DataFrame wordsDataFrame = spark.createDataFrame(rowRDD, JavaRow.class);
+  // Creates a temporary view using the DataFrame
+  wordsDataFrame.createOrReplaceTempView("words");
 
-      // Creates a temporary view using the DataFrame
-      wordsDataFrame.createOrReplaceTempView("words");
-
-      // Do word count on table using SQL and print it
-      DataFrame wordCountsDataFrame =
-        spark.sql("select word, count(*) as total from words group by word");
-      wordCountsDataFrame.show();
-      return null;
-    }
-  }
-);
+  // Do word count on table using SQL and print it
+  DataFrame wordCountsDataFrame =
+    spark.sql("select word, count(*) as total from words group by word");
+  wordCountsDataFrame.show();
+});
 {% endhighlight %}
 
 See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
@@ -1811,27 +1816,21 @@ class JavaDroppedWordsCounter {
   }
 }
 
-wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() {
-  @Override
-  public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
-    // Get or register the blacklist Broadcast
-    final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
-    // Get or register the droppedWordsCounter Accumulator
-    final LongAccumulator droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
-    // Use blacklist to drop words and use droppedWordsCounter to count them
-    String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
-      @Override
-      public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
-        if (blacklist.value().contains(wordCount._1())) {
-          droppedWordsCounter.add(wordCount._2());
-          return false;
-        } else {
-          return true;
-        }
-      }
-    }).collect().toString();
-    String output = "Counts at time " + time + " " + counts;
-  }
+wordCounts.foreachRDD((rdd, time) -> {
+  // Get or register the blacklist Broadcast
+  Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
+  // Get or register the droppedWordsCounter Accumulator
+  LongAccumulator droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+  // Use blacklist to drop words and use droppedWordsCounter to count them
+  String counts = rdd.filter(wordCount -> {
+    if (blacklist.value().contains(wordCount._1())) {
+      droppedWordsCounter.add(wordCount._2());
+      return false;
+    } else {
+      return true;
+    }
+  }).collect().toString();
+  String output = "Counts at time " + time + " " + counts;
 }
 
 {% endhighlight %}
@@ -1945,6 +1944,9 @@ To run a Spark Streaming applications, you need to have the following.
   `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
   `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
   [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
+  Note that Spark will not encrypt data written to the write ahead log when I/O encryption is
+  enabled. If encryption of the write ahead log data is desired, it should be stored in a file
+  system that supports encryption natively.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
   application to process data as fast as it is being received, the receivers can be rate limited
@@ -2191,7 +2193,7 @@ consistent batch processing times. Make sure you set the CMS GC on both the driv
 
 - When data is received from a stream source, receiver creates blocks of data.  A new block of data is generated every blockInterval milliseconds. N blocks of data are created during the batchInterval where N = batchInterval/blockInterval. These blocks are distributed by the BlockManager of the current executor to the block managers of other executors. After that, the Network Input Tracker running on the driver is informed about the block locations for further processing.
 
-- A RDD is created on the driver for the blocks created during the batchInterval. The blocks generated during the batchInterval are partitions of the RDD. Each partition is a task in spark. blockInterval== batchinterval would mean that a single partition is created and probably it is processed locally.
+- An RDD is created on the driver for the blocks created during the batchInterval. The blocks generated during the batchInterval are partitions of the RDD. Each partition is a task in spark. blockInterval== batchinterval would mean that a single partition is created and probably it is processed locally.
 
 - The map tasks on the blocks are processed in the executors (one that received the block, and another where the block was replicated) that has the blocks irrespective of block interval, unless non-local scheduling kicks in.
 Having bigger blockinterval means bigger blocks. A high value of `spark.locality.wait` increases the chance of processing a block on the local node. A balance needs to be found out between these two parameters to ensure that the bigger blocks are processed locally.
@@ -2382,7 +2384,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
     - [Kafka Integration Guide](streaming-kafka-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
-* Third-party DStream data sources can be found in [Third Party Projects](https://cwiki.apache.org/confluence/display/SPARK/Third+Party+Projects)
+* Third-party DStream data sources can be found in [Third Party Projects](http://spark.apache.org/third-party-projects.html)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and

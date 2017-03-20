@@ -85,9 +85,9 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
 
     Seq("exec1", "exec2").foreach { exec =>
       assert(
-        execToFailures(exec).taskToFailureCount === Map(
-          0 -> 1,
-          1 -> 1
+        execToFailures(exec).taskToFailureCountAndFailureTime === Map(
+          0 -> (1, 0),
+          1 -> (1, 0)
         )
       )
     }

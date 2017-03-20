@@ -27,7 +27,7 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, SparseMatrix, SparseVector, Vector, Vectors}
-import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -141,6 +141,14 @@ class LogisticRegressionSuite
     assert(model.getProbabilityCol === "probability")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
+    model.setSummary(None)
+    assert(!model.hasSummary)
   }
 
   test("empty probabilityCol") {
@@ -184,6 +192,12 @@ class LogisticRegressionSuite
       }
     }
     // thresholds and threshold must be consistent: values
+    withClue("fit with ParamMap should throw error if threshold, thresholds do not match.") {
+      intercept[IllegalArgumentException] {
+        lr2.fit(smallBinaryDataset,
+          lr2.thresholds -> Array(0.3, 0.7), lr2.threshold -> (expectedThreshold / 2.0))
+      }
+    }
     withClue("fit with ParamMap should throw error if threshold, thresholds do not match.") {
       intercept[IllegalArgumentException] {
         val lr2model = lr2.fit(smallBinaryDataset,
@@ -251,9 +265,6 @@ class LogisticRegressionSuite
     mlr.setFitIntercept(false)
     val mlrModel = mlr.fit(smallMultinomialDataset)
     assert(mlrModel.interceptVector === Vectors.sparse(3, Seq()))
-
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
   }
 
   test("logistic regression with setters") {
@@ -348,8 +359,16 @@ class LogisticRegressionSuite
         assert(pred == predFromProb)
     }
 
+    // force it to use raw2prediction
+    model.setRawPredictionCol("rawPrediction").setProbabilityCol("")
+    val resultsUsingRaw2Predict =
+      model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
+    resultsUsingRaw2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
     // force it to use probability2prediction
-    model.setProbabilityCol("")
+    model.setRawPredictionCol("").setProbabilityCol("probability")
     val resultsUsingProb2Predict =
       model.transform(smallMultinomialDataset).select("prediction").as[Double].collect()
     resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
@@ -394,8 +413,16 @@ class LogisticRegressionSuite
         assert(pred == predFromProb)
     }
 
+    // force it to use raw2prediction
+    model.setRawPredictionCol("rawPrediction").setProbabilityCol("")
+    val resultsUsingRaw2Predict =
+      model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
+    resultsUsingRaw2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
+      case (pred1, pred2) => assert(pred1 === pred2)
+    }
+
     // force it to use probability2prediction
-    model.setProbabilityCol("")
+    model.setRawPredictionCol("").setProbabilityCol("probability")
     val resultsUsingProb2Predict =
       model.transform(smallBinaryDataset).select("prediction").as[Double].collect()
     resultsUsingProb2Predict.zip(results.select("prediction").as[Double].collect()).foreach {
@@ -427,6 +454,32 @@ class LogisticRegressionSuite
     val blrModel = blr.fit(smallBinaryDataset)
     assert(blrModel.coefficients.size === 1)
     assert(blrModel.intercept !== 0.0)
+  }
+
+  test("sparse coefficients in LogisticAggregator") {
+    val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
+    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
+    val binaryAgg = new LogisticAggregator(bcCoefficientsBinary, bcFeaturesStd, 2,
+      fitIntercept = true, multinomial = false)
+    val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
+      intercept[IllegalArgumentException] {
+        binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
+      }
+    }
+    assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
+
+    val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
+    val multinomialAgg = new LogisticAggregator(bcCoefficientsMulti, bcFeaturesStd, 3,
+      fitIntercept = true, multinomial = true)
+    val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
+      intercept[IllegalArgumentException] {
+        multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
+      }
+    }
+    assert(thrown.getMessage.contains("coefficients only supports dense"))
+    bcCoefficientsBinary.destroy(blocking = false)
+    bcFeaturesStd.destroy(blocking = false)
+    bcCoefficientsMulti.destroy(blocking = false)
   }
 
   test("overflow prediction for multiclass") {
@@ -1807,55 +1860,26 @@ class LogisticRegressionSuite
         .objectiveHistory
         .sliding(2)
         .forall(x => x(0) >= x(1)))
-
   }
 
-  test("binary logistic regression with weighted data") {
-    val numClasses = 2
-    val numPoints = 40
-    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
-      numClasses, numPoints)
-    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
-      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    }.toSeq.toDF()
-    val lr = new LogisticRegression().setFamily("binomial").setWeightCol("weight")
-    val model = lr.fit(outlierData)
-    val results = model.transform(testData).select("label", "prediction").collect()
-
-    // check that the predictions are the one to one mapping
-    results.foreach { case Row(label: Double, pred: Double) =>
-      assert(label === pred)
+  test("logistic regression with sample weights") {
+    def modelEquals(m1: LogisticRegressionModel, m2: LogisticRegressionModel): Unit = {
+      assert(m1.coefficientMatrix ~== m2.coefficientMatrix absTol 0.05)
+      assert(m1.interceptVector ~== m2.interceptVector absTol 0.05)
     }
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
-        42L)
-    val weightedModel = lr.fit(weightedData)
-    val overSampledModel = lr.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
-  }
-
-  test("multinomial logistic regression with weighted data") {
-    val numClasses = 5
-    val numPoints = 40
-    val outlierData = MLTestingUtils.genClassificationInstancesWithWeightedOutliers(spark,
-      numClasses, numPoints)
-    val testData = Array.tabulate[LabeledPoint](numClasses) { i =>
-      LabeledPoint(i.toDouble, Vectors.dense(i.toDouble))
-    }.toSeq.toDF()
-    val mlr = new LogisticRegression().setFamily("multinomial").setWeightCol("weight")
-    val model = mlr.fit(outlierData)
-    val results = model.transform(testData).select("label", "prediction").collect()
-
-    // check that the predictions are the one to one mapping
-    results.foreach { case Row(label: Double, pred: Double) =>
-      assert(label === pred)
+    val testParams = Seq(
+      ("binomial", smallBinaryDataset, 2),
+      ("multinomial", smallMultinomialDataset, 3)
+    )
+    testParams.foreach { case (family, dataset, numClasses) =>
+      val estimator = new LogisticRegression().setFamily(family)
+      MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
+        dataset.as[LabeledPoint], estimator, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
+        dataset.as[LabeledPoint], estimator, numClasses, modelEquals)
+      MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](
+        dataset.as[LabeledPoint], estimator, modelEquals, seed)
     }
-    val (overSampledData, weightedData) =
-      MLTestingUtils.genEquivalentOversampledAndWeightedInstances(outlierData, "label", "features",
-        42L)
-    val weightedModel = mlr.fit(weightedData)
-    val overSampledModel = mlr.setWeightCol("").fit(overSampledData)
-    assert(weightedModel.coefficientMatrix ~== overSampledModel.coefficientMatrix relTol 0.01)
   }
 
   test("set family") {
@@ -2065,10 +2089,10 @@ class LogisticRegressionSuite
     }
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, smallBinaryDataset, LogisticRegressionSuite.allParamSettings,
-      checkModelData)
+      LogisticRegressionSuite.allParamSettings, checkModelData)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val lr = new LogisticRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LogisticRegressionModel, LogisticRegression](
       lr, spark) { (expected, actual) =>

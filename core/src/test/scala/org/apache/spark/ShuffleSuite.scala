@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListene
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
-import org.apache.spark.util.MutablePair
+import org.apache.spark.util.{MutablePair, Utils}
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 

@@ -73,7 +73,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
    */
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
     val comparisons = ordering.map { order =>
+      val oldCurrentVars = ctx.currentVars
+      ctx.INPUT_ROW = "i"
+      // to use INPUT_ROW we must make sure currentVars is null
+      ctx.currentVars = null
       val eval = order.child.genCode(ctx)
+      ctx.currentVars = oldCurrentVars
       val asc = order.isAscending
       val isNullA = ctx.freshName("isNullA")
       val primitiveA = ctx.freshName("primitiveA")
@@ -117,8 +122,37 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
             }
           }
       """
-    }.mkString("\n")
-    comparisons
+    }
+
+    val code = ctx.splitExpressions(
+      expressions = comparisons,
+      funcName = "compare",
+      arguments = Seq(("InternalRow", "a"), ("InternalRow", "b")),
+      returnType = "int",
+      makeSplitFunction = { body =>
+        s"""
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
+          $body
+          return 0;
+        """
+      },
+      foldFunctions = { funCalls =>
+        funCalls.zipWithIndex.map { case (funCall, i) =>
+          val comp = ctx.freshName("comp")
+          s"""
+            int $comp = $funCall;
+            if ($comp != 0) {
+              return $comp;
+            }
+          """
+        }.mkString
+      })
+    // make sure INPUT_ROW is declared even if splitExpressions
+    // returns an inlined block
+    s"""
+       |InternalRow ${ctx.INPUT_ROW} = null;
+       |$code
+     """.stripMargin
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
@@ -142,7 +176,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         ${ctx.declareAddedFunctions()}
 
         public int compare(InternalRow a, InternalRow b) {
-          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
           $comparisons
           return 0;
         }

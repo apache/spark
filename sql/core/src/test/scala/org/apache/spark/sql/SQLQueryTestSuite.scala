@@ -98,7 +98,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(
-    "blacklist.sql"  // Do NOT remove this one. It is here to test the blacklist functionality.
+    "blacklist.sql",  // Do NOT remove this one. It is here to test the blacklist functionality.
+    ".DS_Store"       // A meta-file that may be created on Mac by Finder App.
+                      // We should ignore this file from processing.
   )
 
   // Create all the test cases.
@@ -121,7 +123,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.contains(testCase.name.toLowerCase)) {
+    if (blackList.exists(t => testCase.name.toLowerCase.contains(t.toLowerCase))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else {
@@ -163,7 +165,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         s"-- Number of queries: ${outputs.size}\n\n\n" +
         outputs.zipWithIndex.map{case (qr, i) => qr.toString(i)}.mkString("\n\n\n") + "\n"
       }
-      stringToFile(new File(testCase.resultFile), goldenOutput)
+      val resultFile = new File(testCase.resultFile);
+      val parent = resultFile.getParentFile();
+      if (!parent.exists()) {
+        assert(parent.mkdirs(), "Could not create directory: " + parent)
+      }
+      stringToFile(resultFile, goldenOutput)
     }
 
     // Read back the golden file.
@@ -196,7 +203,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       assertResult(expected.schema, s"Schema did not match for query #$i\n${expected.sql}") {
         output.schema
       }
-      assertResult(expected.output, s"Result dit not match for query #$i\n${expected.sql}") {
+      assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
         output.output
       }
     }
@@ -214,15 +221,22 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     try {
       val df = session.sql(sql)
       val schema = df.schema
-      val answer = df.queryExecution.hiveResultString()
+      // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
+      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
+        .replaceAll("Location: .*/sql/core/", "Location: sql/core/")
+        .replaceAll("Created: .*\n", "Created: \n")
+        .replaceAll("Last Access: .*\n", "Last Access: \n"))
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
 
     } catch {
-      case a: AnalysisException if a.plan.nonEmpty =>
+      case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
-        (StructType(Seq.empty), Seq(a.getClass.getName, a.getSimpleMessage))
+        // Also implement a crude way of masking expression IDs in the error message
+        // with a generic pattern "###".
+        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
+        (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         (StructType(Seq.empty), Seq(e.getClass.getName, e.getMessage))
@@ -232,7 +246,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def listTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).map { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-      TestCase(file.getName, file.getAbsolutePath, resultFile)
+      val absPath = file.getAbsolutePath
+      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      TestCase(testCaseName, absPath, resultFile)
     }
   }
 

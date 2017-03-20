@@ -132,55 +132,6 @@ class DataTypeSuite extends SparkFunSuite {
     assert(mapped === expected)
   }
 
-  test("merge where right is empty") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(List())
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, left))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
-  test("merge where left is empty") {
-
-    val left = StructType(List())
-
-    val right = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, right))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
-  test("merge where both are non-empty") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(
-      StructField("c", LongType) :: Nil)
-
-    val expected = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) ::
-      StructField("c", LongType) :: Nil)
-
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, expected))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::
@@ -253,7 +204,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeJsonRepr(structType)
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
-    test(s"Check the default size of ${dataType}") {
+    test(s"Check the default size of $dataType") {
       assert(dataType.defaultSize === expectedDefaultSize)
     }
   }
@@ -272,18 +223,18 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(TimestampType, 8)
   checkDefaultSize(StringType, 20)
   checkDefaultSize(BinaryType, 100)
-  checkDefaultSize(ArrayType(DoubleType, true), 800)
-  checkDefaultSize(ArrayType(StringType, false), 2000)
-  checkDefaultSize(MapType(IntegerType, StringType, true), 2400)
-  checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 80400)
-  checkDefaultSize(structType, 812)
+  checkDefaultSize(ArrayType(DoubleType, true), 8)
+  checkDefaultSize(ArrayType(StringType, false), 20)
+  checkDefaultSize(MapType(IntegerType, StringType, true), 24)
+  checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
+  checkDefaultSize(structType, 20)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
       to: DataType,
       expected: Boolean): Unit = {
     val testName =
-      s"equalsIgnoreCompatibleNullability: (from: ${from}, to: ${to})"
+      s"equalsIgnoreCompatibleNullability: (from: $from, to: $to)"
     test(testName) {
       assert(DataType.equalsIgnoreCompatibleNullability(from, to) === expected)
     }

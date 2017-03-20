@@ -53,6 +53,8 @@ object SimpleFPGrowth {
           + ", " + rule.confidence)
     }
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

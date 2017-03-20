@@ -17,15 +17,21 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, TableIdentifier}
+import java.util.TimeZone
+
+import org.scalatest.ShouldMatchers
+
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
-class AnalysisSuite extends AnalysisTest {
+
+class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
@@ -56,23 +62,23 @@ class AnalysisSuite extends AnalysisTest {
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
-        UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
 
     assertAnalysisError(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
-        TableIdentifier("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("TbL.a")), UnresolvedRelation(
-        TableIdentifier("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("TbL.a")),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
     checkAnalysis(
-      Project(Seq(UnresolvedAttribute("tBl.a")), UnresolvedRelation(
-        TableIdentifier("TaBlE"), Some("TbL"))),
+      Project(Seq(UnresolvedAttribute("tBl.a")),
+        SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
@@ -161,12 +167,12 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("resolve relations") {
-    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
+    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
+    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
@@ -187,12 +193,13 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("pull out nondeterministic expressions from RepartitionByExpression") {
-    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation)
+    val plan = RepartitionByExpression(Seq(Rand(33)), testRelation, numPartitions = 10)
     val projected = Alias(Rand(33), "_nondeterministic")()
     val expected =
       Project(testRelation.output,
         RepartitionByExpression(Seq(projected.toAttribute),
-          Project(testRelation.output :+ projected, testRelation)))
+          Project(testRelation.output :+ projected, testRelation),
+          numPartitions = 10))
     checkAnalysis(plan, expected)
   }
 
@@ -218,9 +225,36 @@ class AnalysisSuite extends AnalysisTest {
 
     // CreateStruct is a special case that we should not trim Alias for it.
     plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
-    checkAnalysis(plan, plan)
-    plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
-    checkAnalysis(plan, plan)
+    expected = testRelation.select(CreateNamedStruct(Seq(
+      Literal(a.name), a,
+      Literal("a+1"), (a + 1))).as("col"))
+    checkAnalysis(plan, expected)
+  }
+
+  test("Analysis may leave unnecassary aliases") {
+    val att1 = testRelation.output.head
+    var plan = testRelation.select(
+      CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
+      att1
+    )
+    val prevPlan = getAnalyzer(true).execute(plan)
+    plan = prevPlan.select(CreateArray(Seq(
+      CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
+      /** alias should be eliminated by [[CleanupAliases]] */
+      "col".attr.as("col2")
+    )).as("arr"))
+    plan = getAnalyzer(true).execute(plan)
+
+    val expectedPlan = prevPlan.select(
+      CreateArray(Seq(
+        CreateNamedStruct(Seq(
+          Literal(att1.name), att1,
+          Literal("a_plus_1"), (att1 + 1))),
+          'col.struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+      )).as("arr")
+    )
+
+    checkAnalysis(plan, expectedPlan)
   }
 
   test("SPARK-10534: resolve attribute references in order by clause") {
@@ -228,7 +262,8 @@ class AnalysisSuite extends AnalysisTest {
     val c = testRelation2.output(2)
 
     val plan = testRelation2.select('c).orderBy(Floor('a).asc)
-    val expected = testRelation2.select(c, a).orderBy(Floor(a.cast(DoubleType)).asc).select(c)
+    val expected = testRelation2.select(c, a)
+      .orderBy(Floor(Cast(a, DoubleType, Option(TimeZone.getDefault().getID))).asc).select(c)
 
     checkAnalysis(plan, expected)
   }
@@ -339,8 +374,8 @@ class AnalysisSuite extends AnalysisTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
-          Project(Seq($"y.key"), SubqueryAlias("y", input, None)),
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input)),
           Cross, None))
 
     assertAnalysisSuccess(query)
@@ -376,5 +411,34 @@ class AnalysisSuite extends AnalysisTest {
     assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
+  }
+
+  test("SPARK-18058: union and set operations shall not care about the nullability" +
+    " when comparing column types") {
+    val firstTable = LocalRelation(
+      AttributeReference("a",
+        StructType(Seq(StructField("a", IntegerType, nullable = true))), nullable = false)())
+    val secondTable = LocalRelation(
+      AttributeReference("a",
+        StructType(Seq(StructField("a", IntegerType, nullable = false))), nullable = false)())
+
+    val unionPlan = Union(firstTable, secondTable)
+    assertAnalysisSuccess(unionPlan)
+
+    val r1 = Except(firstTable, secondTable)
+    val r2 = Intersect(firstTable, secondTable)
+
+    assertAnalysisSuccess(r1)
+    assertAnalysisSuccess(r2)
+  }
+
+  test("resolve as with an already existed alias") {
+    checkAnalysis(
+      Project(Seq(UnresolvedAttribute("tbl2.a")),
+        SubqueryAlias("tbl", testRelation).as("tbl2")),
+      Project(testRelation.output, testRelation),
+      caseSensitive = false)
+
+    checkAnalysis(SubqueryAlias("tbl", testRelation).as("tbl2"), testRelation)
   }
 }

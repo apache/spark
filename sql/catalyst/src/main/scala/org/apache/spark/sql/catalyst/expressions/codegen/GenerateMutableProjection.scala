@@ -111,6 +111,10 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           ${ctx.initMutableStates()}
         }
 
+        public void initialize(int partitionIndex) {
+          ${ctx.initPartition()}
+        }
+
         ${ctx.declareAddedFunctions()}
 
         public ${classOf[BaseMutableProjection].getName} target(InternalRow row) {

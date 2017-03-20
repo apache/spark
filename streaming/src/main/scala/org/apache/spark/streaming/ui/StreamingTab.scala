@@ -38,6 +38,7 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
 
   ssc.addStreamingListener(listener)
   ssc.sc.addSparkListener(listener)
+  parent.setStreamingJobProgressListener(listener)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
 

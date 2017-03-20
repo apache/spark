@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -97,14 +98,18 @@ case class OptimizeMetadataOnlyQuery(
         relation match {
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-            val partitionData = fsRelation.location.listFiles(filters = Nil)
+            val partitionData = fsRelation.location.listFiles(Nil, Nil)
             LocalRelation(partAttrs, partitionData.map(_.values))
 
           case relation: CatalogRelation =>
-            val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
-            val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
+            val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
+            val caseInsensitiveProperties =
+              CaseInsensitiveMap(relation.tableMeta.storage.properties)
+            val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
+              .getOrElse(conf.sessionLocalTimeZone)
+            val partitionData = catalog.listPartitions(relation.tableMeta.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
-                Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
+                Cast(Literal(p.spec(attr.name)), attr.dataType, Option(timeZoneId)).eval()
               })
             }
             LocalRelation(partAttrs, partitionData)
@@ -132,8 +137,8 @@ case class OptimizeMetadataOnlyQuery(
         val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
         Some(AttributeSet(partAttrs), l)
 
-      case relation: CatalogRelation if relation.catalogTable.partitionColumnNames.nonEmpty =>
-        val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
+      case relation: CatalogRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
+        val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
         Some(AttributeSet(partAttrs), relation)
 
       case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>

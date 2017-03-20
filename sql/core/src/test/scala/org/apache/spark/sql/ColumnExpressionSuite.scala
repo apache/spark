@@ -533,31 +533,54 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("input_file_name - FileScanRDD") {
+  test("input_file_name, input_file_block_start, input_file_block_length - FileScanRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      val answer = spark.read.parquet(dir.getCanonicalPath).select(input_file_name())
-        .head.getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
 
-      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
+      // Test the 3 expressions when reading from files
+      val q = spark.read.parquet(dir.getCanonicalPath).select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
     }
   }
 
-  test("input_file_name - HadoopRDD") {
+  test("input_file_name, input_file_block_start, input_file_block_length - HadoopRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
       data.write.text(dir.getCanonicalPath)
       val df = spark.sparkContext.textFile(dir.getCanonicalPath).toDF()
-      val answer = df.select(input_file_name()).head.getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
 
-      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
+      // Test the 3 expressions when reading from files
+      val q = df.select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
     }
   }
 
-  test("input_file_name - NewHadoopRDD") {
+  test("input_file_name, input_file_block_start, input_file_block_length - NewHadoopRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
       data.write.text(dir.getCanonicalPath)
@@ -567,10 +590,22 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         classOf[LongWritable],
         classOf[Text])
       val df = rdd.map(pair => pair._2.toString).toDF()
-      val answer = df.select(input_file_name()).head.getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
 
-      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
+      // Test the 3 expressions when reading from files
+      val q = df.select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
     }
   }
 
@@ -676,5 +711,19 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.select($"a".bitwiseXOR($"b").bitwiseXOR(39)),
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
+  }
+
+  test("typedLit") {
+    val df = Seq(Tuple1(0)).toDF("a")
+    // Only check the types `lit` cannot handle
+    checkAnswer(
+      df.select(typedLit(Seq(1, 2, 3))),
+      Row(Seq(1, 2, 3)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(Map("a" -> 1, "b" -> 2))),
+      Row(Map("a" -> 1, "b" -> 2)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(("a", 2, 1.0))),
+      Row(Row("a", 2, 1.0)) :: Nil)
   }
 }

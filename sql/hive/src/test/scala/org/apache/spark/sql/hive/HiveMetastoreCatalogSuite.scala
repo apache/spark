@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
-
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -64,7 +62,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
       spark.sql("create view vw1 as select 1 as id")
       val plan = spark.sql("select id from vw1").queryExecution.analyzed
       val aliases = plan.collect {
-        case x @ SubqueryAlias("vw1", _, Some(TableIdentifier("vw1", Some("default")))) => x
+        case x @ SubqueryAlias("vw1", _) => x
       }
       assert(aliases.size == 1)
     }
@@ -142,8 +140,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.serde === Some(serde))
 
           assert(hiveTable.tableType === CatalogTableType.EXTERNAL)
-          assert(hiveTable.storage.locationUri ===
-            Some(path.toURI.toString.stripSuffix(File.separator)))
+          assert(hiveTable.storage.locationUri === Some(makeQualifiedPath(dir.getAbsolutePath)))
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))
@@ -159,11 +156,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
     test(s"Persist non-partitioned $provider relation into metastore as managed table using CTAS") {
       withTempPath { dir =>
         withTable("t") {
-          val path = dir.getCanonicalPath
-
           sql(
             s"""CREATE TABLE t USING $provider
-               |OPTIONS (path '$path')
+               |OPTIONS (path '${dir.toURI}')
                |AS SELECT 1 AS d1, "val_1" AS d2
              """.stripMargin)
 

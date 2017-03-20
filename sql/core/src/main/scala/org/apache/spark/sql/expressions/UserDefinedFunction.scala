@@ -24,10 +24,8 @@ import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.DataType
 
 /**
- * A user-defined function. To create one, use the `udf` functions in [[functions]].
- * Note that the user-defined functions must be deterministic. Due to optimization,
- * duplicate invocations may be eliminated or the function may even be invoked more times than
- * it is present in the query.
+ * A user-defined function. To create one, use the `udf` functions in `functions`.
+ *
  * As an example:
  * {{{
  *   // Defined a UDF that returns true or false based on some numeric score.
@@ -36,6 +34,10 @@ import org.apache.spark.sql.types.DataType
  *   // Projects a column that adds a prediction column based on the score column.
  *   df.select( predict(df("score")) )
  * }}}
+ *
+ * @note The user-defined functions must be deterministic. Due to optimization,
+ * duplicate invocations may be eliminated or the function may even be invoked more times than
+ * it is present in the query.
  *
  * @since 1.3.0
  */

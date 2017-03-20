@@ -60,8 +60,8 @@ from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
 from pyspark.ml.tuning import *
-from pyspark.ml.wrapper import JavaParams
-from pyspark.ml.common import _java2py
+from pyspark.ml.wrapper import JavaParams, JavaWrapper
+from pyspark.ml.common import _java2py, _py2java
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
@@ -250,7 +250,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
     def __init__(self, seed=None):
         super(TestParams, self).__init__()
         self._setDefault(maxIter=10)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -259,7 +259,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
         setParams(self, seed=None)
         Sets params for this test.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 
@@ -271,7 +271,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
     def __init__(self, seed=None):
         super(OtherTestParams, self).__init__()
         self._setDefault(maxIter=10)
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -280,7 +280,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
         setParams(self, seed=None)
         Sets params for this test.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 
@@ -388,6 +388,40 @@ class ParamTests(PySparkTestCase):
         model = Word2Vec().setWindowSize(6)
         # Check windowSize is set properly
         self.assertEqual(model.getWindowSize(), 6)
+
+    def test_copy_param_extras(self):
+        tp = TestParams(seed=42)
+        extra = {tp.getParam(TestParams.inputCol.name): "copy_input"}
+        tp_copy = tp.copy(extra=extra)
+        self.assertEqual(tp.uid, tp_copy.uid)
+        self.assertEqual(tp.params, tp_copy.params)
+        for k, v in extra.items():
+            self.assertTrue(tp_copy.isDefined(k))
+            self.assertEqual(tp_copy.getOrDefault(k), v)
+        copied_no_extra = {}
+        for k, v in tp_copy._paramMap.items():
+            if k not in extra:
+                copied_no_extra[k] = v
+        self.assertEqual(tp._paramMap, copied_no_extra)
+        self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
+
+
+class EvaluatorTests(SparkSessionTestCase):
+
+    def test_java_params(self):
+        """
+        This tests a bug fixed by SPARK-18274 which causes multiple copies
+        of a Params instance in Python to be linked to the same Java instance.
+        """
+        evaluator = RegressionEvaluator(metricName="r2")
+        df = self.spark.createDataFrame([Row(label=1.0, prediction=1.1)])
+        evaluator.evaluate(df)
+        self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
+        evaluatorCopy = evaluator.copy({evaluator.metricName: "mae"})
+        evaluator.evaluate(df)
+        evaluatorCopy.evaluate(df)
+        self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
+        self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
 
 
 class FeatureTests(SparkSessionTestCase):
@@ -1097,6 +1131,53 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
+    def test_gaussian_mixture_summary(self):
+        data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
+                (Vectors.sparse(1, [], []),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        gmm = GaussianMixture(k=2)
+        model = gmm.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.probabilityCol, "probability")
+        self.assertTrue(isinstance(s.probability, DataFrame))
+        self.assertEqual(s.featuresCol, "features")
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertTrue(isinstance(s.cluster, DataFrame))
+        self.assertEqual(len(s.clusterSizes), 2)
+        self.assertEqual(s.k, 2)
+
+    def test_bisecting_kmeans_summary(self):
+        data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
+                (Vectors.sparse(1, [], []),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        bkm = BisectingKMeans(k=2)
+        model = bkm.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.featuresCol, "features")
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertTrue(isinstance(s.cluster, DataFrame))
+        self.assertEqual(len(s.clusterSizes), 2)
+        self.assertEqual(s.k, 2)
+
+    def test_kmeans_summary(self):
+        data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
+                (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=2, seed=1)
+        model = kmeans.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.featuresCol, "features")
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertTrue(isinstance(s.cluster, DataFrame))
+        self.assertEqual(len(s.clusterSizes), 2)
+        self.assertEqual(s.k, 2)
+
 
 class OneVsRestTests(SparkSessionTestCase):
 
@@ -1140,6 +1221,26 @@ class HashingTFTest(SparkSessionTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
+
+
+class GeneralizedLinearRegressionTest(SparkSessionTestCase):
+
+    def test_tweedie_distribution(self):
+
+        df = self.spark.createDataFrame(
+            [(1.0, Vectors.dense(0.0, 0.0)),
+             (1.0, Vectors.dense(1.0, 2.0)),
+             (2.0, Vectors.dense(0.0, 0.0)),
+             (2.0, Vectors.dense(1.0, 1.0)), ], ["label", "features"])
+
+        glr = GeneralizedLinearRegression(family="tweedie", variancePower=1.6)
+        model = glr.fit(df)
+        self.assertTrue(np.allclose(model.coefficients.toArray(), [-0.4645, 0.3402], atol=1E-4))
+        self.assertTrue(np.isclose(model.intercept, 0.7841, atol=1E-4))
+
+        model2 = glr.setLinkPower(-1.0).fit(df)
+        self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
+        self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
 
 
 class ALSTest(SparkSessionTestCase):
@@ -1553,6 +1654,42 @@ class MatrixUDTTests(MLlibTestCase):
                 self.assertTrue(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
+
+
+class WrapperTests(MLlibTestCase):
+
+    def test_new_java_array(self):
+        # test array of strings
+        str_list = ["a", "b", "c"]
+        java_class = self.sc._gateway.jvm.java.lang.String
+        java_array = JavaWrapper._new_java_array(str_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), str_list)
+        # test array of integers
+        int_list = [1, 2, 3]
+        java_class = self.sc._gateway.jvm.java.lang.Integer
+        java_array = JavaWrapper._new_java_array(int_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), int_list)
+        # test array of floats
+        float_list = [0.1, 0.2, 0.3]
+        java_class = self.sc._gateway.jvm.java.lang.Double
+        java_array = JavaWrapper._new_java_array(float_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), float_list)
+        # test array of bools
+        bool_list = [False, True, True]
+        java_class = self.sc._gateway.jvm.java.lang.Boolean
+        java_array = JavaWrapper._new_java_array(bool_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), bool_list)
+        # test array of Java DenseVectors
+        v1 = DenseVector([0.0, 1.0])
+        v2 = DenseVector([1.0, 0.0])
+        vec_java_list = [_py2java(self.sc, v1), _py2java(self.sc, v2)]
+        java_class = self.sc._gateway.jvm.org.apache.spark.ml.linalg.DenseVector
+        java_array = JavaWrapper._new_java_array(vec_java_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), [v1, v2])
+        # test empty array
+        java_class = self.sc._gateway.jvm.java.lang.Integer
+        java_array = JavaWrapper._new_java_array([], java_class)
+        self.assertEqual(_java2py(self.sc, java_array), [])
 
 
 if __name__ == "__main__":

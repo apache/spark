@@ -45,26 +45,33 @@ import org.apache.spark.util.Utils
 object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
-    val mirror = typeTag[T].mirror
-    val tpe = typeTag[T].tpe
+    val mirror = ScalaReflection.mirror
+    val tpe = typeTag[T].in(mirror).tpe
+
+    if (ScalaReflection.optionOfProductType(tpe)) {
+      throw new UnsupportedOperationException(
+        "Cannot create encoder for Option of Product type, because Product type is represented " +
+          "as a row, and the entire row can not be null in Spark SQL like normal databases. " +
+          "You can wrap your type with Tuple1 if you do want top level null Product objects, " +
+          "e.g. instead of creating `Dataset[Option[MyClass]]`, you can do something like " +
+          "`val ds: Dataset[Tuple1[MyClass]] = Seq(Tuple1(MyClass(...)), Tuple1(null)).toDS`")
+    }
+
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = !cls.isPrimitive)
     val nullSafeInput = if (flat) {
       inputObject
     } else {
-      // For input object of non-flat type, we can't encode it to row if it's null, as Spark SQL
+      // For input object of Product type, we can't encode it to row if it's null, as Spark SQL
       // doesn't allow top-level row to be null, only its columns can be null.
-      AssertNotNull(inputObject, Seq("top level non-flat input object"))
+      AssertNotNull(inputObject, Seq("top level Product input object"))
     }
     val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
     val deserializer = ScalaReflection.deserializerFor[T]
 
-    val schema = ScalaReflection.schemaFor[T] match {
-      case ScalaReflection.Schema(s: StructType, _) => s
-      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
-    }
+    val schema = serializer.dataType
 
     new ExpressionEncoder[T](
       schema,
@@ -281,7 +288,7 @@ case class ExpressionEncoder[T](
   } catch {
     case e: Exception =>
       throw new RuntimeException(
-        s"Error while encoding: $e\n${serializer.map(_.treeString).mkString("\n")}", e)
+        s"Error while encoding: $e\n${serializer.map(_.simpleString).mkString("\n")}", e)
   }
 
   /**
@@ -293,7 +300,7 @@ case class ExpressionEncoder[T](
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.treeString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.simpleString}", e)
   }
 
   /**

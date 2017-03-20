@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -37,12 +39,14 @@ class CatalogSuite
   extends SparkFunSuite
   with BeforeAndAfterEach
   with SharedSQLContext {
+  import testImplicits._
 
   private def sessionCatalog: SessionCatalog = spark.sessionState.catalog
 
   private val utils = new CatalogTestUtils {
     override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
     override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
+    override val defaultProvider: String = "parquet"
     override def newEmptyCatalog(): ExternalCatalog = spark.sharedState.externalCatalog
   }
 
@@ -306,29 +310,6 @@ class CatalogSuite
     columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
 
-  test("createExternalTable should fail if path is not given for file-based data source") {
-    val e = intercept[AnalysisException] {
-      spark.catalog.createExternalTable("tbl", "json", Map.empty[String, String])
-    }
-    assert(e.message.contains("Unable to infer schema"))
-
-    val e2 = intercept[AnalysisException] {
-      spark.catalog.createExternalTable(
-        "tbl",
-        "json",
-        new StructType().add("i", IntegerType),
-        Map.empty[String, String])
-    }
-    assert(e2.message == "Cannot create a file-based external data source table without path")
-  }
-
-  test("createExternalTable should fail if provider is hive") {
-    val e = intercept[AnalysisException] {
-      spark.catalog.createExternalTable("tbl", "HiVe", Map.empty[String, String])
-    }
-    assert(e.message.contains("Cannot create hive serde table with createExternalTable API"))
-  }
-
   test("dropTempView should not un-cache and drop metastore table if a same-name table exists") {
     withTable("same_name") {
       spark.range(10).write.saveAsTable("same_name")
@@ -386,15 +367,24 @@ class CatalogSuite
         createFunction("fn2", Some(db))
 
         // Find a temporary function
-        assert(spark.catalog.getFunction("fn1").name === "fn1")
+        val fn1 = spark.catalog.getFunction("fn1")
+        assert(fn1.name === "fn1")
+        assert(fn1.database === null)
+        assert(fn1.isTemporary)
 
         // Find a qualified function
-        assert(spark.catalog.getFunction(db, "fn2").name === "fn2")
+        val fn2 = spark.catalog.getFunction(db, "fn2")
+        assert(fn2.name === "fn2")
+        assert(fn2.database === db)
+        assert(!fn2.isTemporary)
 
         // Find an unqualified function using the current database
         intercept[AnalysisException](spark.catalog.getFunction("fn2"))
         spark.catalog.setCurrentDatabase(db)
-        assert(spark.catalog.getFunction("fn2").name === "fn2")
+        val unqualified = spark.catalog.getFunction("fn2")
+        assert(unqualified.name === "fn2")
+        assert(unqualified.database === db)
+        assert(!unqualified.isTemporary)
       }
     }
   }
@@ -458,6 +448,69 @@ class CatalogSuite
     }
   }
 
-  // TODO: add tests for the rest of them
+  test("createTable with 'path' in options") {
+    withTable("t") {
+      withTempDir { dir =>
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "json",
+          schema = new StructType().add("i", "int"),
+          options = Map("path" -> dir.getAbsolutePath))
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(table.tableType == CatalogTableType.EXTERNAL)
+        assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
 
+        Seq((1)).toDF("i").write.insertInto("t")
+        assert(dir.exists() && dir.listFiles().nonEmpty)
+
+        sql("DROP TABLE t")
+        // the table path and data files are still there after DROP TABLE, if custom table path is
+        // specified.
+        assert(dir.exists() && dir.listFiles().nonEmpty)
+      }
+    }
+  }
+
+  test("createTable without 'path' in options") {
+    withTable("t") {
+      spark.catalog.createTable(
+        tableName = "t",
+        source = "json",
+        schema = new StructType().add("i", "int"),
+        options = Map.empty[String, String])
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.tableType == CatalogTableType.MANAGED)
+      val tablePath = new File(table.storage.locationUri.get)
+      assert(tablePath.exists() && tablePath.listFiles().isEmpty)
+
+      Seq((1)).toDF("i").write.insertInto("t")
+      assert(tablePath.listFiles().nonEmpty)
+
+      sql("DROP TABLE t")
+      // the table path is removed after DROP TABLE, if custom table path is not specified.
+      assert(!tablePath.exists())
+    }
+  }
+
+  test("clone Catalog") {
+    // need to test tempTables are cloned
+    assert(spark.catalog.listTables().collect().isEmpty)
+
+    createTempTable("my_temp_table")
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+
+    // inheritance
+    val forkedSession = spark.cloneSession()
+    assert(spark ne forkedSession)
+    assert(spark.catalog ne forkedSession.catalog)
+    assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+
+    // independence
+    dropTable("my_temp_table") // drop table in original session
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
+    assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+    forkedSession.sessionState.catalog
+      .createTempView("fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
+  }
 }

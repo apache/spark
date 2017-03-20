@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -51,7 +51,8 @@ private[deploy] class Master(
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
+  // For application IDs
+  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
 
   private val WORKER_TIMEOUT_MS = conf.getLong("spark.worker.timeout", 60) * 1000
   private val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
@@ -230,6 +231,29 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
+    case RegisterWorker(id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
+      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      if (state == RecoveryState.STANDBY) {
+        workerRef.send(MasterInStandby)
+      } else if (idToWorker.contains(id)) {
+        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
+      } else {
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerWebUiUrl)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
+          schedule()
+        } else {
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
+        }
+      }
+
     case RegisterApplication(description, driver) =>
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
@@ -385,30 +409,6 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
-      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
-      if (state == RecoveryState.STANDBY) {
-        context.reply(MasterInStandby)
-      } else if (idToWorker.contains(id)) {
-        context.reply(RegisterWorkerFailed("Duplicate worker ID"))
-      } else {
-        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerWebUiUrl)
-        if (registerWorker(worker)) {
-          persistenceEngine.addWorker(worker)
-          context.reply(RegisteredWorker(self, masterWebUiUrl))
-          schedule()
-        } else {
-          val workerAddress = worker.endpoint.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same " +
-            "address: " + workerAddress)
-          context.reply(RegisterWorkerFailed("Attempted to re-register worker at same address: "
-            + workerAddress))
-        }
-      }
-
     case RequestSubmitDriver(description) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -1045,7 +1045,7 @@ private[deploy] object Master extends Logging {
     val rpcEnv = RpcEnv.create(SYSTEM_NAME, host, port, conf, securityMgr)
     val masterEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME,
       new Master(rpcEnv, rpcEnv.address, webUiPort, securityMgr, conf))
-    val portsResponse = masterEndpoint.askWithRetry[BoundPortsResponse](BoundPortsRequest)
+    val portsResponse = masterEndpoint.askSync[BoundPortsResponse](BoundPortsRequest)
     (rpcEnv, portsResponse.webUIPort, portsResponse.restPort)
   }
 }

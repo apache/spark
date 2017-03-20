@@ -18,7 +18,8 @@
 package org.apache.spark.util
 
 import java.io._
-import java.lang.management.ManagementFactory
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
@@ -38,7 +39,9 @@ import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.matching.Regex
 
+import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
@@ -54,7 +57,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
+import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.util.logging.RollingFileAppender
@@ -236,9 +239,11 @@ private[spark] object Utils extends Logging {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
+      val originalPosition = bb.position()
       val bbval = new Array[Byte](bb.remaining())
       bb.get(bbval)
       out.write(bbval)
+      bb.position(originalPosition)
     }
   }
 
@@ -249,9 +254,11 @@ private[spark] object Utils extends Logging {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
+      val originalPosition = bb.position()
       val bbval = new Array[Byte](bb.remaining())
       bb.get(bbval)
       out.write(bbval)
+      bb.position(originalPosition)
     }
   }
 
@@ -1104,26 +1111,39 @@ private[spark] object Utils extends Logging {
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MB".
    */
-  def bytesToString(size: Long): String = {
+  def bytesToString(size: Long): String = bytesToString(BigInt(size))
+
+  def bytesToString(size: BigInt): String = {
+    val EB = 1L << 60
+    val PB = 1L << 50
     val TB = 1L << 40
     val GB = 1L << 30
     val MB = 1L << 20
     val KB = 1L << 10
 
-    val (value, unit) = {
-      if (size >= 2*TB) {
-        (size.asInstanceOf[Double] / TB, "TB")
-      } else if (size >= 2*GB) {
-        (size.asInstanceOf[Double] / GB, "GB")
-      } else if (size >= 2*MB) {
-        (size.asInstanceOf[Double] / MB, "MB")
-      } else if (size >= 2*KB) {
-        (size.asInstanceOf[Double] / KB, "KB")
-      } else {
-        (size.asInstanceOf[Double], "B")
+    if (size >= BigInt(1L << 11) * EB) {
+      // The number is too large, show it in scientific notation.
+      BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
+    } else {
+      val (value, unit) = {
+        if (size >= 2 * EB) {
+          (BigDecimal(size) / EB, "EB")
+        } else if (size >= 2 * PB) {
+          (BigDecimal(size) / PB, "PB")
+        } else if (size >= 2 * TB) {
+          (BigDecimal(size) / TB, "TB")
+        } else if (size >= 2 * GB) {
+          (BigDecimal(size) / GB, "GB")
+        } else if (size >= 2 * MB) {
+          (BigDecimal(size) / MB, "MB")
+        } else if (size >= 2 * KB) {
+          (BigDecimal(size) / KB, "KB")
+        } else {
+          (BigDecimal(size), "B")
+        }
       }
+      "%.1f %s".formatLocal(Locale.US, value, unit)
     }
-    "%.1f %s".formatLocal(Locale.US, value, unit)
   }
 
   /**
@@ -1248,7 +1268,7 @@ private[spark] object Utils extends Logging {
         val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
           logError(s"uncaught error in thread $currentThreadName, stopping SparkContext", t)
-          sc.stop()
+          sc.stopInNewThread()
         }
         if (!NonFatal(t)) {
           logError(s"throw uncaught fatal error in thread $currentThreadName", t)
@@ -1418,8 +1438,12 @@ private[spark] object Utils extends Logging {
             }
             callStack(0) = ste.toString // Put last Spark method on top of the stack trace.
           } else {
-            firstUserLine = ste.getLineNumber
-            firstUserFile = ste.getFileName
+            if (ste.getFileName != null) {
+              firstUserFile = ste.getFileName
+              if (ste.getLineNumber >= 0) {
+                firstUserLine = ste.getLineNumber
+              }
+            }
             callStack += ste.toString
             insideSpark = false
           }
@@ -1479,10 +1503,11 @@ private[spark] object Utils extends Logging {
 
   /** Return uncompressed file length of a compressed file. */
   private def getCompressedFileLength(file: File): Long = {
+    var gzInputStream: GZIPInputStream = null
     try {
       // Uncompress .gz file to determine file size.
       var fileSize = 0L
-      val gzInputStream = new GZIPInputStream(new FileInputStream(file))
+      gzInputStream = new GZIPInputStream(new FileInputStream(file))
       val bufSize = 1024
       val buf = new Array[Byte](bufSize)
       var numBytes = ByteStreams.read(gzInputStream, buf, 0, bufSize)
@@ -1495,6 +1520,10 @@ private[spark] object Utils extends Logging {
       case e: Throwable =>
         logError(s"Cannot get file length of ${file}", e)
         throw e
+    } finally {
+      if (gzInputStream != null) {
+        gzInputStream.close()
+      }
     }
   }
 
@@ -1668,8 +1697,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * NaN-safe version of [[java.lang.Double.compare()]] which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN > any non-NaN double.
+   * NaN-safe version of `java.lang.Double.compare()` which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN double.
    */
   def nanSafeCompareDoubles(x: Double, y: Double): Int = {
     val xIsNan: Boolean = java.lang.Double.isNaN(x)
@@ -1682,8 +1711,8 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * NaN-safe version of [[java.lang.Float.compare()]] which allows NaN values to be compared
-   * according to semantics where NaN == NaN and NaN > any non-NaN float.
+   * NaN-safe version of `java.lang.Float.compare()` which allows NaN values to be compared
+   * according to semantics where NaN == NaN and NaN is greater than any non-NaN float.
    */
   def nanSafeCompareFloats(x: Float, y: Float): Int = {
     val xIsNan: Boolean = java.lang.Float.isNaN(x)
@@ -1757,6 +1786,22 @@ private[spark] object Utils extends Logging {
       iterator.next()
     }
     count
+  }
+
+  /**
+   * Generate a zipWithIndex iterator, avoid index value overflowing problem
+   * in scala's zipWithIndex
+   */
+  def getIteratorZipWithIndex[T](iterator: Iterator[T], startIndex: Long): Iterator[(T, Long)] = {
+    new Iterator[(T, Long)] {
+      require(startIndex >= 0, "startIndex should be >= 0.")
+      var index: Long = startIndex - 1L
+      def hasNext: Boolean = iterator.hasNext
+      def next(): (T, Long) = {
+        index += 1L
+        (iterator.next(), index)
+      }
+    }
   }
 
   /**
@@ -1852,20 +1897,17 @@ private[spark] object Utils extends Logging {
   def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
     // Politely destroy first
     process.destroy()
-
-    if (waitForProcess(process, timeoutMs)) {
+    if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
       // Successful exit
       Option(process.exitValue())
     } else {
-      // Java 8 added a new API which will more forcibly kill the process. Use that if available.
       try {
-        classOf[Process].getMethod("destroyForcibly").invoke(process)
+        process.destroyForcibly()
       } catch {
-        case _: NoSuchMethodException => return None // Not available; give up
         case NonFatal(e) => logWarning("Exception when attempting to kill process", e)
       }
       // Wait, again, although this really should return almost immediately
-      if (waitForProcess(process, timeoutMs)) {
+      if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
         Option(process.exitValue())
       } else {
         logWarning("Timed out waiting to forcibly kill process")
@@ -1875,44 +1917,11 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Wait for a process to terminate for at most the specified duration.
-   *
-   * @return whether the process actually terminated before the given timeout.
-   */
-  def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
-    try {
-      // Use Java 8 method if available
-      classOf[Process].getMethod("waitFor", java.lang.Long.TYPE, classOf[TimeUnit])
-        .invoke(process, timeoutMs.asInstanceOf[java.lang.Long], TimeUnit.MILLISECONDS)
-        .asInstanceOf[Boolean]
-    } catch {
-      case _: NoSuchMethodException =>
-        // Otherwise implement it manually
-        var terminated = false
-        val startTime = System.currentTimeMillis
-        while (!terminated) {
-          try {
-            process.exitValue()
-            terminated = true
-          } catch {
-            case e: IllegalThreadStateException =>
-              // Process not terminated yet
-              if (System.currentTimeMillis - startTime > timeoutMs) {
-                return false
-              }
-              Thread.sleep(100)
-          }
-        }
-        true
-    }
-  }
-
-  /**
    * Return the stderr of a process after waiting for the process to terminate.
    * If the process does not terminate within the specified timeout, return None.
    */
   def getStderr(process: Process, timeoutMs: Long): Option[String] = {
-    val terminated = Utils.waitForProcess(process, timeoutMs)
+    val terminated = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
     if (terminated) {
       Some(Source.fromInputStream(process.getErrorStream).getLines().mkString("\n"))
     } else {
@@ -1995,7 +2004,7 @@ private[spark] object Utils extends Logging {
     if (paths == null || paths.trim.isEmpty) {
       ""
     } else {
-      paths.split(",").map { p => Utils.resolveURI(p) }.mkString(",")
+      paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
     }
   }
 
@@ -2033,6 +2042,20 @@ private[spark] object Utils extends Logging {
       }
     }
     path
+  }
+
+  /**
+   * Updates Spark config with properties from a set of Properties.
+   * Provided properties have the highest priority.
+   */
+  def updateSparkConfigFromProperties(
+      conf: SparkConf,
+      properties: Map[String, String]) : Unit = {
+    properties.filter { case (k, v) =>
+      k.startsWith("spark.")
+    }.foreach { case (k, v) =>
+      conf.set(k, v)
+    }
   }
 
   /** Load properties present in the given file. */
@@ -2080,16 +2103,60 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  private implicit class Lock(lock: LockInfo) {
+    def lockString: String = {
+      lock match {
+        case monitor: MonitorInfo =>
+          s"Monitor(${lock.getClassName}@${lock.getIdentityHashCode}})"
+        case _ =>
+          s"Lock(${lock.getClassName}@${lock.getIdentityHashCode}})"
+      }
+    }
+  }
+
   /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
   def getThreadDump(): Array[ThreadStackTrace] = {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
-      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
-      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
-        threadInfo.getThreadState, stackTrace)
+    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+  }
+
+  def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
+    if (threadId <= 0) {
+      None
+    } else {
+      // The Int.MaxValue here requests the entire untruncated stack trace of the thread:
+      val threadInfo =
+        Option(ManagementFactory.getThreadMXBean.getThreadInfo(threadId, Int.MaxValue))
+      threadInfo.map(threadInfoToThreadStackTrace)
     }
+  }
+
+  private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
+    val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
+    val stackTrace = threadInfo.getStackTrace.map { frame =>
+      monitors.get(frame) match {
+        case Some(monitor) =>
+          monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
+        case None =>
+          frame.toString
+      }
+    }.mkString("\n")
+
+    // use a set to dedup re-entrant locks that are held at multiple places
+    val heldLocks =
+      (threadInfo.getLockedSynchronizers ++ threadInfo.getLockedMonitors).map(_.lockString).toSet
+
+    ThreadStackTrace(
+      threadId = threadInfo.getThreadId,
+      threadName = threadInfo.getThreadName,
+      threadState = threadInfo.getThreadState,
+      stackTrace = stackTrace,
+      blockedByThreadId =
+        if (threadInfo.getLockOwnerId < 0) None else Some(threadInfo.getLockOwnerId),
+      blockedByLock = Option(threadInfo.getLockInfo).map(_.lockString).getOrElse(""),
+      holdingLocks = heldLocks.toSeq)
   }
 
   /**
@@ -2112,6 +2179,14 @@ private[spark] object Utils extends Logging {
     } else {
       maxRetries.getOrElse(16)
     }
+  }
+
+  /**
+   * Returns the user port to try when trying to bind a service. Handles wrapping and skipping
+   * privileged ports.
+   */
+  def userPort(base: Int, offset: Int): Int = {
+    (base + offset - 1024) % (65536 - 1024) + 1024
   }
 
   /**
@@ -2141,8 +2216,7 @@ private[spark] object Utils extends Logging {
       val tryPort = if (startPort == 0) {
         startPort
       } else {
-        // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        userPort(startPort, offset)
       }
       try {
         val (service, port) = startService(tryPort)
@@ -2151,17 +2225,32 @@ private[spark] object Utils extends Logging {
       } catch {
         case e: Exception if isBindCollision(e) =>
           if (offset >= maxRetries) {
-            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
-              s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
-              s"the appropriate port for the service$serviceString (for example spark.ui.port " +
-              s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            val exceptionMessage = if (startPort == 0) {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (on a random free port)! " +
+                s"Consider explicitly setting the appropriate binding address for " +
+                s"the service$serviceString (for example spark.driver.bindAddress " +
+                s"for SparkDriver) to the correct binding address."
+            } else {
+              s"${e.getMessage}: Service$serviceString failed after " +
+                s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
+                s"the appropriate port for the service$serviceString (for example spark.ui.port " +
+                s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+            }
             val exception = new BindException(exceptionMessage)
             // restore original stack trace
             exception.setStackTrace(e.getStackTrace)
             throw exception
           }
-          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
-            s"Attempting port ${tryPort + 1}.")
+          if (startPort == 0) {
+            // As startPort 0 is for a random free port, it is most possibly binding address is
+            // not correct.
+            logWarning(s"Service$serviceString could not bind on a random free port. " +
+              "You may check whether configuring an appropriate binding address.")
+          } else {
+            logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+              s"Attempting port ${tryPort + 1}.")
+          }
       }
     }
     // Should never happen
@@ -2180,6 +2269,9 @@ private[spark] object Utils extends Logging {
         isBindCollision(e.getCause)
       case e: MultiException =>
         e.getThrowables.asScala.exists(isBindCollision)
+      case e: NativeIoException =>
+        (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+          isBindCollision(e.getCause)
       case e: Exception => isBindCollision(e.getCause)
       case _ => false
     }
@@ -2290,8 +2382,9 @@ private[spark] object Utils extends Logging {
    * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
    * host and port.
    *
-   * @throws SparkException if `sparkUrl` is invalid.
+   * @throws org.apache.spark.SparkException if sparkUrl is invalid.
    */
+  @throws(classOf[SparkException])
   def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
     try {
       val uri = new java.net.URI(sparkUrl)
@@ -2491,6 +2584,54 @@ private[spark] object Utils extends Logging {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
     }
   }
+
+  private[util] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
+
+  def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    val redactionPattern = conf.get(SECRET_REDACTION_PATTERN).r
+    redact(redactionPattern, kvs)
+  }
+
+  private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    kvs.map { kv =>
+      redactionPattern.findFirstIn(kv._1)
+        .map { _ => (kv._1, REDACTION_REPLACEMENT_TEXT) }
+        .getOrElse(kv)
+    }
+  }
+
+  /**
+   * Looks up the redaction regex from within the key value pairs and uses it to redact the rest
+   * of the key value pairs. No care is taken to make sure the redaction property itself is not
+   * redacted. So theoretically, the property itself could be configured to redact its own value
+   * when printing.
+   */
+  def redact(kvs: Map[String, String]): Seq[(String, String)] = {
+    val redactionPattern = kvs.getOrElse(
+      SECRET_REDACTION_PATTERN.key,
+      SECRET_REDACTION_PATTERN.defaultValueString
+    ).r
+    redact(redactionPattern, kvs.toArray)
+  }
+
+}
+
+private[util] object CallerContext extends Logging {
+  val callerContextSupported: Boolean = {
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
+      try {
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        true
+      } catch {
+        case _: ClassNotFoundException =>
+          false
+        case NonFatal(e) =>
+          logWarning("Fail to load the CallerContext class", e)
+          false
+      }
+    }
+  }
 }
 
 /**
@@ -2505,6 +2646,7 @@ private[spark] object Utils extends Logging {
  * @param from who sets up the caller context (TASK, CLIENT, APPMASTER)
  *
  * The parameters below are optional:
+ * @param upstreamCallerContext caller context the upstream application passes in
  * @param appId id of the app this task belongs to
  * @param appAttemptId attempt id of the app this task belongs to
  * @param jobId id of the job this task belongs to
@@ -2514,46 +2656,56 @@ private[spark] object Utils extends Logging {
  * @param taskAttemptNumber task attempt id
  */
 private[spark] class CallerContext(
-   from: String,
-   appId: Option[String] = None,
-   appAttemptId: Option[String] = None,
-   jobId: Option[Int] = None,
-   stageId: Option[Int] = None,
-   stageAttemptId: Option[Int] = None,
-   taskId: Option[Long] = None,
-   taskAttemptNumber: Option[Int] = None) extends Logging {
+  from: String,
+  upstreamCallerContext: Option[String] = None,
+  appId: Option[String] = None,
+  appAttemptId: Option[String] = None,
+  jobId: Option[Int] = None,
+  stageId: Option[Int] = None,
+  stageAttemptId: Option[Int] = None,
+  taskId: Option[Long] = None,
+  taskAttemptNumber: Option[Int] = None) extends Logging {
 
-   val appIdStr = if (appId.isDefined) s"_${appId.get}" else ""
-   val appAttemptIdStr = if (appAttemptId.isDefined) s"_${appAttemptId.get}" else ""
-   val jobIdStr = if (jobId.isDefined) s"_JId_${jobId.get}" else ""
-   val stageIdStr = if (stageId.isDefined) s"_SId_${stageId.get}" else ""
-   val stageAttemptIdStr = if (stageAttemptId.isDefined) s"_${stageAttemptId.get}" else ""
-   val taskIdStr = if (taskId.isDefined) s"_TId_${taskId.get}" else ""
-   val taskAttemptNumberStr =
-     if (taskAttemptNumber.isDefined) s"_${taskAttemptNumber.get}" else ""
+  private val context = prepareContext("SPARK_" +
+    from +
+    appId.map("_" + _).getOrElse("") +
+    appAttemptId.map("_" + _).getOrElse("") +
+    jobId.map("_JId_" + _).getOrElse("") +
+    stageId.map("_SId_" + _).getOrElse("") +
+    stageAttemptId.map("_" + _).getOrElse("") +
+    taskId.map("_TId_" + _).getOrElse("") +
+    taskAttemptNumber.map("_" + _).getOrElse("") +
+    upstreamCallerContext.map("_" + _).getOrElse(""))
 
-   val context = "SPARK_" + from + appIdStr + appAttemptIdStr +
-     jobIdStr + stageIdStr + stageAttemptIdStr + taskIdStr + taskAttemptNumberStr
+  private def prepareContext(context: String): String = {
+    // The default max size of Hadoop caller context is 128
+    lazy val len = SparkHadoopUtil.get.conf.getInt("hadoop.caller.context.max.size", 128)
+    if (context == null || context.length <= len) {
+      context
+    } else {
+      val finalContext = context.substring(0, len)
+      logWarning(s"Truncated Spark caller context from $context to $finalContext")
+      finalContext
+    }
+  }
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
    * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
    */
-  def setCurrentContext(): Boolean = {
-    var succeed = false
-    try {
-      // scalastyle:off classforname
-      val callerContext = Class.forName("org.apache.hadoop.ipc.CallerContext")
-      val Builder = Class.forName("org.apache.hadoop.ipc.CallerContext$Builder")
-      // scalastyle:on classforname
-      val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
-      val hdfsContext = Builder.getMethod("build").invoke(builderInst)
-      callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
-      succeed = true
-    } catch {
-      case NonFatal(e) => logInfo("Fail to set Spark caller context", e)
+  def setCurrentContext(): Unit = {
+    if (CallerContext.callerContextSupported) {
+      try {
+        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
+        val hdfsContext = builder.getMethod("build").invoke(builderInst)
+        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Fail to set Spark caller context", e)
+      }
     }
-    succeed
   }
 }
 

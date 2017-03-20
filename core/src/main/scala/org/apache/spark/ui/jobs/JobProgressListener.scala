@@ -142,7 +142,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If stages is too large, remove and garbage collect old stages */
   private def trimStagesIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
-      val toRemove = (stages.size - retainedStages)
+      val toRemove = calculateNumberToRemove(stages.size, retainedStages)
       stages.take(toRemove).foreach { s =>
         stageIdToData.remove((s.stageId, s.attemptId))
         stageIdToInfo.remove(s.stageId)
@@ -154,7 +154,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If jobs is too large, remove and garbage collect old jobs */
   private def trimJobsIfNecessary(jobs: ListBuffer[JobUIData]) = synchronized {
     if (jobs.size > retainedJobs) {
-      val toRemove = (jobs.size - retainedJobs)
+      val toRemove = calculateNumberToRemove(jobs.size, retainedJobs)
       jobs.take(toRemove).foreach { job =>
         // Remove the job's UI data, if it exists
         jobIdToData.remove(job.jobId).foreach { removedJob =>
@@ -409,7 +409,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
       // If Tasks is too large, remove and garbage collect old tasks
       if (stageData.taskData.size > retainedTasks) {
-        stageData.taskData = stageData.taskData.drop(stageData.taskData.size - retainedTasks)
+        stageData.taskData = stageData.taskData.drop(
+          calculateNumberToRemove(stageData.taskData.size, retainedTasks))
       }
 
       for (
@@ -428,6 +429,13 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         }
       }
     }
+  }
+
+  /**
+   * Remove at least (maxRetained / 10) items to reduce friction.
+   */
+  private def calculateNumberToRemove(dataSize: Int, retainedSize: Int): Int = {
+    math.max(retainedSize / 10, dataSize - retainedSize)
   }
 
   /**
