@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util
+import java.sql.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import org.scalatest.BeforeAndAfterAll
@@ -26,7 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, FlatMapGroupsWithState, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
@@ -96,77 +96,83 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  test("KeyedState - setTimeoutDuration, hasTimedOut") {
-    import KeyedStateImpl._
-    var state: KeyedStateImpl[Int] = null
-
-    // When isTimeoutEnabled = false, then setTimeoutDuration() is not allowed
+  test("KeyedState - setTimeout**** with NoTimeout") {
     for (initState <- Seq(None, Some(5))) {
       // for different initial state
-      state = new KeyedStateImpl(initState, 1000, isTimeoutEnabled = false, hasTimedOut = false)
-      assert(state.hasTimedOut === false)
-      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-      intercept[UnsupportedOperationException] {
-        state.setTimeoutDuration(1000)
-      }
-      intercept[UnsupportedOperationException] {
-        state.setTimeoutDuration("1 day")
-      }
-      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+      implicit val state = new KeyedStateImpl(initState, 1000, NoTimeout, hasTimedOut = false)
+      testTimeoutDurationNotAllowed[UnsupportedOperationException]
+      testTimeoutTimestampNotAllowed[UnsupportedOperationException]
     }
+  }
 
-    def testTimeoutNotAllowed(): Unit = {
-      intercept[IllegalStateException] {
-        state.setTimeoutDuration(1000)
-      }
-      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-      intercept[IllegalStateException] {
-        state.setTimeoutDuration("2 second")
-      }
-      assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    }
+  test("KeyedState - setTimeout**** with ProcessingTimeTimeout") {
+    implicit var state: KeyedStateImpl[Int] = null
 
-    // When isTimeoutEnabled = true, then setTimeoutDuration() is not allowed until the
-    // state is be defined
-    state = new KeyedStateImpl(None, 1000, isTimeoutEnabled = true, hasTimedOut = false)
-    assert(state.hasTimedOut === false)
+    // ========== With ProcessingTimeTimeout ==========
+    state = new KeyedStateImpl(None, 1000, ProcessingTimeTimeout, hasTimedOut = false)
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    testTimeoutNotAllowed()
+    testTimeoutDurationNotAllowed[IllegalStateException]
+    testTimeoutTimestampNotAllowed[IllegalStateException]
 
-    // After state has been set, setTimeoutDuration() is allowed, and
-    // getTimeoutTimestamp returned correct timestamp
     state.update(5)
-    assert(state.hasTimedOut === false)
     assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
     state.setTimeoutDuration(1000)
     assert(state.getTimeoutTimestamp === 2000)
     state.setTimeoutDuration("2 second")
     assert(state.getTimeoutTimestamp === 3000)
-    assert(state.hasTimedOut === false)
 
-    // setTimeoutDuration() with negative values or 0 is not allowed
+    state.remove()
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    testTimeoutDurationNotAllowed[IllegalStateException]
+    testTimeoutTimestampNotAllowed[IllegalStateException]
+  }
+
+  test("KeyedState - setTimeout**** with EventTimeTimeout") {
+    // ========== With EventTimeTimeout ==========
+    implicit val state = new KeyedStateImpl[Int](None, 1000, EventTimeTimeout, hasTimedOut = false)
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    testTimeoutDurationNotAllowed[UnsupportedOperationException]
+    testTimeoutTimestampNotAllowed[IllegalStateException]
+
+    state.update(5)
+    state.setTimeoutTimestamp(10000)
+    assert(state.getTimeoutTimestamp === 10000)
+    state.setTimeoutTimestamp(new Date(20000))
+    assert(state.getTimeoutTimestamp === 20000)
+
+    state.remove()
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    testTimeoutDurationNotAllowed[UnsupportedOperationException]
+    testTimeoutTimestampNotAllowed[IllegalStateException]
+  }
+
+  test("KeyedState - illegal params to setTimeout****") {
+    implicit var state: KeyedStateImpl[Int] = null
+
+    // Test setTimeout****() with illegal values
     def testIllegalTimeout(body: => Unit): Unit = {
       intercept[IllegalArgumentException] { body }
       assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
     }
-    state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = false)
+
+    state = new KeyedStateImpl(Some(5), 1000, ProcessingTimeTimeout, hasTimedOut = false)
     testIllegalTimeout { state.setTimeoutDuration(-1000) }
     testIllegalTimeout { state.setTimeoutDuration(0) }
     testIllegalTimeout { state.setTimeoutDuration("-2 second") }
     testIllegalTimeout { state.setTimeoutDuration("-1 month") }
     testIllegalTimeout { state.setTimeoutDuration("1 month -1 day") }
+    testIllegalTimeout { state.setTimeoutTimestamp(-10000) }
+  }
 
-    // Test remove() clear timeout timestamp, and setTimeoutDuration() is not allowed after that
-    state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = false)
-    state.remove()
-    assert(state.hasTimedOut === false)
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
-    testTimeoutNotAllowed()
-
-    // Test hasTimedOut = true
-    state = new KeyedStateImpl(Some(5), 1000, isTimeoutEnabled = true, hasTimedOut = true)
-    assert(state.hasTimedOut === true)
-    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+  test("KeyedState - hasTimedOut") {
+    for (timeoutConf <- Seq(NoTimeout, ProcessingTimeTimeout, EventTimeTimeout)) {
+      for (initState <- Seq(None, Some(5))) {
+        val state1 = new KeyedStateImpl(initState, 1000, timeoutConf, hasTimedOut = false)
+        assert(state1.hasTimedOut === false)
+        val state2 = new KeyedStateImpl(initState, 1000, timeoutConf, hasTimedOut = true)
+        assert(state2.hasTimedOut === true)
+      }
+    }
   }
 
   test("KeyedState - primitive type") {
@@ -481,11 +487,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[String]
-    val timeout = KeyedStateTimeout.ProcessingTimeTimeout
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, timeout)(stateFunc)
+        .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
       StartStream(ProcessingTime("1 second"), triggerClock = clock),
@@ -516,6 +521,50 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       AdvanceManualClock(20 * 1000),
       CheckLastBatch(("c", "2")),
       assertNumStateRows(total = 1, updated = 1)
+    )
+  }
+
+  test("flatMapGroupsWithState - streaming with event time timeout") {
+    // Function to maintain the max event time
+    // Returns the max event time in the state, or -1 if the state was removed by timeout
+    val stateFunc = (
+        key: String,
+        values: Iterator[(String, Long)],
+        state: KeyedState[Long]) => {
+      if (key != "a") {
+        Iterator.empty
+      } else {
+        if (state.hasTimedOut) {
+          state.remove()
+          Iterator((key, -1))
+        } else {
+          val valuesSeq = values.toSeq
+          val maxEventTime = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
+          val timeoutDelay = 5 * 1000
+          state.update(maxEventTime)
+          state.setTimeoutTimestamp(maxEventTime + timeoutDelay)
+          Iterator((key, (maxEventTime / 1000).toInt))
+        }
+      }
+    }
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS
+        .select($"_1".as("key"), $"_2".multiply(1000).cast("timestamp").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .select($"key", $"eventTime".cast("long"))
+        .as[(String, Long)]
+        .groupByKey[String]((x: (String, Long)) => x._1)
+        .flatMapGroupsWithState[Long, (String, Int)](Update, EventTimeTimeout)(stateFunc)
+
+    testStream(result, Update)(
+      StartStream(ProcessingTime("1 second")),
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Should set timeout timestamp of ...
+      CheckLastBatch(("a", 15)),                           // 'a' to 15 + 5 = 20s, watermark to 5s
+      AddData(inputData, ("dummy", 35)),  // Should set watermark = 35 - 10 = 25s
+      CheckLastBatch(),
+      AddData(inputData, ("dummy", 25)),  // Should keep watermark to 35 - 10 = 25s
+      CheckLastBatch(("a", -1))          // Should remove state for "a" and emit -1
     )
   }
 
@@ -744,9 +793,25 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       .logicalPlan.collectFirst {
         case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, _) =>
           FlatMapGroupsWithStateExec(
-            f, k, v, g, d, o, None, s, m, t, currentTimestamp,
+            f, k, v, g, d, o, None, s, m, t, Some(currentTimestamp), Some(0),
             RDDScanExec(g, null, "rdd"))
       }.get
+  }
+
+  def testTimeoutDurationNotAllowed[T <: Exception: Manifest](
+      implicit state: KeyedStateImpl[_]): Unit = {
+    intercept[T] { state.setTimeoutDuration(1000) }
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    intercept[T] { state.setTimeoutDuration("2 second") }
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+  }
+
+  def testTimeoutTimestampNotAllowed[T <: Exception: Manifest](
+      implicit state: KeyedStateImpl[_]): Unit = {
+    intercept[T] { state.setTimeoutTimestamp(1000) }
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
+    intercept[T] { state.setTimeoutTimestamp(new Date(1000)) }
+    assert(state.getTimeoutTimestamp === TIMEOUT_TIMESTAMP_NOT_SET)
   }
 
   def newStateStore(): StateStore = new MemoryStateStore()

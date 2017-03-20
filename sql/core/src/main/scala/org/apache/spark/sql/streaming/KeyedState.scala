@@ -211,4 +211,15 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   def setTimeoutDuration(duration: String): Unit
+
+  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  def setTimeoutTimestamp(timestampMs: Long): Unit
+
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  def setTimeoutTimestamp(timestamp: java.sql.Date): Unit
 }

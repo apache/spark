@@ -356,6 +356,8 @@ trait LogicalKeyedState[S]
 /** Possible types of timeouts used in FlatMapGroupsWithState */
 case object NoTimeout extends KeyedStateTimeout
 case object ProcessingTimeTimeout extends KeyedStateTimeout
+case object EventTimeTimeout extends KeyedStateTimeout
+
 
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object FlatMapGroupsWithState {

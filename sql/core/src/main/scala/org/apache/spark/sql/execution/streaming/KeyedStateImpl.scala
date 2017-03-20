@@ -17,32 +17,38 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.sql.Date
+
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.sql.streaming.KeyedState
+import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTimeout}
+import org.apache.spark.sql.execution.streaming.KeyedStateImpl._
+import org.apache.spark.sql.streaming.{KeyedState, KeyedStateTimeout}
 import org.apache.spark.unsafe.types.CalendarInterval
+
 
 /**
  * Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe.
  * @param optionalValue Optional value of the state
  * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
  *                              for processing time timeouts
- * @param isTimeoutEnabled Whether timeout is enabled. This will be used to check whether the user
- *                         is allowed to configure timeouts.
+ * @param timeoutConf   Type of timeout configured. Based on this, different operations will
+ *                        be supported.
  * @param hasTimedOut     Whether the key for which this state wrapped is being created is
  *                        getting timed out or not.
  */
 private[sql] class KeyedStateImpl[S](
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
-    isTimeoutEnabled: Boolean,
+    timeoutConf: KeyedStateTimeout,
     override val hasTimedOut: Boolean) extends KeyedState[S] {
-
-  import KeyedStateImpl._
 
   // Constructor to create dummy state when using mapGroupsWithState in a batch query
   def this(optionalValue: Option[S]) = this(
-    optionalValue, -1, isTimeoutEnabled = false, hasTimedOut = false)
+    optionalValue,
+    batchProcessingTimeMs = NO_BATCH_PROCESSING_TIMESTAMP,
+    timeoutConf = KeyedStateTimeout.NoTimeout,
+    hasTimedOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
   private var updated: Boolean = false // whether value has been updated (but not removed)
@@ -86,9 +92,10 @@ private[sql] class KeyedStateImpl[S](
   }
 
   override def setTimeoutDuration(durationMs: Long): Unit = {
-    if (!isTimeoutEnabled) {
+    if (timeoutConf != ProcessingTimeTimeout) {
       throw new UnsupportedOperationException(
-        "Cannot set timeout information without enabling timeout in map/flatMapGroupsWithState")
+        "Cannot set timeout duration without enabling processing time timeout in " +
+          "map/flatMapGroupsWithState")
     }
     if (!defined) {
       throw new IllegalStateException(
@@ -131,6 +138,38 @@ private[sql] class KeyedStateImpl[S](
       cal.milliseconds + cal.months * millisPerMonth
     }
     setTimeoutDuration(delayMs)
+  }
+
+  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestampMs: Long): Unit = {
+    if (timeoutConf == NoTimeout) {
+      throw new UnsupportedOperationException(
+        "Cannot set timeout timestamp without enabling timeouts in map/flatMapGroupsWithState")
+    }
+    if (!defined) {
+      throw new IllegalStateException(
+        "Cannot set timeout timestamp without any state value, " +
+          "state has either not been initialized, or has already been removed")
+    }
+    if (timestampMs <= 0) {
+      throw new IllegalArgumentException("Timeout timestamp must be positive")
+    }
+    if (!removed && batchProcessingTimeMs != NO_BATCH_PROCESSING_TIMESTAMP) {
+      timeoutTimestamp = timestampMs
+    } else {
+      // This is being called in a batch query, hence no processing timestamp.
+      // Just ignore any attempts to set timeout.
+    }
+  }
+
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestamp: Date): Unit = {
+    setTimeoutTimestamp(timestamp.getTime)
   }
 
   override def toString: String = {
