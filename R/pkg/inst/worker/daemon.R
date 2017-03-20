@@ -17,8 +17,6 @@
 
 # Worker daemon
 
-Sys.setenv(SPARKR_IS_RUNNING_ON_WORKER = TRUE)
-
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
 connectionTimeout <- as.integer(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
 dirs <- strsplit(rLibDir, ",")[[1]]
