@@ -291,7 +291,7 @@ broadcast <- function(sc, object) {
 #' rdd <- parallelize(sc, 1:2, 2L)
 #' checkpoint(rdd)
 #'}
-setCheckpointDir <- function(sc, dirName) {
+setCheckpointDirSC <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
@@ -409,4 +409,23 @@ spark.lapply <- function(list, func) {
 setLogLevel <- function(level) {
   sc <- getSparkContext()
   invisible(callJMethod(sc, "setLogLevel", level))
+}
+
+#' Set checkpoint directory
+#'
+#' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
+#' a HDFS path if running on a cluster.
+#'
+#' @rdname setCheckpointDir
+#' @param directory Directory path to checkpoint to
+#' @seealso \link{checkpoint}
+#' @export
+#' @examples
+#'\dontrun{
+#' setCheckpointDir("/checkpoint")
+#'}
+#' @note setCheckpointDir since 2.0.0
+setCheckpointDir <- function(directory) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
 }
