@@ -1340,6 +1340,10 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
   # Test to_json(), from_json()
+  df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
