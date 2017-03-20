@@ -100,9 +100,6 @@ object FileSourceStrategy extends Strategy with Logging {
       val outputSchema = readDataColumns.toStructType
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
-      val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
-      logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
-
       val outputAttributes = readDataColumns ++ partitionColumns
 
       val scan =
@@ -111,7 +108,7 @@ object FileSourceStrategy extends Strategy with Logging {
           outputAttributes,
           outputSchema,
           partitionKeyFilters.toSeq,
-          pushedDownFilters,
+          dataFilters,
           table.map(_.identifier))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)

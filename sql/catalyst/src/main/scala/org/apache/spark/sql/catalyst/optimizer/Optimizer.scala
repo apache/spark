@@ -68,6 +68,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    Batch("Pullup Correlated Expressions", Once,
+      PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
@@ -118,6 +120,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCreateMapOps) ::
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
+    Batch("Join Reorder", Once,
+      CostBasedJoinReorder(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates(conf)) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -138,7 +142,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.plan))
+        val Subquery(newPlan) = Optimizer.this.execute(Subquery(s.plan))
+        s.withNewPlan(newPlan)
     }
   }
 }
@@ -183,7 +188,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if a.metadata == Metadata.empty && name == attr.name && !blacklist.contains(attr) =>
+      if a.metadata == Metadata.empty &&
+        name == attr.name &&
+        !blacklist.contains(attr) &&
+        !blacklist.contains(a) =>
       attr
     case a => a
   }
@@ -191,10 +199,15 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   /**
    * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
    * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
-   * join.
+   * join or to prevent the removal of top-level subquery attributes.
    */
   private def removeRedundantAliases(plan: LogicalPlan, blacklist: AttributeSet): LogicalPlan = {
     plan match {
+      // We want to keep the same output attributes for subqueries. This means we cannot remove
+      // the aliases that produce these attributes
+      case Subquery(child) =>
+        Subquery(removeRedundantAliases(child, blacklist ++ child.outputSet))
+
       // A join has to be treated differently, because the left and the right side of the join are
       // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
       // situation in which this happens; the rule will only remove an alias if its child
@@ -562,27 +575,23 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
- * by keeping only the one.
- * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
- * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
- * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
- *    [[RepartitionByExpression]] with the expression and last number of partition.
+ * Combines adjacent [[RepartitionOperation]] operators
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    // Case 1
-    case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
-      Repartition(numPartitions, shuffle, child)
-    // Case 2
-    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
-      RepartitionByExpression(exprs, child, numPartitions)
-    // Case 3
-    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
-      r.copy(numPartitions = numPartitions)
-    // Case 3
-    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
-      RepartitionByExpression(exprs, child, numPartitions)
+    // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
+    // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
+    //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
+    //   otherwise, keep unchanged.
+    // 2) In the other cases, returns the top node with the child's child
+    case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
+      case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
+      case _ => r.copy(child = child.child)
+    }
+    // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
+    // we can remove the child.
+    case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
+      r.copy(child = child.child)
   }
 }
 
@@ -887,7 +896,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
   private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
     val matched = condition.find {
-      case PredicateSubquery(p, _, _, _) => p.outputSet.intersect(attributes).nonEmpty
+      case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
     matched.isEmpty
