@@ -61,7 +61,7 @@ class BatchCommitLog(sparkSession: SparkSession, path: String)
 
   override protected def serialize(metadata: String, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(BatchCommitLog.VERSION.toString.getBytes(UTF_8))
+    out.write(s"v${BatchCommitLog.VERSION}".getBytes(UTF_8))
     out.write('\n')
 
     // write metadata or void
