@@ -700,16 +700,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create temporary view using") {
-    val csvFile =
-      Thread.currentThread().getContextClassLoader.getResourceAsStream("test-data/cars.csv")
-
-    withTempDir { dir =>
-      // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
-      // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
-      // to a temp file.
-      val tmpFile = new File(dir, "tmp")
-      Files.copy(csvFile, tmpFile.toPath)
-
+    // when we test the HiveCatalogedDDLSuite, it will failed because the csvFile path above
+    // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
+    // to a temp file by withResourceTempPath
+    withResourceTempPath("test-data/cars.csv") { tmpFile =>
       withView("testview") {
         sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
           "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
