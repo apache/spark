@@ -1963,104 +1963,111 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 21,
-      |          "Name": "${shuffleWrite.MAX_BLOCK_SIZE}",
+      |          "Name": "${shuffleWrite.UNDERESTIMATED_BLOCKS_NUM}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 22,
+      |          "Name": "${shuffleWrite.UNDERESTIMATED_BLOCKS_SIZE}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 23,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 24,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 25,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 25,
+      |          "ID": 26,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 26,
+      |          "ID": 27,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 27,
+      |          "ID": 28,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}0",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 28,
+      |          "ID": 29,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}1",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 29,
+      |          "ID": 30,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}2",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 30,
+      |          "ID": 31,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}3",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 31,
+      |          "ID": 32,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}4",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 32,
+      |          "ID": 33,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}5",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 33,
+      |          "ID": 34,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}6",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 34,
+      |          "ID": 35,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}7",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 35,
+      |          "ID": 36,
       |          "Name": "${shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX}8",
       |          "Update": 0,
       |          "Internal": true,

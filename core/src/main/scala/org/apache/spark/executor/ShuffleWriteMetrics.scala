@@ -40,7 +40,8 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
     case i => _blockSizeDistribution(i) = new LongAccumulator
   }
   private[executor] val _averageBlockSize = new LongAccumulator
-  private[executor] val _maxBlockSize = new LongAccumulator
+  private[executor] val _underestimatedBlocksNum = new LongAccumulator
+  private[executor] val _underestimatedBlocksSize = new LongAccumulator
 
   /**
    * Number of bytes written for the shuffle by this task.
@@ -72,10 +73,14 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   def averageBlockSize: Long = _averageBlockSize.value
 
   /**
-   * The max size of blocks in HighlyCompressedMapStatus.
-   * This is not set if CompressedMapStatus is returned.
+   * The num of blocks whose sizes are underestimated in MapStatus.
    */
-  def maxBlockSize: Long = _maxBlockSize.value
+  def underestimatedBlocksNum: Long = _underestimatedBlocksNum.value
+
+  /**
+   * The total amount of blocks whose sizes are underestimated in MapStatus.
+   */
+  def underestimatedBlocksSize: Long = _underestimatedBlocksSize.value
 
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
@@ -98,7 +103,6 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
       case len: Long if len >= 104857600L && len < 1073741824L => _blockSizeDistribution(6).add(1)
       case len: Long if len >= 1073741824L && len < 10737418240L => _blockSizeDistribution(7).add(1)
       case len: Long if len >= 10737418240L => _blockSizeDistribution(8).add(1)
-
     }
   }
 
@@ -106,8 +110,12 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
     _averageBlockSize.setValue(avg)
   }
 
-  private[spark] def setMaxBlockSize(avg: Long): Unit = {
-    _maxBlockSize.setValue(avg)
+  private[spark] def incUnderestimatedBlocksNum() = {
+    _underestimatedBlocksNum.add(1)
+  }
+
+  private[spark] def incUnderestimatedBlocksSize(v: Long) = {
+    _underestimatedBlocksSize.add(v)
   }
 
   // Legacy methods for backward compatibility.

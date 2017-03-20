@@ -76,7 +76,13 @@ private[spark] class SortShuffleWriter[K, V, C](
       if (mapStatus.isInstanceOf[HighlyCompressedMapStatus]) {
         writeMetrics.setAverageBlockSize(
           mapStatus.asInstanceOf[HighlyCompressedMapStatus].getAvgSize());
-        writeMetrics.setMaxBlockSize(partitionLengths.max)
+        (0 until partitionLengths.length).foreach {
+          case i =>
+            if (partitionLengths(i) < mapStatus.getSizeForBlock(i)) {
+              writeMetrics.incUnderestimatedBlocksNum()
+              writeMetrics.incUnderestimatedBlocksSize(partitionLengths(i))
+            }
+        }
       }
     } finally {
       if (tmp.exists() && !tmp.delete()) {

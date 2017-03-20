@@ -62,7 +62,8 @@ private[spark] object InternalAccumulator {
     val WRITE_TIME = SHUFFLE_WRITE_METRICS_PREFIX + "writeTime"
     val BLOCK_SIZE_DISTRIBUTION_PREFIX = SHUFFLE_WRITE_METRICS_PREFIX + "blockSizeDistribution."
     val AVERAGE_BLOCK_SIZE = SHUFFLE_WRITE_METRICS_PREFIX + "averageBlockSize"
-    val MAX_BLOCK_SIZE = SHUFFLE_WRITE_METRICS_PREFIX + "maxBlockSize"
+    val UNDERESTIMATED_BLOCKS_NUM = SHUFFLE_WRITE_METRICS_PREFIX + "underestimatedBlocksNum"
+    val UNDERESTIMATED_BLOCKS_SIZE = SHUFFLE_WRITE_METRICS_PREFIX + "underestimatedBlocksSize"
   }
 
   // Names of output metrics

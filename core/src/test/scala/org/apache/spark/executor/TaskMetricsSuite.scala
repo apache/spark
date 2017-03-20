@@ -136,14 +136,16 @@ class TaskMetricsSuite extends SparkFunSuite {
     sw.incBlockSizeDistribution(10)
     sw.incBlockSizeDistribution(2048)
     sw.setAverageBlockSize(1024)
-    sw.setMaxBlockSize(10240)
+    sw.incUnderestimatedBlocksNum()
+    sw.incUnderestimatedBlocksSize(1024)
     // assert new values exist
     assert(sw.bytesWritten == 108L)
     assert(sw.recordsWritten == 216L)
     assert(sw.writeTime == 330L)
     assert(sw.blockSizeDistribution(0) === 1 && sw.blockSizeDistribution(1) ===1)
     assert(sw.averageBlockSize === 1024)
-    assert(sw.maxBlockSize === 10240)
+    assert(sw.underestimatedBlocksNum === 1)
+    assert(sw.underestimatedBlocksSize === 1024)
   }
 
   test("mutating input metrics values") {
