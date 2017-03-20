@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, ParseModes}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, ParseModes}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -482,7 +482,8 @@ case class JsonTuple(children: Seq[Expression])
 }
 
 /**
- * Converts an json input string to a [[StructType]] or [[ArrayType]] with the specified schema.
+ * Converts an json input string to a [[StructType]] or [[ArrayType]] of [[StructType]]s
+ * with the specified schema.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -495,7 +496,7 @@ case class JsonTuple(children: Seq[Expression])
        {"time":"2015-08-26 00:00:00.0"}
   """)
 // scalastyle:on line.size.limit
-case class JsonToStruct(
+case class JsonToStructs(
     schema: DataType,
     options: Map[String, String],
     child: Expression,
@@ -590,7 +591,7 @@ case class JsonToStruct(
 }
 
 /**
- * Converts a [[StructType]] to a json output string.
+ * Converts a [[StructType]] or [[ArrayType]] of [[StructType]]s to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -601,9 +602,11 @@ case class JsonToStruct(
        {"a":1,"b":2}
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"26/08/2015"}
+      > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
+       [{"a":1,"b":2}]
   """)
 // scalastyle:on line.size.limit
-case class StructToJson(
+case class StructsToJson(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
@@ -624,41 +627,58 @@ case class StructToJson(
   lazy val writer = new CharArrayWriter()
 
   @transient
-  lazy val gen =
-    new JacksonGenerator(
-      child.dataType.asInstanceOf[StructType],
-      writer,
-      new JSONOptions(options, timeZoneId.get))
+  lazy val gen = new JacksonGenerator(
+    rowSchema, writer, new JSONOptions(options, timeZoneId.get))
+
+  @transient
+  lazy val rowSchema = child.dataType match {
+    case st: StructType => st
+    case ArrayType(st: StructType, _) => st
+  }
+
+  // This converts rows to the JSON output according to the given schema.
+  @transient
+  lazy val converter: Any => UTF8String = {
+    def getAndReset(): UTF8String = {
+      gen.flush()
+      val json = writer.toString
+      writer.reset()
+      UTF8String.fromString(json)
+    }
+
+    child.dataType match {
+      case _: StructType =>
+        (row: Any) =>
+          gen.write(row.asInstanceOf[InternalRow])
+          getAndReset()
+      case ArrayType(_: StructType, _) =>
+        (arr: Any) =>
+          gen.write(arr.asInstanceOf[ArrayData])
+          getAndReset()
+    }
+  }
 
   override def dataType: DataType = StringType
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (StructType.acceptsType(child.dataType)) {
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: StructType | ArrayType(_: StructType, _) =>
       try {
-        JacksonUtils.verifySchema(child.dataType.asInstanceOf[StructType])
+        JacksonUtils.verifySchema(rowSchema)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName requires that the expression is a struct expression.")
-    }
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"Input type ${child.dataType.simpleString} must be a struct or array of structs.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def nullSafeEval(row: Any): Any = {
-    gen.write(row.asInstanceOf[InternalRow])
-    gen.flush()
-    val json = writer.toString
-    writer.reset()
-    UTF8String.fromString(json)
-  }
+  override def nullSafeEval(value: Any): Any = converter(value)
 
-  override def inputTypes: Seq[AbstractDataType] = StructType :: Nil
+  override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 }
 
 object JsonExprUtils {
