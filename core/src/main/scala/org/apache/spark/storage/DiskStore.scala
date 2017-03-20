@@ -22,9 +22,11 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ListBuffer
 
+import com.google.common.base.Preconditions
 import com.google.common.io.{ByteStreams, Closeables, Files}
 import io.netty.channel.FileRegion
 import io.netty.util.AbstractReferenceCounted
@@ -46,10 +48,12 @@ private[spark] class DiskStore(
     securityManager: SecurityManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+  private val blockSizes = new ConcurrentHashMap[String, Long]()
 
   def getSize(blockId: BlockId): Long = {
-    val file = diskManager.getMetadataFile(blockId)
-    Files.toString(file, UTF_8).toLong
+    val size: java.lang.Long = blockSizes.get(blockId.name)
+    Preconditions.checkArgument(size != null, "Unknown block %s.", blockId.name)
+    size
   }
 
   /**
@@ -68,7 +72,7 @@ private[spark] class DiskStore(
     var threwException: Boolean = true
     try {
       writeFunc(out)
-      Files.write(out.getCount.toString(), diskManager.getMetadataFile(blockId), UTF_8)
+      blockSizes.put(blockId.name, out.getCount)
       threwException = false
     } finally {
       try {
@@ -133,22 +137,15 @@ private[spark] class DiskStore(
 
   def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
-    val meta = diskManager.getMetadataFile(blockId)
-
-    def delete(f: File): Boolean = {
-      if (f.exists()) {
-        val ret = f.delete()
-        if (!ret) {
-          logWarning(s"Error deleting ${file.getPath()}")
-        }
-
-        ret
-      } else {
-        false
+    if (file.exists()) {
+      val ret = file.delete()
+      if (!ret) {
+        logWarning(s"Error deleting ${file.getPath()}")
       }
+      ret
+    } else {
+      false
     }
-
-    delete(file) & delete(meta)
   }
 
   def contains(blockId: BlockId): Boolean = {

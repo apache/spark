@@ -34,8 +34,6 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  */
 private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolean) extends Logging {
 
-  private val METADATA_FILE_SUFFIX = ".meta"
-
   private[spark] val subDirsPerLocalDir = conf.getInt("spark.diskStore.subDirectories", 64)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
@@ -81,11 +79,6 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
-  /** The path of the metadata file for the given block. */
-  def getMetadataFile(blockId: BlockId): File = {
-    new File(getFile(blockId).getAbsolutePath() + METADATA_FILE_SUFFIX)
-  }
-
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
     getFile(blockId.name).exists()
@@ -101,11 +94,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) {
-        files.filter(!_.getName().endsWith(METADATA_FILE_SUFFIX))
-      } else {
-        Seq.empty
-      }
+      if (files != null) files else Seq.empty
     }
   }
 
