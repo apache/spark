@@ -29,6 +29,7 @@ import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
 
 class MultilayerPerceptronClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -80,6 +81,23 @@ class MultilayerPerceptronClassifierSuite
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
       assert(p == l)
     }
+  }
+
+  test("test model probability") {
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(dataset)
+    model.setProbabilityCol("probability")
+    val result = model.transform(dataset)
+    val features2prob = udf { features: Vector => model.mlpModel.predict(features) }
+    val cmpVec = udf { (v1: Vector, v2: Vector) => v1 ~== v2 relTol 1e-3 }
+    assert(result.select(cmpVec(features2prob(col("features")), col("probability")))
+      .rdd.map(_.getBoolean(0)).reduce(_ && _))
   }
 
   test("Test setWeights by training restart") {

@@ -363,7 +363,7 @@ private[ann] trait TopologyModel extends Serializable {
    * @param data input data
    * @return array of outputs for each of the layers
    */
-  def forward(data: BDM[Double]): Array[BDM[Double]]
+  def forward(data: BDM[Double], containsLastLayer: Boolean): Array[BDM[Double]]
 
   /**
    * Prediction of the model
@@ -372,6 +372,22 @@ private[ann] trait TopologyModel extends Serializable {
    * @return prediction
    */
   def predict(data: Vector): Vector
+
+  /**
+   * Raw prediction of the model
+   *
+   * @param data input data
+   * @return raw prediction
+   */
+  def predictRaw(data: Vector): Vector
+
+  /**
+   * Probability of the model
+   *
+   * @param data input data
+   * @return probability
+   */
+  def raw2ProbabilityInPlace(data: Vector): Vector
 
   /**
    * Computes gradient for the network
@@ -463,7 +479,7 @@ private[ml] class FeedForwardModel private(
   private var outputs: Array[BDM[Double]] = null
   private var deltas: Array[BDM[Double]] = null
 
-  override def forward(data: BDM[Double]): Array[BDM[Double]] = {
+  override def forward(data: BDM[Double], containsLastLayer: Boolean): Array[BDM[Double]] = {
     // Initialize output arrays for all layers. Special treatment for InPlace
     val currentBatchSize = data.cols
     // TODO: allocate outputs as one big array and then create BDMs from it
@@ -481,7 +497,8 @@ private[ml] class FeedForwardModel private(
       }
     }
     layerModels(0).eval(data, outputs(0))
-    for (i <- 1 until layerModels.length) {
+    val end = if (containsLastLayer) layerModels.length else layerModels.length - 1
+    for (i <- 1 until end) {
       layerModels(i).eval(outputs(i - 1), outputs(i))
     }
     outputs
@@ -492,7 +509,7 @@ private[ml] class FeedForwardModel private(
     target: BDM[Double],
     cumGradient: Vector,
     realBatchSize: Int): Double = {
-    val outputs = forward(data)
+    val outputs = forward(data, true)
     val currentBatchSize = data.cols
     // TODO: allocate deltas as one big array and then create BDMs from it
     if (deltas == null || deltas(0).cols != currentBatchSize) {
@@ -527,8 +544,20 @@ private[ml] class FeedForwardModel private(
 
   override def predict(data: Vector): Vector = {
     val size = data.size
-    val result = forward(new BDM[Double](size, 1, data.toArray))
+    val result = forward(new BDM[Double](size, 1, data.toArray), true)
     Vectors.dense(result.last.toArray)
+  }
+
+  override def predictRaw(data: Vector): Vector = {
+    val size = data.size
+    val result = forward(new BDM[Double](size, 1, data.toArray), false)
+    Vectors.dense(result(result.length - 2).toArray)
+  }
+
+  override def raw2ProbabilityInPlace(data: Vector): Vector = {
+    val dataMatrix = new BDM[Double](data.size, 1, data.toArray)
+    layerModels.last.eval(dataMatrix, dataMatrix)
+    data
   }
 }
 

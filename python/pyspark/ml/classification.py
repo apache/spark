@@ -1378,7 +1378,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
-    >>> model.transform(testDF).show()
+    >>> model.transform(testDF).select("features", "prediction").show()
     +---------+----------+
     | features|prediction|
     +---------+----------+
