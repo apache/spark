@@ -17,19 +17,23 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.File
+
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
+import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.session.SessionState.ResourceType
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -37,7 +41,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 
 private[sql] class HiveSessionCatalog(
@@ -132,6 +136,24 @@ private[sql] class HiveSessionCatalog(
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
       }
+    }
+  }
+
+  override def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    logDebug("loading hive permanent function resources")
+    resources.foreach { resource =>
+      val resourceType = resource.resourceType match {
+        case JarResource =>
+          ResourceType.JAR
+        case FileResource =>
+          ResourceType.FILE
+        case ArchiveResource =>
+          ResourceType.ARCHIVE
+      }
+      val sessionState = SessionState.get()
+      val localPath = sessionState.add_resource(resourceType, resource.uri)
+      ShutdownHookManager.registerShutdownDeleteDir(new File(localPath).getParentFile)
+      functionResourceLoader.loadResource(FunctionResource(resource.resourceType, localPath))
     }
   }
 
