@@ -1338,7 +1338,7 @@ private object BlockManagerSuite {
     val getSingleAndReleaseLock: (BlockId) => Option[Any] = wrapGet(store.getSingle)
     val getLocalBytesAndReleaseLock: (BlockId) => Option[ChunkedByteBuffer] = {
       val allocator = ByteBuffer.allocate _
-      wrapGet { bid => store.getLocalBytes(bid).map(_.toByteBuffer(allocator)) }
+      wrapGet { bid => store.getLocalBytes(bid).map(_.toChunkedByteBuffer(allocator)) }
     }
   }
 

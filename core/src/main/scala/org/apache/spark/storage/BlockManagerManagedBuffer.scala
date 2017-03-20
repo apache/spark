@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.InputStream
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -34,18 +35,21 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 private[storage] class BlockManagerManagedBuffer(
     blockInfoManager: BlockInfoManager,
     blockId: BlockId,
-    buffer: ManagedBuffer) extends ManagedBuffer {
+    data: BlockData,
+    dispose: Boolean) extends ManagedBuffer {
 
-  override def size(): Long = buffer.size()
+  private val refCount = new AtomicInteger(1)
 
-  override def nioByteBuffer(): ByteBuffer = buffer.nioByteBuffer()
+  override def size(): Long = data.size
 
-  override def createInputStream(): InputStream = buffer.createInputStream()
+  override def nioByteBuffer(): ByteBuffer = data.toByteBuffer()
 
-  override def convertToNetty(): Object = buffer.convertToNetty()
+  override def createInputStream(): InputStream = data.toInputStream()
+
+  override def convertToNetty(): Object = data.toNetty()
 
   override def retain(): ManagedBuffer = {
-    buffer.retain()
+    refCount.incrementAndGet()
     val locked = blockInfoManager.lockForReading(blockId, blocking = false)
     assert(locked.isDefined)
     this
@@ -53,7 +57,9 @@ private[storage] class BlockManagerManagedBuffer(
 
   override def release(): ManagedBuffer = {
     blockInfoManager.unlock(blockId)
-    buffer.release()
+    if (refCount.decrementAndGet() == 0 && dispose) {
+      data.dispose()
+    }
     this
   }
 }

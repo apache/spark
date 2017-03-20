@@ -122,7 +122,7 @@ class DiskStoreSuite extends SparkFunSuite {
   }
 
   private def readViaChunkedByteBuffer(data: BlockData): Array[Byte] = {
-    val buf = data.toByteBuffer(ByteBuffer.allocate _)
+    val buf = data.toChunkedByteBuffer(ByteBuffer.allocate _)
     try {
       buf.toArray
     } finally {
@@ -131,11 +131,11 @@ class DiskStoreSuite extends SparkFunSuite {
   }
 
   private def readViaNioBuffer(data: BlockData): Array[Byte] = {
-    JavaUtils.bufferToArray(data.toManagedBuffer().nioByteBuffer())
+    JavaUtils.bufferToArray(data.toByteBuffer())
   }
 
   private def readViaManagedBuffer(data: BlockData): Array[Byte] = {
-    val region = data.toManagedBuffer().convertToNetty().asInstanceOf[FileRegion]
+    val region = data.toNetty().asInstanceOf[FileRegion]
     val byteChannel = new ByteArrayWritableChannel(data.size.toInt)
 
     while (region.transfered() < region.count()) {

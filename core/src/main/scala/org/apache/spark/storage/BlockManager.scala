@@ -36,7 +36,7 @@ import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.{ManagedBuffer, NettyManagedBuffer}
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -58,16 +58,17 @@ private[spark] class BlockResult(
 
 /**
  * Abstracts away how blocks are stored and provides different ways to read the underlying block
- * data. The data for a BlockData instance can only be read once, since it may be backed by open
- * file descriptors that change state as data is read.
+ * data. Callers should call [[dispose()]] when they're done with the block.
  */
 private[spark] trait BlockData {
 
   def toInputStream(): InputStream
 
-  def toManagedBuffer(): ManagedBuffer
+  def toNetty(): Object
 
-  def toByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer
+  def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer
+
+  def toByteBuffer(): ByteBuffer
 
   def size: Long
 
@@ -75,17 +76,17 @@ private[spark] trait BlockData {
 
 }
 
-private[spark] class ByteBufferBlockData(
-    val buffer: ChunkedByteBuffer,
-    autoDispose: Boolean = true) extends BlockData {
+private[spark] class ByteBufferBlockData(val buffer: ChunkedByteBuffer) extends BlockData {
 
-  override def toInputStream(): InputStream = buffer.toInputStream(dispose = autoDispose)
+  override def toInputStream(): InputStream = buffer.toInputStream(dispose = false)
 
-  override def toManagedBuffer(): ManagedBuffer = new NettyManagedBuffer(buffer.toNetty)
+  override def toNetty(): Object = buffer.toNetty
 
-  override def toByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
+  override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     buffer.copy(allocator)
   }
+
+  override def toByteBuffer(): ByteBuffer = buffer.toByteBuffer
 
   override def size: Long = buffer.size
 
@@ -343,7 +344,7 @@ private[spark] class BlockManager(
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
-          new BlockManagerManagedBuffer(blockInfoManager, blockId, blockData.toManagedBuffer())
+          new BlockManagerManagedBuffer(blockInfoManager, blockId, blockData, true)
         case None =>
           // If this block manager receives a request for a block that it doesn't have then it's
           // likely that the master has outdated block statuses for this block. Therefore, we send
@@ -499,8 +500,8 @@ private[spark] class BlockManager(
           val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
+          val diskData = diskStore.getBytes(blockId)
           val iterToReturn: Iterator[Any] = {
-            val diskData = diskStore.getBytes(blockId)
             if (level.deserialized) {
               val diskValues = serializerManager.dataDeserializeStream(
                 blockId,
@@ -513,7 +514,8 @@ private[spark] class BlockManager(
               serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
             }
           }
-          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
+          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn,
+            releaseLockAndDispose(blockId, diskData))
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
           handleLocalReadFailure(blockId)
@@ -832,8 +834,9 @@ private[spark] class BlockManager(
       val replicationFuture = if (level.replication > 1) {
         Future {
           // This is a blocking action and should run in futureExecutionContext which is a cached
-          // thread pool
-          replicate(blockId, new ByteBufferBlockData(bytes, autoDispose = false), level, classTag)
+          // thread pool. The ByteBufferBlockData wrapper is not disposed of to avoid releasing
+          // buffers that are owned by the caller.
+          replicate(blockId, new ByteBufferBlockData(bytes), level, classTag)
         }(futureExecutionContext)
       } else {
         null
@@ -1107,7 +1110,7 @@ private[spark] class BlockManager(
             // If the file size is bigger than the free memory, OOM will happen. So if we
             // cannot put it into MemoryStore, copyForMemory should not be created. That's why
             // this action is put into a `() => ChunkedByteBuffer` and created lazily.
-            diskData.toByteBuffer(allocator)
+            diskData.toChunkedByteBuffer(allocator)
           })
           if (putSucceeded) {
             diskData.dispose()
@@ -1198,7 +1201,7 @@ private[spark] class BlockManager(
       try {
         replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
       } finally {
-        releaseLock(blockId)
+        releaseLockAndDispose(blockId, data)
       }
     }
   }
@@ -1251,7 +1254,7 @@ private[spark] class BlockManager(
           peer.port,
           peer.executorId,
           blockId,
-          new BlockManagerManagedBuffer(blockInfoManager, blockId, data.toManagedBuffer()),
+          new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false),
           tLevel,
           classTag)
         logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
@@ -1428,6 +1431,11 @@ private[spark] class BlockManager(
     Option(TaskContext.get()).foreach { c =>
       c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
     }
+  }
+
+  def releaseLockAndDispose(blockId: BlockId, data: BlockData): Unit = {
+    blockInfoManager.unlock(blockId)
+    data.dispose()
   }
 
   def stop(): Unit = {

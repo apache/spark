@@ -177,9 +177,9 @@ private class EncryptedBlockData(
 
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
-  override def toManagedBuffer(): ManagedBuffer = new EncryptedManagedBuffer()
+  override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
 
-  override def toByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
+  override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val source = open()
     try {
       var remaining = blockSize
@@ -199,6 +199,22 @@ private class EncryptedBlockData(
     }
   }
 
+  override def toByteBuffer(): ByteBuffer = {
+    // This is used by the block transfer service to replicate blocks. The upload code reads
+    // all bytes into memory to send the block to the remote executor, so it's ok to do this
+    // as long as the block fits in a Java array.
+    assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
+    val dst = ByteBuffer.allocate(blockSize.toInt)
+    val in = open()
+    try {
+      JavaUtils.readFully(in, dst)
+      dst.flip()
+      dst
+    } finally {
+      Closeables.close(in, true)
+    }
+  }
+
   override def size: Long = blockSize
 
   override def dispose(): Unit = { }
@@ -212,35 +228,6 @@ private class EncryptedBlockData(
         Closeables.close(channel, true)
         throw e
     }
-  }
-
-  private class EncryptedManagedBuffer extends ManagedBuffer {
-
-    override def size(): Long = blockSize
-
-    override def nioByteBuffer(): ByteBuffer = {
-      // This is used by the block transfer service to replicate blocks. The upload code reads
-      // all bytes into memory to send the block to the remote executor, so it's ok to do this
-      // as long as the block fits in a Java array.
-      assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
-      val bytes = new Array[Byte](blockSize.toInt)
-      val is = toInputStream()
-      try {
-        ByteStreams.readFully(is, bytes)
-        ByteBuffer.wrap(bytes)
-      } finally {
-        Closeables.close(is, true)
-      }
-    }
-
-    override def createInputStream(): InputStream = toInputStream()
-
-    override def convertToNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
-
-    override def retain(): ManagedBuffer = this
-
-    override def release(): ManagedBuffer = this
-
   }
 
 }
