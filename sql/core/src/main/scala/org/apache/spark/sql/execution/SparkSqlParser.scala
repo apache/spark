@@ -134,7 +134,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
       Option(ctx.pattern).map(string),
-      isExtended = false)
+      isExtended = false,
+      partitionSpec = None)
   }
 
   /**
@@ -146,14 +147,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      operationNotAllowed("SHOW TABLE EXTENDED ... PARTITION", ctx)
-    }
-
+    val partitionSpec = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
     ShowTablesCommand(
       Option(ctx.db).map(_.getText),
       Option(ctx.pattern).map(string),
-      isExtended = true)
+      isExtended = true,
+      partitionSpec = partitionSpec)
   }
 
   /**
