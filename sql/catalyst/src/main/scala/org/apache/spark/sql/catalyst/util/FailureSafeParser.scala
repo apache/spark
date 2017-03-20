@@ -31,21 +31,26 @@ class FailureSafeParser[IN](
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
   private val resultRow = new GenericInternalRow(schema.length)
+  private val nullResult = new GenericInternalRow(schema.length)
 
+  // This function takes 2 parameters: an optional partial result, and the bad record. If the given
+  // schema doesn't contain a field for corrupted record, we just return the partial result or a
+  // row with all fields null. If the given schema contains a field for corrupted record, we will
+  // set the bad record to this field, and set other fields according to the partial result or null.
   private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = {
     if (corruptFieldIndex.isDefined) {
       (row, badRecord) => {
-        for ((f, i) <- actualSchema.zipWithIndex) {
+        var i = 0
+        while (i < actualSchema.length) {
+          val f = actualSchema(i)
           resultRow(schema.fieldIndex(f.name)) = row.map(_.get(i, f.dataType)).orNull
+          i += 1
         }
         resultRow(corruptFieldIndex.get) = badRecord()
         resultRow
       }
     } else {
-      (row, badRecord) => row.getOrElse {
-        for (i <- schema.indices) resultRow.setNullAt(i)
-        resultRow
-      }
+      (row, badRecord) => row.getOrElse(nullResult)
     }
   }
 
@@ -57,11 +62,18 @@ class FailureSafeParser[IN](
         Iterator(toResultRow(e.partialResult(), e.record))
       case _: BadRecordException if ParseModes.isDropMalformedMode(mode) =>
         Iterator.empty
-      // If the parse mode is FAIL FAST, do not catch the exception.
+      case e: BadRecordException => throw e.cause
     }
   }
 }
 
+/**
+ * Exception thrown when the underlying parser meet a bad record and can't parse it.
+ * @param record a function to return the record that cause the parser to fail
+ * @param partialResult a function that returns an optional row, which is the partial result of
+ *                      parsing this bad record.
+ * @param cause the actual exception about why the record is bad and can't be parsed.
+ */
 case class BadRecordException(
     record: () => UTF8String,
     partialResult: () => Option[InternalRow],
