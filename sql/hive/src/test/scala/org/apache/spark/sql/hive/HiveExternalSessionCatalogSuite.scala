@@ -37,4 +37,13 @@ class HiveExternalSessionCatalogSuite extends SessionCatalogSuite with TestHiveS
     override val defaultProvider: String = "hive"
     override def newEmptyCatalog(): ExternalCatalog = externalCatalog
   }
+
+  test("setCurrentDatabase need to set the current database of Hive ExternalCatalog") {
+    withBasicCatalog { catalog =>
+      val hiveClient = catalog.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      assert(hiveClient.runSqlHive("SELECT current_database()") == Seq("default"))
+      catalog.setCurrentDatabase("db1")
+      assert(hiveClient.runSqlHive("SELECT current_database()") == Seq("db1"))
+    }
+  }
 }

@@ -51,9 +51,8 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   import utils._
 
-  private def withBasicCatalog(f: SessionCatalog => Unit): Unit = {
+  protected def withBasicCatalog(f: SessionCatalog => Unit): Unit = {
     val catalog = new SessionCatalog(newBasicCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     try {
       f(catalog)
     } finally {
@@ -61,9 +60,8 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
-  private def withEmptyCatalog(f: SessionCatalog => Unit): Unit = {
+  protected def withEmptyCatalog(f: SessionCatalog => Unit): Unit = {
     val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     try {
       f(catalog)
     } finally {
