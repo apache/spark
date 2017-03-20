@@ -26,7 +26,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ListBuffer
 
-import com.google.common.base.Preconditions
 import com.google.common.io.{ByteStreams, Closeables, Files}
 import io.netty.channel.FileRegion
 import io.netty.util.AbstractReferenceCounted
@@ -50,11 +49,7 @@ private[spark] class DiskStore(
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
   private val blockSizes = new ConcurrentHashMap[String, Long]()
 
-  def getSize(blockId: BlockId): Long = {
-    val size: java.lang.Long = blockSizes.get(blockId.name)
-    Preconditions.checkArgument(size != null, "Unknown block %s.", blockId.name)
-    size
-  }
+  def getSize(blockId: BlockId): Long = blockSizes.get(blockId.name)
 
   /**
    * Invokes the provided callback function to write the specific block.
@@ -136,6 +131,7 @@ private[spark] class DiskStore(
   }
 
   def remove(blockId: BlockId): Boolean = {
+    blockSizes.remove(blockId.name)
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
       val ret = file.delete()

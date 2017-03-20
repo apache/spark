@@ -74,12 +74,30 @@ class DiskStoreSuite extends SparkFunSuite {
     assert(Arrays.equals(notMapped.toArray, bytes))
   }
 
+  test("block size tracking") {
+    val conf = new SparkConf()
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
+
+    val blockId = BlockId("rdd_1_2")
+    diskStore.put(blockId) { chan =>
+      val buf = ByteBuffer.wrap(new Array[Byte](32))
+      while (buf.hasRemaining()) {
+        chan.write(buf)
+      }
+    }
+
+    assert(diskStore.getSize(blockId) === 32L)
+    diskStore.remove(blockId)
+    assert(diskStore.getSize(blockId) === 0L)
+  }
+
   test("block data encryption") {
     val testDir = Utils.createTempDir()
     val testData = new Array[Byte](128 * 1024)
     new Random().nextBytes(testData)
 
-    val conf = new SparkConf().set("spark.storage.memoryMapThreshold", "1k")
+    val conf = new SparkConf()
     val securityManager = new SecurityManager(conf, Some(CryptoStreamUtils.createKey(conf)))
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
     val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
@@ -87,7 +105,7 @@ class DiskStoreSuite extends SparkFunSuite {
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>
       val buf = ByteBuffer.wrap(testData)
-      while (buf.remaining() > 0) {
+      while (buf.hasRemaining()) {
         chan.write(buf)
       }
     }
