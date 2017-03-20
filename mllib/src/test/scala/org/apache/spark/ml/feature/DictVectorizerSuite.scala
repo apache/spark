@@ -18,13 +18,13 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
-import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.DenseVector
+import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 
 class DictVectorizerSuite
@@ -39,19 +39,39 @@ class DictVectorizerSuite
     ParamsSuite.checkParams(model)
     ParamsSuite.checkParams(modelWithoutUid)
   }
+  test("DictVectorizer read/write") {
+    val t = new DictVectorizer()
+      .setInputCols(Array("myInputCol"))
+      .setOutputCol("myOutputCol")
+      .setHandleInvalid("skip")
+      .setSepToken("+")
+    testDefaultReadWrite(t)
+  }
 
+  test("DictVectorizerModel read/write") {
+    val instance = new DictVectorizerModel("myStringIndexerModel", Array("a", "b", "c"))
+      .setInputCols(Array("myInputCol"))
+      .setOutputCol("myOutputCol")
+      .setHandleInvalid("skip")
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.vocabulary === instance.vocabulary)
+    assert(newInstance.vocabDimension === instance.vocabDimension)
+
+  }
   test("DictVectorizer fits") {
     val data = Seq(
-      (0, "a", "x", Seq("x", "xx")),
-      (1, "b", "x", Seq("x")),
-      (2, "c", "x", Seq("x", "xx")),
-      (3, "a", "x", Seq("x", "xx")),
-      (4, "a", "x", Seq("x", "xx")),
-      (5, "c", "x", Seq("x", "xx")))
+      (0, true, "a", 1.0, Seq("x", "xx"), Seq(true, false), Vector(1.0), Vector(1, 0, 1, 0)),
+      (1, false, "b", 1.0, Seq("x"), Seq(true, false), Vector(1.0), Vector(1, 0, 1, 1)),
+      (2, true, "c", 1.0, Seq("x", "xx"), Seq(true, false), Vector(1.0), Vector(1, 1, 0)),
+      (3, true, "a", 1.0, Seq("x", "xx"), Seq(true, false), Vector(1.0), Vector(1, 0, 1, 0)),
+      (4, false, "a", 1.0, Seq("x", "xx"), Seq(true, false), Vector(1.0), Vector(1)),
+      (5, true, "c", 1.0, Seq("x", "xx"), Seq(true, false), Vector(1.0), Vector(1)))
+//
+    val df = data.toDF("id", "bool", "label", "name", "hobbies", "x", "v", "vec")
 
-    val df = data.toDF("id", "label", "name", "hobbies")
+
     val vec = new DictVectorizer()
-      .setInputCols(Array("label", "id", "name", "hobbies"))
+      .setInputCols(Array("label", "bool", "id", "name", "x", "hobbies", "vec", "v"))
       .setOutputCol("labelIndex")
       .fit(df)
 
@@ -59,45 +79,30 @@ class DictVectorizerSuite
 
     MLTestingUtils.checkCopy(vec)
 
-    assert(vec.vocabulary === Array("id", "label=a", "label=c",
-      "label=b", "name=x", "hobbies=x", "hobbies=xx"))
+    assert(vec.vocabulary.sorted === Array("id", "bool", "x", "v", "label=a", "label=c",
+      "label=b", "name", "hobbies=x", "hobbies=xx", "vec").sorted)
   }
 
   test("DictVectorizer transforms") {
       val data = Seq(
-        (0, "a", "x", Seq("x", "xx")),
-        (0, "a", "x", Seq("x", "xx")),
-        (0, "a", "x", Seq("x", "xx")),
-        (0, "a", "x", Seq("x", "xx")))
+        (0, true, 1.0, "a", "x", Seq("x", "xx"), Seq(1.0, 2.0), Vector(1, 0, 1, 0)),
+        (0, true, 1.0, "a", "x", Seq("x", "xx"), Seq(1.0, 2.0), Vector(1, 0, 1, 0)),
+        (0, true, 1.0, "a", "x", Seq("x", "xx"), Seq(1.0, 2.0), Vector(1, 0, 1, 0)),
+        (0, true, 1.0, "a", "x", Seq("x", "xx"), Seq(1.0, 2.0), Vector(1, 0, 1, 0)))
 
-      val df = data.toDF("id", "label", "name", "hobbies")
+      val df = data.toDF("id", "bool", "f", "label", "name", "hobbies", "is", "vec")
       val vec = new DictVectorizer()
-        .setInputCols(Array("label", "id", "name", "hobbies"))
+        .setInputCols(Array("label", "bool", "f", "id", "name", "hobbies", "is", "vec"))
         .setOutputCol("labelIndex")
         .fit(df)
 
     val transformed = vec.transform(df)
-    transformed.show()
-    // scalastyle:off
-    println(transformed.schema)
 
     transformed.select("labelIndex").collect().foreach {
-      case Row(v: VectorUDT) =>
-        println(v)
+      case Row(v: Vector) =>
+        assert(v === Vectors.sparse(13, Array(0, 1, 2, 3, 5, 6, 7, 8, 9, 11),
+          Array(1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0)))
+      }
     }
-
-    }
-//    val transformed = indexer.transform(df)
-//
-//    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
-//      .asInstanceOf[NominalAttribute]
-//    assert(attr.values.get === Array("a", "c", "b", "x"))
-//    val output = transformed.select("id", "labelIndex").rdd.map { r =>
-//      (r.getInt(0), r.getDouble(1))
-//    }.collect().toSet
-//    // a -> 0, b -> 2, c -> 1
-//    val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
-//    assert(output === expected)
-
 }
 
