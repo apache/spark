@@ -22,33 +22,62 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.client.{Config, ConfigBuilder, DefaultKubernetesClient}
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 
-private[spark] object KubernetesClientBuilder {
-  private val API_SERVER_TOKEN = new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)
-  private val CA_CERT_FILE = new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)
+private[spark] class KubernetesClientBuilder(sparkConf: SparkConf, namespace: String) {
+  private val SERVICE_ACCOUNT_TOKEN = new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)
+  private val SERVICE_ACCOUNT_CA_CERT = new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)
+  private val oauthTokenFile = sparkConf.get(KUBERNETES_DRIVER_MOUNTED_OAUTH_TOKEN)
+  private val caCertFile = sparkConf.get(KUBERNETES_DRIVER_MOUNTED_CA_CERT_FILE)
+  private val clientKeyFile = sparkConf.get(KUBERNETES_DRIVER_MOUNTED_CLIENT_KEY_FILE)
+  private val clientCertFile = sparkConf.get(KUBERNETES_DRIVER_MOUNTED_CLIENT_CERT_FILE)
 
   /**
-   * Creates a {@link KubernetesClient}, expecting to be from
-   * within the context of a pod. When doing so, credentials files
-   * are picked up from canonical locations, as they are injected
-   * into the pod's disk space.
+   * Creates a {@link KubernetesClient}, expecting to be from within the context of a pod. When
+   * doing so, service account token files can be picked up from canonical locations.
    */
-  def buildFromWithinPod(
-      kubernetesNamespace: String): DefaultKubernetesClient = {
-    var clientConfigBuilder = new ConfigBuilder()
+  def buildFromWithinPod(): DefaultKubernetesClient = {
+    val baseClientConfigBuilder = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(KUBERNETES_MASTER_INTERNAL_URL)
-      .withNamespace(kubernetesNamespace)
+      .withNamespace(namespace)
 
-    if (CA_CERT_FILE.isFile) {
-      clientConfigBuilder = clientConfigBuilder.withCaCertFile(CA_CERT_FILE.getAbsolutePath)
-    }
+    val configBuilder = oauthTokenFile
+        .orElse(caCertFile)
+        .orElse(clientKeyFile)
+        .orElse(clientCertFile)
+        .map { _ =>
+      var mountedAuthConfigBuilder = baseClientConfigBuilder
+      oauthTokenFile.foreach { tokenFilePath =>
+        val tokenFile = new File(tokenFilePath)
+        mountedAuthConfigBuilder = mountedAuthConfigBuilder
+          .withOauthToken(Files.toString(tokenFile, Charsets.UTF_8))
+      }
+      caCertFile.foreach { caFile =>
+        mountedAuthConfigBuilder = mountedAuthConfigBuilder.withCaCertFile(caFile)
+      }
+      clientKeyFile.foreach { keyFile =>
+        mountedAuthConfigBuilder = mountedAuthConfigBuilder.withClientKeyFile(keyFile)
+      }
+      clientCertFile.foreach { certFile =>
+        mountedAuthConfigBuilder = mountedAuthConfigBuilder.withClientCertFile(certFile)
+      }
+      mountedAuthConfigBuilder
+    }.getOrElse {
+      var serviceAccountConfigBuilder = baseClientConfigBuilder
+      if (SERVICE_ACCOUNT_CA_CERT.isFile) {
+        serviceAccountConfigBuilder = serviceAccountConfigBuilder.withCaCertFile(
+          SERVICE_ACCOUNT_CA_CERT.getAbsolutePath)
+      }
 
-    if (API_SERVER_TOKEN.isFile) {
-      clientConfigBuilder = clientConfigBuilder.withOauthToken(
-        Files.toString(API_SERVER_TOKEN, Charsets.UTF_8))
+      if (SERVICE_ACCOUNT_TOKEN.isFile) {
+        serviceAccountConfigBuilder = serviceAccountConfigBuilder.withOauthToken(
+          Files.toString(SERVICE_ACCOUNT_TOKEN, Charsets.UTF_8))
+      }
+      serviceAccountConfigBuilder
     }
-    new DefaultKubernetesClient(clientConfigBuilder.build)
+    new DefaultKubernetesClient(configBuilder.build)
   }
 }

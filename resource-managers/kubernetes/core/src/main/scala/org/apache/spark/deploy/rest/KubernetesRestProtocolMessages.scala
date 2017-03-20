@@ -20,14 +20,21 @@ import com.fasterxml.jackson.annotation.{JsonSubTypes, JsonTypeInfo}
 
 import org.apache.spark.SPARK_VERSION
 
+case class KubernetesCredentials(
+    oauthToken: Option[String],
+    caCertDataBase64: Option[String],
+    clientKeyDataBase64: Option[String],
+    clientCertDataBase64: Option[String])
+
 case class KubernetesCreateSubmissionRequest(
-  appResource: AppResource,
-  mainClass: String,
-  appArgs: Array[String],
-  sparkProperties: Map[String, String],
-  secret: String,
-  uploadedJarsBase64Contents: TarGzippedData,
-  uploadedFilesBase64Contents: TarGzippedData) extends SubmitRestProtocolRequest {
+    appResource: AppResource,
+    mainClass: String,
+    appArgs: Array[String],
+    sparkProperties: Map[String, String],
+    secret: String,
+    driverPodKubernetesCredentials: KubernetesCredentials,
+    uploadedJarsBase64Contents: TarGzippedData,
+    uploadedFilesBase64Contents: TarGzippedData) extends SubmitRestProtocolRequest {
   message = "create"
   clientSparkVersion = SPARK_VERSION
 }

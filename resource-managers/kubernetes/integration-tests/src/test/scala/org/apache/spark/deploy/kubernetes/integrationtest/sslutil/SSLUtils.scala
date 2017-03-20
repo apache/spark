@@ -16,15 +16,18 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest.sslutil
 
-import java.io.{File, FileOutputStream}
+import java.io.{File, FileOutputStream, OutputStreamWriter}
 import java.math.BigInteger
 import java.nio.file.Files
-import java.security.{KeyPairGenerator, KeyStore, SecureRandom}
+import java.security.cert.X509Certificate
+import java.security.{KeyPair, KeyPairGenerator, KeyStore, SecureRandom}
 import java.util.{Calendar, Random}
 import javax.security.auth.x500.X500Principal
 
+import com.google.common.base.Charsets
 import org.bouncycastle.asn1.x509.{Extension, GeneralName, GeneralNames}
 import org.bouncycastle.cert.jcajce.{JcaX509CertificateConverter, JcaX509v3CertificateBuilder}
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
 import org.apache.spark.util.Utils
@@ -39,6 +42,58 @@ private[spark] object SSLUtils {
     val keyPairGenerator = KeyPairGenerator.getInstance("RSA")
     keyPairGenerator.initialize(512)
     val keyPair = keyPairGenerator.generateKeyPair()
+    val certificate = generateCertificate(ipAddress, keyPair)
+    val keyStore = KeyStore.getInstance("JKS")
+    keyStore.load(null, null)
+    keyStore.setKeyEntry("key", keyPair.getPrivate,
+      keyPassword.toCharArray, Array(certificate))
+    val tempDir = Files.createTempDirectory("temp-ssl-stores").toFile
+    tempDir.deleteOnExit()
+    val keyStoreFile = new File(tempDir, "keyStore.jks")
+    Utils.tryWithResource(new FileOutputStream(keyStoreFile)) {
+      keyStore.store(_, keyStorePassword.toCharArray)
+    }
+    val trustStore = KeyStore.getInstance("JKS")
+    trustStore.load(null, null)
+    trustStore.setCertificateEntry("key", certificate)
+    val trustStoreFile = new File(tempDir, "trustStore.jks")
+    Utils.tryWithResource(new FileOutputStream(trustStoreFile)) {
+      trustStore.store(_, trustStorePassword.toCharArray)
+    }
+    (keyStoreFile, trustStoreFile)
+  }
+
+  def generateKeyCertPemPair(ipAddress: String): (File, File) = {
+    val keyPairGenerator = KeyPairGenerator.getInstance("RSA")
+    keyPairGenerator.initialize(512)
+    val keyPair = keyPairGenerator.generateKeyPair()
+    val certificate = generateCertificate(ipAddress, keyPair)
+    val tempDir = Files.createTempDirectory("temp-ssl-pems").toFile
+    tempDir.deleteOnExit()
+    val keyPemFile = new File(tempDir, "key.pem")
+    val certPemFile = new File(tempDir, "cert.pem")
+    Utils.tryWithResource(new FileOutputStream(keyPemFile)) { keyPemStream =>
+      Utils.tryWithResource(
+          new OutputStreamWriter(keyPemStream, Charsets.UTF_8)) { streamWriter =>
+        Utils.tryWithResource(
+            new JcaPEMWriter(streamWriter)) { pemWriter =>
+          pemWriter.writeObject(keyPair.getPrivate)
+        }
+      }
+    }
+    Utils.tryWithResource(new FileOutputStream(certPemFile)) { keyPemStream =>
+      Utils.tryWithResource(
+          new OutputStreamWriter(keyPemStream, Charsets.UTF_8)) { streamWriter =>
+        Utils.tryWithResource(
+            new JcaPEMWriter(streamWriter)) { pemWriter =>
+          pemWriter.writeObject(certificate)
+        }
+      }
+    }
+    (keyPemFile, certPemFile)
+  }
+
+  private def generateCertificate(ipAddress: String, keyPair: KeyPair): X509Certificate = {
     val selfPrincipal = new X500Principal(s"cn=$ipAddress")
     val currentDate = Calendar.getInstance
     val validForOneHundredYears = Calendar.getInstance
@@ -56,25 +111,6 @@ private[spark] object SSLUtils {
       .setSecureRandom(new SecureRandom())
       .build(keyPair.getPrivate)
     val bcCertificate = certificateBuilder.build(signer)
-    val jcaCertificate = new JcaX509CertificateConverter().getCertificate(bcCertificate)
-    val keyStore = KeyStore.getInstance("JKS")
-    keyStore.load(null, null)
-    keyStore.setKeyEntry("key", keyPair.getPrivate,
-      keyPassword.toCharArray, Array(jcaCertificate))
-    val tempDir = Files.createTempDirectory("temp-ssl-stores").toFile()
-    tempDir.deleteOnExit()
-    val keyStoreFile = new File(tempDir, "keyStore.jks")
-    Utils.tryWithResource(new FileOutputStream(keyStoreFile)) {
-      keyStore.store(_, keyStorePassword.toCharArray)
-    }
-    val trustStore = KeyStore.getInstance("JKS")
-    trustStore.load(null, null)
-    trustStore.setCertificateEntry("key", jcaCertificate)
-    val trustStoreFile = new File(tempDir, "trustStore.jks")
-    Utils.tryWithResource(new FileOutputStream(trustStoreFile)) {
-      trustStore.store(_, trustStorePassword.toCharArray)
-    }
-    (keyStoreFile, trustStoreFile)
+    new JcaX509CertificateConverter().getCertificate(bcCertificate)
   }
-
 }

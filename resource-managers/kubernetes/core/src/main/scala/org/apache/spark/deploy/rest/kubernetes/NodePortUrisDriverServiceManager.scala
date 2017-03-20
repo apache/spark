@@ -39,8 +39,8 @@ private[spark] class NodePortUrisDriverServiceManager extends DriverServiceManag
     val urlScheme = if (sparkConf.get(DRIVER_SUBMIT_SSL_ENABLED)) {
       "https"
     } else {
-      logWarning("Submitting application details, application secret, and local" +
-        " jars to the cluster over an insecure connection. You should configure SSL" +
+      logWarning("Submitting application details, application secret, Kubernetes credentials," +
+        " and local jars to the cluster over an insecure connection. You should configure SSL" +
         " to secure this step.")
       "http"
     }

@@ -53,6 +53,14 @@ Afterwards, the integration tests can be executed with Maven or your IDE. Note t
 `pre-integration-test` phase must be run every time the Spark main code changes. When running tests from the
 command line, the `pre-integration-test` phase should automatically be invoked if the `integration-test` phase is run.
 
+After the above step, the integration test can be run using the following command:
+
+```sh
+build/mvn integration-test \
+    -Pkubernetes -Pkubernetes-integration-tests \
+    -pl resource-managers/kubernetes/integration-tests -am
+```
+
 # Preserve the Minikube VM
 
 The integration tests make use of [Minikube](https://github.com/kubernetes/minikube), which fires up a virtual machine
