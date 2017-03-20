@@ -212,9 +212,11 @@ class UnivocityParser(
         new RuntimeException("Malformed CSV record"))
     } else {
       try {
-        for (i <- requiredSchema.indices) {
+        var i = 0
+        while (i < requiredSchema.length) {
           val from = tokenIndexArr(i)
           row(i) = valueConverters(from).apply(tokens(from))
+          i += 1
         }
         row
       } catch {

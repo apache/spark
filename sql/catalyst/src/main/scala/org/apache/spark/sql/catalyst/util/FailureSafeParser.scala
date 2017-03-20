@@ -23,7 +23,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
-    func: IN => Seq[InternalRow],
+    rawParser: IN => Seq[InternalRow],
     mode: String,
     schema: StructType,
     columnNameOfCorruptRecord: String) {
@@ -50,13 +50,13 @@ class FailureSafeParser[IN](
         resultRow
       }
     } else {
-      (row, badRecord) => row.getOrElse(nullResult)
+      (row, _) => row.getOrElse(nullResult)
     }
   }
 
   def parse(input: IN): Iterator[InternalRow] = {
     try {
-      func(input).toIterator.map(row => toResultRow(Some(row), () => null))
+      rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
     } catch {
       case e: BadRecordException if ParseModes.isPermissiveMode(mode) =>
         Iterator(toResultRow(e.partialResult(), e.record))
