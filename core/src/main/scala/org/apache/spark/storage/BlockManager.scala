@@ -28,8 +28,6 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
@@ -40,7 +38,6 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
@@ -94,7 +91,7 @@ private[spark] class BlockManager(
   // Actual storage of where blocks are kept
   private[spark] val memoryStore =
     new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this)
-  private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
+  private[spark] val diskStore = new DiskStore(conf, serializerManager, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
 
   // Note: depending on the memory manager, `maxMemory` may actually vary over time.
@@ -461,13 +458,11 @@ private[spark] class BlockManager(
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
           val iterToReturn: Iterator[Any] = {
-            val diskBytes = diskStore.getBytes(blockId)
             if (level.deserialized) {
-              val diskValues = serializerManager.dataDeserializeStream(
-                blockId,
-                diskBytes.toInputStream(dispose = true))(info.classTag)
+              val diskValues = diskStore.getBytesAsValues(blockId, info.classTag)
               maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
+              val diskBytes = diskStore.getBytes(blockId)
               val stream = maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes)
                 .map {_.toInputStream(dispose = false)}
                 .getOrElse { diskBytes.toInputStream(dispose = true) }
@@ -769,29 +764,7 @@ private[spark] class BlockManager(
       encrypt: Boolean = false): Boolean = {
     require(bytes != null, "Bytes is null")
 
-    val bytesToStore =
-      if (encrypt && securityManager.ioEncryptionKey.isDefined) {
-        try {
-          val data = bytes.toByteBuffer
-          val in = new ByteBufferInputStream(data, true)
-          val byteBufOut = new ByteBufferOutputStream(data.remaining())
-          val out = CryptoStreamUtils.createCryptoOutputStream(byteBufOut, conf,
-            securityManager.ioEncryptionKey.get)
-          try {
-            ByteStreams.copy(in, out)
-          } finally {
-            in.close()
-            out.close()
-          }
-          new ChunkedByteBuffer(byteBufOut.toByteBuffer)
-        } finally {
-          bytes.dispose()
-        }
-      } else {
-        bytes
-      }
-
-    doPutBytes(blockId, bytesToStore, level, implicitly[ClassTag[T]], tellMaster)
+    doPutBytes(blockId, bytes, level, implicitly[ClassTag[T]], tellMaster)
   }
 
   /**
@@ -832,9 +805,7 @@ private[spark] class BlockManager(
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
         val putSucceeded = if (level.deserialized) {
-          val values =
-            serializerManager.dataDeserializeStream(blockId, bytes.toInputStream())(classTag)
-          memoryStore.putIteratorAsValues(blockId, values, classTag) match {
+          memoryStore.putBytesAsValues(blockId, bytes, classTag) match {
             case Right(_) => true
             case Left(iter) =>
               // If putting deserialized values in memory failed, we will put the bytes directly to

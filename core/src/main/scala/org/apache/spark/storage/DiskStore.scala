@@ -21,17 +21,25 @@ import java.io.{FileOutputStream, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
-import com.google.common.io.Closeables
+import scala.reflect.ClassTag
 
-import org.apache.spark.SparkConf
+import com.google.common.io.{ByteStreams, Closeables}
+import org.apache.commons.io.IOUtils
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
+import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.serializer.SerializerManager
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Stores BlockManager blocks on disk.
  */
-private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) extends Logging {
+private[spark] class DiskStore(
+    conf: SparkConf,
+    serializerManager: SerializerManager,
+    diskManager: DiskBlockManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
@@ -73,10 +81,31 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
   }
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
+    val bytesToStore = if (serializerManager.encryptionEnabled) {
+      try {
+        val data = bytes.toByteBuffer
+        val in = new ByteBufferInputStream(data, true)
+        val byteBufOut = new ByteBufferOutputStream(data.remaining())
+        val out = CryptoStreamUtils.createCryptoOutputStream(byteBufOut, conf,
+          serializerManager.encryptionKey.get)
+        try {
+          ByteStreams.copy(in, out)
+        } finally {
+          in.close()
+          out.close()
+        }
+        new ChunkedByteBuffer(byteBufOut.toByteBuffer)
+      } finally {
+        bytes.dispose()
+      }
+    } else {
+      bytes
+    }
+
     put(blockId) { fileOutputStream =>
       val channel = fileOutputStream.getChannel
       Utils.tryWithSafeFinally {
-        bytes.writeFully(channel)
+        bytesToStore.writeFully(channel)
       } {
         channel.close()
       }
@@ -84,6 +113,20 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
   }
 
   def getBytes(blockId: BlockId): ChunkedByteBuffer = {
+    val bytes = readBytes(blockId)
+
+    val in = serializerManager.wrapForEncryption(bytes.toInputStream(dispose = true))
+    new ChunkedByteBuffer(ByteBuffer.wrap(IOUtils.toByteArray(in)))
+  }
+
+  def getBytesAsValues[T](blockId: BlockId, classTag: ClassTag[T]): Iterator[T] = {
+    val bytes = readBytes(blockId)
+
+    serializerManager
+      .dataDeserializeStream(blockId, bytes.toInputStream(dispose = true))(classTag)
+  }
+
+  private[storage] def readBytes(blockId: BlockId): ChunkedByteBuffer = {
     val file = diskManager.getFile(blockId.name)
     val channel = new RandomAccessFile(file, "r").getChannel
     Utils.tryWithSafeFinally {
