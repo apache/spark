@@ -424,7 +424,7 @@ setLogLevel <- function(level) {
 #'\dontrun{
 #' setCheckpointDir("/checkpoint")
 #'}
-#' @note setCheckpointDir since 2.0.0
+#' @note setCheckpointDir since 2.2.0
 setCheckpointDir <- function(directory) {
   sc <- getSparkContext()
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
