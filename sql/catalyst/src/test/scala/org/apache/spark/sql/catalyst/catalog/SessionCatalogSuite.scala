@@ -53,6 +53,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   protected def withBasicCatalog(f: SessionCatalog => Unit): Unit = {
     val catalog = new SessionCatalog(newBasicCatalog())
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     try {
       f(catalog)
     } finally {
@@ -62,6 +63,7 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   protected def withEmptyCatalog(f: SessionCatalog => Unit): Unit = {
     val catalog = new SessionCatalog(newEmptyCatalog())
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     try {
       f(catalog)
     } finally {
@@ -74,7 +76,6 @@ abstract class SessionCatalogSuite extends PlanTest {
 
   test("basic create and list databases") {
     withEmptyCatalog { catalog =>
-      catalog.createDatabase(newDb("default"), ignoreIfExists = true)
       assert(catalog.databaseExists("default"))
       assert(!catalog.databaseExists("testing"))
       assert(!catalog.databaseExists("testing2"))
