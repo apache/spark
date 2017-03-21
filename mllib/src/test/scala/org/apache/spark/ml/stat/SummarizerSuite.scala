@@ -86,6 +86,19 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     case (l1: Long, l2: Long) => assert(l1 === l2)
   }
 
+  test("debugging test") {
+    val df = denseData(Nil)
+    val c = df.col("features")
+    println(s">>>>> c=$c")
+    val c1 = metrics("mean").summary(c)
+    println(s">>>>> c1=$c1")
+    val res = df.select(c1)
+    println(s">>>>> res=$res")
+    intercept[SparkException] {
+      compare(res, Seq.empty)
+    }
+  }
+
   test("basic error handling") {
     val df = denseData(Nil)
     val c = df.col("features")
