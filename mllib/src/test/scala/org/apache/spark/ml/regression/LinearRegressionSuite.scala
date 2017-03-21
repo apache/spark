@@ -167,6 +167,41 @@ class LinearRegressionSuite
     assert(model.numFeatures === numFeatures)
   }
 
+  test("linear regression: illegal params") {
+    val lowerBoundOfCoefficients = Vectors.dense(Array(1.0, 1.0))
+    val upperBoundOfCoefficients1 = Vectors.dense(Array(-2.0, 2.0))
+    val upperBoundOfCoefficients2 = Vectors.dense(Array(2.0))
+
+    val lir = new LinearRegression().setLowerBoundOfCoefficients(lowerBoundOfCoefficients)
+
+    // Work well when only set bound in one side.
+    lir.fit(datasetWithDenseFeature)
+
+    withClue("bound constrained optimization does not support normal solver.") {
+      intercept[IllegalArgumentException] {
+        lir.setSolver("normal").fit(datasetWithDenseFeature)
+      }
+    }
+
+    withClue("bound constrained optimization only supports L2 regularization") {
+      intercept[IllegalArgumentException] {
+        lir.setElasticNetParam(1.0).fit(datasetWithDenseFeature)
+      }
+    }
+
+    withClue("lowerBoundOfCoefficients should less than or equal to upperBoundOfCoefficients") {
+      intercept[IllegalArgumentException] {
+        lir.setUpperBoundOfCoefficients(upperBoundOfCoefficients1).fit(datasetWithDenseFeature)
+      }
+    }
+
+    withClue("the size of coefficients bound mismatched with number of features") {
+      intercept[IllegalArgumentException] {
+        lir.setUpperBoundOfCoefficients(upperBoundOfCoefficients2).fit(datasetWithDenseFeature)
+      }
+    }
+  }
+
   test("linear regression handles singular matrices") {
     // check for both constant columns with intercept (zero std) and collinear
     val singularDataConstantColumn = sc.parallelize(Seq(

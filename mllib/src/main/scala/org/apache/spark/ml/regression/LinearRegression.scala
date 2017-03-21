@@ -57,7 +57,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   /**
    * The lower bound of coefficients if fitting under bound constrained optimization.
    * The bound vector size must be equal with the number of features in training dataset,
-   * otherwise, it throws exception.
+   * otherwise, throws exception.
    * @group param
    */
   @Since("2.2.0")
@@ -71,7 +71,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   /**
    * The upper bound of coefficients if fitting under bound constrained optimization.
    * The bound vector size must be equal with the number of features in training dataset,
-   * otherwise, it throws exception.
+   * otherwise, throws exception.
    * @group param
    */
   @Since("2.2.0")
@@ -153,7 +153,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * Default is 0.0 which is an L2 penalty.
    *
    * Note: Fitting under bound constrained optimization only supports L2 regularization,
-   * so it throws exception if getting non-zero value from this param.
+   * so throws exception if this param is non-zero value.
    *
    * @group setParam
    */
@@ -203,6 +203,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    *    The Normal Equations solver will be used when possible, but this will automatically fall
    *    back to iterative optimization methods when needed.
    *
+   * Note: Fitting under bound constrained optimization does not support "normal" solver.
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -245,14 +247,38 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     isSet(lowerBoundOfCoefficients) || isSet(upperBoundOfCoefficients)
   }
 
+  private def assertBoundConstrainedOptimizationParamsValid(numFeatures: Int): Unit = {
+    if (isSet(lowerBoundOfCoefficients)) {
+      require($(lowerBoundOfCoefficients).size == numFeatures,
+        "The size of lowerBoundOfCoefficients mismatched with number of features: " +
+          s"lowerBoundOfCoefficients size = ${getLowerBoundOfCoefficients.size}, " +
+          s"number of features = $numFeatures.")
+    }
+    if (isSet(upperBoundOfCoefficients)) {
+      require($(upperBoundOfCoefficients).size == numFeatures,
+        "The size of upperBoundOfCoefficients mismatched with number of features: " +
+          s"upperBoundOfCoefficients size = ${getUpperBoundOfCoefficients.size}, " +
+          s"number of features = $numFeatures.")
+    }
+    if (isSet(lowerBoundOfCoefficients) && isSet(upperBoundOfCoefficients)) {
+      require($(lowerBoundOfCoefficients).toArray.zip($(upperBoundOfCoefficients).toArray)
+        .forall(x => x._1 <= x._2), "LowerBoundOfCoefficients should always " +
+        "less than or equal to upperBoundOfCoefficients, but found: " +
+        s"lowerBoundOfCoefficients = $getLowerBoundOfCoefficients, " +
+        s"upperBoundOfCoefficients = $getUpperBoundOfCoefficients.")
+    }
+  }
+
   @Since("2.2.0")
   override def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if (usingBoundConstrainedOptimization && $(elasticNetParam) != 0.0) {
-      logError("Fitting linear regression under bound constrained optimization only supports " +
-        s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+    if (usingBoundConstrainedOptimization) {
+      require($(solver) != "normal", "Fitting under bound constrained optimization " +
+        "does not support normal solver.")
+      require($(elasticNetParam) == 0.0, "Fitting under bound constrained optimization only " +
+        s"supports L2 regularization, but got elasticNetParam = $getElasticNetParam.")
     }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
@@ -264,22 +290,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     // Check params interaction is valid if fitting under bound constrained optimization.
     if (usingBoundConstrainedOptimization) {
-      if ($(lowerBoundOfCoefficients).size != numFeatures ||
-        $(upperBoundOfCoefficients).size != numFeatures) {
-        logError("The size of coefficients bound mismatched with number of features: " +
-          s"lowerBoundOfCoefficients size = ${getLowerBoundOfCoefficients.size}, " +
-          s"upperBoundOfCoefficients size = ${getUpperBoundOfCoefficients.size}, " +
-          s"number of features = $numFeatures.")
-      }
-
-      val validBound = $(lowerBoundOfCoefficients).toArray.zip($(upperBoundOfCoefficients).toArray)
-        .forall(x => x._1 <= x._2)
-      if (!validBound) {
-        logError("LowerBoundOfCoefficients should always less than or equal to " +
-          "upperBoundOfCoefficients, but found: " +
-          s"lowerBoundOfCoefficients = $getLowerBoundOfCoefficients, " +
-          s"upperBoundOfCoefficients = $getUpperBoundOfCoefficients.")
-      }
+      assertBoundConstrainedOptimizationParamsValid(numFeatures)
     }
 
     val instances: RDD[Instance] = dataset.select(
@@ -410,10 +421,18 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       if (usingBoundConstrainedOptimization) {
-        val lowerBound = BDV[Double]($(lowerBoundOfCoefficients).toArray.zip(featuresStd)
-          .map{ case (lb, xStd) => lb * xStd / yStd })
-        val upperBound = BDV[Double]($(upperBoundOfCoefficients).toArray.zip(featuresStd)
-          .map{ case (ub, xStd) => ub * xStd / yStd })
+        val lowerBound = if (isSet(lowerBoundOfCoefficients)) {
+          BDV[Double]($(lowerBoundOfCoefficients).toArray.zip(featuresStd)
+            .map{ case (lb, xStd) => lb * xStd / yStd })
+        } else {
+          BDV[Double](Array.fill(numFeatures)(Double.NegativeInfinity))
+        }
+        val upperBound = if (isSet(upperBoundOfCoefficients)) {
+          BDV[Double]($(upperBoundOfCoefficients).toArray.zip(featuresStd)
+            .map{ case (ub, xStd) => ub * xStd / yStd })
+        } else {
+          BDV[Double](Array.fill(numFeatures)(Double.PositiveInfinity))
+        }
         initialValues = lowerBound.toArray.zip(upperBound.toArray).map { case (lb, ub) =>
           if (lb.isInfinity && ub.isInfinity) {
             0.0
