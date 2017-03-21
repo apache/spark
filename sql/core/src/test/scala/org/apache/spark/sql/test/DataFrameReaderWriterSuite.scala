@@ -26,7 +26,6 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
