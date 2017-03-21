@@ -47,7 +47,7 @@ val stream = KafkaUtils.createDirectStream[String, String](
 
 stream.map(record => (record.key, record.value))
 {% endhighlight %}
-Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javadoc/org/apache/kafka/clients/consumer/ConsumerRecord.html)
+Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javadoc/org/apache/kafka/clients/consumer/ConsumerRecord.html).  Note that `ConsumerRecord` is not serializable.  Hence any shuffle-inducing operations on the stream (i.e. repartition) will result in a `NotSerializableException`.  
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
