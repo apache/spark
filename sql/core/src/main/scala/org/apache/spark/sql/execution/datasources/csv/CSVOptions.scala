@@ -82,7 +82,7 @@ class CSVOptions(
 
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 

@@ -293,7 +293,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .load(testFile(carsFile)).collect()
       }
 
-      assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
+      assert(exception.getMessage.contains("Malformed CSV record"))
     }
   }
 

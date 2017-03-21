@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.io.InputStream
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
@@ -31,6 +33,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
+import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.datasources.{CodecStreams, DataSource, HadoopFileLinesReader, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -49,7 +52,8 @@ abstract class JsonDataSource extends Serializable {
   def readFile(
     conf: Configuration,
     file: PartitionedFile,
-    parser: JacksonParser): Iterator[InternalRow]
+    parser: JacksonParser,
+    schema: StructType): Iterator[InternalRow]
 
   final def inferSchema(
       sparkSession: SparkSession,
@@ -127,10 +131,16 @@ object TextInputJsonDataSource extends JsonDataSource {
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: JacksonParser): Iterator[InternalRow] = {
+      parser: JacksonParser,
+      schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-    linesReader.flatMap(parser.parse(_, CreateJacksonParser.text, textToUTF8String))
+    val safeParser = new FailureSafeParser[Text](
+      input => parser.parse(input, CreateJacksonParser.text, textToUTF8String),
+      parser.options.parseMode,
+      schema,
+      parser.options.columnNameOfCorruptRecord)
+    linesReader.flatMap(safeParser.parse)
   }
 
   private def textToUTF8String(value: Text): UTF8String = {
@@ -180,7 +190,8 @@ object WholeFileJsonDataSource extends JsonDataSource {
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: JacksonParser): Iterator[InternalRow] = {
+      parser: JacksonParser,
+      schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
         CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
@@ -189,9 +200,13 @@ object WholeFileJsonDataSource extends JsonDataSource {
       }
     }
 
-    parser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath),
-      CreateJacksonParser.inputStream,
-      partitionedFileString).toIterator
+    val safeParser = new FailureSafeParser[InputStream](
+      input => parser.parse(input, CreateJacksonParser.inputStream, partitionedFileString),
+      parser.options.parseMode,
+      schema,
+      parser.options.columnNameOfCorruptRecord)
+
+    safeParser.parse(
+      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath))
   }
 }

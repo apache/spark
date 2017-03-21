@@ -1043,7 +1043,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .json(corruptRecords)
         .collect()
     }
-    assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode: {"))
+    assert(exceptionOne.getMessage.contains("JsonParseException"))
 
     val exceptionTwo = intercept[SparkException] {
       spark.read
@@ -1052,7 +1052,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .json(corruptRecords)
         .collect()
     }
-    assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
+    assert(exceptionTwo.getMessage.contains("JsonParseException"))
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1929,7 +1929,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .json(path)
           .collect()
       }
-      assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode"))
+      assert(exceptionOne.getMessage.contains("Failed to parse a value"))
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
@@ -1939,7 +1939,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .json(path)
           .collect()
       }
-      assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode"))
+      assert(exceptionTwo.getMessage.contains("Failed to parse a value"))
     }
   }
 
