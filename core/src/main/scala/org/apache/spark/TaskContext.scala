@@ -185,6 +185,11 @@ abstract class TaskContext extends Serializable {
   def getMetricsSources(sourceName: String): Seq[Source]
 
   /**
+   * If the task is interrupted, throws TaskKilledException with the reason for the interrupt.
+   */
+  private[spark] def killTaskIfInterrupted(): Unit
+
+  /**
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager

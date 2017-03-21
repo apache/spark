@@ -215,7 +215,8 @@ private[spark] class PythonRunner(
 
           case e: Exception if context.isInterrupted =>
             logDebug("Exception thrown after task interruption", e)
-            throw new TaskKilledException
+            context.killTaskIfInterrupted()
+            null  // not reached
 
           case e: Exception if env.isStopped =>
             logDebug("Exception thrown after context is stopped", e)

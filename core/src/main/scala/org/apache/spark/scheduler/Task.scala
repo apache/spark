@@ -89,8 +89,8 @@ private[spark] abstract class Task[T](
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
-    if (_killed) {
-      kill(interruptThread = false)
+    if (_maybeKillReason != null) {
+      kill(interruptThread = false, _maybeKillReason)
     }
 
     new CallerContext(
@@ -160,7 +160,7 @@ private[spark] abstract class Task[T](
 
   // A flag to indicate whether the task is killed. This is used in case context is not yet
   // initialized when kill() is invoked.
-  @volatile @transient private var _killed = false
+  @volatile @transient private var _maybeKillReason: String = null
 
   protected var _executorDeserializeTime: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
@@ -168,7 +168,12 @@ private[spark] abstract class Task[T](
   /**
    * Whether the task has been killed.
    */
-  def killed: Boolean = _killed
+  def killed: Boolean = _maybeKillReason != null
+
+  /**
+   * If this task has been killed, contains the reason for the kill.
+   */
+  def maybeKillReason: Option[String] = Option(_maybeKillReason)
 
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
@@ -201,10 +206,11 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean) {
-    _killed = true
+  def kill(interruptThread: Boolean, reason: String) {
+    require(reason != null)
+    _maybeKillReason = reason
     if (context != null) {
-      context.markInterrupted()
+      context.markInterrupted(reason)
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()

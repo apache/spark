@@ -354,7 +354,10 @@ private[spark] object UIUtils extends Logging {
         {completed}/{total}
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
-        { reasonToNumKilled.map { case (reason, count) => s"($count killed: $reason)" } }
+        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
+            case (reason, count) => s"($count killed: $reason)"
+          }
+        }
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>

@@ -219,11 +219,8 @@ private[spark] class Executor(
     val threadName = s"Executor task launch worker for task $taskId"
     private val taskName = taskDescription.name
 
-    /** Whether this task has been killed. */
-    @volatile private var killed = false
-
-    /** The reason this task was killed. */
-    @volatile private var killReason: String = null
+    /** If specified, this task has been killed and this option contains the reason. */
+    @volatile private var maybeKillReason: Option[String] = None
 
     @volatile private var threadId: Long = -1
 
@@ -246,12 +243,11 @@ private[spark] class Executor(
 
     def kill(interruptThread: Boolean, reason: String): Unit = {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
-      killReason = reason
-      killed = true
+      maybeKillReason = Some(reason)
       if (task != null) {
         synchronized {
           if (!finished) {
-            task.kill(interruptThread)
+            task.kill(interruptThread, reason)
           }
         }
       }
@@ -302,12 +298,12 @@ private[spark] class Executor(
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
-        if (killed) {
+        if (maybeKillReason.isDefined) {
           // Throw an exception rather than returning, because returning within a try{} block
           // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
           // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
           // for the task.
-          throw new TaskKilledException
+          throw new TaskKilledException(maybeKillReason.get)
         }
 
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
@@ -364,9 +360,7 @@ private[spark] class Executor(
         } else 0L
 
         // If the task has been killed, let's fail it.
-        if (task.killed) {
-          throw new TaskKilledException
-        }
+        task.context.killTaskIfInterrupted()
 
         val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
@@ -432,15 +426,18 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case _: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId), reason: $killReason")
+        case t: TaskKilledException =>
+          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
 
         case _: InterruptedException if task.killed =>
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
+          logInfo(
+            s"Executor interrupted and killed $taskName (TID $taskId)," +
+            s" reason: ${task.maybeKillReason.get}")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
+          execBackend.statusUpdate(
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(task.maybeKillReason.get)))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason

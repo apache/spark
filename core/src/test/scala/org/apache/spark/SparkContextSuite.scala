@@ -34,7 +34,7 @@ import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFor
 import org.scalatest.concurrent.Eventually
 import org.scalatest.Matchers._
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.Utils
 
 
@@ -548,6 +548,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     SparkContextSuite.isTaskStarted = false
     SparkContextSuite.taskKilled = false
+    SparkContextSuite.taskSucceeded = false
 
     val listener = new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -557,6 +558,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         if (!SparkContextSuite.taskKilled) {
           SparkContextSuite.taskKilled = true
           sc.killTaskAttempt(taskStart.taskInfo.taskId, true, "first attempt will hang")
+        }
+      }
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (taskEnd.taskInfo.attemptNumber == 1 && taskEnd.reason == Success) {
+          SparkContextSuite.taskSucceeded = true
         }
       }
     }
@@ -569,8 +575,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           Thread.sleep(9999999)
         }
         // second attempt succeeds immediately
+        SparkContextSuite.taskSucceeded = true
       }
     }
+    assert(SparkContextSuite.taskSucceeded)
   }
 
   test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
@@ -595,4 +603,5 @@ object SparkContextSuite {
   @volatile var cancelStage = false
   @volatile var isTaskStarted = false
   @volatile var taskKilled = false
+  @volatile var taskSucceeded = false
 }
