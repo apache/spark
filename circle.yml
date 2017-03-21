@@ -61,6 +61,9 @@ test:
         parallel: true
         timeout: 1800
         max-runtime: 14400
+  post:
+    - find . -name unit-tests.log -exec rsync -R {} $CIRCLE_ARTIFACTS \;:
+        parallel: true
 
 deployment:
   release:
