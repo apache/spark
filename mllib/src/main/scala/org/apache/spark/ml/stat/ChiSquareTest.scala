@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions.col
  */
 @Experimental
 @Since("2.2.0")
-object ChiSquare {
+object ChiSquareTest {
 
   /** Used to construct output schema of tests */
   private case class ChiSquareResult(
