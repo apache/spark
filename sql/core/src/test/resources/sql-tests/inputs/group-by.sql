@@ -37,4 +37,11 @@ FROM testData;
 SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a;
 
 -- Aliases in SELECT could be used in GROUP BY
+EXPLAIN SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
+SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
+
+-- turn off group by aliases
+set spark.sql.groupByAliasesEnabled=false;
+
+-- Check analysis exceptions
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
