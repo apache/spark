@@ -27,8 +27,8 @@ import org.apache.spark.ml.linalg.{BLAS, SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.stat.SummaryBuilderImpl.MetricsAggregate
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeArrayData, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types._
@@ -117,7 +117,7 @@ private[ml] class SummaryBuilderImpl(
       column.expr,
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
-    new Column(AggregateExpression(agg, mode = Final, isDistinct = false))
+    new Column(AggregateExpression(agg, mode = Complete, isDistinct = false))
   }
 }
 
@@ -367,17 +367,17 @@ object SummaryBuilderImpl extends Logging {
     def write(buffer: Buffer): Array[Byte] = {
       val ir = InternalRow.apply(
         buffer.n,
-        buffer.mean,
-        buffer.m2n,
-        buffer.m2,
-        buffer.l1,
+        gadD(buffer.mean),
+        gadD(buffer.m2n),
+        gadD(buffer.m2),
+        gadD(buffer.l1),
         buffer.totalCount,
         buffer.totalWeightSum,
         buffer.totalWeightSquareSum,
-        buffer.weightSum,
-        buffer.nnz,
-        buffer.max,
-        buffer.min
+        gadD(buffer.weightSum),
+        gadL(buffer.nnz),
+        gadD(buffer.max),
+        gadD(buffer.min)
       )
       projection.apply(ir).getBytes
     }
@@ -436,6 +436,22 @@ object SummaryBuilderImpl extends Logging {
     def l1(buffer: Buffer): Array[Double] = {
       require(buffer.l1 != null)
       buffer.l1
+    }
+
+    private def gadD(arr: Array[Double]): UnsafeArrayData = {
+      if (arr == null) {
+        null
+      } else {
+        UnsafeArrayData.fromPrimitiveArray(arr)
+      }
+    }
+
+    private def gadL(arr: Array[Long]): UnsafeArrayData = {
+      if (arr == null) {
+        null
+      } else {
+        UnsafeArrayData.fromPrimitiveArray(arr)
+      }
     }
 
     private[this] lazy val projection = UnsafeProjection.create(bufferSchema)
