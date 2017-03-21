@@ -297,17 +297,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("test for tokens more than the fields in the schema") {
-    val cars = spark
-      .read
-      .format("csv")
-      .option("header", "false")
-      .option("comment", "~")
-      .load(testFile(carsMalformedFile))
-
-    verifyCars(cars, withHeader = false, checkTypes = false)
-  }
-
   test("test with null quote character") {
     val cars = spark.read
       .format("csv")
@@ -1116,4 +1105,21 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(df2.schema === schema)
   }
 
+  test("SPARK-19783 test for tokens more than the fields in the schema") {
+    val columnNameOfCorruptRecord = "_unparsed"
+    withTempPath { path =>
+      Seq("1,2", "1,2,3,4").toDF().write.text(path.getAbsolutePath)
+      val schema = StructType(
+        StructField("a", IntegerType, true) ::
+        StructField("b", IntegerType, true) ::
+        StructField(columnNameOfCorruptRecord, StringType, true) :: Nil)
+      val df = spark.read
+        .schema(schema)
+        .option("header", "false")
+        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+        .csv(path.getAbsolutePath)
+
+      checkAnswer(df, Row(1, 2, null) :: Row(null, null, "1,2,3,4") :: Nil)
+    }
+  }
 }
