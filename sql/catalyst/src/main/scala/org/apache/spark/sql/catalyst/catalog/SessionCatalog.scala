@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, StringUtils}
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -292,7 +292,7 @@ class SessionCatalog(
     val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-    externalCatalog.alterTable(newTableDefinition)
+    externalCatalog.alterTable(tableIdentifier, newTableDefinition)
   }
 
   /**
@@ -511,6 +511,8 @@ class SessionCatalog(
       }
     }
 
+    require(oldName.table != newName.table)
+
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
     if (db == globalTempViewManager.database) {
@@ -521,7 +523,39 @@ class SessionCatalog(
         requireTableExists(TableIdentifier(oldTableName, Some(db)))
         requireTableNotExists(TableIdentifier(newTableName, Some(db)))
         validateName(newTableName)
-        externalCatalog.renameTable(db, oldTableName, newTableName)
+
+        val oldTable = externalCatalog.getTable(db, oldName.table)
+        // Note that Hive serde tables don't use path option in storage properties to store the
+        // value of table location, but use `locationUri` field to store it directly. And
+        // `locationUri` field will be updated automatically in Hive metastore by the `alterTable`
+        // call at the end of this method. Here we only update the path option if the path option
+        // already exists in storage properties, to avoid adding a unnecessary path option
+        // for Hive serde tables.
+        val hasPathOption = CaseInsensitiveMap(oldTable.storage.properties).contains("path")
+        val storageWithNewPath =
+          if (oldTable.tableType == CatalogTableType.MANAGED) {
+            val newTablePath = defaultTablePath(TableIdentifier(newName.table, Some(db)))
+            // If it's a managed table with path option and we are renaming it, then the path option
+            // becomes inaccurate and we need to update it according to the new table name.
+            if (hasPathOption) {
+              CatalogUtils.updateLocationInStorageProps(
+              oldTable, Some(CatalogUtils.URIToString(newTablePath)))
+            } else if (externalCatalog.isInstanceOf[InMemoryCatalog]) {
+              // For hive metastore, there is no need to set the newTablePath
+              oldTable.storage.copy(locationUri = Some(newTablePath))
+            } else oldTable.storage
+          } else {
+            oldTable.storage
+          }
+
+        val newTable = oldTable.copy(
+          identifier = TableIdentifier(newName.table, Some(db)),
+          storage = storageWithNewPath)
+
+        val oldTableIdentifier =
+          if (!oldName.database.isDefined) oldName.copy(database = Some(db)) else oldName
+
+        externalCatalog.alterTable(oldTableIdentifier, newTable)
       } else {
         if (newName.database.isDefined) {
           throw new AnalysisException(

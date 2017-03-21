@@ -188,6 +188,18 @@ object CatalogUtils {
     new Path(str).toUri
   }
 
+
+  def updateLocationInStorageProps(
+      table: CatalogTable,
+      newPath: Option[String]): CatalogStorageFormat = {
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    val propsWithoutPath = table.storage.properties.filter {
+      case (k, v) => k.toLowerCase != "path"
+    }
+    table.storage.copy(properties = propsWithoutPath ++ newPath.map("path" -> _))
+  }
+
   private def normalizeColumnName(
       tableName: String,
       tableCols: Seq[String],

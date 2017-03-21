@@ -464,44 +464,29 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
-    val rawTable = getRawTable(db, oldName)
-
-    // Note that Hive serde tables don't use path option in storage properties to store the value
-    // of table location, but use `locationUri` field to store it directly. And `locationUri` field
-    // will be updated automatically in Hive metastore by the `alterTable` call at the end of this
-    // method. Here we only update the path option if the path option already exists in storage
-    // properties, to avoid adding a unnecessary path option for Hive serde tables.
-    val hasPathOption = CaseInsensitiveMap(rawTable.storage.properties).contains("path")
-    val storageWithNewPath = if (rawTable.tableType == MANAGED && hasPathOption) {
-      // If it's a managed table with path option and we are renaming it, then the path option
-      // becomes inaccurate and we need to update it according to the new table name.
-      val newTablePath = defaultTablePath(TableIdentifier(newName, Some(db)))
-      updateLocationInStorageProps(rawTable, Some(newTablePath))
-    } else {
-      rawTable.storage
-    }
-
-    val newTable = rawTable.copy(
-      identifier = TableIdentifier(newName, Some(db)),
-      storage = storageWithNewPath)
-
-    client.alterTable(oldName, newTable)
+  override def renameTable(
+      tableIdentifier: TableIdentifier,
+      newTableDefinition: CatalogTable): Unit = withClient {
+    client.alterTable(tableIdentifier.table, newTableDefinition)
   }
 
   private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {
     CaseInsensitiveMap(table.storage.properties).get("path")
   }
 
-  private def updateLocationInStorageProps(
-      table: CatalogTable,
-      newPath: Option[String]): CatalogStorageFormat = {
-    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
-    // while `CatalogTable` should be serializable.
-    val propsWithoutPath = table.storage.properties.filter {
-      case (k, v) => k.toLowerCase != "path"
+  /**
+   * We can use alterTable to do the following commands:
+   * 1.Rename a table
+   * 2.Alter a table whose database and name match the ones specified in `tableDefinition`
+   */
+  override def alterTable(
+      tableIdentifier: TableIdentifier,
+      newTableDefinition: CatalogTable): Unit = withClient {
+    if (newTableDefinition.identifier != tableIdentifier) {
+      renameTable(tableIdentifier, newTableDefinition)
+    } else {
+      alterSameTable(newTableDefinition)
     }
-    table.storage.copy(properties = propsWithoutPath ++ newPath.map("path" -> _))
   }
 
   /**
@@ -511,7 +496,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * Note: As of now, this doesn't support altering table schema, partition column names and bucket
    * specification. We will ignore them even if users do specify different values for these fields.
    */
-  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
+  protected override def alterSameTable(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
@@ -730,7 +715,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val storageWithLocation = {
       val tableLocation = getLocationFromStorageProps(table)
       // We pass None as `newPath` here, to remove the path option in storage properties.
-      updateLocationInStorageProps(table, newPath = None).copy(
+      CatalogUtils.updateLocationInStorageProps(table, newPath = None).copy(
         locationUri = tableLocation.map(CatalogUtils.stringToURI(_)))
     }
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)

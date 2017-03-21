@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.StructType
@@ -92,7 +93,16 @@ abstract class ExternalCatalog {
 
   def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
-  def renameTable(db: String, oldName: String, newName: String): Unit
+  protected def renameTable(
+      tableIdentifier: TableIdentifier,
+      newTableDefinition: CatalogTable): Unit
+
+  /**
+   * We can use alterTable to do the following commands:
+   * 1.Rename a table
+   * 2.Alter a table whose database and name match the ones specified in `tableDefinition`
+   */
+  def alterTable(tableIdentifier: TableIdentifier, newTableDefinition: CatalogTable): Unit
 
   /**
    * Alter a table whose database and name match the ones specified in `tableDefinition`, assuming
@@ -102,7 +112,7 @@ abstract class ExternalCatalog {
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(tableDefinition: CatalogTable): Unit
+  protected def alterSameTable(tableDefinition: CatalogTable): Unit
 
   /**
    * Alter the schema of a table identified by the provided database and table name. The new schema
