@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File, PrintStream}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -108,7 +109,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0")
+  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1")
 
   private var client: HiveClient = null
 
@@ -120,10 +121,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
       System.gc() // Hack to avoid SEGV on some JVM versions.
       val hadoopConf = new Configuration()
       hadoopConf.set("test", "success")
-      // Hive changed the default of datanucleus.schema.autoCreateAll from true to false since 2.0
-      // For details, see the JIRA HIVE-6113
-      if (version == "2.0") {
+      // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
+      // hive.metastore.schema.verification from false to true since 2.0
+      // For details, see the JIRA HIVE-6113 and HIVE-12463
+      if (version == "2.0" || version == "2.1") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
+        hadoopConf.set("hive.metastore.schema.verification", "false")
       }
       client = buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
@@ -572,6 +575,14 @@ class VersionsSuite extends SparkFunSuite with Logging {
       withTable("tbl") {
         versionSpark.sql("CREATE TABLE tbl AS SELECT 1 AS a")
         assert(versionSpark.table("tbl").collect().toSeq == Seq(Row(1)))
+        val tableMeta = versionSpark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl"))
+        val totalSize = tableMeta.properties.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(totalSize.isEmpty)
+        } else {
+          assert(totalSize.nonEmpty && totalSize.get > 0)
+        }
       }
     }
 

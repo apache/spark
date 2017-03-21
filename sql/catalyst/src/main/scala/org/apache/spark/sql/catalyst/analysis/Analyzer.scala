@@ -58,13 +58,12 @@ object SimpleAnalyzer extends Analyzer(
  *
  * @param defaultDatabase The default database used in the view resolution, this overrules the
  *                        current catalog database.
- * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
+ * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
- *                        TODO Limit the depth of nested views.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
-    nestedViewLevel: Int = 0)
+    nestedViewDepth: Int = 0)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -77,7 +76,7 @@ object AnalysisContext {
   def withAnalysisContext[A](database: Option[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(defaultDatabase = database,
-      nestedViewLevel = originContext.nestedViewLevel + 1)
+      nestedViewDepth = originContext.nestedViewDepth + 1)
     set(context)
     try f finally { set(originContext) }
   }
@@ -525,7 +524,7 @@ class Analyzer(
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(expr: Expression) = {
-              If(EqualTo(pivotColumn, value), expr, Literal(null))
+              If(EqualNullSafe(pivotColumn, value), expr, Literal(null))
             }
             aggregates.map { aggregate =>
               val filteredAggregate = aggregate.transformDown {
@@ -598,6 +597,12 @@ class Analyzer(
       case view @ View(desc, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
+          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
+            view.failAnalysis(s"The depth of view ${view.desc.identifier} exceeds the maximum " +
+              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
+              "avoid errors. Increase the value of spark.sql.view.maxNestedViewDepth to work " +
+              "aroud this.")
+          }
           execute(child)
         }
         view.copy(child = newChild)
@@ -961,9 +966,9 @@ class Analyzer(
       case s @ Sort(orders, global, child)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction, nullOrdering)
+              SortOrder(child.output(index - 1), direction, nullOrdering, Set.empty)
             } else {
               s.failAnalysis(
                 s"ORDER BY position $index is not in select list " +
