@@ -40,20 +40,22 @@ import org.apache.spark.unsafe.types.CalendarInterval
 private[sql] class KeyedStateImpl[S](
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
+    eventTimeWatermarkMs: Long,
     timeoutConf: KeyedStateTimeout,
     override val hasTimedOut: Boolean) extends KeyedState[S] {
 
   // Constructor to create dummy state when using mapGroupsWithState in a batch query
   def this(optionalValue: Option[S]) = this(
     optionalValue,
-    batchProcessingTimeMs = NO_BATCH_PROCESSING_TIMESTAMP,
+    batchProcessingTimeMs = NO_TIMESTAMP,
+    eventTimeWatermarkMs = NO_TIMESTAMP,
     timeoutConf = KeyedStateTimeout.NoTimeout,
     hasTimedOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
   private var updated: Boolean = false // whether value has been updated (but not removed)
   private var removed: Boolean = false // whether value has been removed
-  private var timeoutTimestamp: Long = TIMEOUT_TIMESTAMP_NOT_SET
+  private var timeoutTimestamp: Long = NO_TIMESTAMP
 
   // ========= Public API =========
   override def exists: Boolean = defined
@@ -88,7 +90,7 @@ private[sql] class KeyedStateImpl[S](
     defined = false
     updated = false
     removed = true
-    timeoutTimestamp = TIMEOUT_TIMESTAMP_NOT_SET
+    timeoutTimestamp = NO_TIMESTAMP
   }
 
   override def setTimeoutDuration(durationMs: Long): Unit = {
@@ -106,7 +108,7 @@ private[sql] class KeyedStateImpl[S](
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
     }
-    if (!removed && batchProcessingTimeMs != NO_BATCH_PROCESSING_TIMESTAMP) {
+    if (!removed && batchProcessingTimeMs != NO_TIMESTAMP) {
       timeoutTimestamp = durationMs + batchProcessingTimeMs
     } else {
       // This is being called in a batch query, hence no processing timestamp.
@@ -158,7 +160,12 @@ private[sql] class KeyedStateImpl[S](
     if (timestampMs <= 0) {
       throw new IllegalArgumentException("Timeout timestamp must be positive")
     }
-    if (!removed && batchProcessingTimeMs != NO_BATCH_PROCESSING_TIMESTAMP) {
+    if (eventTimeWatermarkMs != NO_TIMESTAMP && timestampMs < eventTimeWatermarkMs) {
+      throw new IllegalArgumentException(
+        s"Timeout timestamp ($timestampMs) cannot be earlier than the " +
+          s"current watermark ($eventTimeWatermarkMs)")
+    }
+    if (!removed && batchProcessingTimeMs != NO_TIMESTAMP) {
       timeoutTimestamp = timestampMs
     } else {
       // This is being called in a batch query, hence no processing timestamp.
@@ -191,10 +198,6 @@ private[sql] class KeyedStateImpl[S](
 
 
 private[sql] object KeyedStateImpl {
-  // Value used in the state row to represent the lack of any timeout timestamp
-  val TIMEOUT_TIMESTAMP_NOT_SET = -1L
-
-  // Value to represent that no batch processing timestamp is passed to KeyedStateImpl. This is
-  // used in batch queries where there are no streaming batches and timeouts.
-  val NO_BATCH_PROCESSING_TIMESTAMP = -1L
+  // Value used represent the lack of valid timestamp as a long
+  val NO_TIMESTAMP = -1L
 }

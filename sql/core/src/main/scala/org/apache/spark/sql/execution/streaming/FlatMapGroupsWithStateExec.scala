@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Attribut
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.streaming.KeyedStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode}
 import org.apache.spark.sql.types.IntegerType
@@ -146,7 +147,7 @@ case class FlatMapGroupsWithStateExec(
     private val stateSerializer = {
       val encoderSerializer = stateEncoder.namedExpressions
       if (isTimeoutEnabled) {
-        encoderSerializer :+ Literal(KeyedStateImpl.TIMEOUT_TIMESTAMP_NOT_SET)
+        encoderSerializer :+ Literal(KeyedStateImpl.NO_TIMESTAMP)
       } else {
         encoderSerializer
       }
@@ -188,7 +189,7 @@ case class FlatMapGroupsWithStateExec(
         }
         val timingOutKeys = store.filter { case (_, stateRow) =>
           val timeoutTimestamp = getTimeoutTimestamp(stateRow)
-          timeoutTimestamp != TIMEOUT_TIMESTAMP_NOT_SET && timeoutTimestamp < timeoutThreshold
+          timeoutTimestamp != NO_TIMESTAMP && timeoutTimestamp < timeoutThreshold
         }
         timingOutKeys.flatMap { case (keyRow, stateRow) =>
           callFunctionAndUpdateState(keyRow, Iterator.empty, Some(stateRow), hasTimedOut = true)
@@ -212,7 +213,8 @@ case class FlatMapGroupsWithStateExec(
       val stateObjOption = getStateObj(prevStateRowOption)
       val keyedState = new KeyedStateImpl(
         stateObjOption,
-        batchTimestampMs.getOrElse(NO_BATCH_PROCESSING_TIMESTAMP),
+        batchTimestampMs.getOrElse(NO_TIMESTAMP),
+        eventTimeWatermark.getOrElse(NO_TIMESTAMP),
         timeoutConfig,
         hasTimedOut)
 
@@ -224,8 +226,6 @@ case class FlatMapGroupsWithStateExec(
 
       // When the iterator is consumed, then write changes to state
       def onIteratorCompletion: Unit = {
-        // Has the timeout information changed
-
         if (keyedState.hasRemoved) {
           store.remove(keyRow)
           numUpdatedStateRows += 1
@@ -233,26 +233,25 @@ case class FlatMapGroupsWithStateExec(
         } else {
           val previousTimeoutTimestamp = prevStateRowOption match {
             case Some(row) => getTimeoutTimestamp(row)
-            case None => TIMEOUT_TIMESTAMP_NOT_SET
+            case None => NO_TIMESTAMP
           }
-
+          val currentTimeoutTimestamp = keyedState.getTimeoutTimestamp
           val stateRowToWrite = if (keyedState.hasUpdated) {
             getStateRow(keyedState.get)
           } else {
             prevStateRowOption.orNull
           }
 
-          val hasTimeoutChanged = keyedState.getTimeoutTimestamp != previousTimeoutTimestamp
+          val hasTimeoutChanged = currentTimeoutTimestamp != previousTimeoutTimestamp
           val shouldWriteState = keyedState.hasUpdated || hasTimeoutChanged
 
           if (shouldWriteState) {
             if (stateRowToWrite == null) {
               // This should never happen because checks in KeyedStateImpl should avoid cases
               // where empty state would need to be written
-              throw new IllegalStateException(
-                "Attempting to write empty state")
+              throw new IllegalStateException("Attempting to write empty state")
             }
-            setTimeoutTimestamp(stateRowToWrite, keyedState.getTimeoutTimestamp)
+            setTimeoutTimestamp(stateRowToWrite, currentTimeoutTimestamp)
             store.put(keyRow.copy(), stateRowToWrite.copy())
             numUpdatedStateRows += 1
           }
@@ -275,7 +274,7 @@ case class FlatMapGroupsWithStateExec(
 
     /** Returns the timeout timestamp of a state row is set */
     def getTimeoutTimestamp(stateRow: UnsafeRow): Long = {
-      if (isTimeoutEnabled) stateRow.getLong(timeoutTimestampIndex) else TIMEOUT_TIMESTAMP_NOT_SET
+      if (isTimeoutEnabled) stateRow.getLong(timeoutTimestampIndex) else NO_TIMESTAMP
     }
 
     /** Set the timestamp in a state row */
