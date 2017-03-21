@@ -42,8 +42,8 @@ class FailureSafeParser[IN](
       (row, badRecord) => {
         var i = 0
         while (i < actualSchema.length) {
-          val f = actualSchema(i)
-          resultRow(schema.fieldIndex(f.name)) = row.map(_.get(i, f.dataType)).orNull
+          val from = actualSchema(i)
+          resultRow(schema.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
           i += 1
         }
         resultRow(corruptFieldIndex.get) = badRecord()

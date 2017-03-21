@@ -51,7 +51,7 @@ class UnivocityParser(
   private val row = new GenericInternalRow(requiredSchema.length)
 
   // Retrieve the raw record string.
-  private def getCurrentInput(): UTF8String = {
+  private def getCurrentInput: UTF8String = {
     UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
   }
 
@@ -207,7 +207,7 @@ class UnivocityParser(
         }
       }
       throw BadRecordException(
-        () => getCurrentInput(),
+        () => getCurrentInput,
         getPartialResult,
         new RuntimeException("Malformed CSV record"))
     } else {
@@ -221,7 +221,7 @@ class UnivocityParser(
         row
       } catch {
         case NonFatal(e) =>
-          throw BadRecordException(() => getCurrentInput(), () => None, e)
+          throw BadRecordException(() => getCurrentInput, () => None, e)
       }
     }
   }

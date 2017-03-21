@@ -383,11 +383,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
-    val dataSchema = StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val actualSchema =
+      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val rawParser = new JacksonParser(dataSchema, parsedOptions)
+      val rawParser = new JacksonParser(actualSchema, parsedOptions)
       val parser = new FailureSafeParser[String](
         input => rawParser.parse(input, createParser, UTF8String.fromString),
         parsedOptions.parseMode,
@@ -442,14 +443,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
-    val dataSchema = StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val actualSchema =
+      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 
     val parsed = linesWithoutHeader.mapPartitions { iter =>
-      val rawParser = new UnivocityParser(dataSchema, parsedOptions)
+      val rawParser = new UnivocityParser(actualSchema, parsedOptions)
       val parser = new FailureSafeParser[String](
         input => Seq(rawParser.parse(input)),
         parsedOptions.parseMode,
