@@ -226,7 +226,6 @@ class SessionCatalog(
           s"${globalTempViewManager.database}.viewName.")
     }
     requireDbExists(dbName)
-    externalCatalog.setCurrentDatabase(dbName)
     synchronized { currentDb = dbName }
   }
 
