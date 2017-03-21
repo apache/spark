@@ -1384,7 +1384,8 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        Note that rows containing any null values will be removed before calculation.
+        Note that null values will be ignored in numerical columns before calculation.
+        For columns only containing null values, an empty list is returned.
 
         :param col: str, list.
           Can be a single column name, or a list of names for multiple columns.
