@@ -228,17 +228,6 @@ class SQLContext(object):
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
-    # TODO(andrew): delete this once we refactor things to take in SparkSession
-    def _inferSchema(self, rdd, samplingRatio=None):
-        """
-        Infer schema from an RDD of Row or tuple.
-
-        :param rdd: an RDD of Row or tuple
-        :param samplingRatio: sampling ratio, or no sampling (default)
-        :return: :class:`pyspark.sql.types.StructType`
-        """
-        return self.sparkSession._inferSchema(rdd, samplingRatio)
-
     @since(1.3)
     @ignore_unicode_prefix
     def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
