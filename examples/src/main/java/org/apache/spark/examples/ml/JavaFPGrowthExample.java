@@ -44,11 +44,12 @@ public class JavaFPGrowthExample {
       RowFactory.create(Arrays.asList("1 2".split(" ")))
     );
     StructType schema = new StructType(new StructField[]{ new StructField(
-      "features", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
+      "items", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
     Dataset<Row> itemsDF = spark.createDataFrame(data, schema);
 
     FPGrowthModel model = new FPGrowth()
+      .setItemsCol("items")
       .setMinSupport(0.5)
       .setMinConfidence(0.6)
       .fit(itemsDF);

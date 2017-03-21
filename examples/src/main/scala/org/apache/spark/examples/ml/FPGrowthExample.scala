@@ -45,9 +45,9 @@ object FPGrowthExample {
       "1 2 5",
       "1 2 3 5",
       "1 2")
-    ).map(t => t.split(" ")).toDF("features")
+    ).map(t => t.split(" ")).toDF("items")
 
-    val fpgrowth = new FPGrowth().setMinSupport(0.5).setMinConfidence(0.6)
+    val fpgrowth = new FPGrowth().setItemsCol("items").setMinSupport(0.5).setMinConfidence(0.6)
     val model = fpgrowth.fit(dataset)
 
     // Display frequent itemsets.

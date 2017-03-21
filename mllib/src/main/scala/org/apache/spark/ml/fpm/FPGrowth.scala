@@ -117,7 +117,7 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
  * Recommendation</a>. PFP distributes computation in such a way that each worker executes an
  * independent group of mining tasks. The FP-Growth algorithm is described in
  * <a href="http://dx.doi.org/10.1145/335191.335372">Han et al., Mining frequent patterns without
- * candidate generation</a>. Note null values in the feature column are ignored during fit().
+ * candidate generation</a>. Note null values in the itemsCol column are ignored during fit().
  *
  * @see <a href="http://en.wikipedia.org/wiki/Association_rule_learning">
  * Association rule learning (Wikipedia)</a>
@@ -230,7 +230,7 @@ class FPGrowthModel private[ml] (
    * Then for each association rule, it will examine the input items against antecedents and
    * summarize the consequents as prediction. The prediction column has the same data type as the
    * input column(Array[T]) and will not contain existing items in the input column. The null
-   * values in the feature columns are treated as empty sets.
+   * values in the itemsCol columns are treated as empty sets.
    * WARNING: internally it collects association rules to the driver and uses broadcast for
    * efficiency. This may bring pressure to driver memory for large set of association rules.
    */
