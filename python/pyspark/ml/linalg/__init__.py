@@ -434,7 +434,7 @@ class DenseVector(Vector):
         return getattr(self.array, item)
 
     def _delegate(op):
-        unary_ops = {"__neg__"}
+        unary_ops = set(["__neg__"])
 
         def func(self, other=None):
             # Unary operator
