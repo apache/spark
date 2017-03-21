@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.hive.test
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.Utils
 
 
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
@@ -31,6 +34,7 @@ trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
     try {
       hiveContext.reset()
     } finally {
+      Utils.deleteRecursively(new File(spark.sessionState.conf.warehousePath))
       super.afterAll()
     }
   }

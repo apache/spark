@@ -202,10 +202,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
 
-    if (tableExists(db, table) && !ignoreIfExists) {
-      throw new TableAlreadyExistsException(db = db, table = table)
-    }
-
     if (tableDefinition.tableType == VIEW) {
       client.createTable(tableDefinition, ignoreIfExists)
     } else {

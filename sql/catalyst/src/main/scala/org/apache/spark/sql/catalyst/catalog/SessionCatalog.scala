@@ -238,6 +238,28 @@ class SessionCatalog(
     new Path(new Path(conf.warehousePath), database + ".db").toUri
   }
 
+  /**
+   * Check if the table exists, and check if the path exists for managed table
+   */
+  def checkTableOrPathExists(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
+    if (!ignoreIfExists) {
+      val db = formatDatabaseName(table.identifier.database.getOrElse(getCurrentDatabase))
+      val tbl = formatTableName(table.identifier.table)
+      val tableIdentifier = TableIdentifier(tbl, Some(db))
+      if (tableExists(tableIdentifier)) {
+        throw new TableAlreadyExistsException(db = db, table = tbl)
+      }
+      // As discussed in SPARK-19583, the default location of a managed table should not exists
+      if (table.tableType == CatalogTableType.MANAGED) {
+        val tablePath = new Path(defaultTablePath(tableIdentifier))
+        val fs = tablePath.getFileSystem(hadoopConf)
+        if (fs.exists(tablePath)) {
+          throw new AnalysisException(s"the location('${tablePath.toString}') " +
+            s"of table('$tableIdentifier') already exists.")
+        }
+      }
+    }
+  }
   // ----------------------------------------------------------------------------
   // Tables
   // ----------------------------------------------------------------------------
@@ -259,6 +281,8 @@ class SessionCatalog(
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     validateName(table)
+    requireDbExists(db)
+    checkTableOrPathExists(tableDefinition, ignoreIfExists)
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
@@ -272,7 +296,6 @@ class SessionCatalog(
       tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     }
 
-    requireDbExists(db)
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 

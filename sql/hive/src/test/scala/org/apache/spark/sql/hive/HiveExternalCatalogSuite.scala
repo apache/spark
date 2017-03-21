@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -49,6 +50,16 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
   }
 
   import utils._
+
+  test("create table when the table already exists") {
+    val catalog = newBasicCatalog()
+    assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
+    val table = newTable("tbl1", "db2")
+    val e = intercept[AnalysisException] {
+      catalog.createTable(table, ignoreIfExists = false)
+    }.getMessage
+    assert(e.contains("AlreadyExistsException(message:Table tbl1 already exists);"))
+  }
 
   test("list partitions by filter") {
     val catalog = newBasicCatalog()

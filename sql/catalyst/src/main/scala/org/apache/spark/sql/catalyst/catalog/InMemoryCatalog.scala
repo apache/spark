@@ -187,38 +187,32 @@ class InMemoryCatalog(
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
-    if (tableExists(db, table)) {
-      if (!ignoreIfExists) {
-        throw new TableAlreadyExistsException(db = db, table = table)
+    // Set the default table location if this is a managed table and its location is not
+    // specified.
+    // Ideally we should not create a managed table with location, but Hive serde table can
+    // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
+    // to create the table directory and write out data before we create this table, to avoid
+    // exposing a partial written table.
+    val needDefaultTableLocation =
+    tableDefinition.tableType == CatalogTableType.MANAGED &&
+      tableDefinition.storage.locationUri.isEmpty
+
+    val tableWithLocation = if (needDefaultTableLocation) {
+      val defaultTableLocation = new Path(new Path(catalog(db).db.locationUri), table)
+      try {
+        val fs = defaultTableLocation.getFileSystem(hadoopConfig)
+        fs.mkdirs(defaultTableLocation)
+      } catch {
+        case e: IOException =>
+          throw new SparkException(s"Unable to create table $table as failed " +
+            s"to create its directory $defaultTableLocation", e)
       }
+      tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
     } else {
-      // Set the default table location if this is a managed table and its location is not
-      // specified.
-      // Ideally we should not create a managed table with location, but Hive serde table can
-      // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
-      // to create the table directory and write out data before we create this table, to avoid
-      // exposing a partial written table.
-      val needDefaultTableLocation =
-        tableDefinition.tableType == CatalogTableType.MANAGED &&
-          tableDefinition.storage.locationUri.isEmpty
-
-      val tableWithLocation = if (needDefaultTableLocation) {
-        val defaultTableLocation = new Path(new Path(catalog(db).db.locationUri), table)
-        try {
-          val fs = defaultTableLocation.getFileSystem(hadoopConfig)
-          fs.mkdirs(defaultTableLocation)
-        } catch {
-          case e: IOException =>
-            throw new SparkException(s"Unable to create table $table as failed " +
-              s"to create its directory $defaultTableLocation", e)
-        }
-        tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
-      } else {
-        tableDefinition
-      }
-
-      catalog(db).tables.put(table, new TableDesc(tableWithLocation))
+      tableDefinition
     }
+
+    catalog(db).tables.put(table, new TableDesc(tableWithLocation))
   }
 
   override def dropTable(

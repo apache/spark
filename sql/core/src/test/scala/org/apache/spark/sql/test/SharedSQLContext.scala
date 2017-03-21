@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.test
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 
 /**
@@ -71,6 +73,7 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
    */
   protected override def afterAll(): Unit = {
     super.afterAll()
+    Utils.deleteRecursively(new File(_spark.sessionState.conf.warehousePath))
     if (_spark != null) {
       _spark.stop()
       _spark = null

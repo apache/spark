@@ -88,6 +88,17 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
+  test("create table when the table already exists") {
+    val catalog = new SessionCatalog(newEmptyCatalog())
+    catalog.createDatabase(newDb("db1"), ignoreIfExists = false)
+    catalog.createTable(newTable("tbl1", "db1"), ignoreIfExists = false)
+
+    val table = newTable("tbl1", "db1")
+    intercept[TableAlreadyExistsException] {
+      catalog.createTable(table, ignoreIfExists = false)
+    }.getMessage
+  }
+
   def testInvalidName(func: (String) => Unit) {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
