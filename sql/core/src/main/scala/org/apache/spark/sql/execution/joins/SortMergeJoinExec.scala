@@ -84,7 +84,7 @@ case class SortMergeJoinExec(
     case RightOuter => requiredOrders(rightKeys)
     // There are null rows in both streams, so there is no order.
     case FullOuter => Nil
-    case _: InnerLike | LeftExistence(_) => requiredOrders(leftKeys)
+    case Inner | LeftExistence(_) => requiredOrders(leftKeys)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
