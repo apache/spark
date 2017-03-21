@@ -1227,7 +1227,7 @@ the following case-insensitive options:
   <tr>
     <td><code>createTableColumnTypes</code></td>
     <td>
-     The database column data types to use instead of the defaults, when creating the table. Data type information should be specified as key(column name)-value(data type) pairs in JSON (e.g: <code>{"name":"varchar(128)", "comments":"clob(20k)"})</code>. You can use <code>org.apache.spark.sql.types.MetadataBuilder</code> to build the metadata and generate the JSON string required for this option. This option applies only to writing.
+     The database column data types to use instead of the defaults, when creating the table. Data type information should be specified in the same format as CREATE TABLE columns syntax (e.g: <code>"name CHAR(64), comments VARCHAR(1024)")</code>. The specified types should be valid spark sql data types. This option applies only to writing.
     </td>
   </tr>  
 </table>

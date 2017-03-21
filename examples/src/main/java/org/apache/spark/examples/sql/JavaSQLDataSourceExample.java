@@ -35,9 +35,6 @@ import org.apache.spark.sql.Row;
 // $example off:schema_merging$
 // $example off:basic_parquet_example$
 import org.apache.spark.sql.SparkSession;
-// $example on:jdbc_dataset$
-import org.apache.spark.sql.types.MetadataBuilder;
-// $example off:jdbc_dataset$
 
 public class JavaSQLDataSourceExample {
 
@@ -263,9 +260,8 @@ public class JavaSQLDataSourceExample {
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
 
     // Specifying create table column data types on write
-    String columnTypes = new MetadataBuilder().putString("name", "VARCHAR(128)").build().json();
     jdbcDF.write()
-      .option("createTableColumnTypes", columnTypes)
+      .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
     // $example off:jdbc_dataset$
   }

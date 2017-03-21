@@ -19,7 +19,6 @@ package org.apache.spark.examples.sql
 import java.util.Properties
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.MetadataBuilder
 
 object SQLDataSourceExample {
 
@@ -184,9 +183,8 @@ object SQLDataSourceExample {
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
 
     // Specifying create table column data types on write
-    val createTableColTypes = new MetadataBuilder().putString("name", "VARCHAR(128)").build().json
     jdbcDF.write
-      .option("createTableColumnTypes", createTableColTypes)
+      .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
     // $example off:jdbc_dataset$
   }

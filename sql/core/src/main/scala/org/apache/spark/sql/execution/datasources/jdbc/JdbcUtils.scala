@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
@@ -686,19 +687,54 @@ object JdbcUtils extends Logging {
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    val dbColumnTypeMetadata =
-      createTableColumnTypes.map(Metadata.fromJson).getOrElse(Metadata.empty)
+    val userSpecifiedColTypesMap = createTableColumnTypes
+      .map(parseUserSpecifiedCreateTableColumnTypes(schema, _))
+      .getOrElse(Map.empty[String, String])
     schema.fields foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
-      val typ: String = if (dbColumnTypeMetadata.contains(field.name)) {
-        dbColumnTypeMetadata.getString(field.name)
-      } else {
-        getJdbcType(field.dataType, dialect).databaseTypeDefinition
-      }
+      val typ: String = userSpecifiedColTypesMap.get(field.name)
+        .getOrElse(getJdbcType(field.dataType, dialect).databaseTypeDefinition)
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }
     if (sb.length < 2) "" else sb.substring(2)
+  }
+
+  /**
+   * Parses the user specified createTableColumnTypes option value string specified in the same
+   * format as create table ddl column types, and returns Map of field name and the data type to
+   * use in-place of the default data type.
+   */
+  private def parseUserSpecifiedCreateTableColumnTypes(schema: StructType,
+    createTableColumnTypes: String): Map[String, String] = {
+    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val userColNames = userSchema.fieldNames
+    // check duplicate columns in the user specified column types.
+    if (userColNames.distinct.length != userColNames.length) {
+      val duplicates = userColNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => x
+      }.mkString(", ")
+      throw new AnalysisException(
+        s"Found duplicate column(s) in createTableColumnTypes option value: $duplicates")
+    }
+    // check user specified column names exists in the data frame schema.
+    val commonNames = userColNames.intersect(schema.fieldNames)
+    if (commonNames.length != userColNames.length) {
+      val invalidColumns = userColNames.diff(commonNames).mkString(", ")
+      throw new AnalysisException(
+        s"Found invalid column(s) in createTableColumnTypes option value: $invalidColumns")
+    }
+
+    // char/varchar gets translated to string type. Real data type specified by the user
+    // is available in the field metadata as HIVE_TYPE_STRING
+    userSchema.fields.map(f =>
+      f.name -> {
+        (if (f.metadata.contains(HIVE_TYPE_STRING)) {
+          f.metadata.getString(HIVE_TYPE_STRING)
+        } else {
+          f.dataType.catalogString
+        }).toUpperCase
+      }).toMap
   }
 
   /**
@@ -737,10 +773,9 @@ object JdbcUtils extends Logging {
       conn: Connection,
       schema: StructType,
       options: JDBCOptions): Unit = {
+    val strSchema = schemaString(schema, options.url, options.createTableColumnTypes)
     val table = options.table
     val createTableOptions = options.createTableOptions
-    val createTableColumnTypes = options.createTableColumnTypes
-    val strSchema = schemaString(schema, options.url, createTableColumnTypes)
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.

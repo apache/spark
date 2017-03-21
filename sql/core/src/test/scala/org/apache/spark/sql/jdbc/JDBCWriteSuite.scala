@@ -25,6 +25,7 @@ import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -366,51 +367,76 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("SPARK-10849: create table using user specified column type.") {
     val data = Seq[Row](
       Row(1, "dave", "Boston", "electric cars"),
-      Row(2, "mary", "boston", "building planes")
+      Row(2, "mary", "Seattle", "building planes")
     )
     val schema = StructType(
       StructField("id", IntegerType) ::
-        StructField("name", StringType) ::
+        StructField("first#name", StringType) ::
         StructField("city", StringType) ::
         StructField("descr", StringType) ::
         Nil)
     val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
-
-    // Using metadata builder to generate metadata json string for create table column types.
-    val mdb = new MetadataBuilder()
-    mdb.putString("name", "NVARCHAR(123)")
-    // Use H2 varchar_ignorecase type instead of TEXT to perform case-insensitive comparisions
-    mdb.putString("city", "VARCHAR_IGNORECASE(20)")
-    val createTableColTypes = mdb.build().json
+    // Use database specific CHAR/VARCHAR types instead of String data type.
+    val createTableColTypes = "`first#name` VARCHAR(123), city CHAR(20)"
     assert(JdbcUtils.schemaString(df.schema, url1, Option(createTableColTypes)) ==
-      s""""id" INTEGER , "name" NVARCHAR(123) , "city" VARCHAR_IGNORECASE(20) , "descr" TEXT """)
+      s""""id" INTEGER , "first#name" VARCHAR(123) , "city" CHAR(20) , "descr" TEXT """)
+
     // create the table with the user specified data types, and verify the data
     df.write.option("createTableColumnTypes", createTableColTypes)
       .jdbc(url1, "TEST.DBCOLTYPETEST", properties)
     assert(spark.read.jdbc(url1,
-      """(select * from TEST.DBCOLTYPETEST where "city"='Boston')""", properties).count == 2)
+      """(select * from TEST.DBCOLTYPETEST where "city" ='Boston')""", properties).count() == 1)
+
+    // verify the data types on the target table
+    val rows = spark.read.jdbc(url1,
+      """
+        |(select type_name, CHARACTER_MAXIMUM_LENGTH
+        | from information_schema.COLUMNS where table_name = 'DBCOLTYPETEST')
+      """.stripMargin.replaceAll("\n", " "),
+      properties
+    )
+    assert(rows.where("TYPE_NAME='VARCHAR'").head.getInt(1) == 123)
+    assert(rows.where("TYPE_NAME='CHAR'").head.getInt(1) == 20)
   }
 
-  test("SPARK-10849: jdbcCreateTableColumnTypes option with invalid data type") {
+  test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid data type") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val invalidCreateTableColTypes =
-      new MetadataBuilder().putString("name", "INVALID(123)").build().json
-    val msg = intercept[org.h2.jdbc.JdbcSQLException] {
+    val msg = intercept[ParseException] {
       df.write.mode(SaveMode.Overwrite)
-        .option("createTableColumnTypes", invalidCreateTableColTypes)
+        .option("createTableColumnTypes", "name CLOB(2000)")
         .jdbc(url1, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
-    assert(msg.contains("Unknown data type: \"INVALID\""))
+    assert(msg.contains("DataType clob(2000) is not supported."))
   }
 
-  test("SPARK-10849: jdbcCreateTableColumnTypes option with invalid json string") {
+  test("SPARK-10849: jdbc CreateTableColumnTypes option with invalid syntax") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val msg = intercept[com.fasterxml.jackson.core.JsonParseException] {
+    val msg = intercept[ParseException] {
       df.write.mode(SaveMode.Overwrite)
-        .option("createTableColumnTypes", """{"name":"NVARCHAR(12)"""")
+        .option("createTableColumnTypes", "`name char(20)")
         .jdbc(url1, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
-    assert(
-      msg.contains("expected close marker for OBJECT (from [Source: {\"name\":\"NVARCHAR(12)\";"))
+    assert(msg.contains("no viable alternative at input"))
+  }
+
+  test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val msg = intercept[AnalysisException] {
+      df.write.mode(SaveMode.Overwrite)
+        .option("createTableColumnTypes", "name CHAR(20), id int, name VARCHAR(100)")
+        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+    }.getMessage()
+    assert(msg.contains("Found duplicate column(s) in createTableColumnTypes option value: name"))
+  }
+
+  test("SPARK-10849: jdbc CreateTableColumnTypes invalid columns") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val msg = intercept[AnalysisException] {
+      df.write.mode(SaveMode.Overwrite)
+        .option("createTableColumnTypes", "firstName CHAR(20), id int, lastName VARCHAR(100)")
+        .jdbc(url1, "TEST.USERDBTYPETEST", properties)
+    }.getMessage()
+    assert(msg.contains(
+      "Found invalid column(s) in createTableColumnTypes option value: firstName, lastName"))
   }
 }
