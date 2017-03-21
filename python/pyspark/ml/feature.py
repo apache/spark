@@ -883,7 +883,8 @@ class Imputer(JavaEstimator, HasInputCols, JavaMLReadable, JavaMLWritable):
 
     Note that the mean/median value is computed after filtering out missing values.
     All Null values in the input columns are treated as missing, and so are also imputed. For
-    computing median, :py:meth:`approxQuantile` is used with a relative error of 0.001.
+    computing median, :py:meth:`pyspark.sql.DataFrame.approxQuantile` is used with a
+    relative error of `0.001`.
 
     >>> df = spark.createDataFrame([(1.0, float("nan")), (2.0, float("nan")), (float("nan"), 3.0),
     ...                             (4.0, 4.0), (5.0, 5.0)], ["a", "b"])
