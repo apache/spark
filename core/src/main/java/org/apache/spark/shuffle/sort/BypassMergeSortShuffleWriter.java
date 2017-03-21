@@ -177,7 +177,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (mapStatus instanceof HighlyCompressedMapStatus) {
       writeMetrics.setAverageBlockSize(((HighlyCompressedMapStatus) mapStatus).getAvgSize());
       for (int i = 0; i < partitionLengths.length; i++) {
-        if (partitionLengths[i] < mapStatus.getSizeForBlock(i)) {
+        if (partitionLengths[i] > mapStatus.getSizeForBlock(i)) {
           writeMetrics.incUnderestimatedBlocksNum();
           writeMetrics.incUnderestimatedBlocksSize(partitionLengths[i]);
         }

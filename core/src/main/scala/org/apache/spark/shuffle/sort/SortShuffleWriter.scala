@@ -73,16 +73,17 @@ private[spark] class SortShuffleWriter[K, V, C](
       shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
       partitionLengths.foreach(writeMetrics.incBlockSizeDistribution(_))
-      if (mapStatus.isInstanceOf[HighlyCompressedMapStatus]) {
-        writeMetrics.setAverageBlockSize(
-          mapStatus.asInstanceOf[HighlyCompressedMapStatus].getAvgSize());
-        (0 until partitionLengths.length).foreach {
-          case i =>
-            if (partitionLengths(i) < mapStatus.getSizeForBlock(i)) {
-              writeMetrics.incUnderestimatedBlocksNum()
-              writeMetrics.incUnderestimatedBlocksSize(partitionLengths(i))
-            }
-        }
+      mapStatus match {
+        case hc: HighlyCompressedMapStatus =>
+          writeMetrics.setAverageBlockSize(hc.getAvgSize())
+          (0 until partitionLengths.length).foreach {
+            case i =>
+              if (partitionLengths(i) > mapStatus.getSizeForBlock(i)) {
+                writeMetrics.incUnderestimatedBlocksNum()
+                writeMetrics.incUnderestimatedBlocksSize(partitionLengths(i))
+              }
+          }
+        case _ => // no-op
       }
     } finally {
       if (tmp.exists() && !tmp.delete()) {

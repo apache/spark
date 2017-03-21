@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.{lang => jl}
+import java.lang.{Long => JLong}
 
 import scala.collection.JavaConverters._
 
@@ -62,7 +62,7 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
    * Distribution of sizes in MapStatus. The ranges are: [0, 1k), [1k, 10k), [10k, 100k),
    * [100k, 1m), [1m, 10m), [10m, 100m), [100m, 1g), [1g, 10g), [10g, Long.MaxValue).
    */
-  def blockSizeDistribution: Seq[jl.Long] = {
+  def blockSizeDistribution: Seq[JLong] = {
     _blockSizeDistribution.map(_.value).toSeq
   }
 

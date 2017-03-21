@@ -165,7 +165,7 @@ private[spark] class HighlyCompressedMapStatus private (
     avgSize = in.readLong()
   }
 
-  def getAvgSize(): Long = avgSize
+  def getAvgSize: Long = avgSize
 }
 
 private[spark] object HighlyCompressedMapStatus {
