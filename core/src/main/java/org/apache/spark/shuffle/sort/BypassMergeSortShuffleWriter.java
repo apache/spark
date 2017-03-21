@@ -171,12 +171,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
 
-    long maxBlockSize = 0L;
     for (long partitionLength: partitionLengths) {
       writeMetrics.incBlockSizeDistribution(partitionLength);
-      if (partitionLength > maxBlockSize) {
-        maxBlockSize = partitionLength;
-      }
     }
     if (mapStatus instanceof HighlyCompressedMapStatus) {
       writeMetrics.setAverageBlockSize(((HighlyCompressedMapStatus) mapStatus).getAvgSize());

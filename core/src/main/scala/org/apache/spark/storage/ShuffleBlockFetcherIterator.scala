@@ -157,6 +157,7 @@ final class ShuffleBlockFetcherIterator(
         case SuccessFetchResult(_, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
+            shuffleMetrics.incRemoteBytesReadToMem(buf.size)
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
           buf.release()
@@ -337,6 +338,7 @@ final class ShuffleBlockFetcherIterator(
         case r @ SuccessFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
           if (address != blockManager.blockManagerId) {
             shuffleMetrics.incRemoteBytesRead(buf.size)
+            shuffleMetrics.incRemoteBytesReadToMem(buf.size)
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
           bytesInFlight -= size
