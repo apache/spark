@@ -425,7 +425,8 @@ object FunctionRegistry {
     expression[BitwiseXor]("^"),
 
     // json
-    expression[StructToJson]("to_json"),
+    expression[StructsToJson]("to_json"),
+    expression[JsonToStructs]("from_json"),
 
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),

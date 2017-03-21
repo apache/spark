@@ -301,7 +301,7 @@ object ALS {
    * level of parallelism.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
@@ -326,7 +326,7 @@ object ALS {
    * level of parallelism.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
@@ -349,7 +349,7 @@ object ALS {
    * parallelism automatically based on the number of partitions in `ratings`.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    * @param lambda     regularization parameter
    */
@@ -366,7 +366,7 @@ object ALS {
    * parallelism automatically based on the number of partitions in `ratings`.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    */
   @Since("0.8.0")
@@ -383,7 +383,7 @@ object ALS {
    * a level of parallelism given by `blocks`.
    *
    * @param ratings    RDD of (userID, productID, rating) pairs
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
@@ -410,7 +410,7 @@ object ALS {
    * iteratively with a configurable level of parallelism.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
@@ -436,7 +436,7 @@ object ALS {
    * partitions in `ratings`.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    * @param lambda     regularization parameter
    * @param alpha      confidence parameter
@@ -455,7 +455,7 @@ object ALS {
    * partitions in `ratings`.
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
-   * @param rank       number of features to use
+   * @param rank       number of features to use (also referred to as the number of latent factors)
    * @param iterations number of iterations of ALS
    */
   @Since("0.8.1")
