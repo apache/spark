@@ -168,12 +168,14 @@ object TextInputCSVDataSource extends CSVDataSource {
       options: CSVOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
+      // Fix for SPARK-19340. resolveRelation replaces with createHadoopRelation
+      // to avoid pattern resolution for already resolved file path
       sparkSession.baseRelationToDataFrame(
         DataSource.apply(
           sparkSession,
           paths = paths,
           className = classOf[TextFileFormat].getName
-        ).resolveRelation(checkFilesExist = false))
+        ).createHadoopRelation(new TextFileFormat, inputPaths.map(_.getPath).toArray))
         .select("value").as[String](Encoders.STRING)
     } else {
       val charset = options.charset
