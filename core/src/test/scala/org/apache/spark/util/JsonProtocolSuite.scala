@@ -1368,7 +1368,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
-      |    "Shuffle Write Metrics" : {
+      |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written" : 0,
       |      "Shuffle Write Time" : 0,
       |      "Shuffle Records Written" : 0,
