@@ -123,7 +123,8 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
  * We also prune cartesian product candidates when building a new plan if there exists no join
  * condition involving references from both left and right. This pruning strategy significantly
  * reduces the search space.
- * For example, given A J B J C J D, plans maintained for each level will be as follows:
+ * E.g., given A J B J C J D with join conditions A.k1 = B.k1 and B.k2 = C.k2 and C.k3 = D.k3,
+ * plans maintained for each level are as follows:
  * level 0: p({A}), p({B}), p({C}), p({D})
  * level 1: p({A, B}), p({B, C}), p({C, D})
  * level 2: p({A, B, C}), p({B, C, D})
