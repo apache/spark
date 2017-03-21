@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
@@ -27,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 object RDDConversions {
