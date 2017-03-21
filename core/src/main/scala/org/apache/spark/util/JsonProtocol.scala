@@ -331,26 +331,13 @@ private[spark] object JsonProtocol {
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
-        ("Remote Bytes Read To Mem" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToMem) ~
-        ("Remote Bytes Read To Disk" -> taskMetrics.shuffleReadMetrics.remoteBytesReadToDisk) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
-
 
     var shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
-        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten) ~
-        ("Shuffle Write Average Block Size" -> taskMetrics.shuffleWriteMetrics.averageBlockSize) ~
-        ("Shuffle Write Underestimated Blocks Num" ->
-          taskMetrics.shuffleWriteMetrics.underestimatedBlocksNum) ~
-        ("Shuffle Write Underestimated Blocks Size" ->
-          taskMetrics.shuffleWriteMetrics.underestimatedBlocksSize) merge
-        taskMetrics.shuffleWriteMetrics.blockSizeDistribution.zipWithIndex.map {
-          case (size, index) =>
-            render(s"Shuffle Write Block Size Distribution $index" -> size.asInstanceOf[Long])
-        }.reduceLeft(_ merge _)
-
+        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
     val inputMetrics: JValue =
       ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
         ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
@@ -806,8 +793,6 @@ private[spark] object JsonProtocol {
       readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
       readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
       readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
-      readMetrics.incRemoteBytesReadToMem((readJson \ "Remote Bytes Read To Mem").extract[Long])
-      readMetrics.incRemoteBytesReadToDisk((readJson \ "Remote Bytes Read To Disk").extract[Long])
       readMetrics.incLocalBytesRead(
         Utils.jsonOption(readJson \ "Local Bytes Read").map(_.extract[Long]).getOrElse(0L))
       readMetrics.incFetchWaitTime((readJson \ "Fetch Wait Time").extract[Long])
@@ -824,17 +809,6 @@ private[spark] object JsonProtocol {
       writeMetrics.incRecordsWritten(
         Utils.jsonOption(writeJson \ "Shuffle Records Written").map(_.extract[Long]).getOrElse(0L))
       writeMetrics.incWriteTime((writeJson \ "Shuffle Write Time").extract[Long])
-      (0 until 9).foreach {
-        case i =>
-          writeMetrics.setBlockSizeDistribution(i, (writeJson \
-            s"Shuffle Write Block Size Distribution $i").extract[Long])
-      }
-      writeMetrics.setAverageBlockSize(
-        (writeJson \ "Shuffle Write Average Block Size").extract[Long])
-      writeMetrics.setUnderestimatedBlocksNum(
-        (writeJson \ "Shuffle Write Underestimated Blocks Num").extract[Long])
-      writeMetrics.incUnderestimatedBlocksSize(
-        (writeJson \ "Shuffle Write Underestimated Blocks Size").extract[Long])
     }
 
     // Output metrics
