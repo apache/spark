@@ -189,17 +189,7 @@ private[hive] class HiveClientImpl(
         if (clientLoader.cachedHive != null) {
           Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
         }
-
-        // When Security is enabled, using real user to initialize Hive SessionState to avoid tgt
-        // not found issue with proxy user.
-        if (UserGroupInformation.isSecurityEnabled) {
-          SparkHadoopUtil.get.doAsRealUser {
-            SessionState.start(state)
-          }
-        } else {
-          SessionState.start(state)
-        }
-
+        SessionState.start(state)
         state.out = new PrintStream(outputBuffer, true, "UTF-8")
         state.err = new PrintStream(outputBuffer, true, "UTF-8")
         state
