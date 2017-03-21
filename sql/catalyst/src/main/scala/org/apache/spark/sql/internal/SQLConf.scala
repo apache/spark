@@ -708,6 +708,7 @@ object SQLConf {
     buildConf("spark.sql.cbo.joinReorder.dp.threshold")
       .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
       .intConf
+      .checkValue(number => number > 0, "The maximum number must be a positive integer.")
       .createWithDefault(12)
 
   val JOIN_REORDER_CARD_WEIGHT =
