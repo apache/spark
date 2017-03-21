@@ -274,6 +274,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val m4 = Map("a" -> "1", "b" -> "2", "c" -> "3")
     checkEvaluation(new StringToMap(s4, Literal("_")), m4)
 
+    val s5 = Literal("a")
+    val m5 = Map("a" -> null)
+    checkEvaluation(new StringToMap(s5), m5)
+
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)
     assert(new StringToMap(Literal(null)).checkInputDataTypes().isFailure)
