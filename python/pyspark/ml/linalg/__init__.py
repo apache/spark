@@ -434,9 +434,11 @@ class DenseVector(Vector):
         return getattr(self.array, item)
 
     def _delegate(op):
+        unary_ops = {"__neg__"}
+
         def func(self, other=None):
             # Unary operator
-            if other is None:
+            if other is None and op in unary_ops:
                 return getattr(self.array, op)()
 
             # Binary operator
