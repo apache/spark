@@ -156,9 +156,9 @@ object JoinReorderDP extends PredicateHelper with Logging {
       foundPlans += searchLevel(foundPlans, conf, conditions, topOutput)
     }
 
-    val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
-    logDebug(s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
-      s"${items.length}, number of plans in memo: ${foundPlans.map(_.size).sum}")
+//    val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
+//    logDebug(s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
+//      s"${items.length}, number of plans in memo: ${foundPlans.map(_.size).sum}")
 
     // The last level must have one and only one plan, because all items are joinable.
     assert(foundPlans.size == items.length && foundPlans.last.size == 1)
@@ -226,7 +226,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       conditions: Set[Expression],
       topOutput: AttributeSet): Option[JoinPlan] = {
 
-    if (oneJoinPlan.itemIds.intersect(otherJoinPlan.itemIds).isEmpty) {
+    if (oneJoinPlan.itemIds.intersect(otherJoinPlan.itemIds).nonEmpty) {
       // Should not join two overlapping item sets.
       return None
     }
