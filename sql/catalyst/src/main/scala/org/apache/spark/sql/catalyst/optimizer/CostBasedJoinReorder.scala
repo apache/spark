@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike}
 import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, Join, LogicalPlan, Project}
@@ -132,7 +133,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
  * For cost evaluation, since physical costs for operators are not available currently, we use
  * cardinalities and sizes to compute costs.
  */
-object JoinReorderDP extends PredicateHelper {
+object JoinReorderDP extends PredicateHelper with Logging {
 
   def search(
       conf: SQLConf,
@@ -140,6 +141,7 @@ object JoinReorderDP extends PredicateHelper {
       conditions: Set[Expression],
       topOutput: AttributeSet): LogicalPlan = {
 
+    val startTime = System.nanoTime()
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
     val itemIndex = items.zipWithIndex
@@ -153,6 +155,10 @@ object JoinReorderDP extends PredicateHelper {
       // Build plans for the next level.
       foundPlans += searchLevel(foundPlans, conf, conditions, topOutput)
     }
+
+    val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
+    logDebug(s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
+      s"${items.length}, number of plans in memo: ${foundPlans.map(_.size).sum}")
 
     // The last level must have one and only one plan, because all items are joinable.
     assert(foundPlans.size == items.length && foundPlans.last.size == 1)
@@ -203,15 +209,15 @@ object JoinReorderDP extends PredicateHelper {
   }
 
   /**
-   * Builds a new JoinPlan if there exists at least one join condition involving references from
-   * both left and right.
+   * Builds a new JoinPlan when both conditions hold:
+   * - the sets of items contained in left and right sides do not overlap.
+   * - there exists at least one join condition involving references from both sides.
    * @param oneJoinPlan One side JoinPlan for building a new JoinPlan.
    * @param otherJoinPlan The other side JoinPlan for building a new join node.
    * @param conf SQLConf for statistics computation.
    * @param conditions The overall set of join conditions.
    * @param topOutput The output attributes of the final plan.
-   * @return Builds and returns a new JoinPlan if there exists at least one join condition
-   *         involving references from both left and right. Otherwise, returns None.
+   * @return Builds and returns a new JoinPlan if both conditions hold. Otherwise, returns None.
    */
   private def buildJoin(
       oneJoinPlan: JoinPlan,
