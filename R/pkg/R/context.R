@@ -351,7 +351,13 @@ spark.getSparkFilesRootDirectory <- function() {
 #'}
 #' @note spark.getSparkFiles since 2.1.0
 spark.getSparkFiles <- function(fileName) {
-  file.path(spark.getSparkFilesRootDirectory(), as.character(fileName))
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  } else {
+    # Running on worker.
+    file.path(spark.getSparkFilesRootDirectory(), as.character(fileName))
+  }
 }
 
 #' Run a function over a list of elements, distributing the computations with Spark
