@@ -555,19 +555,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       inputData.toDS
         .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
-        .select($"key", $"eventTime".cast("long"))
         .as[(String, Long)]
         .groupByKey[String]((x: (String, Long)) => x._1)
         .flatMapGroupsWithState[Long, (String, Int)](Update, EventTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
       StartStream(ProcessingTime("1 second")),
-      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Should set timeout timestamp of ...
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Set timeout timestamp of ...
       CheckLastBatch(("a", 15)),                           // 'a' to 15 + 5 = 20s, watermark to 5s
-      AddData(inputData, ("dummy", 35)),  // Should set watermark = 35 - 10 = 25s
-      CheckLastBatch(),
-      AddData(inputData, ("dummy", 25)),  // Should keep watermark to 35 - 10 = 25s
-      CheckLastBatch(("a", -1))           // Should remove state for "a" and emit -1
+      AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
+      CheckLastBatch(),                   // No output as data should get filtered by watermark
+      AddData(inputData, ("dummy", 35)),  // Set watermark = 35 - 10 = 25s
+      CheckLastBatch(),                   // No output as no data for "a"
+      AddData(inputData, ("dummy", 25)),  // Run another batch with watermark = 25s
+      CheckLastBatch(("a", -1))           // Output as state for "a" should timeout and emit -1
     )
   }
 

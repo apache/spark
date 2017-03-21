@@ -111,7 +111,7 @@ class IncrementalExecution(
         m.copy(
           stateId = Some(stateId),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermarkMs = Some(offsetSeqMetadata.batchWatermarkMs))
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
     }
   }
 
