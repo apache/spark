@@ -29,7 +29,6 @@ checkout:
     - echo "password=$BINTRAY_PASSWORD" >> .credentials
     - echo "realm=Bintray API Realm" >> .credentials
     - echo "host=api.bintray.com" >> .credentials
-    - ./build/mvn versions:set -DnewVersion=$(git describe --tags)
 
 dependencies:
   override:
@@ -41,8 +40,7 @@ dependencies:
     - ./build/mvn -DskipTests -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr install
       # Copy all of */target/scala_2.11/classes to build_classes/
     - >
-      rsync --info=stats2,misc1,flist0 -a --delete-excluded --prune-empty-dirs --exclude build_classes/ --exclude 'target/streams'
-       --exclude 'assembly/target' --exclude 'common/network-yarn/target' --exclude 'examples/target' --exclude '***/*.jar' --include 'target/***' --include '**/' --exclude '*' . build_classes/
+      rsync --info=stats2,misc1,flist0 -a --delete-excluded --prune-empty-dirs --exclude build_classes/ --exclude 'target/streams' --exclude 'assembly/target' --exclude 'common/network-yarn/target' --exclude 'examples/target' --exclude '***/*.jar' --include 'target/***' --include '**/' --exclude '*' . build_classes/
     - |
       # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
       ./build/sbt -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr externalDependencyClasspath

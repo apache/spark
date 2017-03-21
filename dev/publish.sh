@@ -12,6 +12,7 @@ publish_artifacts() {
   echo "<password>$BINTRAY_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
+  ./build/mvn versions:set -DnewVersion=$version
   ./build/mvn --settings $tmp_settings -DskipTests "${PALANTIR_FLAGS[@]}" deploy
 }
 
