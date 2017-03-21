@@ -597,12 +597,12 @@ class DataStreamReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
-        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
-                                        being read should be skipped. If None is set, it uses
-                                        the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
-                                         being read should be skipped. If None is set, it uses
-                                         the default value, ``false``.
+        :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
+                                        values being read should be skipped. If None is set, it
+                                        uses the default value, ``false``.
+        :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
+                                         values being read should be skipped. If None is set, it
+                                         uses the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.

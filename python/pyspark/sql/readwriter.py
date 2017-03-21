@@ -341,12 +341,12 @@ class DataFrameReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
-        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
-                                        being read should be skipped. If None is set, it uses
-                                        the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
-                                         being read should be skipped. If None is set, it uses
-                                         the default value, ``false``.
+        :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
+                                        values being read should be skipped. If None is set, it
+                                        uses the default value, ``false``.
+        :param ignoreTrailingWhiteSpace: A flag indicating whether or not trailing whitespaces from
+                                         values being read should be skipped. If None is set, it
+                                         uses the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.
@@ -730,10 +730,10 @@ class DataFrameWriter(OptionUtils):
                       empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
-        :param escapeQuotes: A flag indicating whether values containing quotes should always
+        :param escapeQuotes: a flag indicating whether values containing quotes should always
                              be enclosed in quotes. If None is set, it uses the default value
                              ``true``, escaping all values containing a quote character.
-        :param quoteAll: A flag indicating whether all values should always be enclosed in
+        :param quoteAll: a flag indicating whether all values should always be enclosed in
                           quotes. If None is set, it uses the default value ``false``,
                           only escaping values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
@@ -748,12 +748,12 @@ class DataFrameWriter(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
-        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
-                                        being written should be skipped. If None is set, it uses
-                                        the default value, ``true``.
-        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
-                                         being written should be skipped. If None is set, it uses
-                                         the default value, ``true``.
+        :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
+                                        values being written should be skipped. If None is set, it
+                                        uses the default value, ``true``.
+        :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
+                                         values being written should be skipped. If None is set, it
+                                         uses the default value, ``true``.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
