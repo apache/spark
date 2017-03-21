@@ -1037,7 +1037,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst) }
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Set.empty) }
 
   /**
    * Returns a descending ordering used in sorting, where null values appear after non-null values.
@@ -1052,7 +1052,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast) }
+  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Set.empty) }
 
   /**
    * Returns an ascending ordering used in sorting.
@@ -1082,7 +1082,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst) }
+  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Set.empty) }
 
   /**
    * Returns an ordering used in sorting, where null values appear after non-null values.
@@ -1097,7 +1097,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast) }
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Set.empty) }
 
   /**
    * Prints the expression to the console for debugging purpose.
