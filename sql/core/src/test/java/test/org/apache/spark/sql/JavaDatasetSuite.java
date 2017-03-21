@@ -1380,4 +1380,23 @@ public class JavaDatasetSuite implements Serializable {
     CircularReference4Bean bean = new CircularReference4Bean();
     spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
   }
+
+  @Test(expected = RuntimeException.class)
+  public void testNullInTopLevelBean() {
+    NestedSmallBean bean = new NestedSmallBean();
+    // We cannot set null in top-level bean
+    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+  }
+
+  @Test
+  public void testSerializeNull() {
+    NestedSmallBean bean = new NestedSmallBean();
+    Encoder<NestedSmallBean> encoder = Encoders.bean(NestedSmallBean.class);
+    List<NestedSmallBean> beans = Arrays.asList(bean);
+    Dataset<NestedSmallBean> ds1 = spark.createDataset(beans, encoder);
+    Assert.assertEquals(beans, ds1.collectAsList());
+    Dataset<NestedSmallBean> ds2 =
+      ds1.map((MapFunction<NestedSmallBean, NestedSmallBean>) b -> b, encoder);
+    Assert.assertEquals(beans, ds2.collectAsList());
+  }
 }
