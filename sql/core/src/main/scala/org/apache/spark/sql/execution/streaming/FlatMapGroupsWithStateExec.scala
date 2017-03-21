@@ -40,7 +40,7 @@ import org.apache.spark.util.CompletionIterator
  * @param outputObjAttr used to define the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
  * @param outputMode the output mode of `func`
- * @param timeoutConfig used to timeout groups that have not received data in a while
+ * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
  */
 case class FlatMapGroupsWithStateExec(
@@ -53,7 +53,7 @@ case class FlatMapGroupsWithStateExec(
     stateId: Option[OperatorStateId],
     stateEncoder: ExpressionEncoder[Any],
     outputMode: OutputMode,
-    timeoutConfig: KeyedStateTimeout,
+    timeoutConf: KeyedStateTimeout,
     batchTimestampMs: Option[Long],
     override val eventTimeWatermark: Option[Long],
     child: SparkPlan
@@ -61,7 +61,7 @@ case class FlatMapGroupsWithStateExec(
 
   import KeyedStateImpl._
 
-  private val isTimeoutEnabled = timeoutConfig != NoTimeout
+  private val isTimeoutEnabled = timeoutConf != NoTimeout
   private val timestampTimeoutAttribute =
     AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
   private val stateAttributes: Seq[Attribute] = {
@@ -83,7 +83,7 @@ case class FlatMapGroupsWithStateExec(
     metrics // force lazy init at driver
 
     // Throw errors early if parameters are not as expected
-    timeoutConfig match {
+    timeoutConf match {
       case ProcessingTimeTimeout =>
         require(batchTimestampMs.nonEmpty)
       case EventTimeTimeout =>
@@ -104,7 +104,7 @@ case class FlatMapGroupsWithStateExec(
 
         // If timeout is based on event time, then filter late data based on watermark
         val filteredIter = watermarkPredicateForData match {
-          case Some(predicate) if timeoutConfig == EventTimeTimeout =>
+          case Some(predicate) if timeoutConf == EventTimeTimeout =>
             iter.filter(row => !predicate.eval(row))
           case None =>
             iter
@@ -180,12 +180,12 @@ case class FlatMapGroupsWithStateExec(
     /** Find the groups that have timeout set and are timing out right now, and call the function */
     def updateStateForTimedOutKeys(): Iterator[InternalRow] = {
       if (isTimeoutEnabled) {
-        val timeoutThreshold = timeoutConfig match {
+        val timeoutThreshold = timeoutConf match {
           case ProcessingTimeTimeout => batchTimestampMs.get
           case EventTimeTimeout => eventTimeWatermark.get
           case _ =>
             throw new IllegalStateException(
-              s"Cannot filter timed out keys for timeout config $timeoutConfig")
+              s"Cannot filter timed out keys for $timeoutConf")
         }
         val timingOutKeys = store.filter { case (_, stateRow) =>
           val timeoutTimestamp = getTimeoutTimestamp(stateRow)
@@ -215,7 +215,7 @@ case class FlatMapGroupsWithStateExec(
         stateObjOption,
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
-        timeoutConfig,
+        timeoutConf,
         hasTimedOut)
 
       // Call function, get the returned objects and convert them to rows

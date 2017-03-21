@@ -229,7 +229,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState = None)        // should be removed
   }
 
-  // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout = ProcessingTimeTimeout
+  // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout != NoTimeout
   for (priorState <- Seq(None, Some(0))) {
     for (priorTimeoutTimestamp <- Seq(NO_TIMESTAMP, 1000)) {
       var testName = s""
@@ -616,13 +616,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testStream(result, Update)(
       StartStream(ProcessingTime("1 second")),
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Set timeout timestamp of ...
-      CheckLastBatch(("a", 15)),                           // 'a' to 15 + 5 = 20s, watermark to 5s
+      CheckLastBatch(("a", 15)),                           // "a" to 15 + 5 = 20s, watermark to 5s
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
       CheckLastBatch(),                   // No output as data should get filtered by watermark
       AddData(inputData, ("dummy", 35)),  // Set watermark = 35 - 10 = 25s
       CheckLastBatch(),                   // No output as no data for "a"
-      AddData(inputData, ("dummy", 25)),  // Run another batch with watermark = 25s
-      CheckLastBatch(("a", -1))           // Output as state for "a" should timeout and emit -1
+      AddData(inputData, ("a", 24)),      // Add data older than watermark, should be ignored
+      CheckLastBatch(("a", -1))           // State for "a" should timeout and emit -1
     )
   }
 
