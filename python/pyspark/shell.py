@@ -39,7 +39,7 @@ SparkContext._ensure_initialized()
 try:
     # Try to access HiveConf, it will raise exception if Hive is not added
     conf = SparkConf()
-    if conf.get('spark.sql.catalogImplementation', 'hive') == 'hive':
+    if conf.get('spark.sql.catalogImplementation', 'hive').lower() == 'hive':
         SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
         spark = SparkSession.builder\
             .enableHiveSupport()\
