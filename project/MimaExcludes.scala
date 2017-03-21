@@ -75,7 +75,8 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.TaskKilled.countTowardsTaskFailures"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.TaskKilled.productPrefix"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.TaskKilled.toErrorString"),
-    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.TaskKilled.toString")
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.TaskKilled.toString"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.killTaskIfInterrupted")
   )
 
   // Exclude rules for 2.1.x
