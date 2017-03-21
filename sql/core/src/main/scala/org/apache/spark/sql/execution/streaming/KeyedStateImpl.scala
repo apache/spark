@@ -117,29 +117,7 @@ private[sql] class KeyedStateImpl[S](
   }
 
   override def setTimeoutDuration(duration: String): Unit = {
-    if (StringUtils.isBlank(duration)) {
-      throw new IllegalArgumentException(
-        "The window duration, slide duration and start time cannot be null or blank.")
-    }
-    val intervalString = if (duration.startsWith("interval")) {
-      duration
-    } else {
-      "interval " + duration
-    }
-    val cal = CalendarInterval.fromString(intervalString)
-    if (cal == null) {
-      throw new IllegalArgumentException(
-        s"The provided duration ($duration) is not valid.")
-    }
-    if (cal.milliseconds < 0 || cal.months < 0) {
-      throw new IllegalArgumentException("Timeout duration must be positive")
-    }
-
-    val delayMs = {
-      val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
-      cal.milliseconds + cal.months * millisPerMonth
-    }
-    setTimeoutDuration(delayMs)
+    setTimeoutDuration(parseDuration(duration))
   }
 
   @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
@@ -147,16 +125,7 @@ private[sql] class KeyedStateImpl[S](
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestampMs: Long): Unit = {
-    if (timeoutConf != EventTimeTimeout) {
-      throw new UnsupportedOperationException(
-        "Cannot set timeout timestamp without enabling event time timeout in " +
-          "map/flatMapGroupsWithState")
-    }
-    if (!defined) {
-      throw new IllegalStateException(
-        "Cannot set timeout timestamp without any state value, " +
-          "state has either not been initialized, or has already been removed")
-    }
+    checkTimeoutTimestampAllowed()
     if (timestampMs <= 0) {
       throw new IllegalArgumentException("Timeout timestamp must be positive")
     }
@@ -173,11 +142,30 @@ private[sql] class KeyedStateImpl[S](
     }
   }
 
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit = {
+    checkTimeoutTimestampAllowed()
+    setTimeoutTimestamp(parseDuration(additionalDuration) + timestampMs)
+  }
+
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestamp: Date): Unit = {
+    checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(timestamp.getTime)
+  }
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestamp: Date, additionalDuration: String): Unit = {
+    checkTimeoutTimestampAllowed()
+    setTimeoutTimestamp(timestamp.getTime + parseDuration(additionalDuration))
   }
 
   override def toString: String = {
@@ -194,6 +182,42 @@ private[sql] class KeyedStateImpl[S](
 
   /** Return timeout timestamp or `TIMEOUT_TIMESTAMP_NOT_SET` if not set */
   def getTimeoutTimestamp: Long = timeoutTimestamp
+
+  private def parseDuration(duration: String): Long = {
+    if (StringUtils.isBlank(duration)) {
+      throw new IllegalArgumentException(
+        "Provided duration is null or blank.")
+    }
+    val intervalString = if (duration.startsWith("interval")) {
+      duration
+    } else {
+      "interval " + duration
+    }
+    val cal = CalendarInterval.fromString(intervalString)
+    if (cal == null) {
+      throw new IllegalArgumentException(
+        s"Provided duration ($duration) is not valid.")
+    }
+    if (cal.milliseconds < 0 || cal.months < 0) {
+      throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
+    }
+
+    val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
+    cal.milliseconds + cal.months * millisPerMonth
+  }
+
+  private def checkTimeoutTimestampAllowed(): Unit = {
+    if (timeoutConf != EventTimeTimeout) {
+      throw new UnsupportedOperationException(
+        "Cannot set timeout timestamp without enabling event time timeout in " +
+          "map/flatMapGroupsWithState")
+    }
+    if (!defined) {
+      throw new IllegalStateException(
+        "Cannot set timeout timestamp without any state value, " +
+          "state has either not been initialized, or has already been removed")
+    }
+  }
 }
 
 

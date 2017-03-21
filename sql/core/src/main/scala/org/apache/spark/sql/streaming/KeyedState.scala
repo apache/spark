@@ -194,7 +194,8 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
 
   /**
    * Set the timeout duration in ms for this key.
-   * @note Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
+   *
+   * @note ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'durationMs' is not positive")
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
@@ -204,7 +205,8 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
 
   /**
    * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
-   * @note, Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
+   *
+   * @note, ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
@@ -216,10 +218,50 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as milliseconds in epoch time.
+   * This timestamp cannot be older than the current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
   def setTimeoutTimestamp(timestampMs: Long): Unit
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as milliseconds in epoch time and an additional
+   * duration as a string (e.g. "1 hour", "2 days", etc.).
+   * The final timestamp (including the additional duration) cannot be older than the
+   * current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
+  def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit
 
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as a java.sql.Date.
+   * This timestamp cannot be older than the current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
   def setTimeoutTimestamp(timestamp: java.sql.Date): Unit
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as a java.sql.Date and an additional
+   * duration as a string (e.g. "1 hour", "2 days", etc.).
+   * The final timestamp (including the additional duration) cannot be older than the
+   * current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
+  def setTimeoutTimestamp(timestamp: java.sql.Date, additionalDuration: String): Unit
 }

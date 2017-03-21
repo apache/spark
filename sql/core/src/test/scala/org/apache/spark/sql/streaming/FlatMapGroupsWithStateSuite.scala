@@ -165,6 +165,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     state = new KeyedStateImpl(Some(5), 1000, 1000, EventTimeTimeout, hasTimedOut = false)
     testIllegalTimeout { state.setTimeoutTimestamp(-10000) }
+    testIllegalTimeout { state.setTimeoutTimestamp(10000, "-3 second") }
+    testIllegalTimeout { state.setTimeoutTimestamp(10000, "-1 month") }
+    testIllegalTimeout { state.setTimeoutTimestamp(10000, "1 month -1 day") }
+    testIllegalTimeout { state.setTimeoutTimestamp(new Date(-10000)) }
+    testIllegalTimeout { state.setTimeoutTimestamp(new Date(-10000), "-3 second") }
+    testIllegalTimeout { state.setTimeoutTimestamp(new Date(-10000), "-1 month") }
+    testIllegalTimeout { state.setTimeoutTimestamp(new Date(-10000), "1 month -1 day") }
   }
 
   test("KeyedState - hasTimedOut") {
@@ -866,9 +873,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   def testTimeoutTimestampNotAllowed[T <: Exception: Manifest](state: KeyedStateImpl[_]): Unit = {
     val prevTimestamp = state.getTimeoutTimestamp
-    intercept[T] { state.setTimeoutTimestamp(1000) }
+    intercept[T] { state.setTimeoutTimestamp(2000) }
     assert(state.getTimeoutTimestamp === prevTimestamp)
-    intercept[T] { state.setTimeoutTimestamp(new Date(1000)) }
+    intercept[T] { state.setTimeoutTimestamp(2000, "1 second") }
+    assert(state.getTimeoutTimestamp === prevTimestamp)
+    intercept[T] { state.setTimeoutTimestamp(new Date(2000)) }
+    assert(state.getTimeoutTimestamp === prevTimestamp)
+    intercept[T] { state.setTimeoutTimestamp(new Date(2000), "1 second") }
     assert(state.getTimeoutTimestamp === prevTimestamp)
   }
 
