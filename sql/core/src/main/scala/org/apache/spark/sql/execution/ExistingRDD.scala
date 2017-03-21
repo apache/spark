@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
@@ -70,20 +72,7 @@ object RDDConversions {
 object ExternalRDD {
 
   def apply[T: Encoder](rdd: RDD[T], session: SparkSession): LogicalPlan = {
-    val attr = {
-      val attr = CatalystSerde.generateObjAttr[T]
-      // Since ExpressionEncoder[T].deserializer is not resolved here,
-      // cannot access ExpressionEncoder[T].deserializer.nullable.
-      // We infer nullability from DataType
-      attr.dataType match {
-        case BooleanType => attr
-        case _: IntegralType => attr
-        case FloatType | DoubleType => attr
-        case DecimalType.Fixed(p, s) if p <= Decimal.MAX_LONG_DIGITS => attr
-        case _ => attr.withNullability(true)
-      }
-    }
-    val externalRdd = ExternalRDD(attr, rdd)(session)
+    val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
     CatalystSerde.serialize[T](externalRdd)
   }
 }

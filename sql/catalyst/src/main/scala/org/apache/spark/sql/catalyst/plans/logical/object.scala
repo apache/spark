@@ -41,7 +41,20 @@ object CatalystSerde {
   }
 
   def generateObjAttr[T : Encoder]: Attribute = {
-    AttributeReference("obj", encoderFor[T].deserializer.dataType, nullable = false)()
+    val deserializer = encoderFor[T].deserializer
+    val dataType = deserializer.dataType
+    val nullable = if (deserializer.childrenResolved) {
+      deserializer.nullable
+    } else {
+      // Since deserializer is not resolved here, cannot access deserializer.nullable.
+      // We infer nullability from DataType
+      dataType match {
+        case BooleanType | FloatType | DoubleType => false
+        case _: IntegralType => false
+        case _ => true
+      }
+    }
+    AttributeReference("obj", dataType, nullable = nullable)()
   }
 }
 
