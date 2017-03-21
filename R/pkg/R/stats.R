@@ -150,7 +150,7 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
 #' Note that NA values will be ignored in numerical columns before calculation. For
-#'   columns only containing Na values, an empty list is returned.
+#'   columns only containing NA values, an empty list is returned.
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A single column name, or a list of names for multiple columns.
