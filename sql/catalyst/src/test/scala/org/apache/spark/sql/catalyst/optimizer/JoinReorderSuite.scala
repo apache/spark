@@ -22,10 +22,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-import org.apache.spark.sql.catalyst.util._
 
 
 class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
@@ -38,7 +37,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
-        ReorderJoin,
+        ReorderJoin(conf),
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
@@ -203,27 +202,7 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
       originalPlan: LogicalPlan,
       groundTruthBestPlan: LogicalPlan): Unit = {
     val optimized = Optimize.execute(originalPlan.analyze)
-    val normalized1 = normalizePlan(normalizeExprIds(optimized))
-    val normalized2 = normalizePlan(normalizeExprIds(groundTruthBestPlan.analyze))
-    if (!sameJoinPlan(normalized1, normalized2)) {
-      fail(
-        s"""
-           |== FAIL: Plans do not match ===
-           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-         """.stripMargin)
-    }
-  }
-
-  /** Consider symmetry for joins when comparing plans. */
-  private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
-    (plan1, plan2) match {
-      case (j1: Join, j2: Join) =>
-        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)) ||
-          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left))
-      case _ if plan1.children.nonEmpty && plan2.children.nonEmpty =>
-        (plan1.children, plan2.children).zipped.forall { case (c1, c2) => sameJoinPlan(c1, c2) }
-      case _ =>
-        plan1 == plan2
-    }
+    val expected = groundTruthBestPlan.analyze
+    compareJoinOrder(optimized, expected)
   }
 }

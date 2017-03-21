@@ -841,6 +841,17 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
   expect_true(is.data.frame(collect(df)))
 })
 
+test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
+  checkpointDir <- file.path(tempdir(), "cproot")
+  expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+
+  setCheckpointDir(checkpointDir)
+  df <- read.json(jsonPath)
+  df <- checkpoint(df)
+  expect_is(df, "SparkDataFrame")
+  expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+})
+
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- read.json(jsonPath)
   testSchema <- schema(df)
@@ -1340,6 +1351,10 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
   # Test to_json(), from_json()
+  df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")

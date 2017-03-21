@@ -719,6 +719,18 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
+    .doc("When true, it enables join reordering based on star schema detection. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val STARSCHEMA_FACT_TABLE_RATIO = buildConf("spark.sql.cbo.starJoinFTRatio")
+    .internal()
+    .doc("Specifies the upper limit of the ratio between the largest fact tables" +
+      " for a star join to be considered. ")
+    .doubleConf
+    .createWithDefault(0.9)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
@@ -987,6 +999,10 @@ class SQLConf extends Serializable with Logging {
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
+
+  def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 
