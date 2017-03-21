@@ -32,12 +32,20 @@ import org.apache.spark.sql.catalyst.plans.logical.*;
 @InterfaceStability.Evolving
 public class KeyedStateTimeout {
 
-  /** Timeout based on processing time.  */
+  /**
+   * Timeout based on processing time. The duration of timeout can be set for each group in
+   * `map/flatMapGroupsWithState` by calling `KeyedState.setTimeoutDuration()`.
+   */
   public static KeyedStateTimeout ProcessingTimeTimeout() { return ProcessingTimeTimeout$.MODULE$; }
 
-  /** Timeout based on event time.  */
+  /**
+   * Timeout based on event time. The event time timestamp for timeout can be set for each
+   * group in `map/flatMapGroupsWithState` by calling `KeyedState.setTimeoutTimestamp()`.
+   * In addition, you have to define the watermark in the query using `Dataset.withWatermark`.
+   * When the watermark advances beyond the set timestamp of a group, then the group times out.
+   */
   public static KeyedStateTimeout EventTimeTimeout() { return EventTimeTimeout$.MODULE$; }
 
-  /** No timeout */
+  /** No timeout. */
   public static KeyedStateTimeout NoTimeout() { return NoTimeout$.MODULE$; }
 }
