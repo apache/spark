@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, Logica
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 
-class StatsEstimationTestBase extends SparkFunSuite {
+trait StatsEstimationTestBase extends SparkFunSuite {
 
   /** Enable stats estimation based on CBO. */
   protected val conf = SimpleCatalystConf(caseSensitiveAnalysis = true, cboEnabled = true)
@@ -48,7 +48,7 @@ class StatsEstimationTestBase extends SparkFunSuite {
 /**
  * This class is used for unit-testing. It's a logical plan whose output and stats are passed in.
  */
-protected case class StatsTestPlan(
+case class StatsTestPlan(
     outputList: Seq[Attribute],
     rowCount: BigInt,
     attributeStats: AttributeMap[ColumnStat],

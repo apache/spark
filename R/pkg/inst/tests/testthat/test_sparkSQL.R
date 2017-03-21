@@ -60,6 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
+filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
@@ -87,6 +88,13 @@ mockLinesComplexType <-
     "{\"c1\":[7, 8, 9], \"c2\":[\"g\", \"h\", \"i\"], \"c3\":[7.0, 8.0, 9.0]}")
 complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
+
+# For test map type and struct type in DataFrame
+mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
+                      "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
+                      "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
+mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
+writeLines(mockLinesMapType, mapTypeJsonPath)
 
 test_that("calling sparkRSQL.init returns existing SQL context", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
@@ -466,13 +474,6 @@ test_that("create DataFrame from a data.frame with complex types", {
   expect_equal(ldf$an_envir, collected$an_envir)
 })
 
-# For test map type and struct type in DataFrame
-mockLinesMapType <- c("{\"name\":\"Bob\",\"info\":{\"age\":16,\"height\":176.5}}",
-                      "{\"name\":\"Alice\",\"info\":{\"age\":20,\"height\":164.3}}",
-                      "{\"name\":\"David\",\"info\":{\"age\":60,\"height\":180}}")
-mapTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-writeLines(mockLinesMapType, mapTypeJsonPath)
-
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(complexTypeJsonPath)
@@ -840,6 +841,17 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
   expect_true(is.data.frame(collect(df)))
 })
 
+test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
+  checkpointDir <- file.path(tempdir(), "cproot")
+  expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+
+  setCheckpointDir(checkpointDir)
+  df <- read.json(jsonPath)
+  df <- checkpoint(df)
+  expect_is(df, "SparkDataFrame")
+  expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+})
+
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- read.json(jsonPath)
   testSchema <- schema(df)
@@ -898,6 +910,12 @@ test_that("names() colnames() set the column names", {
   expect_equal(names(z)[3], "c")
   names(z)[3] <- "c2"
   expect_equal(names(z)[3], "c2")
+
+  # Test subset assignment
+  colnames(df)[1] <- "col5"
+  expect_equal(colnames(df)[1], "col5")
+  names(df)[2] <- "col6"
+  expect_equal(names(df)[2], "col6")
 })
 
 test_that("head() and first() return the correct data", {
@@ -1331,6 +1349,48 @@ test_that("column functions", {
   df <- createDataFrame(data.frame(x = c(2.5, 3.5)))
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
+
+  # Test to_json(), from_json()
+  df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
+  df <- read.json(mapTypeJsonPath)
+  j <- collect(select(df, alias(to_json(df$info), "json")))
+  expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
+  df <- as.DataFrame(j)
+  schema <- structType(structField("age", "integer"),
+                       structField("height", "double"))
+  s <- collect(select(df, alias(from_json(df$json, schema), "structcol")))
+  expect_equal(ncol(s), 1)
+  expect_equal(nrow(s), 3)
+  expect_is(s[[1]][[1]], "struct")
+  expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+
+  # passing option
+  df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
+  schema2 <- structType(structField("date", "date"))
+  s <- collect(select(df, from_json(df$col, schema2)))
+  expect_equal(s[[1]][[1]], NA)
+  s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
+  expect_is(s[[1]][[1]]$date, "Date")
+  expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
+
+  # check for unparseable
+  df <- as.DataFrame(list(list("a" = "")))
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
+
+  # check if array type in string is correctly supported.
+  jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
+  df <- as.DataFrame(list(list("people" = jsonArr)))
+  schema <- structType(structField("name", "string"))
+  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
+  expect_equal(ncol(arr), 1)
+  expect_equal(nrow(arr), 1)
+  expect_is(arr[[1]][[1]], "list")
+  expect_equal(length(arr$arrcol[[1]]), 2)
+  expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
+  expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
 })
 
 test_that("column binary mathfunctions", {
@@ -1816,6 +1876,13 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned2, "SparkDataFrame")
   expect_equal(count(unioned2), 12)
   expect_equal(first(unioned2)$name, "Michael")
+
+  df3 <- df2
+  names(df3)[1] <- "newName"
+  expect_error(rbind(df, df3),
+               "Names of input data frames are different.")
+  expect_error(rbind(df, df2, df3),
+               "Names of input data frames are different.")
 
   excepted <- arrange(except(df, df2), desc(df$age))
   expect_is(unioned, "SparkDataFrame")
@@ -2552,8 +2619,8 @@ test_that("coalesce, repartition, numPartitions", {
 
   df2 <- repartition(df1, 10)
   expect_equal(getNumPartitions(df2), 10)
-  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
-  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 7)
   expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
@@ -2857,9 +2924,44 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
 })
 
+compare_list <- function(list1, list2) {
+  # get testthat to show the diff by first making the 2 lists equal in length
+  expect_equal(length(list1), length(list2))
+  l <- max(length(list1), length(list2))
+  length(list1) <- l
+  length(list2) <- l
+  expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
+}
+
+# This should always be the **very last test** in this test file.
+test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  # Check that it is not creating any extra file.
+  # Does not check the tempdir which would be cleaned up after.
+  filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
+
+  expect_true(length(sparkRFilesBefore) > 0)
+  # first, ensure derby.log is not there
+  expect_false("derby.log" %in% filesAfter)
+  # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  # note: currently all other test files have enableHiveSupport = F, so we capture the list of files
+  # before creating a SparkSession with enableHiveSupport = T at the top of this test file
+  # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
+  # any test is run in run-all.R (sparkRFilesBefore).
+  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
+  # same as before any test is run.
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
+  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
+})
+
 unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
+unlink(complexTypeJsonPath)
+unlink(mapTypeJsonPath)
 
 sparkR.session.stop()

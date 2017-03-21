@@ -39,6 +39,7 @@ test_that("spark.gbt", {
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
   expect_equal(stats$formula, "Employed ~ .")
   expect_equal(stats$numFeatures, 6)
   expect_equal(length(stats$treeWeights), 20)
@@ -53,6 +54,7 @@ test_that("spark.gbt", {
   expect_equal(stats$numFeatures, stats2$numFeatures)
   expect_equal(stats$features, stats2$features)
   expect_equal(stats$featureImportances, stats2$featureImportances)
+  expect_equal(stats$maxDepth, stats2$maxDepth)
   expect_equal(stats$numTrees, stats2$numTrees)
   expect_equal(stats$treeWeights, stats2$treeWeights)
 
@@ -66,6 +68,7 @@ test_that("spark.gbt", {
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
   predictions <- collect(predict(model, data))$prediction
@@ -93,6 +96,7 @@ test_that("spark.gbt", {
   expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
   expect_equal(s$numFeatures, 5)
   expect_equal(s$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
 
   # spark.gbt classification can work on libsvm data
   data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
@@ -116,6 +120,7 @@ test_that("spark.randomForest", {
 
   stats <- summary(model)
   expect_equal(stats$numTrees, 1)
+  expect_equal(stats$maxDepth, 5)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
 
@@ -129,6 +134,7 @@ test_that("spark.randomForest", {
                tolerance = 1e-4)
   stats <- summary(model)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
 
   modelPath <- tempfile(pattern = "spark-randomForestRegression", fileext = ".tmp")
   write.ml(model, modelPath)
@@ -141,6 +147,7 @@ test_that("spark.randomForest", {
   expect_equal(stats$features, stats2$features)
   expect_equal(stats$featureImportances, stats2$featureImportances)
   expect_equal(stats$numTrees, stats2$numTrees)
+  expect_equal(stats$maxDepth, stats2$maxDepth)
   expect_equal(stats$treeWeights, stats2$treeWeights)
 
   unlink(modelPath)
@@ -153,6 +160,7 @@ test_that("spark.randomForest", {
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
   expect_error(capture.output(stats), NA)
   expect_true(length(capture.output(stats)) > 6)
   # Test string prediction values
@@ -187,6 +195,8 @@ test_that("spark.randomForest", {
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
+  expect_equal(stats$maxDepth, 5)
+
   # Test numeric prediction values
   predictions <- collect(predict(model, data))$prediction
   expect_equal(length(grep("1.0", predictions)), 50)

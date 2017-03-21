@@ -112,30 +112,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
-  test("estimates the size of limit") {
-    withTempView("test") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("four", 4)).toDF("k", "v")
-        .createOrReplaceTempView("test")
-      Seq((0, 1), (1, 24), (2, 48)).foreach { case (limit, expected) =>
-        val df = sql(s"""SELECT * FROM test limit $limit""")
-
-        val sizesGlobalLimit = df.queryExecution.analyzed.collect { case g: GlobalLimit =>
-          g.stats(conf).sizeInBytes
-        }
-        assert(sizesGlobalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesGlobalLimit.head === BigInt(expected),
-          s"expected exact size $expected for table 'test', got: ${sizesGlobalLimit.head}")
-
-        val sizesLocalLimit = df.queryExecution.analyzed.collect { case l: LocalLimit =>
-          l.stats(conf).sizeInBytes
-        }
-        assert(sizesLocalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesLocalLimit.head === BigInt(expected),
-          s"expected exact size $expected for table 'test', got: ${sizesLocalLimit.head}")
-      }
-    }
-  }
-
   test("column stats round trip serialization") {
     // Make sure we serialize and then deserialize and we will get the result data
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
@@ -306,7 +282,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     // Analyze only one column.
     sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
     val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: CatalogRelation => (catalogRel, catalogRel.catalogTable)
+      case catalogRel: CatalogRelation => (catalogRel, catalogRel.tableMeta)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
     }.head
     val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)

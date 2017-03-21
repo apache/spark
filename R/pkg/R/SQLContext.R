@@ -332,8 +332,10 @@ setMethod("toDF", signature(x = "RDD"),
 
 #' Create a SparkDataFrame from a JSON file.
 #'
-#' Loads a JSON file (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
-#' ), returning the result as a SparkDataFrame
+#' Loads a JSON file, returning the result as a SparkDataFrame
+#' By default, (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' ) is supported. For JSON (one record per file), set a named property \code{wholeFile} to
+#' \code{TRUE}.
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -346,6 +348,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
+#' df <- read.json(path, wholeFile = TRUE)
 #' df <- jsonFile(path)
 #' }
 #' @name read.json
@@ -778,6 +781,7 @@ dropTempView <- function(viewName) {
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
+#' @seealso \link{read.json}
 #' @export
 #' @examples
 #'\dontrun{
@@ -785,7 +789,7 @@ dropTempView <- function(viewName) {
 #' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
-#' df2 <- read.df(mapTypeJsonPath, "json", schema)
+#' df2 <- read.df(mapTypeJsonPath, "json", schema, wholeFile = TRUE)
 #' df3 <- loadDF("data/test_table", "parquet", mergeSchema = "true")
 #' }
 #' @name read.df
@@ -932,4 +936,54 @@ read.jdbc <- function(url, tableName,
     sdf <- handledCallJMethod(read, "jdbc", url, tableName, jprops)
   }
   dataFrame(sdf)
+}
+
+#' Load a streaming SparkDataFrame
+#'
+#' Returns the dataset in a data source as a SparkDataFrame
+#'
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used.
+#'
+#' @param source The name of external data source
+#' @param schema The data schema defined in structType, this is required for file-based streaming
+#'               data source
+#' @param ... additional external data source specific named options, for instance \code{path} for
+#'        file-based streaming data source
+#' @return SparkDataFrame
+#' @rdname read.stream
+#' @name read.stream
+#' @seealso \link{write.stream}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- read.stream("socket", host = "localhost", port = 9999)
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
+#'
+#' df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
+#' }
+#' @name read.stream
+#' @note read.stream since 2.2.0
+#' @note experimental
+read.stream <- function(source = NULL, schema = NULL, ...) {
+  sparkSession <- getSparkSession()
+  if (!is.null(source) && !is.character(source)) {
+    stop("source should be character, NULL or omitted. It is the data source specified ",
+         "in 'spark.sql.sources.default' configuration by default.")
+  }
+  if (is.null(source)) {
+    source <- getDefaultSqlSource()
+  }
+  options <- varargsToStrEnv(...)
+  read <- callJMethod(sparkSession, "readStream")
+  read <- callJMethod(read, "format", source)
+  if (!is.null(schema)) {
+    stopifnot(class(schema) == "structType")
+    read <- callJMethod(read, "schema", schema$jobj)
+  }
+  read <- callJMethod(read, "options", options)
+  sdf <- handledCallJMethod(read, "load")
+  dataFrame(callJMethod(sdf, "toDF"))
 }

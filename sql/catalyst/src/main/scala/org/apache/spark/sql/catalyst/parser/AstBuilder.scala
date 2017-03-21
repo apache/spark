@@ -108,7 +108,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    SubqueryAlias(ctx.name.getText, plan(ctx.query), None)
+    SubqueryAlias(ctx.name.getText, plan(ctx.query))
   }
 
   /**
@@ -666,7 +666,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     val tableWithAlias = Option(ctx.strictIdentifier).map(_.getText) match {
       case Some(strictIdentifier) =>
-        SubqueryAlias(strictIdentifier, table, None)
+        SubqueryAlias(strictIdentifier, table)
       case _ => table
     }
     tableWithAlias.optionalMap(ctx.sample)(withSample)
@@ -731,7 +731,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
   private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
-    SubqueryAlias(alias.getText, plan, None)
+    SubqueryAlias(alias.getText, plan)
   }
 
   /**
@@ -1016,7 +1016,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-    val arguments = ctx.expression().asScala.map(expression) match {
+    val arguments = ctx.namedExpression().asScala.map(expression) match {
       case Seq(UnresolvedStar(None)) if name.toLowerCase == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
         Seq(Literal(1))
@@ -1127,7 +1127,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[CreateStruct]] expression.
    */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.expression.asScala.map(expression))
+    CreateStruct(ctx.namedExpression().asScala.map(expression))
   }
 
   /**
@@ -1229,7 +1229,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     } else {
       direction.defaultNullOrdering
     }
-    SortOrder(expression(ctx.expression), direction, nullOrdering)
+    SortOrder(expression(ctx.expression), direction, nullOrdering, Set.empty)
   }
 
   /**

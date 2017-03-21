@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -317,7 +319,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create hive table - property values must be set") {
@@ -334,7 +336,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create table - with partitioned by") {
@@ -409,7 +411,7 @@ class DDLCommandSuite extends PlanTest {
     val expectedTableDesc = CatalogTable(
       identifier = TableIdentifier("my_tab"),
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(locationUri = Some("/tmp/file")),
+      storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
       schema = new StructType().add("a", IntegerType).add("b", StringType),
       provider = Some("parquet"))
 
@@ -778,13 +780,7 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
-  test("alter table: add/replace columns (not allowed)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |ADD COLUMNS (new_col1 INT COMMENT 'test_comment', new_col2 LONG
-       |COMMENT 'test_comment2') CASCADE
-      """.stripMargin)
+  test("alter table: replace columns (not allowed)") {
     assertUnsupported(
       """
        |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT

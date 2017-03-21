@@ -24,9 +24,9 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util._
 
-private[csv] class CSVOptions(
+class CSVOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
@@ -82,7 +82,7 @@ private[csv] class CSVOptions(
 
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
@@ -120,7 +120,8 @@ private[csv] class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = TimeZone.getTimeZone(parameters.getOrElse("timeZone", defaultTimeZoneId))
+  val timeZone: TimeZone = TimeZone.getTimeZone(
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
@@ -129,6 +130,8 @@ private[csv] class CSVOptions(
   val timestampFormat: FastDateFormat =
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSZZ"), timeZone, Locale.US)
+
+  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
 
   val maxColumns = getInt("maxColumns", 20480)
 

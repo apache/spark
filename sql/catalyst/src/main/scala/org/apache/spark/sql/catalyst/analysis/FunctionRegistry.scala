@@ -64,6 +64,8 @@ trait FunctionRegistry {
   /** Clear all registered functions. */
   def clear(): Unit
 
+  /** Create a copy of this registry with identical functions as this registry. */
+  override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -107,7 +109,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.clear()
   }
 
-  def copy(): SimpleFunctionRegistry = synchronized {
+  override def clone(): SimpleFunctionRegistry = synchronized {
     val registry = new SimpleFunctionRegistry
     functionBuilders.iterator.foreach { case (name, (info, builder)) =>
       registry.registerFunction(name, info, builder)
@@ -150,6 +152,7 @@ object EmptyFunctionRegistry extends FunctionRegistry {
     throw new UnsupportedOperationException
   }
 
+  override def clone(): FunctionRegistry = this
 }
 
 
@@ -420,6 +423,10 @@ object FunctionRegistry {
     expression[BitwiseNot]("~"),
     expression[BitwiseOr]("|"),
     expression[BitwiseXor]("^"),
+
+    // json
+    expression[StructsToJson]("to_json"),
+    expression[JsonToStructs]("from_json"),
 
     // Cast aliases (SPARK-16730)
     castAlias("boolean", BooleanType),

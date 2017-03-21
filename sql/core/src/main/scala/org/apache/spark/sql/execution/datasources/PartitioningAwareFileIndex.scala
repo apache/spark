@@ -30,7 +30,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -54,17 +54,19 @@ abstract class PartitioningAwareFileIndex(
 
   override def partitionSchema: StructType = partitionSpec().partitionColumns
 
-  protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  protected val hadoopConf: Configuration =
+    sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
-  override def listFiles(filters: Seq[Expression]): Seq[PartitionDirectory] = {
+  override def listFiles(
+      partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
       PartitionDirectory(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
-      prunePartitions(filters, partitionSpec()).map {
+      prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
@@ -125,22 +127,27 @@ abstract class PartitioningAwareFileIndex(
     val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
       files.exists(f => isDataPath(f.getPath))
     }.keys.toSeq
+
+    val caseInsensitiveOptions = CaseInsensitiveMap(parameters)
+    val timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
+      .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
+
     userPartitionSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
           leafDirs,
           typeInference = false,
-          basePaths = basePaths)
+          basePaths = basePaths,
+          timeZoneId = timeZoneId)
 
         // Without auto inference, all of value in the `row` should be null or in StringType,
         // we need to cast into the data type that user specified.
         def castPartitionValuesToUserSchema(row: InternalRow) = {
           InternalRow((0 until row.numFields).map { i =>
-            // TODO: use correct timezone for partition values.
             Cast(
               Literal.create(row.getUTF8String(i), StringType),
               userProvidedSchema.fields(i).dataType,
-              Option(DateTimeUtils.defaultTimeZone().getID)).eval()
+              Option(timeZoneId)).eval()
           }: _*)
         }
 
@@ -151,7 +158,8 @@ abstract class PartitioningAwareFileIndex(
         PartitioningUtils.parsePartitions(
           leafDirs,
           typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled,
-          basePaths = basePaths)
+          basePaths = basePaths,
+          timeZoneId = timeZoneId)
     }
   }
 
@@ -180,7 +188,8 @@ abstract class PartitioningAwareFileIndex(
         val total = partitions.length
         val selectedSize = selected.length
         val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
-        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
+        s"Selected $selectedSize partitions out of $total, " +
+          s"pruned ${if (total == 0) "0" else s"$percentPruned%"} partitions."
       }
 
       selected
@@ -300,7 +309,7 @@ object PartitioningAwareFileIndex extends Logging {
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
-    if (paths.size < sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       return paths.map { path =>
         (path, listLeafFiles(path, hadoopConf, filter, Some(sparkSession)))
       }
