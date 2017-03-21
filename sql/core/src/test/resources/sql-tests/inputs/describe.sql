@@ -1,4 +1,4 @@
-CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet PARTITIONED BY (c, d);
+CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet PARTITIONED BY (c, d) COMMENT 'table_comment';
 
 ALTER TABLE t ADD PARTITION (c='Us', d=1);
 
@@ -7,6 +7,10 @@ DESCRIBE t;
 DESC t;
 
 DESC TABLE t;
+
+DESC FORMATTED t;
+
+DESC EXTENDED t;
 
 -- Ignore these because there exist timestamp results, e.g., `Create Table`.
 -- DESC EXTENDED t;
