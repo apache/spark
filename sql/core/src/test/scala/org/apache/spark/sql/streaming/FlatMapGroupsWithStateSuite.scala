@@ -26,7 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, FlatMapGroupsWithState, NoTimeout, ProcessingTimeTimeout}
+import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
@@ -44,6 +44,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   import testImplicits._
   import KeyedStateImpl._
+  import KeyedStateTimeout._
 
   override def afterAll(): Unit = {
     super.afterAll()
