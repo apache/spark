@@ -477,14 +477,18 @@ class PlannerSuite extends SharedSQLContext {
 
   private val exprA = Literal(1)
   private val exprB = Literal(2)
+  private val exprC = Literal(3)
   private val orderingA = SortOrder(exprA, Ascending)
   private val orderingB = SortOrder(exprB, Ascending)
+  private val orderingC = SortOrder(exprC, Ascending)
   private val planA = DummySparkPlan(outputOrdering = Seq(orderingA),
     outputPartitioning = HashPartitioning(exprA :: Nil, 5))
   private val planB = DummySparkPlan(outputOrdering = Seq(orderingB),
     outputPartitioning = HashPartitioning(exprB :: Nil, 5))
+  private val planC = DummySparkPlan(outputOrdering = Seq(orderingC),
+    outputPartitioning = HashPartitioning(exprC :: Nil, 5))
 
-  assert(orderingA != orderingB)
+  assert(orderingA != orderingB && orderingA != orderingC && orderingB != orderingC)
 
   private def assertSortRequirementsAreSatisfied(
       childPlan: SparkPlan,
@@ -505,6 +509,30 @@ class PlannerSuite extends SharedSQLContext {
       if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
         fail(s"No sorts should have been added:\n$outputPlan")
       }
+    }
+  }
+
+  test("EnsureRequirements skips sort when either side of join keys is required after inner SMJ") {
+    val innerSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, planA, planB)
+    // Both left and right keys should be sorted after the SMJ.
+    Seq(orderingA, orderingB).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = innerSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = false)
+    }
+  }
+
+  test("EnsureRequirements skips sort when key order of a parent SMJ is propagated from its " +
+    "child SMJ") {
+    val childSmj = SortMergeJoinExec(exprA :: Nil, exprB :: Nil, Inner, None, planA, planB)
+    val parentSmj = SortMergeJoinExec(exprB :: Nil, exprC :: Nil, Inner, None, childSmj, planC)
+    // After the second SMJ, exprA, exprB and exprC should all be sorted.
+    Seq(orderingA, orderingB, orderingC).foreach { ordering =>
+      assertSortRequirementsAreSatisfied(
+        childPlan = parentSmj,
+        requiredOrdering = Seq(ordering),
+        shouldHaveSort = false)
     }
   }
 
