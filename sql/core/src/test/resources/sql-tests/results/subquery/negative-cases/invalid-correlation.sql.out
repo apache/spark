@@ -63,7 +63,8 @@ where  t1a in (select   min(t2a)
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-|Some resolved attribute(s) are not present among available attributes for a query.
-| t2b#x is not in min(t2a)#x,t2c#x. 
-|The failed query was for operator
-| !Filter predicate-subquery#x [(t2c#x = max(t3c)#x) && (t3b#x > t2b#x)];
+Some resolved attribute(s) are not present among the available attributes
+for a query.
+t2b#x is not in min(t2a)#x,t2c#x. 
+The failed query was for operator
+ !Filter predicate-subquery#x [(t2c#x = max(t3c)#x) && (t3b#x > t2b#x)];

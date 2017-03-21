@@ -356,11 +356,11 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
             failAnalysis(
-              s"|Some resolved attribute(s) are not present among available attributes " +
-                s"for a query.\n" +
-                s"| $missingAttributes is not in $availableAttributes. $repeatedNameHint\n" +
-                s"|The failed query was for operator\n" +
-                s"| ${operator.simpleString}")
+              s"""Some resolved attribute(s) are not present among the available attributes
+                |for a query.
+                |$missingAttributes is not in $availableAttributes. $repeatedNameHint
+                |The failed query was for operator
+                | ${operator.simpleString}""".stripMargin)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(

@@ -409,11 +409,12 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     assert(plan.resolved)
 
-    assertAnalysisError(plan,
-                        "Some resolved attribute(s) are not present among available " +
-                          "attributes for a query.\n" +
-                          s"""| ${aId.mkString("#")}L is not """ +
-                          s"""in ${otherAId.mkString("#")}L.""" :: Nil)
+    val errorMsg = s"""Some resolved attribute(s) are not present among the available attributes
+                     |for a query.
+                     |${aId.mkString("#")}L is not in ${otherAId.mkString("#")}L."""
+
+
+    assertAnalysisError(plan, errorMsg :: Nil)
   }
 
   test("error test for self-join") {
