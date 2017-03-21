@@ -249,7 +249,7 @@ class ALS(object):
         :param ratings:
           RDD of `Rating` or (userID, productID, rating) tuple.
         :param rank:
-          Rank of the feature matrices computed (number of features).
+          Number of features to use (also referred to as the number of latent factors).
         :param iterations:
           Number of iterations of ALS.
           (default: 5)
@@ -287,7 +287,7 @@ class ALS(object):
         :param ratings:
           RDD of `Rating` or (userID, productID, rating) tuple.
         :param rank:
-          Rank of the feature matrices computed (number of features).
+          Number of features to use (also referred to as the number of latent factors).
         :param iterations:
           Number of iterations of ALS.
           (default: 5)
