@@ -344,10 +344,10 @@ class SessionCatalog(
     }
 
     // assuming the newSchema has all partition columns at the end as required
-    externalCatalog.alterTableSchema(db, table, StructType(newSchema))
+    externalCatalog.alterTableSchema(db, table, newSchema)
   }
 
-  def columnNameResolved(schema: StructType, colName: String): Boolean = {
+  private def columnNameResolved(schema: StructType, colName: String): Boolean = {
     schema.fields.map(_.name).exists(conf.resolver(_, colName))
   }
 
