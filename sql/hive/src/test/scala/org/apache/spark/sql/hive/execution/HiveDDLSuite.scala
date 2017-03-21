@@ -1922,26 +1922,12 @@ class HiveDDLSuite
     }
   }
 
-  Seq("orc", "ORC", "org.apache.spark.sql.hive.orc",
-    "org.apache.spark.sql.hive.orc.DefaultSource").foreach { source =>
-    test(s"alter datasource table add columns - $source format not supported") {
-      withTable("tab") {
-        sql(s"CREATE TABLE tab (c1 int) USING $source")
-        val e = intercept[AnalysisException] {
-          sql("ALTER TABLE tab ADD COLUMNS (c2 int)")
-        }.getMessage
-        assert(
-          e.contains(s"ALTER ADD COLUMNS does not support datasource table with type"))
-      }
-    }
-  }
-
-  Seq("true", "false").foreach { caseSensitive =>
+  Seq(true, false).foreach { caseSensitive =>
     test(s"alter add columns with existing column name - caseSensitive $caseSensitive") {
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
         withTable("tab") {
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
-          if (caseSensitive == "false") {
+          if (!caseSensitive) {
             // duplicating partitioning column name
             val e1 = intercept[AnalysisException] {
               sql("ALTER TABLE tab ADD COLUMNS (C2 string)")

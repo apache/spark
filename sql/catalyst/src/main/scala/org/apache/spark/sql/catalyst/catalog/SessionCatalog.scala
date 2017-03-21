@@ -318,7 +318,7 @@ class SessionCatalog(
    *
    * @param identifier TableIdentifier
    * @param newSchema Updated schema to be used for the table (must contain existing partition and
-   *                  bucket columns)
+   *                  bucket columns, and partition columns need to be at the end)
    */
   def alterTableSchema(
       identifier: TableIdentifier,
@@ -343,15 +343,11 @@ class SessionCatalog(
          """.stripMargin)
     }
 
-    // make sure partition columns are at the end
-    val partitionSchema = catalogTable.partitionSchema
-    val reorderedSchema = newSchema
-      .filterNot(f => columnNameResolved(partitionSchema, f.name)) ++ partitionSchema
-
-    externalCatalog.alterTableSchema(db, table, StructType(reorderedSchema))
+    // assuming the newSchema has all partition columns at the end as required
+    externalCatalog.alterTableSchema(db, table, StructType(newSchema))
   }
 
-  private def columnNameResolved(schema: StructType, colName: String): Boolean = {
+  def columnNameResolved(schema: StructType, colName: String): Boolean = {
     schema.fields.map(_.name).exists(conf.resolver(_, colName))
   }
 

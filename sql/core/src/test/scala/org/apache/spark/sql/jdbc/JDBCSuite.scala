@@ -965,27 +965,9 @@ class JDBCSuite extends SparkFunSuite
           |CREATE TEMPORARY VIEW people_view
           |USING org.apache.spark.sql.jdbc
           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
-        """.stripMargin)
+        """.stripMargin.replaceAll("\n", " "))
 
       assert(sql("select * from people_view").count() == 3)
-    }
-  }
-
-  test("ALTER TABLE ADD COLUMNS") {
-    withTable("ds_jdbc") {
-      sql(
-        s"""
-          |CREATE TABLE IF NOT EXISTS ds_jdbc
-          |USING org.apache.spark.sql.jdbc
-          |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
-         """.stripMargin)
-
-      conn.prepareStatement("ALTER TABLE TEST.PEOPLE ADD COLUMN (C3 int)").executeUpdate()
-      conn.commit()
-      val e = intercept[AnalysisException] {
-        sql("ALTER TABLE ds_jdbc ADD COLUMNS (C3 int)")
-      }.getMessage
-      assert(e.contains("ALTER ADD COLUMNS does not support datasource table with type"))
     }
   }
 }

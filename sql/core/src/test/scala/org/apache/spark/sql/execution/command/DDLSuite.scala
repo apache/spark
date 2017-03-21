@@ -2272,24 +2272,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table add columns to table referenced by a view") {
-    withTable("t1") {
-      withView("v1") {
-        sql("CREATE TABLE t1 (c1 int, c2 int) USING PARQUET")
-        sql("CREATE VIEW v1 AS SELECT * FROM t1")
-        val originViewSchema = sql("SELECT * FROM v1").schema
-        sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
-        assert(sql("SELECT * FROM v1").schema == originViewSchema)
-      }
-    }
-  }
-
-  Seq("true", "false").foreach { caseSensitive =>
+  Seq(true, false).foreach { caseSensitive =>
     test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
         withTable("t1") {
           sql("CREATE TABLE t1 (c1 int) USING PARQUET")
-          if (caseSensitive == "false") {
+          if (!caseSensitive) {
             val e = intercept[AnalysisException] {
               sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
             }.getMessage
