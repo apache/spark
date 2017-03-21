@@ -298,12 +298,13 @@ private[spark] class Executor(
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
-        if (maybeKillReason.isDefined) {
+        val killReason = maybeKillReason
+        if (killReason.isDefined) {
           // Throw an exception rather than returning, because returning within a try{} block
           // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
           // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
           // for the task.
-          throw new TaskKilledException(maybeKillReason.get)
+          throw new TaskKilledException(killReason.get)
         }
 
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
@@ -432,12 +433,11 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
 
         case _: InterruptedException if task.killed =>
-          logInfo(
-            s"Executor interrupted and killed $taskName (TID $taskId)," +
-            s" reason: ${task.maybeKillReason.get}")
+          val killReason = task.maybeKillReason.getOrElse("unknown reason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(
-            taskId, TaskState.KILLED, ser.serialize(TaskKilled(task.maybeKillReason.get)))
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason
