@@ -575,7 +575,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           Thread.sleep(9999999)
         }
         // second attempt succeeds immediately
-        SparkContextSuite.taskSucceeded = true
       }
     }
     assert(SparkContextSuite.taskSucceeded)
