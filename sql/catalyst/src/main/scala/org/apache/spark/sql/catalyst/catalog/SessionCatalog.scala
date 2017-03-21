@@ -1175,6 +1175,7 @@ class SessionCatalog(
    */
   def reset(): Unit = synchronized {
     setCurrentDatabase(DEFAULT_DATABASE)
+    externalCatalog.setCurrentDatabase(DEFAULT_DATABASE)
     listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
