@@ -90,11 +90,11 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val dataset = spark.createDataFrame(Seq(
       Array("1", "3"),
       Array("2", "3")
-    ).map(Tuple1(_))).toDF("features")
+    ).map(Tuple1(_))).toDF("items")
     val model = new FPGrowth().fit(dataset)
 
     val prediction = model.transform(
-      spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("features")
+      spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("items")
     ).first().getAs[Seq[String]]("prediction")
 
     assert(prediction === Seq("3"))
