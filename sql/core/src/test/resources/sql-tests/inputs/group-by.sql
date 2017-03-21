@@ -40,6 +40,11 @@ SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS
 EXPLAIN SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
 SELECT a AS k, COUNT(b) FROM testData GROUP BY k;
 
+-- Test data.
+CREATE OR REPLACE TEMPORARY VIEW testDataHasSameNameWithAlias AS SELECT * FROM VALUES
+(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v);
+SELECT k AS a, COUNT(v) FROM testDataHasSameNameWithAlias GROUP BY a;
+
 -- turn off group by aliases
 set spark.sql.groupByAliasesEnabled=false;
 
