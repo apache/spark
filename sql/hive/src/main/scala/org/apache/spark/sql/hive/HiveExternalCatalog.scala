@@ -464,7 +464,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
-  override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
+  override def renameTable(
+      db: String,
+      oldName: String,
+      newName: String,
+      newTablePath: Option[String]): Unit = withClient {
     val rawTable = getRawTable(db, oldName)
 
     // Note that Hive serde tables don't use path option in storage properties to store the value
@@ -476,8 +480,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val storageWithNewPath = if (rawTable.tableType == MANAGED && hasPathOption) {
       // If it's a managed table with path option and we are renaming it, then the path option
       // becomes inaccurate and we need to update it according to the new table name.
-      val newTablePath = defaultTablePath(TableIdentifier(newName, Some(db)))
-      updateLocationInStorageProps(rawTable, Some(newTablePath))
+      require(newTablePath.isDefined)
+      updateLocationInStorageProps(rawTable, newTablePath)
     } else {
       rawTable.storage
     }
