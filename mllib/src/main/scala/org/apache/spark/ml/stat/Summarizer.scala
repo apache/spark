@@ -18,6 +18,7 @@
 package org.apache.spark.ml.stat
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import breeze.numerics
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types._
 
 // scalastyle:off println
@@ -224,18 +225,18 @@ object SummaryBuilderImpl extends Logging {
    * an empty array.
    */
   private case class Buffer private (
-    var n: Int = -1,
-    var mean: Array[Double] = null,
-    var m2n: Array[Double] = null,
-    var m2: Array[Double] = null,
-    var l1: Array[Double] = null,
-    var totalCount: Long = 0,
-    var totalWeightSum: Double = 0.0,
-    var totalWeightSquareSum: Double = 0.0,
-    var weightSum: Array[Double] = null,
-    var nnz: Array[Long] = null,
-    var max: Array[Double] = null,
-    var min: Array[Double] = null)
+    var n: Int = -1,                          // 0
+    var mean: Array[Double] = null,           // 1
+    var m2n: Array[Double] = null,            // 2
+    var m2: Array[Double] = null,             // 3
+    var l1: Array[Double] = null,             // 4
+    var totalCount: Long = 0,                 // 5
+    var totalWeightSum: Double = 0.0,         // 6
+    var totalWeightSquareSum: Double = 0.0,   // 7
+    var weightSum: Array[Double] = null,      // 8
+    var nnz: Array[Long] = null,              // 9
+    var max: Array[Double] = null,            // 10
+    var min: Array[Double] = null)            // 11
 
   object Buffer {
     // Recursive function, but the number of cases is really small.
@@ -327,6 +328,9 @@ object SummaryBuilderImpl extends Logging {
       }
     }
 
+    /**
+     * Updates 'buffer' with the content of 'other', and returns 'buffer'.
+     */
     @throws[SparkException]("When the buffers are not compatible")
     def mergeBuffers(buffer: Buffer, other: Buffer): Buffer = {
       if (buffer.n == -1) {
@@ -349,8 +353,120 @@ object SummaryBuilderImpl extends Logging {
       }
     }
 
-    private def axpy(a: Double, x: Array[Double], y: Array[Double]): Unit = {
-      BLAS.axpy(a, Vectors.dense(x), Vectors.dense(y))
+    /**
+     * Reads a buffer from a serialized form, using the row object as an assistant.
+     */
+    def read(bytes: Array[Byte], row: UnsafeRow): Buffer = {
+      row.pointTo(bytes, bytes.length)
+      new Buffer(
+        n = row.getInt(0),
+        mean = nullableArrayD(row, 1),
+        m2n = nullableArrayD(row, 2),
+        m2 = nullableArrayD(row, 3),
+        l1 = nullableArrayD(row, 4),
+        totalCount = row.getLong(5),
+        totalWeightSum = row.getDouble(6),
+        totalWeightSquareSum = row.getDouble(7),
+        weightSum = nullableArrayD(row, 8),
+        nnz = nullableArrayL(row, 9),
+        max = nullableArrayD(row, 10),
+        min = nullableArrayD(row, 11)
+      )
+    }
+
+
+    def write(buffer: Buffer): Array[Byte] = {
+      val ir = InternalRow.apply(
+        buffer.n,
+        buffer.mean,
+        buffer.m2n,
+        buffer.m2,
+        buffer.l1,
+        buffer.totalCount,
+        buffer.totalWeightSum,
+        buffer.totalWeightSquareSum,
+        buffer.weightSum,
+        buffer.nnz,
+        buffer.max,
+        buffer.min
+      )
+      projection.apply(ir).getBytes
+    }
+
+    def mean(buffer: Buffer): Array[Double] = {
+      require(buffer.totalWeightSum > 0)
+      require(buffer.mean != null)
+      require(buffer.weightSum != null)
+      val res = b(buffer.mean) :* b(buffer.weightSum) :/ buffer.totalWeightSum
+      res.toArray
+    }
+
+    def variance(buffer: Buffer): Array[Double] = {
+      import buffer._
+      require(n >= 0)
+      require(totalWeightSum > 0)
+      require(totalWeightSquareSum > 0)
+      require(mean != null)
+      require(m2n != null)
+      require(weightSum != null)
+      val denom = totalWeightSum - (totalWeightSquareSum / totalWeightSum)
+      if (denom > 0.0) {
+        val normWs = b(weightSum) :/ totalWeightSum
+        val x = b(mean) :* b(mean) :* b(weightSum) :* (1.0 - normWs)
+        val res = (b(m2n) :+ x) :/ denom
+        res.toArray
+      } else {
+        Array.ofDim(n) // Return 0.0 instead.
+      }
+    }
+
+    def totalCount(buffer: Buffer): Long = buffer.totalCount
+
+    def nnz(buffer: Buffer): Array[Long] = {
+      require(buffer.nnz != null)
+      buffer.nnz
+    }
+
+    def max(buffer: Buffer): Array[Double] = {
+      require(buffer.max != null)
+      buffer.max
+    }
+
+    def min(buffer: Buffer): Array[Double] = {
+      require(buffer.min != null)
+      buffer.min
+    }
+
+    def l2(buffer: Buffer): Array[Double] = {
+      import buffer._
+      require(totalWeightSum > 0.0)
+      require(m2 != null)
+      numerics.sqrt(b(m2)).toArray
+    }
+
+    def l1(buffer: Buffer): Array[Double] = {
+      require(buffer.l1 != null)
+      buffer.l1
+    }
+
+    private[this] lazy val projection = UnsafeProjection.create(bufferSchema)
+
+    // Returns the array at a given index, or null if the array is null.
+    private def nullableArrayD(row: UnsafeRow, ordinal: Int): Array[Double] = {
+      if (row.isNullAt(ordinal)) {
+        null
+      } else {
+        row.getArray(ordinal).toDoubleArray
+      }
+    }
+
+    // Returns the array at a given index, or null if the array is null.
+    private def nullableArrayL(row: UnsafeRow, ordinal: Int): Array[Long] = {
+      if (row.isNullAt(ordinal)) {
+        null
+      } else {
+        row.getArray(ordinal).toLongArray
+      }
     }
 
     private def b(x: Array[Double]): BV[Double] = Vectors.dense(x).asBreeze
@@ -449,19 +565,31 @@ object SummaryBuilderImpl extends Logging {
         b(buffer.weightSum) :+= b(other.weightSum)
       }
     }
-
-
-
-
   }
 
   private case class MetricsAggregate(
       requested: Seq[Metrics],
       startBuffer: Buffer,
-      child: Expression)
+      child: Expression,
+      mutableAggBufferOffset: Int,
+      inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[Buffer] {
 
-    override def eval(buff: Buffer): Buffer = Buffer
+    private lazy val row = new UnsafeRow(1)
+
+    override def eval(buff: Buffer): Row = {
+      val metrics = requested.map({
+        case Mean => Buffer.mean(buff)
+        case Variance => Buffer.variance(buff)
+        case Count => Buffer.totalCount(buff)
+        case NumNonZeros => Buffer.nnz(buff)
+        case Max => Buffer.max(buff)
+        case Min => Buffer.min(buff)
+        case NormL2 => Buffer.l2(buff)
+        case NormL1 => Buffer.l1(buff)
+      })
+      Row(metrics: _*)
+    }
 
     override def children: Seq[Expression] = child :: Nil
 
@@ -487,24 +615,24 @@ object SummaryBuilderImpl extends Logging {
     override def createAggregationBuffer(): Buffer = startBuffer.copy()
 
     override def serialize(buff: Buffer): Array[Byte] = {
-      val array = new GenericArrayData(buff.productIterator.toArray)
-      projection.apply(InternalRow.apply(array)).getBytes
+      Buffer.write(buff)
     }
 
     override def deserialize(bytes: Array[Byte]): Buffer = {
-      val buffer = createAggregationBuffer()
-      row.pointTo(bytes, bytes.length)
-      row.getArray(0).foreach(child.dataType, (_, x: Any) => buffer += x)
-      buffer
+      Buffer.read(bytes, row)
     }
 
+    override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): MetricsAggregate = {
+      copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+    }
 
+    override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): MetricsAggregate = {
+      copy(inputAggBufferOffset = newInputAggBufferOffset)
+    }
 
-    private lazy val projection = UnsafeProjection.create(
-      Array[DataType](ArrayType(elementType = child.dataType, containsNull = false)))
-    private lazy val row = new UnsafeRow(1)
+    override def dataType: DataType = Buffer.bufferSchema
 
-
+    override def prettyName: String = "aggregate_metrics"
   }
 
 
