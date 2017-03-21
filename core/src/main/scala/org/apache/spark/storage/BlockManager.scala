@@ -90,7 +90,7 @@ private[spark] class ByteBufferBlockData(val buffer: ChunkedByteBuffer) extends 
 
   override def size: Long = buffer.size
 
-  override def dispose(): Unit = buffer.dispose()
+  override def dispose(): Unit = buffer.unmap()
 
 }
 
