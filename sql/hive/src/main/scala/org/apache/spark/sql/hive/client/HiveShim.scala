@@ -596,11 +596,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         s"$v ${op.symbol} ${a.name}"
       case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
           if !varcharKeys.contains(a.name) =>
-        s"""${a.name} ${op.symbol} "$v""""
+        s"""${a.name} ${op.symbol} ${getEscapedString(v.toString)}"""
       case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
           if !varcharKeys.contains(a.name) =>
-        s""""$v" ${op.symbol} ${a.name}"""
+        s"""${getEscapedString(v.toString)} ${op.symbol} ${a.name}"""
     }.mkString(" and ")
+  }
+
+  private def getEscapedString(str: String): String = {
+    s""""${str.replace("\"", "\\\"")}""""
   }
 
   override def getPartitionsByFilter(
