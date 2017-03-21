@@ -187,7 +187,7 @@ object SummaryBuilderImpl extends Logging {
   case object NormL1 extends Metrics
 
   /**
-   * The running metrics that are going to be computing.
+   * The running metrics that are going to be computed.
    *
    * There is a bipartite graph between the metrics and the computed metrics.
    */
@@ -203,12 +203,6 @@ object SummaryBuilderImpl extends Logging {
   case object ComputeNNZ extends ComputeMetrics
   case object ComputeMax extends ComputeMetrics
   case object ComputeMin extends ComputeMetrics
-
-  // The order in which the metrics will be stored in the buffer.
-  // This order replicates the order above.
-  private val metricsWithOrder = Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1, ComputeCount,
-    ComputeTotalWeightSum, ComputeWeightSquareSum, ComputeWeightSum, ComputeNNZ, ComputeMax,
-    ComputeMin).zipWithIndex
 
   /**
    * The buffer that contains all the summary statistics. If the value is null, it is considered
@@ -253,17 +247,23 @@ object SummaryBuilderImpl extends Logging {
     }
 
     def bufferSchema: StructType = {
-      val fields = metricsWithOrder.map { case (m, _) =>
-        val tpe = m match {
-          case ComputeCount => LongType
-          case ComputeTotalWeightSum => DoubleType
-          case ComputeWeightSquareSum => DoubleType
-          case _ => ArrayType(DoubleType, containsNull = false)
-        }
-        StructField(m.toString, tpe, nullable = true)
-      }
-      val n = StructField("n", IntegerType, nullable = false)
-      StructType(n +: fields)
+      val at = ArrayType(DoubleType, containsNull = false)
+      val al = ArrayType(LongType, containsNull = false)
+      val fields = Seq(
+        "n" -> IntegerType,
+        "mean" -> at,
+        "m2n" -> at,
+        "m2" -> at,
+        "l1" -> at,
+        "totalCount" -> LongType,
+        "totalWeightSum" -> DoubleType,
+        "totalWeightSquareSum" -> DoubleType,
+        "weightSum" -> at,
+        "nnz" -> al,
+        "max" -> at,
+        "min" -> at
+      )
+      StructType(fields.map { case (name, t) => StructField(name, t, nullable = true)})
     }
 
     def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
