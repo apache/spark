@@ -846,7 +846,7 @@ class Analyzer(
         agg.copy(groupingExpressions = groups.map {
             case u: UnresolvedAttribute =>
               aggs.find(ne => resolver(ne.name, u.name)).map {
-                case alias @ Alias(e, _) => e
+                case Alias(e, _) => e
                 case e => e
               }.getOrElse(u)
             case e => e
