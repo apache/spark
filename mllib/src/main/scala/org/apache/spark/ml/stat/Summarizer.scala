@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{BLAS, SQLDataTypes, Vector, Vectors}
-import org.apache.spark.ml.stat.SummaryBuilderImpl.MetricsAggregate
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeArrayData, UnsafeProjection, UnsafeRow}
@@ -269,7 +269,7 @@ object SummaryBuilderImpl extends Logging {
     def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
       val startN = buffer.n
       if (startN == -1) {
-        buffer.n = v.size
+        resizeArraysInPlace(buffer, v.size)
       } else {
         require(startN == v.size,
           s"Trying to insert a vector of size $v into a buffer that " +
@@ -345,8 +345,9 @@ object SummaryBuilderImpl extends Logging {
     /**
      * Reads a buffer from a serialized form, using the row object as an assistant.
      */
-    def read(bytes: Array[Byte], row: UnsafeRow): Buffer = {
-      row.pointTo(bytes, bytes.length)
+    def read(bytes: Array[Byte], row2: UnsafeRow): Buffer = {
+      row2.pointTo(bytes, bytes.length)
+      val row = row2.getStruct(0, 12)
       new Buffer(
         n = row.getInt(0),
         mean = nullableArrayD(row, 1),
@@ -436,6 +437,40 @@ object SummaryBuilderImpl extends Logging {
     def l1(buffer: Buffer): Array[Double] = {
       require(buffer.l1 != null)
       buffer.l1
+    }
+
+    private def resizeArraysInPlace(buffer: Buffer, n: Int): Unit = {
+      // It should either be unsized or of the same size.
+      require(buffer.n == -1 || buffer.n == n, (buffer.n, n))
+      if (buffer.n == n) {
+        return
+      }
+      buffer.n = n
+      // Conditional resize of the non-null arrays
+      if (buffer.mean != null) {
+        buffer.mean = Array.ofDim(n)
+      }
+      if (buffer.m2n != null) {
+        buffer.m2n = Array.ofDim(n)
+      }
+      if (buffer.m2 != null) {
+        buffer.m2 = Array.ofDim(n)
+      }
+      if (buffer.l1 != null) {
+        buffer.l1 = Array.ofDim(n)
+      }
+      if (buffer.weightSum != null) {
+        buffer.weightSum = Array.ofDim(n)
+      }
+      if (buffer.nnz != null) {
+        buffer.nnz = Array.ofDim(n)
+      }
+      if (buffer.max != null) {
+        buffer.max = Array.ofDim(n)
+      }
+      if (buffer.min != null) {
+        buffer.min = Array.ofDim(n)
+      }
     }
 
     private def gadD(arr: Array[Double]): UnsafeArrayData = {
@@ -599,7 +634,10 @@ object SummaryBuilderImpl extends Logging {
     override def children: Seq[Expression] = child :: Nil
 
     override def update(buff: Buffer, row: InternalRow): Buffer = {
-      val v = row.get(0, SQLDataTypes.VectorType).asInstanceOf[Vector]
+      println(s"UPDATE: ROW=$row")
+      // Unsafe rows do not play well with UDTs, it seems.
+      // Directly call the deserializer.
+      val v = udt.deserialize(row.getStruct(0, udt.sqlType.size))
 
       val w = row.numFields match {
         case 1 => 1.0
@@ -620,7 +658,11 @@ object SummaryBuilderImpl extends Logging {
     override def createAggregationBuffer(): Buffer = startBuffer.copy()
 
     override def serialize(buff: Buffer): Array[Byte] = {
-      Buffer.write(buff)
+      val x = Buffer.write(buff)
+      println(s"serialize: buff=$buff")
+      val b2 = deserialize(x)
+      println(s"serialize: b2=$b2")
+      x
     }
 
     override def deserialize(bytes: Array[Byte]): Buffer = {
@@ -639,5 +681,7 @@ object SummaryBuilderImpl extends Logging {
 
     override def prettyName: String = "aggregate_metrics"
   }
+
+  private[this] val udt = new VectorUDT
 
 }
