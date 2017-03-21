@@ -1130,10 +1130,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10
       |    },
-      |    "Shuffle Write Metrics" : {
-      |      "Shuffle Bytes Written" : 1200,
-      |      "Shuffle Write Time" : 1500,
-      |      "Shuffle Records Written" : 12
+      |    "Shuffle Write Metrics": {
+      |      "Shuffle Bytes Written": 1200,
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Input Metrics" : {
       |      "Bytes Read" : 0,
