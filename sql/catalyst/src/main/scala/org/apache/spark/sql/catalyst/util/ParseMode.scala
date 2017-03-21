@@ -17,25 +17,35 @@
 
 package org.apache.spark.sql.catalyst.util
 
-object ParseModes {
-  val PERMISSIVE_MODE = "PERMISSIVE"
-  val DROP_MALFORMED_MODE = "DROPMALFORMED"
-  val FAIL_FAST_MODE = "FAILFAST"
+import org.apache.spark.internal.Logging
 
-  val DEFAULT = PERMISSIVE_MODE
+object ParseMode extends Enumeration with Logging {
+  type ParseMode = Value
 
-  def isValidMode(mode: String): Boolean = {
-    mode.toUpperCase match {
-      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
-      case _ => false
-    }
-  }
+  /**
+   * This mode permissively parses the records.
+   */
+  val Permissive = Value("PERMISSIVE")
 
-  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
-  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
-  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
-    mode.toUpperCase == PERMISSIVE_MODE
-  } else {
-    true // We default to permissive is the mode string is not valid
+  /**
+   * This mode ignores the whole corrupted records.
+   */
+  val DropMalformed = Value("DROPMALFORMED")
+
+  /**
+   * This mode throws an exception when it meets corrupted records.
+   */
+  val FailFast = Value("FAILFAST")
+
+  /**
+   * Returns `ParseMode` enum from the given string.
+   */
+  def fromString(mode: String): ParseMode = mode.toUpperCase match {
+    case "PERMISSIVE" => ParseMode.Permissive
+    case "DROPMALFORMED" => ParseMode.DropMalformed
+    case "FAILFAST" => ParseMode.FailFast
+    case _ =>
+      logWarning(s"$mode is not a valid parse mode. Using $Permissive.")
+      ParseMode.Permissive
   }
 }
