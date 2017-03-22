@@ -232,11 +232,15 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   }
 
   test("pivot with timestamp and count should not print internal representation") {
-    val timestamp = "2012-12-31 16:00:10.011"
-    val df = Seq(java.sql.Timestamp.valueOf(timestamp)).toDF("a").groupBy("a").pivot("a").count()
-    val expected = StructType(
-      StructField("a", TimestampType) ::
-      StructField(timestamp, LongType) :: Nil)
-    assert(df.schema == expected)
+    val ts = "2012-12-31 16:00:10.011"
+    val tsWithZone = "2013-01-01 00:00:10.011"
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
+      val expected = StructType(
+        StructField("a", TimestampType) ::
+        StructField(tsWithZone, LongType) :: Nil)
+      assert(df.schema == expected)
+    }
   }
 }
