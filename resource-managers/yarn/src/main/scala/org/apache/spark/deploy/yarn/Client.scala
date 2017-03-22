@@ -52,7 +52,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, SparkLauncher, YarnCommandBuilderUtils}
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.{CallerContext, Utils}
 
 
@@ -154,20 +154,8 @@ private[spark] class Client(
    */
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
-    val launcherServerPort: Int = sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_PORT, "0").toInt
-    val launcherServerSecret: String =
-      sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, "")
-    val launcherServerStopIfShutdown: Boolean =
-      sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, "false").toBoolean
     try {
-      if (launcherServerSecret != null && launcherServerSecret != "" && launcherServerPort != 0) {
-        launcherBackend.connect(
-          launcherServerPort,
-          launcherServerSecret,
-          launcherServerStopIfShutdown)
-      } else {
-        launcherBackend.connect()
-      }
+      YarnCommandBuilderUtils.launcherBackendConnect(launcherBackend, sparkConf)
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
       setupCredentials()

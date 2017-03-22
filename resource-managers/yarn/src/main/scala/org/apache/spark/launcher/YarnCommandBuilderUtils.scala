@@ -17,9 +17,10 @@
 
 package org.apache.spark.launcher
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ListBuffer
 import scala.util.Properties
+
+import org.apache.spark.SparkConf
+
 
 /**
  * Exposes methods from the launcher library that are used by the YARN backend.
@@ -36,6 +37,22 @@ private[spark] object YarnCommandBuilderUtils {
       .take(2)
       .mkString(".")
     CommandBuilderUtils.findJarsDir(sparkHome, scalaVer, true)
+  }
+
+  def launcherBackendConnect(launcherBackend: LauncherBackend, sparkConf: SparkConf): Unit = {
+    val launcherServerPort: Int = sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_PORT, "0").toInt
+    val launcherServerSecret: String =
+      sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, "")
+    val launcherServerStopIfShutdown: Boolean =
+      sparkConf.get(SparkLauncher.LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, "false").toBoolean
+    if (launcherServerSecret != null && launcherServerSecret != "" && launcherServerPort != 0) {
+      launcherBackend.connect(
+        launcherServerPort,
+        launcherServerSecret,
+        launcherServerStopIfShutdown)
+    } else {
+      launcherBackend.connect()
+    }
   }
 
 }

@@ -74,11 +74,11 @@ public class SparkLauncher {
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 
-  public static final String LAUNCHER_INTERNAL_PORT = "spark.launcher.internal.port";
+  static final String LAUNCHER_INTERNAL_PORT = "spark.launcher.internal.port";
 
-  public static final String LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET = "spark.launcher.internal.secret";
+  static final String LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET = "spark.launcher.internal.secret";
 
-  public static final String LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN = "spark.launcher.internal.stop.on.shutdown";
+  static final String LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN = "spark.launcher.internal.stop.on.shutdown";
 
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
