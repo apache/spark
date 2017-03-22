@@ -91,9 +91,13 @@ case class NGrams(
       defaultCheck
     } else if (!nExpression.foldable || !kExpression.foldable || !accuracyExpression.foldable) {
       TypeCheckFailure(s"The accuracy or percentage provided must be a foldable integer expression")
+    } else if (n <= 0) {
+      TypeCheckFailure(s"The n provided must be a positive integer (current value = $n)")
+    } else if (k <= 0) {
+      TypeCheckFailure(s"The k provided must be a positive integer (current value = $k)")
     } else if (accuracy <= 0) {
       TypeCheckFailure(
-        s"The accuracy provided must be a foldable integer expression (current value = $accuracy)")
+        s"The accuracy provided must be a positive integer (current value = $accuracy)")
     } else {
       TypeCheckSuccess
     }
@@ -217,16 +221,15 @@ object NGrams {
 
     def trim(): Unit = {
       if (frequencyMap.size() > 2 * k * precisionFactor) {
-        val orderedWithIndex = frequencyMap.asScala.iterator.toVector.
-          sortWith(sortWithTwoFields(frequencyDescend = false)).zipWithIndex
-        orderedWithIndex.takeWhile(_._2 < frequencyMap.size() - k * precisionFactor).map(_._1).
+        frequencyMap.asScala.iterator.toVector.sortWith(sortWithTwoFields(
+          frequencyDescend = false)).take(frequencyMap.size() - k * precisionFactor).
           foreach(keyValuePair => frequencyMap.remove(keyValuePair._1))
       }
     }
 
     def getTopKNGrams(): Seq[(Vector[UTF8String], Double)] = {
       frequencyMap.asScala.iterator.toVector.sortWith(sortWithTwoFields(frequencyDescend = true)).
-        zipWithIndex.takeWhile(_._2 < k).map(_._1)
+        take(k)
     }
 
   }
