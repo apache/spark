@@ -382,17 +382,17 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     val array = mapStatuses(shuffleId)
     array.synchronized {
       array(mapId) = status
-      val epochs = epochForMapStatus.get(shuffleId).get
+      val epochs = epochForMapStatus(shuffleId)
       epochs(mapId) = epoch
     }
   }
 
   /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
+    mapStatuses.put(shuffleId, statuses.clone())
     if (changeEpoch) {
       incrementEpoch()
     }
-    mapStatuses.put(shuffleId, statuses.clone())
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
@@ -426,11 +426,11 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
 
   /** Get the epoch for map output for a shuffle, if it is available */
   def getEpochForMapOutput(shuffleId: Int, mapId: Int): Option[Long] = {
-    val arrayOpt = mapStatuses.get(shuffleId)
-    if (arrayOpt.isDefined && arrayOpt.get != null && arrayOpt.get(mapId) != null) {
-       return Some(epochForMapStatus.get(shuffleId).get(mapId))
-    }
-    None
+    for {
+      mapStatus <- mapStatuses.get(shuffleId).flatMap { mapStatusArray =>
+        Option(mapStatusArray(mapId))
+      }
+    } yield epochForMapStatus(shuffleId)(mapId)
   }
 
   /**

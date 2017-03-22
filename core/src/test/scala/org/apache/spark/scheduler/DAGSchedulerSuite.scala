@@ -704,6 +704,52 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(stage1Resubmit2.tasks.length === 1)
   }
 
+  test("Test allow commit from task from staged failed due to fetch failure (SPARK-14649)") {
+    val firstRDD = new MyRDD(sc, 2, Nil)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
+    val firstShuffleId = firstShuffleDep.shuffleId
+    val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+
+    // things start out smoothly, stage 0 completes with no issues
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.length)),
+      (Success, makeMapStatus("hostA", shuffleMapRdd.partitions.length))
+    ))
+
+    // Begin event for the reduce tasks.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+    // fail taks 0 in stage 1 due to fetch failure
+    val failedTask1 = taskSets(1).tasks(0)
+    runEvent(makeCompletionEvent(
+      failedTask1,
+      FetchFailed(makeBlockManagerId("hostA"), firstShuffleId, 0, 0, "ignored"),
+      42, Seq.empty, createFakeTaskInfo()))
+
+    // abort task 1 in stage 1 due to fetch failure, task 2 still running
+    val abortedTask1 = taskSets(1).tasks(1)
+    runEvent(new TasksAborted(1, List(abortedTask1)))
+
+    // Make sure that we still have 2 running tasks for the first attempt
+    assert(sparkListener.failedStages.contains(1))
+
+    // Wait for resubmission of the map stage
+    Thread.sleep(1000)
+
+    // so we resubmit stage 0, which completes happily
+    val stage0Resubmit1 = taskSets(2)
+    assert(stage0Resubmit1.stageId == 0)
+    assert(stage0Resubmit1.stageAttemptId === 1)
+
+    // Now the running task from the first attempt tries to commit the output and we
+    // make sure it succeeds.
+    assert(scheduler.outputCommitCoordinator.canCommit(1,
+      taskSets(1).tasks(2).partitionId, 0))
+  }
+
   test("Test no duplicate shuffle reduce tasks running on fetch failure (SPARK-14649)") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
