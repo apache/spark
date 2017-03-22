@@ -64,8 +64,9 @@ if ! hash pip 2>/dev/null; then
   exit 0
 fi
 
+set -x
 # Determine which version of PySpark we are building for archive name
-PYSPARK_VERSION=$(python -c "exec(open('python/pyspark/version.py').read());print __version__")
+PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print __version__")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
 PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
@@ -73,7 +74,6 @@ PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
 
-set -x
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
     echo "Testing pip installation with python $python"
