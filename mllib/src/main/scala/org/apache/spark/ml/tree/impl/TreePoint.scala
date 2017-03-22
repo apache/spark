@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.rdd.RDD
 
@@ -38,13 +38,12 @@ import org.apache.spark.rdd.RDD
  * @param _binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[spark] class TreePoint(val label: Double, _binnedFeatures: Array[Int])
+private[spark] class TreePoint(val label: Double, _binnedFeatures: Vector)
   extends Serializable {
 
   // TODO: to implement a custom Int Vector, instead of Double
-  val binnedFeaturesVec = Vectors.dense(_binnedFeatures.map(_.toDouble)).toSparse
 
-  def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
+  def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x).toInt
 }
 
 private[spark] object TreePoint {
@@ -109,7 +108,7 @@ private[spark] object TreePoint {
 
     val vec = Vectors.sparse(numFeatures, arr)
 
-    new TreePoint(labeledPoint.label, vec.toArray.map(_.toInt))
+    new TreePoint(labeledPoint.label, vec)
   }
 
   /**
