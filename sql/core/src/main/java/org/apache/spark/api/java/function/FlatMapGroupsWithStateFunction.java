@@ -28,7 +28,8 @@ import org.apache.spark.sql.streaming.KeyedState;
  * ::Experimental::
  * Base interface for a map function used in
  * {@link org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroupsWithState(
- * FlatMapGroupsWithStateFunction, org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}.
+ * FlatMapGroupsWithStateFunction, org.apache.spark.sql.streaming.OutputMode,
+ * org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}
  * @since 2.1.1
  */
 @Experimental
