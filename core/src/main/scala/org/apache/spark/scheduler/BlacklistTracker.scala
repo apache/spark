@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -176,15 +177,28 @@ private[scheduler] class BlacklistTracker (
     }
   }
 
-  def updateBlacklistForFetchFailure(host: String, exec: String, numFailedTasks: Int): Unit = {
+  @Experimental
+  def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
     if (BLACKLIST_FETCH_FAILURE_ENABLED) {
+      logWarning(
+        s"""
+           |${config.BLACKLIST_FETCH_FAILURE_ENABLED.key} is enabled. If we blacklist
+           |on fetch failures, we are implicitly saying that we believe the failure is
+           |non-transient, and can't be recovered from (even if this is the first fetch failure).
+           |If the external shuffle-service is on, then every other executor on this node would
+           |be suffering from the same issue, so we should blacklist (and potentially kill) all
+           |of them immediately.
+         """.stripMargin)
+
       val now = clock.getTimeMillis()
       val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
       if (!executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor $exec due to fetch failure")
 
         executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(host, expiryTimeForNewBlacklists))
-        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, numFailedTasks))
+        // We hardcoded number of failure tasks to 1 for fetch failure, because there's no
+        // reattempt for this failure.
+        listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, 1))
         updateNextExpiryTime()
         killBlacklistedExecutor(exec)
 
@@ -192,7 +206,7 @@ private[scheduler] class BlacklistTracker (
         blacklistedExecsOnNode += exec
 
         if (SparkEnv.get.blockManager.externalShuffleServiceEnabled &&
-          !nodeIdToBlacklistExpiryTime.contains(host)) {
+            !nodeIdToBlacklistExpiryTime.contains(host)) {
           logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
 
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)

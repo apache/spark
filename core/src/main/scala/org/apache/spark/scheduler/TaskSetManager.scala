@@ -776,8 +776,8 @@ private[spark] class TaskSetManager(
         isZombie = true
 
         if (fetchFailed.bmAddress != null) {
-          blacklistTracker.foreach(_.updateBlacklistForFetchFailure(fetchFailed.bmAddress.host,
-            fetchFailed.bmAddress.executorId, numTasks - tasksSuccessful))
+          blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
+            fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
 
         None
