@@ -27,16 +27,17 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
- * API for statistical functions in MLlib, compatible with Dataframes and Datasets.
+ * API for correlation functions in MLlib, compatible with Dataframes and Datasets.
  *
  * The functions in this package generalize the functions in [[org.apache.spark.sql.Dataset.stat]]
  * to spark.ml's Vector types.
  */
 @Since("2.2.0")
 @Experimental
-object Correlations {
+object Correlation {
 
   /**
+   * :: Experimental ::
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
@@ -71,15 +72,12 @@ object Correlations {
     }
     val oldM = OldStatistics.corr(rdd, method)
     val name = s"$method($column)"
-    val schema = StructType(Array(StructField(name, SQLDataTypes.MatrixType, nullable = true)))
+    val schema = StructType(Array(StructField(name, SQLDataTypes.MatrixType, nullable = false)))
     dataset.sparkSession.createDataFrame(Seq(Row(oldM.asML)).asJava, schema)
   }
 
   /**
    * Compute the correlation matrix for the input Dataset of Vectors.
-   * @param dataset A dataset or dataframe
-   * @param column A column of this dataset
-   * @return
    */
   @Since("2.2.0")
   def corr(dataset: Dataset[_], column: String): DataFrame = {

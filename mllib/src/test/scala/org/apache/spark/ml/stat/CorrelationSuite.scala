@@ -21,16 +21,13 @@ import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.Matrix
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.util.LinalgUtils
+import org.apache.spark.ml.linalg.{Matrices, Matrix, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 
-class CorrelationsSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
-
-  import LinalgUtils._
+class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
   val xData = Array(1.0, 0.0, -2.0)
   val yData = Array(4.0, 5.0, 3.0)
@@ -51,30 +48,30 @@ class CorrelationsSuite extends SparkFunSuite with MLlibTestSparkContext with Lo
 
 
   test("corr(X) default, pearson") {
-    val defaultMat = Correlations.corr(X, "features")
-    val pearsonMat = Correlations.corr(X, "features", "pearson")
+    val defaultMat = Correlation.corr(X, "features")
+    val pearsonMat = Correlation.corr(X, "features", "pearson")
     // scalastyle:off
-    val expected = BDM(
+    val expected = Matrices.fromBreeze(BDM(
       (1.00000000, 0.05564149, Double.NaN, 0.4004714),
       (0.05564149, 1.00000000, Double.NaN, 0.9135959),
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
-      (0.40047142, 0.91359586, Double.NaN, 1.0000000))
+      (0.40047142, 0.91359586, Double.NaN, 1.0000000)))
     // scalastyle:on
 
-    assert(matrixApproxEqual(extract(defaultMat), expected))
-    assert(matrixApproxEqual(extract(pearsonMat), expected))
+    assert(Matrices.fromBreeze(extract(defaultMat)) ~== expected absTol 1e-4)
+    assert(Matrices.fromBreeze(extract(pearsonMat)) ~== expected absTol 1e-4)
   }
 
   test("corr(X) spearman") {
-    val spearmanMat = Correlations.corr(X, "features", "spearman")
+    val spearmanMat = Correlation.corr(X, "features", "spearman")
     // scalastyle:off
-    val expected = BDM(
+    val expected = Matrices.fromBreeze(BDM(
       (1.0000000,  0.1054093,  Double.NaN, 0.4000000),
       (0.1054093,  1.0000000,  Double.NaN, 0.9486833),
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
-      (0.4000000,  0.9486833,  Double.NaN, 1.0000000))
+      (0.4000000,  0.9486833,  Double.NaN, 1.0000000)))
     // scalastyle:on
-    assert(matrixApproxEqual(extract(spearmanMat), expected))
+    assert(Matrices.fromBreeze(extract(spearmanMat)) ~== expected absTol 1e-4)
   }
 
 }
