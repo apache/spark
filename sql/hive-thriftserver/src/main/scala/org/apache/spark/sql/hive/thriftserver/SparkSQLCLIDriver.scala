@@ -18,28 +18,37 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.util.{ArrayList => JArrayList, Locale}
+import java.util.{Locale, ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.universe
+import scala.util.control.NonFatal
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
+import org.apache.hadoop.security.token.Token
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.thrift.transport.TSocket
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
-import org.apache.spark.util.ShutdownHookManager
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -80,6 +89,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     val cliConf = new HiveConf(classOf[SessionState])
+
+    if (UserGroupInformation.isSecurityEnabled &&
+      UserGroupInformation.getCurrentUser.getAuthenticationMethod == AuthenticationMethod.PROXY) {
+      obtainCredentials(cliConf)
+    }
+
     // Override the location of the metastore since this is only used for local execution.
     HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
       case (key, value) => cliConf.set(key, value)
@@ -264,6 +279,38 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   def isRemoteMode(state: CliSessionState): Boolean = {
     //    sessionState.isRemoteMode
     state.isHiveServerQuery
+  }
+
+  def obtainCredentials(conf: HiveConf): Unit = {
+    val principalKey = "hive.metastore.kerberos.principal"
+    val principal = conf.getTrimmed(principalKey, "")
+    require(principal.nonEmpty, s"Hive principal $principalKey undefined")
+    val metastoreUri = conf.getTrimmed("hive.metastore.uris", "")
+    require(metastoreUri.nonEmpty, "Hive metastore uri undefined")
+
+    val currentUser = UserGroupInformation.getCurrentUser
+    logDebug(s"Getting Hive delegation token for ${currentUser.getUserName} against " +
+      s"$principal at $metastoreUri")
+
+    try {
+      val hive = Hive.get(conf, classOf[HiveConf])
+      val creds = new Credentials
+      SparkHadoopUtil.get.doAsRealUser {
+        val tokenStr = hive.getDelegationToken(currentUser.getUserName, principal)
+        val hive2Token = new Token[DelegationTokenIdentifier]
+        hive2Token.decodeFromUrlString(tokenStr)
+        logInfo(s"Get Token from hive metastore: ${hive2Token.toString}")
+        creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
+        currentUser.addCredentials(creds)
+      }
+    } catch {
+      case NonFatal(e) =>
+        logDebug(s"Fail to get token from service hive", e)
+    } finally {
+      Utils.tryLogNonFatalError {
+        Hive.closeCurrent()
+      }
+    }
   }
 
 }

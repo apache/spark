@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.IOException
+import java.lang.reflect.UndeclaredThrowableException
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
@@ -61,9 +62,63 @@ class SparkHadoopUtil extends Logging {
     logDebug("running as user: " + user)
     val ugi = UserGroupInformation.createRemoteUser(user)
     transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-    ugi.doAs(new PrivilegedExceptionAction[Unit] {
-      def run: Unit = func()
-    })
+    tryDoAsUserOrExit(ugi, func)
+  }
+
+  /**
+   * Create a proxy user ugi with username of the effective user and the ugi of the real user.
+   * Transfer the all credentials to the proxy user ugi. Runs the given function with the proxy
+   * user ugi.
+   * @param user
+   * @param func
+   */
+  def runAsProxyUser(user: String)(func: () => Unit) {
+    require(Some(user).nonEmpty, "running as proxy user `null` is not allowed")
+    val realUser = UserGroupInformation.getCurrentUser
+    logInfo(s"User being impersonated is: ${realUser.getShortUserName}")
+    val proxyUser = UserGroupInformation.createProxyUser(user, realUser)
+    proxyUser.addCredentials(realUser.getCredentials)
+    tryDoAsUserOrExit(proxyUser, func)
+  }
+
+  /**
+   * Run some code as the real logged in user (which may differ from the current user, for
+   * example, when using proxying).
+   */
+  private[spark] def doAsRealUser[T](fn: => T): T = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+
+    // For some reason the Scala-generated anonymous class ends up causing an
+    // UndeclaredThrowableException, even if you annotate the method with @throws.
+    try {
+      realUser.doAs(new PrivilegedExceptionAction[T]() {
+        override def run(): T = fn
+      })
+    } catch {
+      case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
+    }
+  }
+
+  private[this] def tryDoAsUserOrExit(user: UserGroupInformation, func: () => Unit) {
+    try {
+      user.doAs(new PrivilegedExceptionAction[Unit] {
+        def run: Unit = func()
+      })
+    } catch {
+      case e: Exception =>
+        // Hadoop's AuthorizationException suppresses the exception's stack trace, which
+        // makes the message printed to the output by the JVM not very helpful. Instead,
+        // detect exceptions with empty stack traces here, and treat them differently.
+        if (e.getStackTrace().length == 0) {
+          // scalastyle:off println
+          System.err.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+          // scalastyle:on println
+          System.exit(1)
+        } else {
+          throw e
+        }
+    }
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -71,7 +126,6 @@ class SparkHadoopUtil extends Logging {
       dest.addToken(token)
     }
   }
-
 
   /**
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
