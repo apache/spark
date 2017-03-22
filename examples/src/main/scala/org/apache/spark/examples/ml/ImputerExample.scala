@@ -22,6 +22,11 @@ import org.apache.spark.ml.feature.Imputer
 // $example off$
 import org.apache.spark.sql.SparkSession
 
+/**
+ * An example demonstrating Imputer.
+ * Run with:
+ *   bin/run-example ml.ImputerExample
+ */
 object ImputerExample {
 
   def main(args: Array[String]): Unit = {

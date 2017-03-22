@@ -32,6 +32,11 @@ import org.apache.spark.sql.types.*;
 
 import static org.apache.spark.sql.types.DataTypes.*;
 
+/**
+ * An example demonstrating Imputer.
+ * Run with:
+ *   bin/run-example ml.JavaImputerExample
+ */
 public class JavaImputerExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession

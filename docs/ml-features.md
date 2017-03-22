@@ -1292,7 +1292,7 @@ median of the columns in which the missing value are located. The input columns 
 `DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
 creates incorrect values for a categorical feature.
 
-Note all `null` values in the input columns are treated as missing, and so are also imputed.
+**Note** all `null` values in the input columns are treated as missing, and so are also imputed.
 
 **Examples**
 
