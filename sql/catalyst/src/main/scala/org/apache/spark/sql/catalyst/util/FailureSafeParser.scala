@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.ParseMode.ParseMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -60,11 +59,11 @@ class FailureSafeParser[IN](
       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
     } catch {
       case e: BadRecordException => mode match {
-        case ParseMode.Permissive =>
+        case PermissiveMode =>
           Iterator(toResultRow(e.partialResult(), e.record))
-        case ParseMode.DropMalformed =>
+        case DropMalformedMode =>
           Iterator.empty
-        case ParseMode.FailFast =>
+        case FailFastMode =>
           throw e.cause
       }
     }

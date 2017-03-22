@@ -25,7 +25,6 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.ParseMode.ParseMode
 
 class CSVOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
@@ -84,7 +83,7 @@ class CSVOptions(
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
-    parameters.get("mode").map(ParseMode.fromString).getOrElse(ParseMode.Permissive)
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 

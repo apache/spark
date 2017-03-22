@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, GenericArrayData, ParseMode}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -548,7 +548,7 @@ case class JsonToStructs(
   lazy val parser =
     new JacksonParser(
       rowSchema,
-      new JSONOptions(options + ("mode" -> ParseMode.FailFast.toString), timeZoneId.get))
+      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
 
   override def dataType: DataType = schema
 

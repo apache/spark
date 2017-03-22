@@ -24,7 +24,6 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.ParseMode.ParseMode
 
 /**
  * Options for parsing JSON data into Spark SQL rows.
@@ -67,7 +66,7 @@ private[sql] class JSONOptions(
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   val parseMode: ParseMode =
-    parameters.get("mode").map(ParseMode.fromString).getOrElse(ParseMode.Permissive)
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 

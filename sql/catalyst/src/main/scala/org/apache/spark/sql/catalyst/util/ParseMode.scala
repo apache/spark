@@ -19,33 +19,39 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.internal.Logging
 
-object ParseMode extends Enumeration with Logging {
-  type ParseMode = Value
-
+sealed trait ParseMode {
   /**
-   * This mode permissively parses the records.
+   * String name of the parse mode.
    */
-  val Permissive = Value("PERMISSIVE")
+  def name: String
+}
+
+/**
+ * This mode permissively parses the records.
+ */
+case object PermissiveMode extends ParseMode { val name = "PERMISSIVE" }
+
+/**
+ * This mode ignores the whole corrupted records.
+ */
+case object DropMalformedMode extends ParseMode { val name = "DROPMALFORMED" }
+
+/**
+ * This mode throws an exception when it meets corrupted records.
+ */
+case object FailFastMode extends ParseMode { val name = "FAILFAST" }
+
+object ParseMode extends Logging {
 
   /**
-   * This mode ignores the whole corrupted records.
-   */
-  val DropMalformed = Value("DROPMALFORMED")
-
-  /**
-   * This mode throws an exception when it meets corrupted records.
-   */
-  val FailFast = Value("FAILFAST")
-
-  /**
-   * Returns `ParseMode` enum from the given string.
+   * Returns the parse mode from the given string.
    */
   def fromString(mode: String): ParseMode = mode.toUpperCase match {
-    case "PERMISSIVE" => ParseMode.Permissive
-    case "DROPMALFORMED" => ParseMode.DropMalformed
-    case "FAILFAST" => ParseMode.FailFast
+    case PermissiveMode.name => PermissiveMode
+    case DropMalformedMode.name => DropMalformedMode
+    case FailFastMode.name => FailFastMode
     case _ =>
-      logWarning(s"$mode is not a valid parse mode. Using $Permissive.")
-      ParseMode.Permissive
+      logWarning(s"$mode is not a valid parse mode. Using ${PermissiveMode.name}.")
+      PermissiveMode
   }
 }
