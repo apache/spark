@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.rdd.RDD
 
@@ -34,11 +35,16 @@ import org.apache.spark.rdd.RDD
  *      or any categorical feature used in regression or binary classification.
  *
  * @param label  Label from LabeledPoint
- * @param binnedFeatures  Binned feature values.
+ * @param _binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[spark] class TreePoint(val label: Double, val binnedFeatures: Array[Int])
+private[spark] class TreePoint(val label: Double, _binnedFeatures: Array[Int])
   extends Serializable {
+
+  // TODO: to implement a custom Int Vector, instead of Double
+  val binnedFeaturesVec = Vectors.dense(_binnedFeatures.map(_.toDouble)).toSparse
+
+  def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
 }
 
 private[spark] object TreePoint {
