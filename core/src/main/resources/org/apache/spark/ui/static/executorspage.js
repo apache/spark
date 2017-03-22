@@ -401,7 +401,6 @@ $(document).ready(function () {
                                     var maxMemory = row.maxOnHeapMemory + row.maxOffHeapMemory;
                                     return (formatBytes(memoryUsed, type) + ' / ' +
                                         formatBytes(maxMemory, type));
-
                             }
                         },
                         {
@@ -411,7 +410,6 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.onHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.maxOnHeapMemory, type));
-
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('on_heap_memory')
@@ -424,7 +422,6 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.offHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.maxOffHeapMemory, type));
-
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('off_heap_memory')
@@ -506,7 +503,6 @@ $(document).ready(function () {
                                     var maxMemory = row.allOnHeapMaxMemory + row.allOffHeapMaxMemory;
                                     return (formatBytes(memoryUsed, type) + ' / ' +
                                         formatBytes(maxMemory, type));
-
                             }
                         },
                         {
@@ -516,7 +512,6 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.allOnHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.allOnHeapMaxMemory, type));
-
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('on_heap_memory')
@@ -529,12 +524,10 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.allOffHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.allOffHeapMaxMemory, type));
-
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 $(nTd).addClass('off_heap_memory')
                             }
-
                         },
                         {data: 'allDiskUsed', render: formatBytes},
                         {data: 'allTotalCores'},

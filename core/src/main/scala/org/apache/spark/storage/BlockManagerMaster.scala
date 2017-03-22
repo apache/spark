@@ -63,7 +63,7 @@ class BlockManagerMaster(
     logInfo(s"Registering BlockManager $blockManagerId")
     val updatedId = driverEndpoint.askSync[BlockManagerId](
       RegisterBlockManager(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
-    logInfo(s"Registered BlockManager $blockManagerId")
+    logInfo(s"Registered BlockManager $updatedId")
     updatedId
   }
 
