@@ -109,17 +109,14 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
    * @param maxPartitionId the maximum partition id that could appear in this stage's tasks (i.e.
    *                       the maximum possible value of `context.partitionId`).
    */
-  private[scheduler] def stageStart(stage: StageId, partitionsToCompute: Seq[Int], maxPartitionId: Int): Unit = synchronized {
+  private[scheduler] def stageStart(stage: StageId,
+                                    partitionsToCompute: Seq[Int],
+                                    maxPartitionId: Int): Unit = synchronized {
     // stageStates(stage) = new StageState(maxPartitionId + 1)
     val stageState = stageStates.getOrElseUpdate(stage, new StageState(maxPartitionId + 1))
     for (i <- partitionsToCompute) {
       stageState.authorizedCommitters(i) = NO_AUTHORIZED_COMMITTER
     }
-  }
-
-  // Called by DAGScheduler
-  private[scheduler] def stageEnd(stage: StageId): Unit = synchronized {
-    stageStates.remove(stage)
   }
 
   // Called by DAGScheduler
