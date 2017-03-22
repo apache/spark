@@ -478,9 +478,36 @@ case class EliminateOuterJoin(conf: CatalystConf) extends Rule[LogicalPlan] with
     }
   }
 
+  private def buildNewJoinType(joinCond: Expression, join: Join, subqueryOutPut: AttributeSet):
+    JoinType = {
+    val conditions = splitConjunctivePredicates(joinCond)
+    val leftConditions = conditions.filter(_.references.
+      subsetOf(join.left.outputSet ++ subqueryOutPut))
+    val rightConditions = conditions.filter(_.references.
+      subsetOf(join.right.outputSet ++ subqueryOutPut))
+
+    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
+    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
+
+    join.joinType match {
+      case RightOuter if leftHasNonNullPredicate => Inner
+      case LeftOuter if rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate => LeftOuter
+      case FullOuter if rightHasNonNullPredicate => RightOuter
+      case o => o
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+    case j @ Join(child @ Join(_, _, RightOuter | LeftOuter | FullOuter, _),
+      subquery, LeftSemiOrAnti(joinType), joinCond) =>
+      if (joinCond.isDefined) {
+        val newJoinType = buildNewJoinType(joinCond.get, child, subquery.outputSet)
+        Join(child.copy(joinType = newJoinType), subquery, joinType, joinCond)
+      } else j
   }
 }

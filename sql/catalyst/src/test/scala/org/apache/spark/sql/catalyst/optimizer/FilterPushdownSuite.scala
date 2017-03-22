@@ -38,6 +38,7 @@ class FilterPushdownSuite extends PlanTest {
         PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         CollapseProject) :: Nil
   }
 
@@ -799,7 +800,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctedAnswer)
   }
 
-  test("correlated subquery (simple): no push down") {
+  test("predicate subquery: push down simple") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
@@ -809,14 +810,15 @@ class FilterPushdownSuite extends PlanTest {
       .where(Exists(z.where("x.a".attr === "z.a".attr)))
       .analyze
     val answer = x
-      .join(y, Inner, Option("x.a".attr === "y.a".attr))
       .where(Exists(z.where("x.a".attr === "z.a".attr)))
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
       .analyze
-    val optimized = Optimize.execute(Optimize.execute(query))
-    comparePlans(optimized, answer)
+    val optimized = Optimize.execute(query)
+    val expected = Optimize.execute(answer)
+    comparePlans(optimized, expected)
   }
 
-  test("correlated subquery (complex): no push down") {
+  test("predicate subquery: push down complex") {
     val w = testRelation.subquery('w)
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -828,12 +830,13 @@ class FilterPushdownSuite extends PlanTest {
       .where(Exists(z.where("w.a".attr === "z.a".attr)))
       .analyze
     val answer = w
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
       .join(x, Inner, Option("w.a".attr === "x.a".attr))
       .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
-      .where(Exists(z.where("w.a".attr === "z.a".attr)))
       .analyze
-    val optimized = Optimize.execute(Optimize.execute(query))
-    comparePlans(optimized, answer)
+    val optimized = Optimize.execute(query)
+    val expected = Optimize.execute(answer)
+    comparePlans(optimized, expected)
   }
 
   test("SPARK-20094: don't push predicate with IN subquery into join condition") {

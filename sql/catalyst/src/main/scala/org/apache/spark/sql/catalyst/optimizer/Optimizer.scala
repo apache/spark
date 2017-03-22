@@ -79,6 +79,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReorderJoin(conf),
       EliminateOuterJoin(conf),
       PushPredicateThroughJoin,
+      PushLeftSemiLeftAntiThroughJoin,
       PushDownPredicate,
       LimitPushDown(conf),
       ColumnPruning,
@@ -397,9 +398,10 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  * Attempts to eliminate the reading of unneeded columns from the query plan.
  *
  * Since adding Project before Filter conflicts with PushPredicatesThroughProject, this rule will
- * remove the Project p2 in the following pattern:
+ * remove the Project p2 in the following patterns:
  *
  *   p1 @ Project(_, Filter(_, p2 @ Project(_, child))) if p2.outputSet.subsetOf(p2.inputSet)
+ *   p1 @ Project(_, j @ Join(p2 @ Project(_, child), _, LeftSemiOrAnti(_), _))
  *
  * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
  */
@@ -499,13 +501,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
     }
 
   /**
-   * The Project before Filter is not necessary but conflict with PushPredicatesThroughProject,
-   * so remove it.
+   * The Project before Filter or LeftSemi/LeftAnti is not necessary
+   * but conflict with PushPredicatesThroughProject, so remove it.
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transform {
     case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
       if p2.outputSet.subsetOf(child.outputSet) =>
       p1.copy(child = f.copy(child = child))
+    case p1 @ Project(_, j @ Join(p2 @ Project(_, child), _, LeftSemiOrAnti(_), _))
+      if p2.outputSet.subsetOf(child.outputSet) =>
+      p1.copy(child = j.copy(left = child))
   }
 }
 
@@ -765,6 +770,42 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
+    // Similar to the above Filter over Project
+    // LeftSemi/LeftAnti over Project
+    case join @ Join(project @ Project(projectList, grandChild), rightOp,
+                     LeftSemiOrAnti(joinType), joinCond)
+      if !grandChild.isInstanceOf[LeafNode] &&
+        !ScalarSubquery.hasScalarSubquery(projectList) &&
+        projectList.forall(_.deterministic) =>
+
+      // Create a map of Aliases to their values from the child projection.
+      // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
+      var projectListAfterUnalias = AttributeSet.empty
+      val aliasMap = AttributeMap(projectList.collect {
+        case a: Alias =>
+          projectListAfterUnalias ++= a.child.references
+          (a.toAttribute, a.child)
+      })
+
+      // If nothing to map from Join to the Project below
+      // stop the push down
+      val simple = grandChild match {
+        case Filter(_, l: LeafNode) => true
+        case _ => false
+      }
+      if (joinCond.isDefined &&
+        // detect potential self-join after pushdown
+        joinCond.get.references.intersect(projectListAfterUnalias).isEmpty &&
+        (aliasMap.nonEmpty || !simple)) {
+        val cond = if (joinCond.isDefined) {
+            Option(replaceAlias(joinCond.get, aliasMap))
+        } else None
+        val res = Project(projectList, Join(grandChild, rightOp, joinType, cond))
+        res
+      } else {
+        join
+      }
+
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
     // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
@@ -791,6 +832,35 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
       } else {
         filter
+      }
+
+    // Similar to the above Filter over Window
+    // LeftSemi/LeftAnti over Window
+    case join @ Join(w: Window, rightOp, LeftSemiOrAnti(joinType), joinCond)
+      if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++ rightOp.outputSet
+
+
+      val (candidates, containingNonDeterministic) = if (joinCond.isDefined) {
+          splitConjunctivePredicates(joinCond.get).span(_.deterministic)
+        } else {
+          (Nil, Nil)
+        }
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        cond.references.subsetOf(partitionAttrs) &&
+        !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+        !SubExprUtils.containsOuter(cond)
+      }
+
+      val stayUp = rest ++ containingNonDeterministic
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val newWindow = w.copy(child = Join(w.child, rightOp, joinType, Option(pushDownPredicate)))
+        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
+      } else {
+        join
       }
 
     case filter @ Filter(condition, aggregate: Aggregate) =>
@@ -826,6 +896,54 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
+    // Similar to the above Filter over Aggregate
+    // LeftSemi/LeftAnti over Aggregate
+    case join @ Join(aggregate: Aggregate, rightOp, LeftSemiOrAnti(joinType), joinCond) =>
+      // Find all the aliased expressions in the aggregate list that don't include any actual
+      // AggregateExpression, and create a map from the alias to the expression
+      // TODO: detect potential self-join after push down???
+      var projectListAfterUnalias = AttributeSet.empty
+      val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {
+        case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+          projectListAfterUnalias ++= a.child.references
+          (a.toAttribute, a.child)
+      })
+
+      // For each join condition, expand the alias and check if the condition can be evaluated using
+      // attributes produced by the aggregate operator's child operator.
+      val (candidates, containingNonDeterministic) = if (joinCond.isDefined) {
+        splitConjunctivePredicates(joinCond.get).span(_.deterministic)
+      } else {
+        (Nil, Nil)
+      }
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        val replaced = replaceAlias(cond, aliasMap)
+        cond.references.nonEmpty &&
+          replaced.references.subsetOf(aggregate.child.outputSet ++ rightOp.outputSet) &&
+          !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+          !SubExprUtils.containsOuter(cond)
+      }
+
+      val stayUp = rest ++ containingNonDeterministic
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        if (pushDownPredicate.references.intersect(projectListAfterUnalias).isEmpty) {
+          val replaced = replaceAlias(pushDownPredicate, aliasMap)
+          val newAggregate = aggregate.copy(child =
+            Join(aggregate.child, rightOp, joinType, Option(replaced)))
+          // If there is no more filter to stay up, just return the Aggregate over Join.
+          // Otherwise, create "Filter(stayUp) <- Aggregate <- Join(pushDownPredicate)".
+          if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+        }
+        else {
+          join
+        }
+      } else {
+        join
+      }
+
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
       val (candidates, containingNonDeterministic) =
@@ -858,12 +976,56 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
+    // Similar to the above Filter over Union
+    // LeftSemi/LeftAnti over Union
+    case join @ Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond) =>
+      // Union could change the rows, so non-deterministic predicate can't be pushed down
+      val (candidates, containingNonDeterministic) = if (joinCond.isDefined) {
+          splitConjunctivePredicates(joinCond.get).span(_.deterministic)
+        } else {
+          (Nil, Nil)
+        }
+      val (pushDown, rest) = candidates.partition { cond =>
+        !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+          !SubExprUtils.containsOuter(cond)
+      }
+      val stayUp = rest ++ containingNonDeterministic
+
+      if (pushDown.nonEmpty) {
+        val pushDownCond = pushDown.reduceLeft(And)
+        val output = union.output
+        val newGrandChildren = union.children.map { grandchild =>
+          val newCond = pushDownCond transform {
+            case e if output.exists(_.semanticEquals(e)) =>
+              grandchild.output(output.indexWhere(_.semanticEquals(e)))
+          }
+          assert(newCond.references.subsetOf(grandchild.outputSet ++ rightOp.outputSet))
+          Join(grandchild, rightOp, joinType, Option(newCond))
+        }
+        val newUnion = union.withNewChildren(newGrandChildren)
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newUnion)
+        } else {
+          newUnion
+        }
+      } else {
+        join
+      }
+
     case filter @ Filter(condition, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) &&
           !SubqueryExpression.hasCorrelatedSubquery(condition) &&
           !SubExprUtils.containsOuter(condition) =>
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
+      }
+
+    // Similar to the above Filter over UnaryNode
+    // LeftSemi/LeftAnti over UnaryNode
+    case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(joinType), joinCond)
+      if canPushThrough(u) =>
+      pushDownJoin(join, u.child) { joinCond =>
+        u.withNewChildren(Seq(Join(u.child, rightOp, joinType, Option(joinCond))))
       }
   }
 
@@ -893,7 +1055,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       splitConjunctivePredicates(filter.condition).span(_.deterministic)
 
     val (pushDown, rest) = candidates.partition { cond =>
-      cond.references.subsetOf(grandchild.outputSet)
+      cond.references.subsetOf(grandchild.outputSet) &&
+      !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+      !SubExprUtils.containsOuter(cond)
     }
 
     val stayUp = rest ++ containingNonDeterministic
@@ -907,6 +1071,37 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
     } else {
       filter
+    }
+  }
+
+  private def pushDownJoin(
+      join: Join,
+      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+    // Only push down the predicates that is deterministic and all the referenced attributes
+    // come from grandchild.
+    val (candidates, containingNonDeterministic) = if (join.condition.isDefined) {
+      splitConjunctivePredicates(join.condition.get).span(_.deterministic)
+    } else {
+      (Nil, Nil)
+    }
+
+    val (pushDown, rest) = candidates.partition { cond =>
+      cond.references.subsetOf(grandchild.outputSet ++ join.right.outputSet) &&
+      !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+      !SubExprUtils.containsOuter(cond)
+    }
+
+    val stayUp = rest ++ containingNonDeterministic
+
+    if (pushDown.nonEmpty) {
+      val newChild = insertFilter(pushDown.reduceLeft(And))
+      if (stayUp.nonEmpty) {
+        Filter(stayUp.reduceLeft(And), newChild)
+      } else {
+        newChild
+      }
+    } else {
+      join
     }
   }
 }
@@ -1030,6 +1225,109 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case FullOuter => j
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
+      }
+  }
+}
+
+/**
+ * Pushes down a subquery, in the form of [[Join LeftSemi/LeftAnti]] operator
+ * to the left or right side of a join below.
+ */
+object PushLeftSemiLeftAntiThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Define an enumeration to identify whether a Exists/In subquery,
+   * in the form of a LeftSemi/LeftAnti, can be pushed down to
+   * the left table or the right table.
+   */
+  object subqueryPushdown extends Enumeration {
+    val toRightTable, toLeftTable, none = Value
+  }
+
+  /**
+   * Determine which side of the join an Exists/In subquery (in the form of
+   * LeftSemi/LeftAnti join) can be pushed down to.
+   */
+  private def pushTo(child: Join, subquery: LogicalPlan, joinCond: Option[Expression]) = {
+    val left = child.left
+    val right = child.right
+    val joinType = child.joinType
+    val subqueryOutput = subquery.outputSet
+
+    if (joinCond.nonEmpty) {
+      /**
+       * Note: In order to ensure correctness, it's important to not change the relative ordering of
+       * any deterministic expression that follows a non-deterministic expression. To achieve this,
+       * we only consider pushing down those expressions that precede the first non-deterministic
+       * expression in the condition.
+       */
+      val noPushdown = (subqueryPushdown.none, None)
+      val conditions = splitConjunctivePredicates(joinCond.get)
+      val (candidates, containingNonDeterministic) = conditions.span(_.deterministic)
+      lazy val (pushDownCandidates, subquery) =
+        candidates.partition { cond =>
+          !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+            !SubExprUtils.containsOuter(cond)
+        }
+      lazy val (leftConditions, rest) =
+        pushDownCandidates.partition(_.references.subsetOf(left.outputSet ++ subqueryOutput))
+      lazy val (rightConditions, commonConditions) =
+        rest.partition(_.references.subsetOf(right.outputSet ++ subqueryOutput))
+
+      if (containingNonDeterministic.nonEmpty || subquery.nonEmpty) {
+        noPushdown
+      } else {
+        if (rest.isEmpty && leftConditions.nonEmpty) {
+          // When all the join conditions are only between left table and the subquery
+          // push the subquery to the left table.
+          (subqueryPushdown.toLeftTable, leftConditions.reduceLeftOption(And))
+        } else if (leftConditions.isEmpty && rightConditions.nonEmpty && commonConditions.isEmpty) {
+          // When all the join conditions are only between right table and the subquery
+          // push the subquery to the right table.
+          (subqueryPushdown.toRightTable, rightConditions.reduceLeftOption(And))
+        } else {
+          noPushdown
+        }
+      }
+    } else {
+      /**
+       * When there is no correlated predicate,
+       * 1) if this is a left outer join, push the subquery down to the left table
+       * 2) if a right outer join, to the right table,
+       * 3) if an inner join, push to either side.
+       */
+      val action = joinType match {
+        case RightOuter =>
+          subqueryPushdown.toRightTable
+        case _: InnerLike | LeftOuter =>
+          subqueryPushdown.toLeftTable
+        case _ =>
+          subqueryPushdown.none
+      }
+      (action, None)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // push LeftSemi/LeftAnti down into the join below
+    case j @ Join(child @ Join(left, right, _ : InnerLike | LeftOuter | RightOuter, belowJoinCond),
+    subquery, LeftSemiOrAnti(joinType), joinCond) =>
+      val belowJoinType = child.joinType
+      val (action, newJoinCond) = pushTo(child, subquery, joinCond)
+
+      action match {
+        case subqueryPushdown.toLeftTable
+          if (belowJoinType == LeftOuter || belowJoinType.isInstanceOf[InnerLike]) =>
+            // push down the subquery to the left table
+            val newLeft = Join(left, subquery, joinType, newJoinCond)
+            Join(newLeft, right, belowJoinType, belowJoinCond)
+        case subqueryPushdown.toRightTable
+          if (belowJoinType == RightOuter || belowJoinType.isInstanceOf[InnerLike]) =>
+            // push down the subquery to the right table
+            val newRight = Join(right, subquery, joinType, newJoinCond)
+            Join(left, newRight, belowJoinType, belowJoinCond)
+        case _ =>
+          // Do nothing
+          j
       }
   }
 }
