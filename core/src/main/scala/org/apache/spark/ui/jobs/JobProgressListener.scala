@@ -401,10 +401,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.metrics)
         updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
         logDebug(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
-          s"${m.shuffleReadMetrics.remoteBytesReadToMem} bytes shuffled to memory.")
-        logDebug(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
-          s"the block sizes in MapStatus are inaccurate, sum of sizes of underestimated" +
-          s" blocks is ${m.shuffleWriteMetrics.underestimatedBlocksSize}")
+          s"${m.shuffleReadMetrics.remoteBytesReadToMem} bytes shuffle-read to memory.")
+        logDebug(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), total " +
+          s"size of underestimated blocks is ${m.shuffleWriteMetrics.underestimatedBlocksSize}")
       }
 
       val taskData = stageData.taskData.getOrElseUpdate(info.taskId, TaskUIData(info, None))
