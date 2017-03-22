@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext{
+class DataFramePivotSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("pivot courses") {
@@ -241,6 +241,9 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         StructField("a", TimestampType) ::
         StructField(tsWithZone, LongType) :: Nil)
       assert(df.schema == expected)
+      // String representation of timestamp with timezone should take the time difference
+      // into account.
+      checkAnswer(df.select($"a".cast(StringType)), Row(tsWithZone))
     }
   }
 }
