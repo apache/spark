@@ -113,7 +113,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     }
     val featuresType = schema($(featuresCol)).dataType
     require(featuresType.isInstanceOf[NumericType] || featuresType.isInstanceOf[VectorUDT],
-      s"Column $featuresCol must be of type NumericType or VectorUDT," +
+      s"Column ${$(featuresCol)} must be of type NumericType or VectorUDT," +
         s" but was actually of type $featuresType")
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
