@@ -415,7 +415,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm1.getSizeInBytes <= dm1.getSizeInBytes)
 
     // force compressed column major
-    val cm2 = dm1.compressed(true).asInstanceOf[SparseMatrix]
+    val cm2 = dm1.compressedColMajor.asInstanceOf[SparseMatrix]
     assert(cm2 === dm1)
     assert(!cm2.isTransposed)
     assert(cm2.getSizeInBytes <= dm1.getSizeInBytes)
@@ -447,7 +447,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm4.getSizeInBytes <= dm3.getSizeInBytes)
 
     // force compressed row major
-    val cm5 = dm3.compressed(false).asInstanceOf[DenseMatrix]
+    val cm5 = dm3.compressedRowMajor.asInstanceOf[DenseMatrix]
     assert(cm5 === dm3)
     assert(cm5.isTransposed)
     assert(cm5.getSizeInBytes <= dm3.getSizeInBytes)
@@ -480,7 +480,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm1.values.equals(sm1.values))
     assert(cm1.getSizeInBytes <= sm1.getSizeInBytes)
 
-    val cm2 = sm1.compressed(false).asInstanceOf[SparseMatrix]
+    val cm2 = sm1.compressedRowMajor.asInstanceOf[SparseMatrix]
     assert(cm2 === sm1)
     assert(cm2.isTransposed)
     // forced to be row major, so we have increased the size
@@ -492,6 +492,12 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm3.isTransposed)
     assert(cm3.values.equals(sm2.values))
     assert(cm3.getSizeInBytes <= sm2.getSizeInBytes)
+
+    val cm8 = sm2.compressedColMajor.asInstanceOf[SparseMatrix]
+    assert(cm8 === sm2)
+    assert(!cm8.isTransposed)
+    assert(cm8.getSizeInBytes > sm2.getSizeInBytes)
+    assert(cm8.getSizeInBytes <= sm2.toDense.getSizeInBytes)
 
     /*
        sm3 = 0.0 -1.0
@@ -508,7 +514,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(!cm4.isTransposed)
     assert(cm4.getSizeInBytes <= sm3.getSizeInBytes)
 
-    val cm5 = sm3.compressed(false).asInstanceOf[DenseMatrix]
+    val cm5 = sm3.compressedRowMajor.asInstanceOf[DenseMatrix]
     assert(cm5 === sm3)
     assert(cm5.isTransposed)
     assert(cm5.getSizeInBytes <= sm3.getSizeInBytes)

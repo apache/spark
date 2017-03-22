@@ -216,18 +216,19 @@ sealed trait Matrix extends Serializable {
   def toDenseColMajor: DenseMatrix = toDenseMatrix(colMajor = true)
 
   /**
-   * Returns a matrix in either dense or sparse format, whichever uses less storage.
-   *
-   * @param colMajor Whether the values of the resulting matrix should be in column major
-   *                    or row major order. If `false`, resulting matrix will be row major.
+   * Returns a matrix in dense or sparse column major format, whichever uses less storage.
    */
   @Since("2.2.0")
-  def compressed(colMajor: Boolean): Matrix = {
-    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor)) {
-      toDenseMatrix(colMajor)
-    } else {
-      toSparseMatrix(colMajor)
-    }
+  def compressedColMajor: Matrix = {
+    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = true)) toDenseColMajor else toCSC
+  }
+
+  /**
+   * Returns a matrix in dense or sparse row major format, whichever uses less storage.
+   */
+  @Since("2.2.0")
+  def compressedRowMajor: Matrix = {
+    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = false)) toDenseRowMajor else toCSR
   }
 
   /**
