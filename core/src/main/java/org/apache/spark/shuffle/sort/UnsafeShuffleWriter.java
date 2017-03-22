@@ -250,25 +250,25 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           long len = partitionLengths[i];
           if (len > mapStatus.getSizeForBlock(i)) {
             underestimatedBlocksNum++;
-            if (len >= 0L && len < 1024L) {
-              lenDistribution[0]++;
-            } else if (len >= 1024L && len < 10240L) {
-              lenDistribution[1]++;
-            } else if (len >= 10240L && len < 102400L) {
-              lenDistribution[2]++;
-            } else if (len >= 102400L && len < 1048576L ) {
-              lenDistribution[3]++;
-            } else if (len >= 1048576L && len < 10485760L) {
-              lenDistribution[4]++;
-            } else if (len >= 10485760L && len < 104857600L) {
-              lenDistribution[5]++;
-            } else if (len >= 104857600L && len < 1073741824L) {
-              lenDistribution[6]++;
-            } else if (len >= 1073741824L && len < 10737418240L) {
-              lenDistribution[7]++;
-            } else {
-              lenDistribution[8]++;
-            }
+          }
+          if (len >= 0L && len < 1024L) {
+            lenDistribution[0]++;
+          } else if (len >= 1024L && len < 10240L) {
+            lenDistribution[1]++;
+          } else if (len >= 10240L && len < 102400L) {
+            lenDistribution[2]++;
+          } else if (len >= 102400L && len < 1048576L ) {
+            lenDistribution[3]++;
+          } else if (len >= 1048576L && len < 10485760L) {
+            lenDistribution[4]++;
+          } else if (len >= 10485760L && len < 104857600L) {
+            lenDistribution[5]++;
+          } else if (len >= 104857600L && len < 1073741824L) {
+            lenDistribution[6]++;
+          } else if (len >= 1073741824L && len < 10737418240L) {
+            lenDistribution[7]++;
+          } else {
+            lenDistribution[8]++;
           }
           String[] ranges = {"[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)", "[1m, 10m)",
             "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g"};
@@ -277,7 +277,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             rangesAndDistribute[j] = ranges[j] + ":" + lenDistribution[j];
           }
           logger.debug("For task {}.{} in stage {} (TID {}), the block sizes in MapStatus are " +
-            "inaccurate (average is {}, {} blocks underestimated, sum of sizes is {})," +
+            "inaccurate (average is {}, {} blocks underestimated, size of underestimated is {})," +
             " distribution is {}.", taskContext.partitionId(), taskContext.attemptNumber(),
             taskContext.stageId(), taskContext.taskAttemptId(), hc.getAvgSize(),
             underestimatedBlocksNum, underestimatedBlocksSize,
