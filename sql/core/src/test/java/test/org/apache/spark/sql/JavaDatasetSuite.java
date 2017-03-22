@@ -23,7 +23,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
-import org.apache.spark.sql.streaming.KeyedStateTimeout;
+import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
 import scala.Tuple3;
@@ -210,7 +210,7 @@ public class JavaDatasetSuite implements Serializable {
       OutputMode.Append(),
       Encoders.LONG(),
       Encoders.STRING(),
-      KeyedStateTimeout.NoTimeout());
+      GroupStateTimeout.NoTimeout());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
