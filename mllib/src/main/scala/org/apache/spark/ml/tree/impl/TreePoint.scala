@@ -92,14 +92,24 @@ private[spark] object TreePoint {
       thresholds: Array[Array[Double]],
       featureArity: Array[Int]): TreePoint = {
     val numFeatures = labeledPoint.features.size
-    val arr = new Array[Int](numFeatures)
-    var featureIndex = 0
-    while (featureIndex < numFeatures) {
-      arr(featureIndex) =
-        findBin(featureIndex, labeledPoint, featureArity(featureIndex), thresholds(featureIndex))
-      featureIndex += 1
+
+    // use to construct a sparse vector
+    val arr: Seq[(Int, Double)] = Range(0, numFeatures).map{ idx =>
+      val bin = findBin(idx, labeledPoint,
+                        featureArity(idx), thresholds(idx))
+
+      if (bin != 0) {
+        Some((idx, bin))
+      } else {
+        None
+      }
+    }.map{ case Some((idx, value)) =>
+      (idx, value.toDouble)
     }
-    new TreePoint(labeledPoint.label, arr)
+
+    val vec = Vectors.sparse(numFeatures, arr)
+
+    new TreePoint(labeledPoint.label, vec.toArray.map(_.toInt))
   }
 
   /**
