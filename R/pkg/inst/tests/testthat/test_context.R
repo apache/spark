@@ -177,6 +177,13 @@ test_that("add and get file to be downloaded with Spark job on every node", {
   spark.addFile(path)
   download_path <- spark.getSparkFiles(filename)
   expect_equal(readLines(download_path), words)
+
+  # Test spark.getSparkFiles works well on executors.
+  seq <- seq(from = 1, to = 10, length.out = 5)
+  f <- function(seq) { spark.getSparkFiles(filename) }
+  results <- spark.lapply(seq, f)
+  for (i in 1:5) { expect_equal(basename(results[[i]]), filename) }
+
   unlink(path)
 
   # Test add directory recursively.
