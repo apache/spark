@@ -332,8 +332,7 @@ private[spark] object JsonProtocol {
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
-
-    var shuffleWriteMetrics: JValue =
+    val shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
         ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
