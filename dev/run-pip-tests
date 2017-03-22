@@ -54,6 +54,7 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual enviroments"
   PYTHON_EXECS=('2.7.12' '3')
+  USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"
   exit 0
@@ -72,6 +73,7 @@ PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
 PIP_COMMANDS=("pip install $PIP_OPTIONS $PYSPARK_DIST"
 	      "pip install $PIP_OPTIONS -e python/")
 
+set -x
 for python in "${PYTHON_EXECS[@]}"; do
   for install_command in "${PIP_COMMANDS[@]}"; do
     echo "Testing pip installation with python $python"
