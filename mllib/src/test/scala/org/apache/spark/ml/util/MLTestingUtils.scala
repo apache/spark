@@ -23,7 +23,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasWeightCol}
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
