@@ -486,8 +486,8 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
-          val utf8val = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-          val stringValue: String = Option(utf8val).map(_.toString).getOrElse("null")
+          val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
           if (singleAgg) {
             stringValue
           } else {
