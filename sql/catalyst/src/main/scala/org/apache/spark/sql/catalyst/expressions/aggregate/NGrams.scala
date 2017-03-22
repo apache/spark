@@ -90,12 +90,11 @@ case class NGrams(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!nExpression.foldable || !kExpression.foldable || !accuracyExpression.foldable) {
-      TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
+      TypeCheckFailure(s"The accuracy or percentage provided must be a foldable integer expression")
     } else if (accuracy <= 0) {
       TypeCheckFailure(
-        s"The accuracy provided must be a positive integer literal (current value = $accuracy)")
-    }
-    else {
+        s"The accuracy provided must be a foldable integer expression (current value = $accuracy)")
+    } else {
       TypeCheckSuccess
     }
   }
@@ -114,8 +113,7 @@ case class NGrams(
   override def update(buffer: NGramBuffer, inputRow: InternalRow): NGramBuffer = {
     if (isArrayOfString) {
       updateArray(child.eval(inputRow).asInstanceOf[GenericArrayData], buffer, inputRow)
-    }
-    else {
+    } else {
       val arrayOfArray = child.eval(inputRow).asInstanceOf[GenericArrayData]
       for (i <- 0 until arrayOfArray.numElements()) {
         updateArray(arrayOfArray.getArray(i).asInstanceOf[GenericArrayData], buffer, inputRow)
@@ -136,14 +134,13 @@ case class NGrams(
       val arrayValue = new GenericArrayData(Vector(keyValuePair._2))
       new ArrayBasedMapData(arrayKey, arrayValue)
     }).toVector
-   new GenericArrayData(topKNGrams)
+    new GenericArrayData(topKNGrams)
   }
 
   private def getNGrams(values: Vector[UTF8String], n: Int): Vector[Vector[UTF8String]] = {
     if (values.length >= n) {
       values.sliding(n).toVector
-    }
-    else {
+    } else {
       Vector()
     }
   }
@@ -191,21 +188,13 @@ object NGrams {
                     val precisionFactor: Int,
                     val frequencyMap: HashMap[Vector[UTF8String], Double]) {
     def add(ng: Vector[UTF8String]): Unit = {
-      var currentFrequency: Double = frequencyMap.get(ng)
-      if (currentFrequency == null.asInstanceOf[Double]) {
-        currentFrequency = 1.0D
-      } else {
-        currentFrequency += 1
-      }
-      frequencyMap.put(ng, currentFrequency)
+      frequencyMap.put(ng, frequencyMap.getOrDefault(ng, 0.0D) + 1)
     }
 
     def merge(other: NGramBuffer): Unit = {
       other.frequencyMap.asScala.foreach((keyValuePair: (Vector[UTF8String], Double)) => {
-        val key = keyValuePair._1
-        val value = keyValuePair._2
-        val originalValue = frequencyMap.getOrDefault(key, 0.0D)
-        frequencyMap.put(key, originalValue + value)
+        val (key, value) = keyValuePair
+        frequencyMap.put(key, frequencyMap.getOrDefault(key, 0.0D) + value)
       })
     }
 
@@ -213,9 +202,8 @@ object NGrams {
                          (keyWithFrequency: Tuple2[Vector[UTF8String], Double],
                           keyWithFrequency2: Tuple2[Vector[UTF8String], Double]): Boolean = {
       if (keyWithFrequency._2 != keyWithFrequency2._2) {
-      (keyWithFrequency._2 < keyWithFrequency2._2) ^ frequencyDescend
-      }
-      else {
+        (keyWithFrequency._2 < keyWithFrequency2._2) ^ frequencyDescend
+      } else {
         val keyVector = keyWithFrequency._1
         val keyVector2 = keyWithFrequency2._1
         for (i <- 0 until keyVector.length) {
