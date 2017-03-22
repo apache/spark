@@ -391,7 +391,9 @@ private[spark] object JsonProtocol {
         ("Exit Caused By App" -> exitCausedByApp) ~
         ("Loss Reason" -> reason.map(_.toString))
       case taskKilled: TaskKilled =>
+        val accumUpdates = JArray(taskKilled.accumUpdates.map(accumulableInfoToJson).toList)
         ("Kill Reason" -> taskKilled.reason)
+        ("Accumulator Updates" -> accumUpdates)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -882,7 +884,10 @@ private[spark] object JsonProtocol {
       case `taskKilled` =>
         val killReason = Utils.jsonOption(json \ "Kill Reason")
           .map(_.extract[String]).getOrElse("unknown reason")
-        TaskKilled(killReason)
+        val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
+          .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
+          .getOrElse(Seq[AccumulableInfo]())
+        TaskKilled(killReason, accumUpdates)
       case `taskCommitDenied` =>
         // Unfortunately, the `TaskCommitDenied` message was introduced in 1.3.0 but the JSON
         // de/serialization logic was not added until 1.5.1. To provide backward compatibility
