@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *    batch, nor with streaming Datasets.
  *  - All the data will be shuffled before applying the function.
  *  - If timeout is set, then the function will also be called with no values.
- *    See more details on KeyedStateTimeout` below.
+ *    See more details on `KeyedStateTimeout` below.
  *
  * Important points to note about using `KeyedState`.
  *  - The value of the state cannot be null. So updating state with null will throw
@@ -68,20 +68,38 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
  *
  * Important points to note about using `KeyedStateTimeout`.
  *  - The timeout type is a global param across all the keys (set as `timeout` param in
- *    `[map|flatMap]GroupsWithState`, but the exact timeout duration is configurable per key
- *    (by calling `setTimeout...()` in `KeyedState`).
- *  - When the timeout occurs for a key, the function is called with no values, and
+ *    `[map|flatMap]GroupsWithState`, but the exact timeout duration/timestamp is configurable per
+ *    key by calling `setTimeout...()` in `KeyedState`.
+ *  - Timeouts can be either based on processing time (i.e.
+ *    [[KeyedStateTimeout.ProcessingTimeTimeout]]) or event time (i.e.
+ *    [[KeyedStateTimeout.EventTimeTimeout]]).
+ *  - With `ProcessingTimeTimeout`, the timeout duration can be set by calling
+ *    `KeyedState.setTimeoutDuration`. The timeout will occur when the clock has advanced by the set
+ *    duration. Guarantees provided by this timeout with a duration of D ms are as follows:
+ *    - Timeout will never be occur before the clock time has advanced by D ms
+ *    - Timeout will occur eventually when there is a trigger in the query
+ *      (i.e. after D ms). So there is a no strict upper bound on when the timeout would occur.
+ *      For example, the trigger interval of the query will affect when the timeout actually occurs.
+ *      If there is no data in the stream (for any key) for a while, then their will not be
+ *      any trigger and timeout function call will not occur until there is data.
+ *    - Since the processing time timeout is based on the clock time, it is affected by the
+ *      variations in the system clock (i.e. time zone changes, clock skew, etc.).
+ *  - With `EventTimeTimeout`, the user also has to specify the the the event time watermark in
+ *    the query using `Dataset.withWatermark()`. With this setting, data that is older than the
+ *    watermark are filtered out. The timeout can be enabled for a key by setting a timestamp using
+ *    `KeyedState.setTimeoutTimestamp()`, and the timeout would occur when the watermark advances
+ *    beyond the set timestamp. You can control the timeout delay by two parameters - (i) watermark
+ *    delay and an additional duration beyond the timestamp in the event (which is guaranteed to
+ *    > watermark due to the filtering). Guarantees provided by this timeout are as follows:
+ *    - Timeout will never be occur before watermark has exceeded the set timeout.
+ *    - Similar to processing time timeouts, there is a no strict upper bound on the delay when
+ *      the timeout actually occurs. The watermark can advance only when there is data in the
+ *      stream, and the event time of the data has actually advanced.
+ *  - When the timeout occurs for a key, the function is called for that key with no values, and
  *    `KeyedState.hasTimedOut()` set to true.
  *  - The timeout is reset for key every time the function is called on the key, that is,
  *    when the key has new data, or the key has timed out. So the user has to set the timeout
  *    duration every time the function is called, otherwise there will not be any timeout set.
- *  - Guarantees provided on processing-time-based timeout of key, when timeout duration is D ms:
- *    - Timeout will never be called before real clock time has advanced by D ms
- *    - Timeout will be called eventually when there is a trigger in the query
- *      (i.e. after D ms). So there is a no strict upper bound on when the timeout would occur.
- *      For example, the trigger interval of the query will affect when the timeout is actually hit.
- *      If there is no data in the stream (for any key) for a while, then their will not be
- *      any trigger and timeout will not be hit until there is data.
  *
  * Scala example of using KeyedState in `mapGroupsWithState`:
  * {{{
@@ -194,7 +212,8 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
 
   /**
    * Set the timeout duration in ms for this key.
-   * @note Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
+   *
+   * @note ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'durationMs' is not positive")
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
@@ -204,11 +223,63 @@ trait KeyedState[S] extends LogicalKeyedState[S] {
 
   /**
    * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
-   * @note, Timeouts must be enabled in `[map/flatmap]GroupsWithStates`.
+   *
+   * @note, ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
   @throws[UnsupportedOperationException](
     "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   def setTimeoutDuration(duration: String): Unit
+
+  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as milliseconds in epoch time.
+   * This timestamp cannot be older than the current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
+  def setTimeoutTimestamp(timestampMs: Long): Unit
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as milliseconds in epoch time and an additional
+   * duration as a string (e.g. "1 hour", "2 days", etc.).
+   * The final timestamp (including the additional duration) cannot be older than the
+   * current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
+  def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit
+
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as a java.sql.Date.
+   * This timestamp cannot be older than the current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
+  def setTimeoutTimestamp(timestamp: java.sql.Date): Unit
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /**
+   * Set the timeout timestamp for this key as a java.sql.Date and an additional
+   * duration as a string (e.g. "1 hour", "2 days", etc.).
+   * The final timestamp (including the additional duration) cannot be older than the
+   * current watermark.
+   *
+   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   */
+  def setTimeoutTimestamp(timestamp: java.sql.Date, additionalDuration: String): Unit
 }
