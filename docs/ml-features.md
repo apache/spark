@@ -1287,11 +1287,12 @@ for more details on the API.
 
 ## Imputer
 
-Imputation transformer for completing missing values in the dataset, either using the mean or the 
+The `Imputer` transformer completes missing values in the dataset, either using the mean or the 
 median of the columns in which the missing value are located. The input columns should be of
-DoubleType or FloatType. Currently Imputer does not support categorical features and possibly
-creates incorrect values for a categorical feature. All Null values in the input column are
-treated as missing, and so are also imputed.
+`DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
+creates incorrect values for a categorical feature.
+
+Note all `null` values in the input columns are treated as missing, and so are also imputed.
 
 **Examples**
 
@@ -1307,9 +1308,11 @@ Suppose that we have a DataFrame with the column `a` and `b`:
      5.0    |     5.0   
 ~~~
 
-By default, Imputer will replace all the `Double.NaN` (missing value) with the mean (strategy) from
-other values in the corresponding columns. In our example, the surrogates for `a` and `b` are 3.0
-and 4.0 respectively. After transformation, the output columns will not contain missing value anymore.
+In this example, Imputer will replace all occurrences of Double.NaN (the default for the missing value)
+with the mean (the default imputation strategy) from the other values in the corresponding columns.
+In this example, the surrogate values for columns `a` and `b` are 3.0 and 4.0 respectively. After
+transformation, the missing values in the output columns will be replaced by the surrogate value for
+that column.
 
 ~~~
       a     |      b     | out_a | out_b   

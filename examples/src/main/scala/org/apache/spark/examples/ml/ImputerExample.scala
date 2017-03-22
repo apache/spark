@@ -30,7 +30,7 @@ object ImputerExample {
       .getOrCreate()
 
     // $example on$
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (1.0, Double.NaN),
       (2.0, Double.NaN),
       (Double.NaN, 3.0),
