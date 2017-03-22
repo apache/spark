@@ -2784,7 +2784,7 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
 
 /**
  * Factory for URL stream handlers. It relies on 'protocol' to choose the appropriate
- * UrlStreamHandlerFactory to create URLStreamHandler. Adding new 'if' branches in
+ * UrlStreamHandlerFactory to create URLStreamHandler. Add new 'if' branches in
  * 'createURLStreamHandler' like 'hdfsHandler' to support more protocols.
  */
 private[spark] class SparkUrlStreamHandlerFactory extends URLStreamHandlerFactory {
@@ -2793,7 +2793,8 @@ private[spark] class SparkUrlStreamHandlerFactory extends URLStreamHandlerFactor
   def createURLStreamHandler(protocol: String): URLStreamHandler = {
     if (protocol.compareToIgnoreCase("hdfs") == 0) {
       if (hdfsHandler == null) {
-        hdfsHandler = new FsUrlStreamHandlerFactory().createURLStreamHandler(protocol)
+        hdfsHandler = new FsUrlStreamHandlerFactory(SparkHadoopUtil.get.conf)
+          .createURLStreamHandler(protocol)
       }
       hdfsHandler
     } else {
