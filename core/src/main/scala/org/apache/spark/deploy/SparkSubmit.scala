@@ -485,7 +485,7 @@ object SparkSubmit extends CommandLineUtils {
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
-    if (deployMode == CLIENT) {
+    if (deployMode == CLIENT || isYarnCluster) {
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
