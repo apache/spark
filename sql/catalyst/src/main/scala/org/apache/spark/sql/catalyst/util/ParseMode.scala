@@ -42,7 +42,6 @@ case object DropMalformedMode extends ParseMode { val name = "DROPMALFORMED" }
 case object FailFastMode extends ParseMode { val name = "FAILFAST" }
 
 object ParseMode extends Logging {
-
   /**
    * Returns the parse mode from the given string.
    */
