@@ -292,7 +292,7 @@ private[tree] class LearningNode(
    * This function mimics prediction, passing an example from the root node down to a leaf
    * or unsplit node; that node's index is returned.
    *
-   * @param binnedFeatures  Binned feature vector for data point.
+   * @param binnedFeatures  Binned feature method for data point.
    * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
    * @return Leaf index if the data point reaches a leaf.
    *         Otherwise, last node reachable in tree matching this example.
@@ -301,7 +301,7 @@ private[tree] class LearningNode(
    *         group of nodes on one call to
    *         [[org.apache.spark.ml.tree.impl.RandomForest.findBestSplits()]].
    */
-  def predictImpl(binnedFeatures: Array[Int], splits: Array[Array[Split]]): Int = {
+  def predictImpl(binnedFeatures: Int => Int, splits: Array[Array[Split]]): Int = {
     if (this.isLeaf || this.split.isEmpty) {
       this.id
     } else {
