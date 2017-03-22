@@ -320,7 +320,8 @@ object CaseKeyWhen {
 /**
  * A function that returns the index of expr in (expr1, expr2, ...) list or 0 if not found.
  * It takes at least 2 parameters, and all parameters can be of any type.
- * Implicit cast will be done in this expression based on the first parameter's type.
+ * Implicit cast will be done when at least 2 parameters have different types, and it will be based
+ * on the first parameter's type.
  * If the first parameter is of NumericType, all parameters will be implicitly cast to DoubleType,
  * and those that can't be cast to DoubleType will be regarded as NULL.
  * If the first parameter is of any other type, all parameters will be implicitly cast to StringType
