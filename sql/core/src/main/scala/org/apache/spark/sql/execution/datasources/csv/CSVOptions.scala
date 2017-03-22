@@ -25,7 +25,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.ParseMode._
+import org.apache.spark.sql.catalyst.util.ParseMode.ParseMode
 
 class CSVOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
