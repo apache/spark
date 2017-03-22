@@ -345,6 +345,22 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = Seq("Mixing mapGroupsWithStates and flatMapGroupsWithStates"))
 
+  // mapGroupsWithState with event time timeout + watermark
+  assertNotSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState with event time timeout without watermark",
+    FlatMapGroupsWithState(
+      null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true,
+      EventTimeTimeout, streamRelation),
+    outputMode = Update,
+    expectedMsgs = Seq("watermark"))
+
+  assertSupportedInStreamingPlan(
+    "mapGroupsWithState - mapGroupsWithState with event time timeout with watermark",
+    FlatMapGroupsWithState(
+      null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true,
+      EventTimeTimeout, new TestStreamingRelation(attributeWithWatermark)),
+    outputMode = Update)
+
   // Deduplicate
   assertSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on streaming relation before aggregation",
