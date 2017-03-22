@@ -55,6 +55,34 @@ private[ui] class ExecutorsPage(
     val content =
       <div>
         {
+          <div>
+            <span class="expand-additional-metrics">
+              <span class="expand-additional-metrics-arrow arrow-closed"></span>
+              <a>Show Additional Metrics</a>
+            </span>
+            <div class="additional-metrics collapsed">
+              <ul>
+                <li>
+                  <input type="checkbox" id="select-all-metrics"/>
+                  <span class="additional-metric-title"><em>(De)select All</em></span>
+                </li>
+                <li>
+                  <span data-toggle="tooltip"
+                        title={ExecutorsPage.ON_HEAP_MEMORY_TOOLTIP} data-placement="right">
+                    <input type="checkbox" name="on_heap_memory"/>
+                    <span class="additional-metric-title">On Heap Storage Memory</span>
+                  </span>
+                </li>
+                <li>
+                  <span data-toggle="tooltip"
+                        title={ExecutorsPage.OFF_HEAP_MEMORY_TOOLTIP} data-placement="right">
+                    <input type="checkbox" name="off_heap_memory"/>
+                    <span class="additional-metric-title">Off Heap Storage Memory</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div> ++
           <div id="active-executors"></div> ++
           <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
@@ -67,6 +95,11 @@ private[ui] class ExecutorsPage(
 }
 
 private[spark] object ExecutorsPage {
+  private val ON_HEAP_MEMORY_TOOLTIP = "Memory used / total available memory for on heap " +
+    "storage of data like RDD partitions cached in memory."
+  private val OFF_HEAP_MEMORY_TOOLTIP = "Memory used / total available memory for off heap " +
+    "storage of data like RDD partitions cached in memory."
+
   /** Represent an executor's info as a map given a storage status index */
   def getExecInfo(
       listener: ExecutorsListener,

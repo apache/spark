@@ -210,14 +210,14 @@ class StorageStatus(
   def offHeapMemUsed: Long = _nonRddStorageInfo._2 + offHeapCacheSize
 
   /** Return the memory used by on-heap caching RDDs */
-  def onHeapCacheSize: Long = {
-    _rddStorageInfo.filter(!_._2._3.useOffHeap).map(_._2._1).sum
-  }
+  def onHeapCacheSize: Long = _rddStorageInfo.collect {
+      case (_, (memoryUsed, _, storageLevel)) if !storageLevel.useOffHeap => memoryUsed
+  }.sum
 
   /** Return the memory used by off-heap caching RDDs */
-  def offHeapCacheSize: Long = {
-    _rddStorageInfo.filter(_._2._3.useOffHeap).map(_._2._1).sum
-  }
+  def offHeapCacheSize: Long = _rddStorageInfo.collect {
+      case (_, (memoryUsed, _, storageLevel)) if storageLevel.useOffHeap => memoryUsed
+  }.sum
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long = _nonRddStorageInfo._3 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum

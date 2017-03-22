@@ -180,7 +180,7 @@ private[spark] class BlockManager(
 
     val idFromMaster = master.registerBlockManager(
       id,
-      maxOffHeapMemory,
+      maxOnHeapMemory,
       maxOffHeapMemory,
       slaveEndpoint)
 

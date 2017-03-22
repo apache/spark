@@ -172,15 +172,6 @@ function totalDurationColor(totalGCTime, totalDuration) {
     return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
 }
 
-function memoryUsageTooltip(onHeap, maxOnHeap, offHeap, maxOffHeap, onHeapSum, offHeapSum, type) {
-    return ("<span data-toggle='tooltip' title='" +
-        "On Heap Memory (" + formatBytes(onHeap, type) +
-        " / " + formatBytes(maxOnHeap, type) + ") " +
-        "Off Heap Memory (" + formatBytes(offHeap, type) +
-        " / " + formatBytes(maxOffHeap, type) + ")'>" +
-        formatBytes(onHeapSum, type) + " / " + formatBytes(offHeapSum, type) + "</span>");
-}
-
 $(document).ready(function () {
     $.extend($.fn.dataTable.defaults, {
         stateSave: true,
@@ -406,11 +397,37 @@ $(document).ready(function () {
                                 if (type !== 'display')
                                     return row.maxOnHeapMemory + row.maxOffHeapMemory;
                                 else
-                                    var memoryUsed = row.onHeapMemoryUsed + row.offHeapMemoryUsed
-                                    var maxMemory = row.maxOnHeapMemory + row.maxOffHeapMemory
-                                    return memoryUsageTooltip(row.onHeapMemoryUsed, row.maxOnHeapMemory,
-                                        row.offHeapMemoryUsed, row.maxOffHeapMemory, memoryUsed, maxMemory, type);
+                                    var memoryUsed = row.onHeapMemoryUsed + row.offHeapMemoryUsed;
+                                    var maxMemory = row.maxOnHeapMemory + row.maxOffHeapMemory;
+                                    return (formatBytes(memoryUsed, type) + ' / ' +
+                                        formatBytes(maxMemory, type));
 
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.maxOnHeapMemory;
+                                else
+                                    return (formatBytes(row.onHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.maxOnHeapMemory, type));
+
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('on_heap_memory')
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.maxOffHeapMemory;
+                                else
+                                    return (formatBytes(row.offHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.maxOffHeapMemory, type));
+
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('off_heap_memory')
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
@@ -485,12 +502,39 @@ $(document).ready(function () {
                                 if (type !== 'display')
                                     return row.allOnHeapMemoryUsed + row.allOffHeapMemoryUsed;
                                 else
-                                    var memoryUsed = row.allOnHeapMemoryUsed + row.allOffHeapMemoryUsed
-                                    var maxMemory = row.allOnHeapMaxMemory + row.allOffHeapMaxMemory
-                                    return memoryUsageTooltip(row.allOnHeapMemoryUsed, row.allOnHeapMaxMemory,
-                                        row.allOffHeapMemoryUsed, row.allOffHeapMaxMemory, memoryUsed, maxMemory, type);
+                                    var memoryUsed = row.allOnHeapMemoryUsed + row.allOffHeapMemoryUsed;
+                                    var maxMemory = row.allOnHeapMaxMemory + row.allOffHeapMaxMemory;
+                                    return (formatBytes(memoryUsed, type) + ' / ' +
+                                        formatBytes(maxMemory, type));
 
                             }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.allOnHeapMemoryUsed;
+                                else
+                                    return (formatBytes(row.allOnHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allOnHeapMaxMemory, type));
+
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('on_heap_memory')
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.allOffHeapMemoryUsed;
+                                else
+                                    return (formatBytes(row.allOffHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allOffHeapMaxMemory, type));
+
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('off_heap_memory')
+                            }
+
                         },
                         {data: 'allDiskUsed', render: formatBytes},
                         {data: 'allTotalCores'},

@@ -21,7 +21,11 @@
   "executorLogs" : {
     "stdout" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stdout",
     "stderr" : "http://172.22.0.111:64519/logPage/?appId=app-20161115172038-0000&executorId=2&logType=stderr"
-  }
+  },
+  "onHeapMemoryUsed" : 0,
+  "offHeapMemoryUsed" : 0,
+  "maxOnHeapMemory" : 384093388,
+  "maxOffHeapMemory" : 0
 }, {
   "id" : "driver",
   "hostPort" : "172.22.0.111:64527",
@@ -42,7 +46,11 @@
   "totalShuffleWrite" : 0,
   "isBlacklisted" : false,
   "maxMemory" : 384093388,
-  "executorLogs" : { }
+  "executorLogs" : { },
+  "onHeapMemoryUsed" : 0,
+  "offHeapMemoryUsed" : 0,
+  "maxOnHeapMemory" : 384093388,
+  "maxOffHeapMemory" : 0
 }, {
   "id" : "1",
   "hostPort" : "172.22.0.111:64541",
@@ -66,7 +74,11 @@
   "executorLogs" : {
     "stdout" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stdout",
     "stderr" : "http://172.22.0.111:64518/logPage/?appId=app-20161115172038-0000&executorId=1&logType=stderr"
-  }
+  },
+  "onHeapMemoryUsed" : 0,
+  "offHeapMemoryUsed" : 0,
+  "maxOnHeapMemory" : 384093388,
+  "maxOffHeapMemory" : 0
 }, {
   "id" : "0",
   "hostPort" : "172.22.0.111:64540",
@@ -90,7 +102,11 @@
   "executorLogs" : {
     "stdout" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stdout",
     "stderr" : "http://172.22.0.111:64517/logPage/?appId=app-20161115172038-0000&executorId=0&logType=stderr"
-  }
+  },
+  "onHeapMemoryUsed" : 0,
+  "offHeapMemoryUsed" : 0,
+  "maxOnHeapMemory" : 384093388,
+  "maxOffHeapMemory" : 0
 }, {
   "id" : "3",
   "hostPort" : "172.22.0.111:64543",
@@ -114,5 +130,9 @@
   "executorLogs" : {
     "stdout" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stdout",
     "stderr" : "http://172.22.0.111:64521/logPage/?appId=app-20161115172038-0000&executorId=3&logType=stderr"
-  }
+  },
+  "onHeapMemoryUsed" : 0,
+  "offHeapMemoryUsed" : 0,
+  "maxOnHeapMemory" : 384093388,
+  "maxOffHeapMemory" : 0
 } ]
