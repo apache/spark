@@ -507,6 +507,45 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
+        case t: TaskKilledException =>
+          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
+
+          // Collect latest accumulator values to report back to the driver
+          val accums: Seq[AccumulatorV2[_, _]] =
+            if (task != null) {
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              task.collectAccumulatorUpdates(taskFailed = true)
+            } else {
+              Seq.empty
+            }
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
+          setTaskFinishedAndClearInterruptStatus()
+
+          val serializedTK = ser.serialize(TaskKilled(t.reason, accUpdates).withAccums(accums))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+
+        case _: InterruptedException if task.reasonIfKilled.isDefined =>
+          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
+
+          // Collect latest accumulator values to report back to the driver
+          val accums: Seq[AccumulatorV2[_, _]] =
+            if (task != null) {
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              task.collectAccumulatorUpdates(taskFailed = true)
+            } else {
+              Seq.empty
+            }
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
+          setTaskFinishedAndClearInterruptStatus()
+
+          val serializedTK = ser.serialize(TaskKilled(killReason, accUpdates).withAccums(accums))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskCommitDeniedReason
           setTaskFinishedAndClearInterruptStatus()
