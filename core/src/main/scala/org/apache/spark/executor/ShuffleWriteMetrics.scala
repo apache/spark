@@ -17,12 +17,8 @@
 
 package org.apache.spark.executor
 
-import java.lang.{Long => JLong}
-
-import scala.collection.JavaConverters._
-
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{CollectionAccumulator, LongAccumulator}
+import org.apache.spark.util.LongAccumulator
 
 
 /**
@@ -35,12 +31,6 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
   private[executor] val _writeTime = new LongAccumulator
-  private[executor] val _blockSizeDistribution = new Array[LongAccumulator](9)
-  (0 until 9).foreach {
-    case i => _blockSizeDistribution(i) = new LongAccumulator
-  }
-  private[executor] val _averageBlockSize = new LongAccumulator
-  private[executor] val _underestimatedBlocksNum = new LongAccumulator
   private[executor] val _underestimatedBlocksSize = new LongAccumulator
 
   /**
@@ -59,25 +49,6 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   def writeTime: Long = _writeTime.sum
 
   /**
-   * Distribution of sizes in MapStatus. The ranges are: [0, 1k), [1k, 10k), [10k, 100k),
-   * [100k, 1m), [1m, 10m), [10m, 100m), [100m, 1g), [1g, 10g), [10g, Long.MaxValue).
-   */
-  def blockSizeDistribution: Seq[JLong] = {
-    _blockSizeDistribution.map(_.value).toSeq
-  }
-
-  /**
-   * The average size of blocks in HighlyCompressedMapStatus.
-   * This is not set if CompressedMapStatus is returned.
-   */
-  def averageBlockSize: Long = _averageBlockSize.value
-
-  /**
-   * The num of blocks whose sizes are underestimated in MapStatus.
-   */
-  def underestimatedBlocksNum: Long = _underestimatedBlocksNum.value
-
-  /**
    * The total amount of blocks whose sizes are underestimated in MapStatus.
    */
   def underestimatedBlocksSize: Long = _underestimatedBlocksSize.value
@@ -90,36 +61,6 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   }
   private[spark] def decRecordsWritten(v: Long): Unit = {
     _recordsWritten.setValue(recordsWritten - v)
-  }
-
-  private[spark] def incBlockSizeDistribution(len: Long): Unit = {
-    len match {
-      case len: Long if len >= 0L && len < 1024L => _blockSizeDistribution(0).add(1)
-      case len: Long if len >= 1024L && len < 10240L => _blockSizeDistribution(1).add(1)
-      case len: Long if len >= 10240L && len < 102400L => _blockSizeDistribution(2).add(1)
-      case len: Long if len >= 102400L && len < 1048576L => _blockSizeDistribution(3).add(1)
-      case len: Long if len >= 1048576L && len < 10485760L => _blockSizeDistribution(4).add(1)
-      case len: Long if len >= 10485760L && len < 104857600L => _blockSizeDistribution(5).add(1)
-      case len: Long if len >= 104857600L && len < 1073741824L => _blockSizeDistribution(6).add(1)
-      case len: Long if len >= 1073741824L && len < 10737418240L => _blockSizeDistribution(7).add(1)
-      case len: Long if len >= 10737418240L => _blockSizeDistribution(8).add(1)
-    }
-  }
-
-  private[spark] def setBlockSizeDistribution(index: Int, value: Long): Unit = {
-    _blockSizeDistribution(index).setValue(value)
-  }
-
-  private[spark] def setAverageBlockSize(avg: Long): Unit = {
-    _averageBlockSize.setValue(avg)
-  }
-
-  private[spark] def incUnderestimatedBlocksNum() = {
-    _underestimatedBlocksNum.add(1)
-  }
-
-  private[spark] def setUnderestimatedBlocksNum(value: Long) = {
-    _underestimatedBlocksNum.setValue(value)
   }
 
   private[spark] def incUnderestimatedBlocksSize(v: Long) = {

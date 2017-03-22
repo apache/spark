@@ -400,25 +400,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskMetrics.foreach { m =>
         val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.metrics)
         updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
-
         logDebug(s"${m.shuffleReadMetrics.remoteBytesReadToMem} bytes shuffled to memory.")
-        logDebug(s"${m.shuffleReadMetrics.remoteBytesReadToDisk} bytes shuffled to disk.")
-
-        if (m.shuffleWriteMetrics.averageBlockSize == 0) {
-          logDebug(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
-            s"the block sizes in MapStatus are accurate, distribution is:")
-        } else {
-          logDebug(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
-            s"the block sizes in MapStatus are inaccurate" +
-            s"(average=${m.shuffleWriteMetrics.averageBlockSize}, " +
-            s"${m.shuffleWriteMetrics.underestimatedBlocksNum} blocks underestimated, " +
-            s"sum of sizes is ${m.shuffleWriteMetrics.underestimatedBlocksSize}), " +
-            s"distribution is:")
-        }
-        val ranges = List[String]("[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)", "[1m, 10m)",
-          "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g")
-        logDebug(ranges.map("%11s".format(_)).mkString(" "))
-        logDebug(m.shuffleWriteMetrics.blockSizeDistribution.map("%11d".format(_)).mkString(" "))
+        logDebug(s"For task ${info.id} in stage ${taskEnd.stageId} (TID ${info.taskId}), " +
+          s"the block sizes in MapStatus are inaccurate, sum of sizes of underestimated" +
+          s" blocks is ${m.shuffleWriteMetrics.underestimatedBlocksSize}")
       }
 
       val taskData = stageData.taskData.getOrElseUpdate(info.taskId, TaskUIData(info, None))

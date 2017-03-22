@@ -216,30 +216,18 @@ class TaskMetrics private[spark] () extends Serializable {
     shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
     shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,
     shuffleRead.REMOTE_BYTES_READ_TO_MEM -> shuffleReadMetrics._remoteBytesReadToMem,
-    shuffleRead.REMOTE_BYTES_READ_TO_DISK -> shuffleReadMetrics._remoteBytesReadToDisk,
     shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
     shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
     shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,
     shuffleWrite.BYTES_WRITTEN -> shuffleWriteMetrics._bytesWritten,
     shuffleWrite.RECORDS_WRITTEN -> shuffleWriteMetrics._recordsWritten,
     shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
-    shuffleWrite.AVERAGE_BLOCK_SIZE -> shuffleWriteMetrics._averageBlockSize,
-    shuffleWrite.UNDERESTIMATED_BLOCKS_NUM -> shuffleWriteMetrics._underestimatedBlocksNum,
     shuffleWrite.UNDERESTIMATED_BLOCKS_SIZE -> shuffleWriteMetrics._underestimatedBlocksSize,
     input.BYTES_READ -> inputMetrics._bytesRead,
     input.RECORDS_READ -> inputMetrics._recordsRead,
     output.BYTES_WRITTEN -> outputMetrics._bytesWritten,
     output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
-  ) ++ testAccum.map(TEST_ACCUM -> _) ++ blockSizeDistributionAccums
-
-  def blockSizeDistributionAccums(): LinkedHashMap[String, AccumulatorV2[_, _]] = {
-    val linkedHashMap = LinkedHashMap[String, AccumulatorV2[_, _]]()
-    shuffleWriteMetrics._blockSizeDistribution.zipWithIndex.foreach {
-      case (accum, index) =>
-        linkedHashMap.put(shuffleWrite.BLOCK_SIZE_DISTRIBUTION_PREFIX + index, accum)
-    }
-    linkedHashMap
-  }
+  ) ++ testAccum.map(TEST_ACCUM -> _)
 
   @transient private[spark] lazy val internalAccums: Seq[AccumulatorV2[_, _]] =
     nameToAccums.values.toIndexedSeq

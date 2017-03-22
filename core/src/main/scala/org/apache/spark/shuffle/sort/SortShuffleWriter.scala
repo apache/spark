@@ -72,16 +72,36 @@ private[spark] class SortShuffleWriter[K, V, C](
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
-      partitionLengths.foreach(writeMetrics.incBlockSizeDistribution(_))
+
       mapStatus match {
         case hc: HighlyCompressedMapStatus =>
-          writeMetrics.setAverageBlockSize(hc.getAvgSize())
-          (0 until partitionLengths.length).foreach {
-            case i =>
-              if (partitionLengths(i) > mapStatus.getSizeForBlock(i)) {
-                writeMetrics.incUnderestimatedBlocksNum()
-                writeMetrics.incUnderestimatedBlocksSize(partitionLengths(i))
-              }
+          val underestimatedLengths = partitionLengths.filter(_ > hc.getAvgSize)
+          writeMetrics.incUnderestimatedBlocksSize(underestimatedLengths.sum)
+          if (log.isDebugEnabled()) {
+            // Distribution of sizes in MapStatus. The ranges are: [0, 1k), [1k, 10k), [10k, 100k),
+            // [100k, 1m), [1m, 10m), [10m, 100m), [100m, 1g), [1g, 10g), [10g, Long.MaxValue).
+            val lenDistribution = Array[Int](0, 0, 0, 0, 0, 0, 0, 0, 0)
+            partitionLengths.foreach {
+              case len: Long if len >= 0L && len < 1024L => lenDistribution(0) += 1
+              case len: Long if len >= 1024L && len < 10240L => lenDistribution(1) += 1
+              case len: Long if len >= 10240L && len < 102400L => lenDistribution(2) += 1
+              case len: Long if len >= 102400L && len < 1048576L => lenDistribution(3) += 1
+              case len: Long if len >= 1048576L && len < 10485760L => lenDistribution(4) += 1
+              case len: Long if len >= 10485760L && len < 104857600L => lenDistribution(5) += 1
+              case len: Long if len >= 104857600L && len < 1073741824L => lenDistribution(6) += 1
+              case len: Long if len >= 1073741824L && len < 10737418240L => lenDistribution(7) += 1
+              case len => lenDistribution(8) += 1
+            }
+            val ranges = List[String]("[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)",
+              "[1m, 10m)", "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g")
+            val distributeStr = ranges.zip(lenDistribution).map {
+              case (range, num) => s"$range:$num"
+            }.mkString(", ")
+            logDebug(s"For task ${context.partitionId()}.${context.attemptNumber()} in stage " +
+              s"${context.stageId()} (TID ${context.taskAttemptId()}), " +
+              s"the block sizes in MapStatus are inaccurate (average is ${hc.getAvgSize}, " +
+              s"${underestimatedLengths.length} blocks underestimated, " +
+              s"sum of sizes is ${underestimatedLengths.sum}), distribution is $distributeStr.")
           }
         case _ => // no-op
       }

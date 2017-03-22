@@ -32,7 +32,6 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
   private[executor] val _localBlocksFetched = new LongAccumulator
   private[executor] val _remoteBytesRead = new LongAccumulator
   private[executor] val _remoteBytesReadToMem = new LongAccumulator
-  private[executor] val _remoteBytesReadToDisk = new LongAccumulator
   private[executor] val _localBytesRead = new LongAccumulator
   private[executor] val _fetchWaitTime = new LongAccumulator
   private[executor] val _recordsRead = new LongAccumulator
@@ -56,11 +55,6 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
    * Total number of remotes bytes read to memory from the shuffle by this task.
    */
   def remoteBytesReadToMem: Long = _remoteBytesReadToMem.sum
-
-  /**
-   * Total number of remotes bytes read to disk from the shuffle by this task.
-   */
-  def remoteBytesReadToDisk: Long = _remoteBytesReadToDisk.sum
 
   /**
    * Shuffle data that was read from the local disk (as opposed to from a remote executor).
@@ -93,7 +87,6 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
   private[spark] def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.add(v)
   private[spark] def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.add(v)
   private[spark] def incRemoteBytesReadToMem(v: Long): Unit = _remoteBytesReadToMem.add(v)
-  private[spark] def incRemoteBytesReadToDisk(v: Long): Unit = _remoteBytesReadToDisk.add(v)
   private[spark] def incLocalBytesRead(v: Long): Unit = _localBytesRead.add(v)
   private[spark] def incFetchWaitTime(v: Long): Unit = _fetchWaitTime.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
@@ -102,7 +95,6 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
   private[spark] def setLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.setValue(v)
   private[spark] def setRemoteBytesRead(v: Long): Unit = _remoteBytesRead.setValue(v)
   private[spark] def setRemoteBytesReadToMem(v: Long): Unit = _remoteBytesReadToMem.setValue(v)
-  private[spark] def setRemoteBytesReadToDisk(v: Long): Unit = _remoteBytesReadToDisk.setValue(v)
   private[spark] def setLocalBytesRead(v: Long): Unit = _localBytesRead.setValue(v)
   private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)
   private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
@@ -116,7 +108,6 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
     _localBlocksFetched.setValue(0)
     _remoteBytesRead.setValue(0)
     _remoteBytesReadToMem.setValue(0)
-    _remoteBytesReadToDisk.setValue(0)
     _localBytesRead.setValue(0)
     _fetchWaitTime.setValue(0)
     _recordsRead.setValue(0)
@@ -125,7 +116,6 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
       _localBlocksFetched.add(metric.localBlocksFetched)
       _remoteBytesRead.add(metric.remoteBytesRead)
       _remoteBytesReadToMem.add(metric.remoteBytesReadToMem)
-      _remoteBytesReadToDisk.add(metric.remoteBytesReadToDisk)
       _localBytesRead.add(metric.localBytesRead)
       _fetchWaitTime.add(metric.fetchWaitTime)
       _recordsRead.add(metric.recordsRead)
@@ -143,7 +133,6 @@ private[spark] class TempShuffleReadMetrics {
   private[this] var _localBlocksFetched = 0L
   private[this] var _remoteBytesRead = 0L
   private[this] var _remoteBytesReadToMem = 0L
-  private[this] var _remoteBytesReadToDisk = 0L
   private[this] var _localBytesRead = 0L
   private[this] var _fetchWaitTime = 0L
   private[this] var _recordsRead = 0L
@@ -152,7 +141,6 @@ private[spark] class TempShuffleReadMetrics {
   def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched += v
   def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead += v
   def incRemoteBytesReadToMem(v: Long): Unit = _remoteBytesReadToMem += v
-  def incRemoteBytesReadToDisk(v: Long): Unit = _remoteBytesReadToDisk += v
   def incLocalBytesRead(v: Long): Unit = _localBytesRead += v
   def incFetchWaitTime(v: Long): Unit = _fetchWaitTime += v
   def incRecordsRead(v: Long): Unit = _recordsRead += v
@@ -161,7 +149,6 @@ private[spark] class TempShuffleReadMetrics {
   def localBlocksFetched: Long = _localBlocksFetched
   def remoteBytesRead: Long = _remoteBytesRead
   def remoteBytesReadToMem: Long = _remoteBytesReadToMem
-  def remoteBytesReadToDisk: Long = _remoteBytesReadToDisk
   def localBytesRead: Long = _localBytesRead
   def fetchWaitTime: Long = _fetchWaitTime
   def recordsRead: Long = _recordsRead
