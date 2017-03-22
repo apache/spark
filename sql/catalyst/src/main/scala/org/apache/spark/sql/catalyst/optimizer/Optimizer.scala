@@ -68,10 +68,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
-    Batch("Pullup Correlated Expressions", Once,
-      PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
-      OptimizeSubqueries) ::
+      OptimizeSubqueries,
+      PullupCorrelatedPredicates,
+      RewritePredicateSubquery) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithAntiJoin,
@@ -130,10 +130,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
     Batch("OptimizeCodegen", Once,
-      OptimizeCodegen(conf)) ::
-    Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
-      CollapseProject) :: Nil
+      OptimizeCodegen(conf)) :: Nil
   }
 
   /**
@@ -746,7 +743,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     case filter @ Filter(condition, project @ Project(fields, grandChild))
-      if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
+      if fields.forall(_.deterministic) &&
+        !SubqueryExpression.hasCorrelatedSubquery(condition) &&
+        !SubExprUtils.containsOuter(condition) =>
 
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
@@ -769,7 +768,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         splitConjunctivePredicates(condition).span(_.deterministic)
 
       val (pushDown, rest) = candidates.partition { cond =>
-        cond.references.subsetOf(partitionAttrs)
+        cond.references.subsetOf(partitionAttrs) &&
+        !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+        !SubExprUtils.containsOuter(cond)
       }
 
       val stayUp = rest ++ containingNonDeterministic
@@ -797,7 +798,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet) &&
+        !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+        !SubExprUtils.containsOuter(cond)
       }
 
       val stayUp = rest ++ containingNonDeterministic
@@ -815,7 +818,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+        !SubExprUtils.containsOuter(cond)
+      }
+      val stayUp = rest ++ containingNonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
@@ -839,7 +849,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     case filter @ Filter(condition, u: UnaryNode)
-        if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
+        if canPushThrough(u) && u.expressions.forall(_.deterministic) &&
+          !SubqueryExpression.hasCorrelatedSubquery(condition) &&
+          !SubExprUtils.containsOuter(condition) =>
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
@@ -887,20 +899,6 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       filter
     }
   }
-
-  /**
-   * Check if we can safely push a filter through a projection, by making sure that predicate
-   * subqueries in the condition do not contain the same attributes as the plan they are moved
-   * into. This can happen when the plan and predicate subquery have the same source.
-   */
-  private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
-    val attributes = plan.outputSet
-    val matched = condition.find {
-      case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
-      case _ => false
-    }
-    matched.isEmpty
-  }
 }
 
 /**
@@ -927,13 +925,18 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     // any deterministic expression that follows a non-deterministic expression. To achieve this,
     // we only consider pushing down those expressions that precede the first non-deterministic
     // expression in the condition.
-    val (pushDownCandidates, containingNonDeterministic) = condition.span(_.deterministic)
+    val (candidates, containingNonDeterministic) = condition.span(_.deterministic)
+    val (pushDownCandidates, subquery) = candidates.partition { cond =>
+        !SubqueryExpression.hasCorrelatedSubquery(cond) &&
+        !SubExprUtils.containsOuter(cond)
+    }
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ containingNonDeterministic)
+    (leftEvaluateCondition, rightEvaluateCondition,
+      subquery ++ commonCondition ++ containingNonDeterministic)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
