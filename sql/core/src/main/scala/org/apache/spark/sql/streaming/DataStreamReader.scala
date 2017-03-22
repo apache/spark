@@ -260,7 +260,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing.
+   *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
    *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep

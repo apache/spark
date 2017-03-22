@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
     rawParser: IN => Seq[InternalRow],
-    mode: String,
+    mode: ParseMode,
     schema: StructType,
     columnNameOfCorruptRecord: String) {
 
@@ -58,11 +58,14 @@ class FailureSafeParser[IN](
     try {
       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
     } catch {
-      case e: BadRecordException if ParseModes.isPermissiveMode(mode) =>
-        Iterator(toResultRow(e.partialResult(), e.record))
-      case _: BadRecordException if ParseModes.isDropMalformedMode(mode) =>
-        Iterator.empty
-      case e: BadRecordException => throw e.cause
+      case e: BadRecordException => mode match {
+        case PermissiveMode =>
+          Iterator(toResultRow(e.partialResult(), e.record))
+        case DropMalformedMode =>
+          Iterator.empty
+        case FailFastMode =>
+          throw e.cause
+      }
     }
   }
 }

@@ -82,7 +82,8 @@ class CSVOptions(
 
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
@@ -94,15 +95,6 @@ class CSVOptions(
   val inferSchemaFlag = getBool("inferSchema")
   val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
   val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
-
-  // Parse mode flags
-  if (!ParseModes.isValidMode(parseMode)) {
-    logWarning(s"$parseMode is not a valid parse mode. Using ${ParseModes.DEFAULT}.")
-  }
-
-  val failFast = ParseModes.isFailFastMode(parseMode)
-  val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
-  val permissive = ParseModes.isPermissiveMode(parseMode)
 
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
@@ -138,8 +130,6 @@ class CSVOptions(
   val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
 
   val escapeQuotes = getBool("escapeQuotes", true)
-
-  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
 
   val quoteAll = getBool("quoteAll", false)
 

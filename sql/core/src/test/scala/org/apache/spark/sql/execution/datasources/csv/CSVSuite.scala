@@ -992,9 +992,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { wholeFile =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "abcd")
         .option("wholeFile", wholeFile)
         .schema(schema)
         .csv(testFile(valueMalformedFile))
@@ -1008,7 +1009,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
       val df2 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "Permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("wholeFile", wholeFile)
         .schema(schemaWithCorrField1)
@@ -1025,7 +1026,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .add("b", TimestampType)
       val df3 = spark
         .read
-        .option("mode", "PERMISSIVE")
+        .option("mode", "permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         .option("wholeFile", wholeFile)
         .schema(schemaWithCorrField2)
