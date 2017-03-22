@@ -211,7 +211,7 @@ class IsotonicRegressionSuite
       assert(expected.predictions === actual.predictions)
 
       val actualPrediction =
-        actual.transform(df).select("prediction").map(_.getDouble(0)).collect()
+        actual.transform(df2).select("prediction").map(_.getDouble(0)).collect()
       assert(expectedPrediction === actualPrediction)
     }
 
