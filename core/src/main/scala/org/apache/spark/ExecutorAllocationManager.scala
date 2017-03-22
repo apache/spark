@@ -439,7 +439,7 @@ private[spark] class ExecutorAllocationManager(
       executorsRemoved
     } else {
       logWarning(s"Unable to reach the cluster manager to kill executor/s " +
-        "executorIdsToBeRemoved.mkString(\",\") or no executor eligible to kill!")
+        s"${executorIdsToBeRemoved.mkString(",")} or no executor eligible to kill!")
       Seq.empty[String]
     }
   }
