@@ -240,7 +240,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout != NoTimeout
   for (priorState <- Seq(None, Some(0))) {
     for (priorTimeoutTimestamp <- Seq(NO_TIMESTAMP, 1000)) {
-      var testName = s""
+      var testName = ""
       if (priorState.nonEmpty) {
         testName += "prior state set, "
         if (priorTimeoutTimestamp == 1000) {
