@@ -15,24 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.sql.streaming;
 
-import java.io.Serializable;
-import java.util.Iterator;
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
+import org.junit.Test;
 
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.streaming.KeyedState;
+public class JavaKeyedStateTimeoutSuite {
 
-/**
- * ::Experimental::
- * Base interface for a map function used in
- * {@link org.apache.spark.sql.KeyValueGroupedDataset#flatMapGroupsWithState(
- * FlatMapGroupsWithStateFunction, org.apache.spark.sql.Encoder, org.apache.spark.sql.Encoder)}.
- * @since 2.1.1
- */
-@Experimental
-@InterfaceStability.Evolving
-public interface FlatMapGroupsWithStateFunction<K, V, S, R> extends Serializable {
-  Iterator<R> call(K key, Iterator<V> values, KeyedState<S> state) throws Exception;
+  @Test
+  public void testTimeouts() {
+    assert(KeyedStateTimeout.ProcessingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
+  }
 }
