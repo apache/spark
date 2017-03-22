@@ -17,15 +17,45 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.KeyedState
+import java.sql.Date
 
-/** Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe. */
-private[sql] class KeyedStateImpl[S](optionalValue: Option[S]) extends KeyedState[S] {
+import org.apache.commons.lang3.StringUtils
+
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
+import org.apache.spark.sql.execution.streaming.KeyedStateImpl._
+import org.apache.spark.sql.streaming.{KeyedState, KeyedStateTimeout}
+import org.apache.spark.unsafe.types.CalendarInterval
+
+
+/**
+ * Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe.
+ * @param optionalValue Optional value of the state
+ * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
+ *                              for processing time timeouts
+ * @param timeoutConf     Type of timeout configured. Based on this, different operations will
+ *                        be supported.
+ * @param hasTimedOut     Whether the key for which this state wrapped is being created is
+ *                        getting timed out or not.
+ */
+private[sql] class KeyedStateImpl[S](
+    optionalValue: Option[S],
+    batchProcessingTimeMs: Long,
+    eventTimeWatermarkMs: Long,
+    timeoutConf: KeyedStateTimeout,
+    override val hasTimedOut: Boolean) extends KeyedState[S] {
+
+  // Constructor to create dummy state when using mapGroupsWithState in a batch query
+  def this(optionalValue: Option[S]) = this(
+    optionalValue,
+    batchProcessingTimeMs = NO_TIMESTAMP,
+    eventTimeWatermarkMs = NO_TIMESTAMP,
+    timeoutConf = KeyedStateTimeout.NoTimeout,
+    hasTimedOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
-  private var updated: Boolean = false
-  // whether value has been updated (but not removed)
+  private var updated: Boolean = false // whether value has been updated (but not removed)
   private var removed: Boolean = false // whether value has been removed
+  private var timeoutTimestamp: Long = NO_TIMESTAMP
 
   // ========= Public API =========
   override def exists: Boolean = defined
@@ -60,6 +90,82 @@ private[sql] class KeyedStateImpl[S](optionalValue: Option[S]) extends KeyedStat
     defined = false
     updated = false
     removed = true
+    timeoutTimestamp = NO_TIMESTAMP
+  }
+
+  override def setTimeoutDuration(durationMs: Long): Unit = {
+    if (timeoutConf != ProcessingTimeTimeout) {
+      throw new UnsupportedOperationException(
+        "Cannot set timeout duration without enabling processing time timeout in " +
+          "map/flatMapGroupsWithState")
+    }
+    if (!defined) {
+      throw new IllegalStateException(
+        "Cannot set timeout information without any state value, " +
+          "state has either not been initialized, or has already been removed")
+    }
+
+    if (durationMs <= 0) {
+      throw new IllegalArgumentException("Timeout duration must be positive")
+    }
+    if (!removed && batchProcessingTimeMs != NO_TIMESTAMP) {
+      timeoutTimestamp = durationMs + batchProcessingTimeMs
+    } else {
+      // This is being called in a batch query, hence no processing timestamp.
+      // Just ignore any attempts to set timeout.
+    }
+  }
+
+  override def setTimeoutDuration(duration: String): Unit = {
+    setTimeoutDuration(parseDuration(duration))
+  }
+
+  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestampMs: Long): Unit = {
+    checkTimeoutTimestampAllowed()
+    if (timestampMs <= 0) {
+      throw new IllegalArgumentException("Timeout timestamp must be positive")
+    }
+    if (eventTimeWatermarkMs != NO_TIMESTAMP && timestampMs < eventTimeWatermarkMs) {
+      throw new IllegalArgumentException(
+        s"Timeout timestamp ($timestampMs) cannot be earlier than the " +
+          s"current watermark ($eventTimeWatermarkMs)")
+    }
+    if (!removed && batchProcessingTimeMs != NO_TIMESTAMP) {
+      timeoutTimestamp = timestampMs
+    } else {
+      // This is being called in a batch query, hence no processing timestamp.
+      // Just ignore any attempts to set timeout.
+    }
+  }
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit = {
+    checkTimeoutTimestampAllowed()
+    setTimeoutTimestamp(parseDuration(additionalDuration) + timestampMs)
+  }
+
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestamp: Date): Unit = {
+    checkTimeoutTimestampAllowed()
+    setTimeoutTimestamp(timestamp.getTime)
+  }
+
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  override def setTimeoutTimestamp(timestamp: Date, additionalDuration: String): Unit = {
+    checkTimeoutTimestampAllowed()
+    setTimeoutTimestamp(timestamp.getTime + parseDuration(additionalDuration))
   }
 
   override def toString: String = {
@@ -69,12 +175,53 @@ private[sql] class KeyedStateImpl[S](optionalValue: Option[S]) extends KeyedStat
   // ========= Internal API =========
 
   /** Whether the state has been marked for removing */
-  def isRemoved: Boolean = {
-    removed
+  def hasRemoved: Boolean = removed
+
+  /** Whether the state has been updated */
+  def hasUpdated: Boolean = updated
+
+  /** Return timeout timestamp or `TIMEOUT_TIMESTAMP_NOT_SET` if not set */
+  def getTimeoutTimestamp: Long = timeoutTimestamp
+
+  private def parseDuration(duration: String): Long = {
+    if (StringUtils.isBlank(duration)) {
+      throw new IllegalArgumentException(
+        "Provided duration is null or blank.")
+    }
+    val intervalString = if (duration.startsWith("interval")) {
+      duration
+    } else {
+      "interval " + duration
+    }
+    val cal = CalendarInterval.fromString(intervalString)
+    if (cal == null) {
+      throw new IllegalArgumentException(
+        s"Provided duration ($duration) is not valid.")
+    }
+    if (cal.milliseconds < 0 || cal.months < 0) {
+      throw new IllegalArgumentException(s"Provided duration ($duration) is not positive")
+    }
+
+    val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
+    cal.milliseconds + cal.months * millisPerMonth
   }
 
-  /** Whether the state has been been updated */
-  def isUpdated: Boolean = {
-    updated
+  private def checkTimeoutTimestampAllowed(): Unit = {
+    if (timeoutConf != EventTimeTimeout) {
+      throw new UnsupportedOperationException(
+        "Cannot set timeout timestamp without enabling event time timeout in " +
+          "map/flatMapGroupsWithState")
+    }
+    if (!defined) {
+      throw new IllegalStateException(
+        "Cannot set timeout timestamp without any state value, " +
+          "state has either not been initialized, or has already been removed")
+    }
   }
+}
+
+
+private[sql] object KeyedStateImpl {
+  // Value used represent the lack of valid timestamp as a long
+  val NO_TIMESTAMP = -1L
 }
