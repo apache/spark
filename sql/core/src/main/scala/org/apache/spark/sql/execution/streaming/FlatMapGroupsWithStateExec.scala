@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Attribut
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.streaming.KeyedStateImpl.NO_TIMESTAMP
+import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{KeyedStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.CompletionIterator
 
@@ -44,7 +44,7 @@ import org.apache.spark.util.CompletionIterator
  * @param batchTimestampMs processing timestamp of the current batch.
  */
 case class FlatMapGroupsWithStateExec(
-    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+    func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
@@ -53,13 +53,13 @@ case class FlatMapGroupsWithStateExec(
     stateId: Option[OperatorStateId],
     stateEncoder: ExpressionEncoder[Any],
     outputMode: OutputMode,
-    timeoutConf: KeyedStateTimeout,
+    timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
     override val eventTimeWatermark: Option[Long],
     child: SparkPlan
   ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 
-  import KeyedStateImpl._
+  import GroupStateImpl._
 
   private val isTimeoutEnabled = timeoutConf != NoTimeout
   private val timestampTimeoutAttribute =
@@ -147,7 +147,7 @@ case class FlatMapGroupsWithStateExec(
     private val stateSerializer = {
       val encoderSerializer = stateEncoder.namedExpressions
       if (isTimeoutEnabled) {
-        encoderSerializer :+ Literal(KeyedStateImpl.NO_TIMESTAMP)
+        encoderSerializer :+ Literal(GroupStateImpl.NO_TIMESTAMP)
       } else {
         encoderSerializer
       }
@@ -211,7 +211,7 @@ case class FlatMapGroupsWithStateExec(
       val keyObj = getKeyObj(keyRow)  // convert key to objects
       val valueObjIter = valueRowIter.map(getValueObj.apply) // convert value rows to objects
       val stateObjOption = getStateObj(prevStateRowOption)
-      val keyedState = new KeyedStateImpl(
+      val keyedState = new GroupStateImpl(
         stateObjOption,
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
@@ -247,7 +247,7 @@ case class FlatMapGroupsWithStateExec(
 
           if (shouldWriteState) {
             if (stateRowToWrite == null) {
-              // This should never happen because checks in KeyedStateImpl should avoid cases
+              // This should never happen because checks in GroupStateImpl should avoid cases
               // where empty state would need to be written
               throw new IllegalStateException("Attempting to write empty state")
             }
