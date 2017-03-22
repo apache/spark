@@ -247,11 +247,16 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
   }
 
-  override def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
-    logInfo(s"Killing task ($reason): $taskId")
-    val execId = taskIdToExecutorId.getOrElse(
-      taskId, throw new IllegalArgumentException("Task not found: " + taskId))
-    backend.killTask(taskId, execId, interruptThread, reason)
+  override def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
+    logInfo(s"Killing task $taskId: $reason")
+    val execId = taskIdToExecutorId.get(taskId)
+    if (execId.isDefined) {
+      backend.killTask(taskId, execId.get, interruptThread, reason)
+      true
+    } else {
+      logInfo(s"Could not kill task $taskId because no task with that ID was found.")
+      false
+    }
   }
 
   /**

@@ -2257,11 +2257,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param interruptThread whether to interrupt the thread running the task.
    * @param reason the reason for killing the task, which should be a short string. If a task
    *   is killed multiple times with different reasons, only one reason will be reported.
+   *
+   * @return Whether the task was successfully killed.
    */
   def killTaskAttempt(
       taskId: Long,
       interruptThread: Boolean = true,
-      reason: String = "killed via SparkContext.killTaskAttempt"): Unit = {
+      reason: String = "killed via SparkContext.killTaskAttempt"): Boolean = {
     dagScheduler.killTaskAttempt(taskId, interruptThread, reason)
   }
 

@@ -220,7 +220,7 @@ private[spark] class Executor(
     private val taskName = taskDescription.name
 
     /** If specified, this task has been killed and this option contains the reason. */
-    @volatile private var maybeKillReason: Option[String] = None
+    @volatile private var reasonIfKilled: Option[String] = None
 
     @volatile private var threadId: Long = -1
 
@@ -243,7 +243,7 @@ private[spark] class Executor(
 
     def kill(interruptThread: Boolean, reason: String): Unit = {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
-      maybeKillReason = Some(reason)
+      reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {
           if (!finished) {
@@ -298,7 +298,7 @@ private[spark] class Executor(
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
-        val killReason = maybeKillReason
+        val killReason = reasonIfKilled
         if (killReason.isDefined) {
           // Throw an exception rather than returning, because returning within a try{} block
           // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
@@ -432,8 +432,8 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
 
-        case _: InterruptedException if task.killed =>
-          val killReason = task.maybeKillReason.getOrElse("unknown reason")
+        case _: InterruptedException if task.reasonIfKilled.isDefined =>
+          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(
