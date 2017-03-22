@@ -80,7 +80,7 @@ trait WatermarkSupport extends UnaryExecNode {
   /** Generate an expression that matches data older than the watermark */
   lazy val watermarkExpression: Option[Expression] = {
     val optionalWatermarkAttribute =
-      keyExpressions.find(_.metadata.contains(EventTimeWatermark.delayKey))
+      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
 
     optionalWatermarkAttribute.map { watermarkAttribute =>
       // If we are evicting based on a window, use the end of the window.  Otherwise just
@@ -101,14 +101,12 @@ trait WatermarkSupport extends UnaryExecNode {
     }
   }
 
-  /** Generate a predicate based on keys that matches data older than the watermark */
+  /** Predicate based on keys that matches data older than the watermark */
   lazy val watermarkPredicateForKeys: Option[Predicate] =
     watermarkExpression.map(newPredicate(_, keyExpressions))
 
-  /**
-   * Generate a predicate based on the child output that matches data older than the watermark.
-   */
-  lazy val watermarkPredicate: Option[Predicate] =
+  /** Predicate based on the child output that matches data older than the watermark. */
+  lazy val watermarkPredicateForData: Option[Predicate] =
     watermarkExpression.map(newPredicate(_, child.output))
 }
 
@@ -218,7 +216,7 @@ case class StateStoreSaveExec(
             new Iterator[InternalRow] {
 
               // Filter late date using watermark if specified
-              private[this] val baseIterator = watermarkPredicate match {
+              private[this] val baseIterator = watermarkPredicateForData match {
                 case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
                 case None => iter
               }
@@ -285,7 +283,7 @@ case class StreamingDeduplicateExec(
       val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
 
-      val baseIterator = watermarkPredicate match {
+      val baseIterator = watermarkPredicateForData match {
         case Some(predicate) => iter.filter(row => !predicate.eval(row))
         case None => iter
       }
