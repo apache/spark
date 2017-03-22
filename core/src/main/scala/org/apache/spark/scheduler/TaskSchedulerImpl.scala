@@ -254,7 +254,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       backend.killTask(taskId, execId.get, interruptThread, reason)
       true
     } else {
-      logInfo(s"Could not kill task $taskId because no task with that ID was found.")
+      logWarning(s"Could not kill task $taskId because no task with that ID was found.")
       false
     }
   }
