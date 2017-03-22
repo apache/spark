@@ -88,6 +88,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("debugging test") {
     val df = denseData(Nil)
+    println(s">>> df=${df.collect().toSeq}")
     val c = df.col("features")
     println(s">>>>> c=$c")
     val c1 = metrics("mean").summary(c)
