@@ -50,8 +50,8 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   extended = """
     Examples:
-      > SELECT ngrams(array('abc', 'abc', 'bcd', 'abc', 'bcd'), 2, 4);
-       [["abc","bcd"]:2.0},
+      > SELECT ngrams(array("abc", "abc", "bcd", "abc", "bcd"), 2, 4);
+       [{["abc","bcd"]:2.0},
        {["abc","abc"]:1.0},
        {["bcd","abc"]:1.0}]
   """)
