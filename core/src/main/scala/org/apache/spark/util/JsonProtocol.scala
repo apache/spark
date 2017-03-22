@@ -21,7 +21,6 @@ import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-import scala.collection.mutable.LinkedHashMap
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
