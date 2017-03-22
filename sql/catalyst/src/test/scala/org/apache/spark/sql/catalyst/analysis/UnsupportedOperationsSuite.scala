@@ -352,7 +352,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = true,
       EventTimeTimeout, streamRelation),
     outputMode = Update,
-    expectedMsgs = Seq("without watermark"))
+    expectedMsgs = Seq("watermark"))
 
   assertSupportedInStreamingPlan(
     "mapGroupsWithState - mapGroupsWithState with event time timeout with watermark",

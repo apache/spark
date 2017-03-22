@@ -34,15 +34,18 @@ public class KeyedStateTimeout {
 
   /**
    * Timeout based on processing time. The duration of timeout can be set for each group in
-   * `map/flatMapGroupsWithState` by calling `KeyedState.setTimeoutDuration()`.
+   * `map/flatMapGroupsWithState` by calling `KeyedState.setTimeoutDuration()`. See documentation
+   * on `KeyedState` for more details.
    */
   public static KeyedStateTimeout ProcessingTimeTimeout() { return ProcessingTimeTimeout$.MODULE$; }
 
   /**
-   * Timeout based on event time. The event time timestamp for timeout can be set for each
+   * Timeout based on event-time. The event-time timestamp for timeout can be set for each
    * group in `map/flatMapGroupsWithState` by calling `KeyedState.setTimeoutTimestamp()`.
    * In addition, you have to define the watermark in the query using `Dataset.withWatermark`.
-   * When the watermark advances beyond the set timestamp of a group, then the group times out.
+   * When the watermark advances beyond the set timestamp of a group and the group has not
+   * received any data, then the group times out. See documentation on
+   * `KeyedState` for more details.
    */
   public static KeyedStateTimeout EventTimeTimeout() { return EventTimeTimeout$.MODULE$; }
 

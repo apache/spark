@@ -204,9 +204,10 @@ object UnsupportedOperationChecker {
             }
             if (watermarkAttributes.isEmpty) {
               throwError(
-                "Event time timeout is not supported in a [map|flatMap]GroupsWithState " +
-                  "without watermark. Use '[Dataset/DataFrame].withWatermark()' to " +
-                  "define watermark.")(plan)
+                "Watermark must be specified in the query using " +
+                  "'[Dataset/DataFrame].withWatermark()' for using event-time timeout in a " +
+                  "[map|flatMap]GroupsWithState. Event-time timeout not supported without " +
+                  "watermark.")(plan)
             }
           }
 

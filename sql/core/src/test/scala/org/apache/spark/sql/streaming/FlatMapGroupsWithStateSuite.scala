@@ -618,8 +618,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         .select($"_1".as("key"), $"_2".cast("timestamp").as("eventTime"))
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
-        .groupByKey[String]((x: (String, Long)) => x._1)
-        .flatMapGroupsWithState[Long, (String, Int)](Update, EventTimeTimeout)(stateFunc)
+        .groupByKey(_._1)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
       StartStream(ProcessingTime("1 second")),
@@ -727,7 +727,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val stateFunc = (key: String, values: Iterator[String], state: KeyedState[RunningCount]) => key
     val inputData = MemoryStream[String]
     val result = inputData.toDS.groupByKey(x => x).mapGroupsWithState(stateFunc)
-    result
     testStream(result, Update)(
       AddData(inputData, "a"),
       CheckLastBatch("a"),

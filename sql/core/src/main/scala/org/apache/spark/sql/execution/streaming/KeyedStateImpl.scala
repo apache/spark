@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * @param optionalValue Optional value of the state
  * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
  *                              for processing time timeouts
- * @param timeoutConf   Type of timeout configured. Based on this, different operations will
+ * @param timeoutConf     Type of timeout configured. Based on this, different operations will
  *                        be supported.
  * @param hasTimedOut     Whether the key for which this state wrapped is being created is
  *                        getting timed out or not.
