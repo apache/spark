@@ -788,11 +788,11 @@ Dataset<Row> windowedCounts = words
 words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 # Group the data by window and word and compute the count of each group
-windowedCounts = words
-    .withWatermark("timestamp", "10 minutes")
+windowedCounts = words \
+    .withWatermark("timestamp", "10 minutes") \
     .groupBy(
         window(words.timestamp, "10 minutes", "5 minutes"),
-        words.word)
+        words.word) \
     .count()
 {% endhighlight %}
 
