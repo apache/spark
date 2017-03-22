@@ -497,7 +497,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     val getLocations = PrivateMethod[Seq[BlockManagerId]]('getLocations)
     val locations = blockManager invokePrivate getLocations(BroadcastBlockId(0))
-    assert(locations.map(_.host).toSet === Set(localHost, localHost, otherHost))
+    assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
 
   test("optimize a location order of blocks with topology information") {
@@ -513,15 +513,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val bmId4 = BlockManagerId("id4", otherHost, 4, Some(otherRack))
     val bmId5 = BlockManagerId("id5", otherHost, 5, Some(localRack))
     when(bmMaster.getLocations(mc.any[BlockId]))
-      .thenReturn(Seq(bmId1, bmId2, bmId3, bmId3, bmId4, bmId5))
+      .thenReturn(Seq(bmId1, bmId2, bmId5, bmId3, bmId4))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     val getLocations = PrivateMethod[Seq[BlockManagerId]]('getLocations)
     val locations = blockManager invokePrivate getLocations(BroadcastBlockId(0))
-    assert(locations.map(_.host).toSet
-      === Set(localHost, localHost, otherHost, otherHost, otherHost))
-    assert(locations.flatMap(_.topologyInfo).toSet
-      === Set(localRack, localRack, localRack, otherRack, otherRack))
+    assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
+    assert(locations.flatMap(_.topologyInfo)
+      === Seq(localRack, localRack, localRack, otherRack, otherRack))
   }
 
   test("SPARK-9591: getRemoteBytes from another location when Exception throw") {
