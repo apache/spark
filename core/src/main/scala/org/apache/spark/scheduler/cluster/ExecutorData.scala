@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
+import io.netty.util.internal.chmv8.LongAdderV8
+
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 
 /**
@@ -25,14 +27,27 @@ import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
  * @param executorEndpoint The RpcEndpointRef representing this executor
  * @param executorAddress The network address of this executor
  * @param executorHost The hostname that this executor is running on
- * @param freeCores  The current number of cores available for work on the executor
+ * @param initFreeCores  The current number of cores available for work on the executor
  * @param totalCores The total number of cores available to the executor
  */
 private[cluster] class ExecutorData(
-   val executorEndpoint: RpcEndpointRef,
-   val executorAddress: RpcAddress,
-   override val executorHost: String,
-   var freeCores: Int,
-   override val totalCores: Int,
-   override val logUrlMap: Map[String, String]
-) extends ExecutorInfo(executorHost, totalCores, logUrlMap)
+    val executorEndpoint: RpcEndpointRef,
+    val executorAddress: RpcAddress,
+    override val executorHost: String,
+    private val initFreeCores: Int,
+    override val totalCores: Int,
+    override val logUrlMap: Map[String, String])
+    extends ExecutorInfo(executorHost, totalCores, logUrlMap) {
+  private val freeCoresUpdater = new LongAdderV8()
+  freeCoresUpdater.add(initFreeCores)
+
+  def incrementFreeCores(increment: Int): Unit = {
+    freeCoresUpdater.add(increment)
+  }
+
+  def decrementFreeCores(decrement: Int): Unit = {
+    freeCoresUpdater.add(-decrement)
+  }
+
+  def freeCores: Int = freeCoresUpdater.intValue()
+}

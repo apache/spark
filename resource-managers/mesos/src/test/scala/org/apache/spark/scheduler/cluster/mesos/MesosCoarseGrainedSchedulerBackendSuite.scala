@@ -554,6 +554,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       // override to avoid race condition with the driver thread on `mesosDriver`
       override def startScheduler(newDriver: SchedulerDriver): Unit = {}
 
+      override protected def createSerializeTaskEndpointRef(): RpcEndpointRef = null
+
       override def stopExecutors(): Unit = {
         stopCalled = true
       }
