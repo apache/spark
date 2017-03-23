@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -26,10 +26,9 @@ import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.{SparkConf, SparkException}
 
 private[security] class HadoopFSCredentialProvider
     extends ServiceCredentialProvider with Logging {

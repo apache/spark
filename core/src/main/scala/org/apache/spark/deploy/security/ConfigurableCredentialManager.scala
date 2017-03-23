@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import java.util.ServiceLoader
 
@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
  * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
  * the configuration spark.yarn.security.credentials.hive.enabled.
  */
-private[yarn] final class ConfigurableCredentialManager(
+private[spark] final class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
@@ -89,11 +89,11 @@ private[yarn] final class ConfigurableCredentialManager(
   }
 
   /**
-   * Create an [[AMCredentialRenewer]] instance, caller should be responsible to stop this
+   * Create an [[CredentialRenewer]] instance, caller should be responsible to stop this
    * instance when it is not used. AM will use it to renew credentials periodically.
    */
-  def credentialRenewer(): AMCredentialRenewer = {
-    new AMCredentialRenewer(sparkConf, hadoopConf, this)
+  def credentialRenewer(): CredentialRenewer = {
+    new CredentialRenewer(sparkConf, hadoopConf, this)
   }
 
   /**
