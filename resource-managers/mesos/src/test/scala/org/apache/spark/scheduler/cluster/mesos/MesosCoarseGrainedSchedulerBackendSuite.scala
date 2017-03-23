@@ -478,8 +478,31 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(launchedTasks.head.getName == s"$taskName 0")
   }
 
-  test("mesos sets configurable label on tasks") {
+  test("mesos sets configurable labels on tasks") {
     val taskLabelsString = "mesos:test,label:test"
+    setBackend(Map(
+      "spark.mesos.task.labels" -> taskLabelsString
+    ))
+
+    // Build up the labels
+    val taskLabels = Protos.Labels.newBuilder()
+      .addLabels(Protos.Label.newBuilder()
+        .setKey("mesos").setValue("test").build())
+      .addLabels(Protos.Label.newBuilder()
+        .setKey("label").setValue("test").build())
+      .build()
+
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+
+    val labels = launchedTasks.head.getLabels
+
+    assert(launchedTasks.head.getLabels.equals(taskLabels))
+  }
+
+  test("mesos ignored invalid labels and sets configurable labels on tasks") {
+    val taskLabelsString = "mesos:test,label:test,incorrec:label:here"
     setBackend(Map(
       "spark.mesos.task.labels" -> taskLabelsString
     ))
