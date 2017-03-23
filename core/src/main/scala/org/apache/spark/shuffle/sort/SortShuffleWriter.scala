@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{HighlyCompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
@@ -78,30 +78,18 @@ private[spark] class SortShuffleWriter[K, V, C](
           val underestimatedLengths = partitionLengths.filter(_ > hc.getAvgSize)
           writeMetrics.incUnderestimatedBlocksSize(underestimatedLengths.sum)
           if (log.isDebugEnabled()) {
-            // Distribution of sizes in MapStatus. The ranges are: [0, 1k), [1k, 10k), [10k, 100k),
-            // [100k, 1m), [1m, 10m), [10m, 100m), [100m, 1g), [1g, 10g), [10g, Long.MaxValue).
-            val lenDistribution = Array[Int](0, 0, 0, 0, 0, 0, 0, 0, 0)
-            partitionLengths.foreach {
-              case len: Long if len >= 0L && len < 1024L => lenDistribution(0) += 1
-              case len: Long if len >= 1024L && len < 10240L => lenDistribution(1) += 1
-              case len: Long if len >= 10240L && len < 102400L => lenDistribution(2) += 1
-              case len: Long if len >= 102400L && len < 1048576L => lenDistribution(3) += 1
-              case len: Long if len >= 1048576L && len < 10485760L => lenDistribution(4) += 1
-              case len: Long if len >= 10485760L && len < 104857600L => lenDistribution(5) += 1
-              case len: Long if len >= 104857600L && len < 1073741824L => lenDistribution(6) += 1
-              case len: Long if len >= 1073741824L && len < 10737418240L => lenDistribution(7) += 1
-              case len => lenDistribution(8) += 1
+            // Distribution of sizes in MapStatus.
+            Distribution(partitionLengths.map(_.toDouble)) match {
+              case Some(distribution) =>
+                val distributionStr = distribution.getQuantiles().mkString(", ")
+                logDebug(s"For task ${context.partitionId()}.${context.attemptNumber()} in stage" +
+                  s" ${context.stageId()} (TID ${context.taskAttemptId()}), the block sizes in" +
+                  s" MapStatus are inaccurate (average is ${hc.getAvgSize}," +
+                  s" ${underestimatedLengths.length} blocks underestimated, sum of sizes is" +
+                  s" ${underestimatedLengths.sum}), distribution at the given probabilities" +
+                  s" (0, 0.25, 0.5, 0.75, 1.0) is $distributionStr.")
+              case None => // no-op
             }
-            val ranges = List[String]("[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)",
-              "[1m, 10m)", "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g")
-            val distributeStr = ranges.zip(lenDistribution).map {
-              case (range, num) => s"$range:$num"
-            }.mkString(", ")
-            logDebug(s"For task ${context.partitionId()}.${context.attemptNumber()} in stage " +
-              s"${context.stageId()} (TID ${context.taskAttemptId()}), " +
-              s"the block sizes in MapStatus are inaccurate (average is ${hc.getAvgSize}, " +
-              s"${underestimatedLengths.length} blocks underestimated, " +
-              s"sum of sizes is ${underestimatedLengths.sum}), distribution is $distributeStr.")
           }
         case _ => // no-op
       }

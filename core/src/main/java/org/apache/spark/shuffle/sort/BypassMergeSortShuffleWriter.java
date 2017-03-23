@@ -47,6 +47,7 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
+import org.apache.spark.util.Distribution;
 import org.apache.spark.util.Utils;
 
 /**
@@ -181,48 +182,22 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
       writeMetrics.incUnderestimatedBlocksSize(underestimatedBlocksSize);
-      if (logger.isDebugEnabled()) {
+      if (logger.isDebugEnabled() && partitionLengths.length > 0) {
         int underestimatedBlocksNum = 0;
-        // Distribution of sizes in MapStatus. The ranges are: [0, 1k), [1k, 10k), [10k, 100k),
-        // [100k, 1m), [1m, 10m), [10m, 100m), [100m, 1g), [1g, 10g), [10g, Long.MaxValue).
-        int[] lenDistribution = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+        // Distribution of sizes in MapStatus.
+        double[] cp = new double[partitionLengths.length];
         for (int i = 0; i < partitionLengths.length; i++) {
-          long len = partitionLengths[i];
-          if (len > mapStatus.getSizeForBlock(i)) {
-            underestimatedBlocksNum++;
-          }
-          if (len >= 0L && len < 1024L) {
-            lenDistribution[0]++;
-          } else if (len >= 1024L && len < 10240L) {
-            lenDistribution[1]++;
-          } else if (len >= 10240L && len < 102400L) {
-            lenDistribution[2]++;
-          } else if (len >= 102400L && len < 1048576L ) {
-            lenDistribution[3]++;
-          } else if (len >= 1048576L && len < 10485760L) {
-            lenDistribution[4]++;
-          } else if (len >= 10485760L && len < 104857600L) {
-            lenDistribution[5]++;
-          } else if (len >= 104857600L && len < 1073741824L) {
-            lenDistribution[6]++;
-          } else if (len >= 1073741824L && len < 10737418240L) {
-            lenDistribution[7]++;
-          } else {
-            lenDistribution[8]++;
-          }
+          cp[i] = partitionLengths[i];
         }
-        String[] ranges = {"[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)", "[1m, 10m)",
-          "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g"};
-        String[] rangesAndDistribute = new String[9];
-        for (int j = 0; j < 9; j++) {
-          rangesAndDistribute[j] = ranges[j] + ":" + lenDistribution[j];
-        }
+        Distribution distribution = new Distribution(cp, 0, cp.length);
+        double[] probabilities = {0.0, 0.25, 0.5, 0.75, 1.0};
+        String distributionStr = distribution.getQuantiles(probabilities).mkString(", ");
         logger.debug("For task {}.{} in stage {} (TID {}), the block sizes in MapStatus are " +
           "inaccurate (average is {}, {} blocks underestimated, size of underestimated is {})," +
-          " distribution is {}.", taskContext.partitionId(), taskContext.attemptNumber(),
-          taskContext.stageId(), taskContext.taskAttemptId(), hc.getAvgSize(),
-          underestimatedBlocksNum, underestimatedBlocksSize,
-          String.join(", ", rangesAndDistribute));
+          " distribution at the given probabilities(0, 0.25, 0.5, 0.75, 1.0) is {}.",
+          taskContext.partitionId(), taskContext.attemptNumber(), taskContext.stageId(),
+          taskContext.taskAttemptId(), hc.getAvgSize(),
+          underestimatedBlocksNum, underestimatedBlocksSize, distributionStr);
       }
     }
   }
