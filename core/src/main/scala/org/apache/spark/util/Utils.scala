@@ -2585,11 +2585,25 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private[util] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
+  private[spark] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
 
+  /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
   def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN).r
     redact(redactionPattern, kvs)
+  }
+
+  /**
+   * Redact the sensitive information in the given string.
+   */
+  def redact(conf: SparkConf, text: String): String = {
+    val redactionValue = conf.get(STRING_REDACTION_PATTERN)
+    if (text == null || text.isEmpty || redactionValue.isEmpty) return text
+    val redactionPattern = redactionValue.get.r
+    redactionPattern.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
   }
 
   private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
