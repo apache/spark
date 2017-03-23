@@ -489,9 +489,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
-   * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
-   * from values being read should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
+   * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
+   * whitespaces from values being read should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
    * 2.0.1, this applies to all supported types including the string type.</li>
