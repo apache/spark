@@ -1246,8 +1246,6 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
 
 class FPGrowthTests(SparkSessionTestCase):
     def setUp(self):
-        self.shuffle_partitions = self.spark.conf.get("spark.sql.shuffle.partitions")
-        self.spark.conf.set("spark.sql.shuffle.partitions", "1")
         self.data = self.spark.createDataFrame(
             [([1, 2], ), ([1, 2], ), ([1, 2, 3], ), ([1, 3], )],
             ["items"])
@@ -1279,7 +1277,6 @@ class FPGrowthTests(SparkSessionTestCase):
         self.assertEqual(expected_freq_itemsets.subtract(actual_freq_itemsets).count(), 0)
 
     def tearDown(self):
-        self.spark.conf.set("spark.sql.shuffle.partitions", self.shuffle_partitions)
         del self.data
 
 
