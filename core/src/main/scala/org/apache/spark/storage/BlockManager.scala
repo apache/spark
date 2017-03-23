@@ -64,6 +64,11 @@ private[spark] trait BlockData {
 
   def toInputStream(): InputStream
 
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * @see [[ManagedBuffer#convertToNetty()]]
+   */
   def toNetty(): Object
 
   def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer

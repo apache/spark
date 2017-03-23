@@ -25,9 +25,12 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
- * This [[ManagedBuffer]] wraps a ManagedBuffer retrieved from the [[BlockManager]]
+ * This [[ManagedBuffer]] wraps a [[BlockData]] instance retrieved from the [[BlockManager]]
  * so that the corresponding block's read lock can be released once this buffer's references
  * are released.
+ *
+ * If `dispose` is set to try, the [[BlockData]]will be disposed when the buffer's reference
+ * count drops to zero.
  *
  * This is effectively a wrapper / bridge to connect the BlockManager's notion of read locks
  * to the network layer's notion of retain / release counts.

@@ -67,12 +67,9 @@ private[spark] object CryptoStreamUtils extends Logging {
       key: Array[Byte]): WritableByteChannel = {
     val params = new CryptoParams(key, sparkConf)
     val iv = createInitializationVector(params.conf)
-    val buf = ByteBuffer.wrap(iv)
-    while (buf.hasRemaining()) {
-      channel.write(buf)
-    }
-
     val helper = new CryptoHelperChannel(channel)
+
+    helper.write(ByteBuffer.wrap(iv))
     new CryptoOutputStream(params.transformation, params.conf, helper, params.keySpec,
       new IvParameterSpec(iv))
   }
