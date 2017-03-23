@@ -53,7 +53,7 @@ if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
   fi
 elif hash conda 2>/dev/null; then
   echo "Using conda virtual enviroments"
-  PYTHON_EXECS=('2.7.12' '3')
+  PYTHON_EXECS=('3')
   USE_CONDA=1
 else
   echo "Missing virtualenv & conda, skipping pip installability tests"
@@ -82,7 +82,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
-      conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip
+      conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
