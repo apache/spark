@@ -842,7 +842,7 @@ private[spark] class TaskSetManager(
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
-    if (reason != Success && isZombie) {
+    if (reason != Success && !reason.isInstanceOf[FetchFailed] && isZombie) {
       sched.dagScheduler.tasksAborted(tasks(index).stageId, Array(tasks(index)))
     }
 
