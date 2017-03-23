@@ -39,8 +39,8 @@ class HasSupport(Params):
         """
         Sets the value of :py:attr:`minSupport`.
         """
-        if not 0 <= value <= 1:
-            ValueError("Support must be in range [0, 1]")
+        if not (0 <= value <= 1):
+            raise ValueError("Support must be in range [0, 1]")
         return self._set(minSupport=value)
 
     def getMinSupport(self):
@@ -65,8 +65,8 @@ class HasConfidence(Params):
         """
         Sets the value of :py:attr:`minConfidence`.
         """
-        if not 0 <= value <= 1:
-            ValueError("Confidence must be in range [0, 1]")
+        if not (0 <= value <= 1):
+            raise ValueError("Confidence must be in range [0, 1]")
         return self._set(minConfidence=value)
 
     def getMinConfidence(self):
