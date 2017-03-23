@@ -23,8 +23,7 @@ import breeze.numerics
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.linalg.{BLAS, SQLDataTypes, Vector, Vectors}
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeArrayData, UnsafeProjection, UnsafeRow}
@@ -191,7 +190,7 @@ object SummaryBuilderImpl extends Logging {
     ("max", Max, arrayDType, Seq(ComputeMax)),
     ("min", Min, arrayDType, Seq(ComputeMin)),
     ("normL2", NormL2, arrayDType, Seq(ComputeTotalWeightSum, ComputeM2)),
-    ("normL1", Min, arrayDType, Seq(ComputeTotalWeightSum, ComputeL1))
+    ("normL1", NormL1, arrayDType, Seq(ComputeTotalWeightSum, ComputeL1))
   )
 
   /**
@@ -277,30 +276,32 @@ object SummaryBuilderImpl extends Logging {
       }
     }
 
-    def bufferSchema: StructType = {
-      val at = ArrayType(DoubleType, containsNull = false)
-      val al = ArrayType(LongType, containsNull = false)
+    val bufferSchema: StructType = {
       val fields = Seq(
         "n" -> IntegerType,
-        "mean" -> at,
-        "m2n" -> at,
-        "m2" -> at,
-        "l1" -> at,
+        "mean" -> arrayDType,
+        "m2n" -> arrayDType,
+        "m2" -> arrayDType,
+        "l1" -> arrayDType,
         "totalCount" -> LongType,
         "totalWeightSum" -> DoubleType,
         "totalWeightSquareSum" -> DoubleType,
-        "weightSum" -> at,
-        "nnz" -> al,
-        "max" -> at,
-        "min" -> at
+        "weightSum" -> arrayDType,
+        "nnz" -> arrayLType,
+        "max" -> arrayDType,
+        "min" -> arrayDType
       )
       StructType(fields.map { case (name, t) => StructField(name, t, nullable = true)})
     }
 
+    val numFields = bufferSchema.fields.length
+
     def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
       val startN = buffer.n
       if (startN == -1) {
-        resizeArraysInPlace(buffer, v.size)
+        // The buffer was not initialized, we initialize it with the incoming row.
+        fillBufferWithRow(buffer, v, w)
+        return
       } else {
         require(startN == v.size,
           s"Trying to insert a vector of size $v into a buffer that " +
@@ -368,7 +369,7 @@ object SummaryBuilderImpl extends Logging {
         if (other.n == -1) {
           buffer
         } else {
-          mergeBuffers0(buffer, other)
+          mergeInitializedBuffers(buffer, other)
           buffer
         }
       }
@@ -379,7 +380,7 @@ object SummaryBuilderImpl extends Logging {
      */
     def read(bytes: Array[Byte], row2: UnsafeRow): Buffer = {
       row2.pointTo(bytes, bytes.length)
-      val row = row2.getStruct(0, 12)
+      val row = row2.getStruct(0, numFields)
       new Buffer(
         n = row.getInt(0),
         mean = nullableArrayD(row, 1),
@@ -471,39 +472,6 @@ object SummaryBuilderImpl extends Logging {
       buffer.l1
     }
 
-    private def resizeArraysInPlace(buffer: Buffer, n: Int): Unit = {
-      // It should either be unsized or of the same size.
-      require(buffer.n == -1 || buffer.n == n, (buffer.n, n))
-      if (buffer.n == n) {
-        return
-      }
-      buffer.n = n
-      // Conditional resize of the non-null arrays
-      if (buffer.mean != null) {
-        buffer.mean = Array.ofDim(n)
-      }
-      if (buffer.m2n != null) {
-        buffer.m2n = Array.ofDim(n)
-      }
-      if (buffer.m2 != null) {
-        buffer.m2 = Array.ofDim(n)
-      }
-      if (buffer.l1 != null) {
-        buffer.l1 = Array.ofDim(n)
-      }
-      if (buffer.weightSum != null) {
-        buffer.weightSum = Array.ofDim(n)
-      }
-      if (buffer.nnz != null) {
-        buffer.nnz = Array.ofDim(n)
-      }
-      if (buffer.max != null) {
-        buffer.max = Array.ofDim(n)
-      }
-      if (buffer.min != null) {
-        buffer.min = Array.ofDim(n)
-      }
-    }
 
     private def gadD(arr: Array[Double]): UnsafeArrayData = {
       if (arr == null) {
@@ -563,11 +531,88 @@ object SummaryBuilderImpl extends Logging {
       }
     }
 
+    /**
+     * Sets the content of a buffer based on a single row (initialization).
+     *
+     * The buffer must be uninitialized first.
+     */
+    private def fillBufferWithRow(buffer: Buffer, v: Vector, w: Double): Unit = {
+      require(buffer.n == -1, (buffer.n, buffer))
+      buffer.n = v.size
+      buffer.totalCount = 1L
+      buffer.totalWeightSum = w
+      buffer.totalWeightSquareSum = w * w
+
+      val arr = v.toArray
+      if (buffer.mean != null) {
+        buffer.mean = arr.clone()
+      }
+      if (buffer.m2n != null) {
+        buffer.m2n = Array.ofDim(buffer.n)
+      }
+      if (buffer.max != null) {
+        buffer.max = arr.clone()
+      }
+      if (buffer.min != null) {
+        buffer.min = arr.clone()
+      }
+
+      // The rest of these operations have efficient bulk versions.
+      v match {
+        case dv: DenseVector =>
+          if (buffer.m2 != null) {
+            buffer.m2 = Array.ofDim(buffer.n)
+            b(buffer.m2) := w * (b(arr) :* b(arr))
+          }
+          if (buffer.l1 != null) {
+            buffer.l1 = Array.ofDim(buffer.n)
+            b(buffer.l1) := numerics.abs(b(arr))
+          }
+
+        case sv: SparseVector =>
+          if (buffer.m2 != null) {
+            buffer.m2 = Array.ofDim(buffer.n)
+            v.foreachActive { (index, value) =>
+              buffer.weightSum(index) = w * value * value
+            }
+          }
+
+          if (buffer.l1 != null) {
+            buffer.l1 = Array.ofDim(buffer.n)
+            v.foreachActive { (index, value) =>
+              buffer.weightSum(index) = w * math.abs(value)
+            }
+          }
+
+
+        // In the case of the weightSum and NNZ, we also have to account for the value of
+        // the elements.
+        if (buffer.weightSum != null) {
+          buffer.weightSum = Array.ofDim(buffer.n)
+          v.foreachActive { (index, value) =>
+            if (value != 0.0) {
+              buffer.weightSum(index) = w
+            }
+          }
+        }
+
+        if (buffer.nnz != null) {
+          buffer.nnz = Array.ofDim(buffer.n)
+          v.foreachActive { (index, value) =>
+            if (value != 0.0) {
+              buffer.nnz(index) = 1L
+            }
+          }
+        }
+
+      }
+    }
+
 
     /**
      * Merges other into buffer.
      */
-    private def mergeBuffers0(buffer: Buffer, other: Buffer): Unit = {
+    private def mergeInitializedBuffers(buffer: Buffer, other: Buffer): Unit = {
       // Each buffer needs to be properly initialized.
       require(buffer.n > 0 && other.n > 0, (buffer.n, other.n))
       require(buffer.n == other.n, (buffer.n, other.n))
@@ -647,7 +692,7 @@ object SummaryBuilderImpl extends Logging {
       inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[Buffer] {
 
-//    private lazy val row = new UnsafeRow(1)
+    private lazy val row = new UnsafeRow(Buffer.numFields)
 
     override def eval(buff: Buffer): InternalRow = {
       val metrics = requested.map({
@@ -699,7 +744,7 @@ object SummaryBuilderImpl extends Logging {
 
     override def deserialize(bytes: Array[Byte]): Buffer = {
 //      Buffer.read(bytes, row)
-      Buffer.read(bytes, new UnsafeRow(1))
+      Buffer.read(bytes, new UnsafeRow(Buffer.numFields))
     }
 
     override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): MetricsAggregate = {

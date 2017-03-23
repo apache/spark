@@ -52,52 +52,75 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   // are expected for this input. They currently test against some fixed subset of the
   // metrics, but should be made fuzzy in the future.
 
-  private def testExample(input: Seq[Any], exp: ExpectedMetrics): Unit = {
-    val inputVec: Seq[Vector] = input.map {
+  private def testExample(name: String, input: Seq[Any], exp: ExpectedMetrics): Unit = {
+    def inputVec: Seq[Vector] = input.map {
       case x: Array[Double] => Vectors.dense(x)
       case x: Seq[Double] => Vectors.dense(x.toArray)
       case x: Vector => x
       case x => throw new Exception(x.toString)
     }
-    val df = sc.parallelize(inputVec).map(Tuple1.apply).toDF("features")
-    val c = df.col("features")
 
-    compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), exp.mean))
+    def wrapped() = {
+      val df = sc.parallelize(inputVec).map(Tuple1.apply).toDF("features")
+      val c = df.col("features")
+      df -> c
+    }
 
-    compare(df.select(metrics("variance").summary(c), variance(c)),
-      Seq(Row(exp.variance), exp.variance))
+    registerTest(s"$name - mean only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), exp.mean))
+    }
 
-    compare(df.select(metrics("count").summary(c), count(c)),
-      Seq(Row(exp.count), exp.count))
+    registerTest(s"$name - variance only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("variance").summary(c), variance(c)),
+        Seq(Row(exp.variance), exp.variance))
+    }
 
-    compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
-      Seq(Row(exp.numNonZeros), exp.numNonZeros))
+    registerTest(s"$name - count only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("count").summary(c), count(c)),
+        Seq(Row(exp.count), exp.count))
+    }
 
-    println("STARTING MIN")
+    registerTest(s"$name - numNonZeros only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
+        Seq(Row(exp.numNonZeros), exp.numNonZeros))
+    }
 
-    compare(df.select(metrics("min").summary(c), min(c)),
-      Seq(Row(exp.min), exp.min))
+    registerTest(s"$name - min only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("min").summary(c), min(c)),
+        Seq(Row(exp.min), exp.min))
+    }
 
-    println("STARTING MAX")
+    registerTest(s"$name - max only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("max").summary(c), max(c)),
+        Seq(Row(exp.max), exp.max))
+    }
 
-    compare(df.select(metrics("max").summary(c), max(c)),
-      Seq(Row(exp.max), exp.max))
+    registerTest(s"$name - normL1 only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("normL1").summary(c), normL1(c)),
+        Seq(Row(exp.normL1), exp.normL1))
+    }
 
-    println("STARTING NORML1")
+    registerTest(s"$name - normL2 only") {
+      val (df, c) = wrapped()
+      compare(df.select(metrics("normL2").summary(c), normL2(c)),
+        Seq(Row(exp.normL2), exp.normL2))
+    }
 
-    compare(df.select(metrics("normL1").summary(c), normL1(c)),
-      Seq(Row(exp.normL1), exp.normL1))
-
-    println("STARTING NORML2")
-
-    compare(df.select(metrics("normL2").summary(c), normL2(c)),
-      Seq(Row(exp.normL2), exp.normL2))
-
-    compare(df.select(
-      metrics("mean", "variance", "count", "numNonZeros").summary(c),
-      mean(c), variance(c), count(c), numNonZeros(c)),
-      Seq(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros),
-        exp.mean, exp.variance, exp.count, exp.numNonZeros))
+    registerTest(s"$name - all metrics at once") {
+      val (df, c) = wrapped()
+      compare(df.select(
+        metrics("mean", "variance", "count", "numNonZeros").summary(c),
+        mean(c), variance(c), count(c), numNonZeros(c)),
+        Seq(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros),
+          exp.mean, exp.variance, exp.count, exp.numNonZeros))
+    }
   }
 
   private def denseData(input: Seq[Seq[Double]]): DataFrame = {
@@ -145,6 +168,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     case _ => throw new Exception(s"$name: ${x1.getClass} ${x2.getClass} $x1 $x2")
   }
 
+
+
   test("debugging test") {
     val df = denseData(Nil)
     println(s">>> df=${df.collect().toSeq}")
@@ -175,13 +200,13 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     compare(res, Seq(Row(0L), 0L))
   }
 
-  test("single element in vector, all metrics") {
-    val x = Seq(1.0, 2.0)
-    testExample(Seq(x), ExpectedMetrics(
+  {
+    val x = Seq(0.0, 1.0, 2.0)
+    testExample("single element", Seq(x), ExpectedMetrics(
       mean = x,
-      variance = Seq(0.0, 0.0),
+      variance = Seq(0.0, 0.0, 0.0),
       count = 1,
-      numNonZeros = Seq(1, 1),
+      numNonZeros = Seq(0, 1, 1),
       max = x,
       min = x,
       normL1 = x,
@@ -189,18 +214,17 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     ))
   }
 
-  test("repeated metrics") {
+  testExample("two elements", Seq(Seq(0.0, 1.0, 2.0), Seq(0.0, -1.0, -2.0)), ExpectedMetrics(
+    mean = Seq(0.0, 0.0, 0.0),
+    variance = Seq(0.0, 1.0, 2.0),
+    count = 2,
+    numNonZeros = Seq(0, 2, 2),
+    max = Seq(0.0, 1.0, 2.0),
+    min = Seq(0.0, -1.0, -2.0),
+    normL1 = Seq(0.0, 2.0, 4.0),
+    normL2 = Seq(0.0, 2.0, 4.0)
+  ))
 
-  }
 
-  test("dense vector input") {
 
-  }
-
-  test("sparse vector input") {
-
-  }
-
-  test("merging summarizer when one side has zero mean (SPARK-4355)") {
-  }
 }
