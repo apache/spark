@@ -83,11 +83,12 @@ for python in "${PYTHON_EXECS[@]}"; do
     rm -rf "$VIRTUALENV_PATH"
     if [ -n "$USE_CONDA" ]; then
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip
+      source activate "$VIRTUALENV_PATH"
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
+      source "$VIRTUALENV_PATH"/bin/activate
     fi
-    source "$VIRTUALENV_PATH"/bin/activate
     # Upgrade pip & friends if using virutal env
     if [ ! -n "USE_CONDA" ]; then
       pip install --upgrade pip pypandoc wheel numpy
@@ -122,6 +123,13 @@ for python in "${PYTHON_EXECS[@]}"; do
     python "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
+
+    # conda / virtualenv enviroments need to be deactivated differently
+    if [ -n "$USE_CONDA" ]; then
+      source deactivate
+    else
+      deactivate
+    fi
 
   done
 done
