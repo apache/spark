@@ -69,8 +69,8 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   def getMinSupport: Double = $(minSupport)
 
   /**
-   * Number of partitions (>=1) used by parallel FP-growth. By default the param is not set, and
-   * partition number of the input dataset is used.
+   * Number of partitions (at least 1) used by parallel FP-growth. By default the param is not
+   * set, and partition number of the input dataset is used.
    * @group expertParam
    */
   @Since("2.2.0")

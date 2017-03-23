@@ -18,18 +18,18 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
-import org.apache.spark.sql.{Encoder, KeyValueGroupedDataset}
+import org.apache.spark.sql.KeyValueGroupedDataset
 import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 
 /**
  * :: Experimental ::
  *
  * Wrapper class for interacting with per-group state data in `mapGroupsWithState` and
- * `flatMapGroupsWithState` operations on [[KeyValueGroupedDataset]].
+ * `flatMapGroupsWithState` operations on `KeyValueGroupedDataset`.
  *
  * Detail description on `[map/flatMap]GroupsWithState` operation
  * --------------------------------------------------------------
- * Both, `mapGroupsWithState` and `flatMapGroupsWithState` in [[KeyValueGroupedDataset]]
+ * Both, `mapGroupsWithState` and `flatMapGroupsWithState` in `KeyValueGroupedDataset`
  * will invoke the user-given function on each group (defined by the grouping function in
  * `Dataset.groupByKey()`) while maintaining user-defined per-group state between invocations.
  * For a static batch Dataset, the function will be invoked once per group. For a streaming
@@ -70,8 +70,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *    `[map|flatMap]GroupsWithState`, but the exact timeout duration/timestamp is configurable per
  *    group by calling `setTimeout...()` in `GroupState`.
  *  - Timeouts can be either based on processing time (i.e.
- *    [[GroupStateTimeout.ProcessingTimeTimeout]]) or event time (i.e.
- *    [[GroupStateTimeout.EventTimeTimeout]]).
+ *    `GroupStateTimeout.ProcessingTimeTimeout`) or event time (i.e.
+ *    `GroupStateTimeout.EventTimeTimeout`).
  *  - With `ProcessingTimeTimeout`, the timeout duration can be set by calling
  *    `GroupState.setTimeoutDuration`. The timeout will occur when the clock has advanced by the set
  *    duration. Guarantees provided by this timeout with a duration of D ms are as follows:
@@ -177,7 +177,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * }}}
  *
  * @tparam S User-defined type of the state to be stored for each group. Must be encodable into
- *           Spark SQL types (see [[Encoder]] for more details).
+ *           Spark SQL types (see `Encoder` for more details).
  * @since 2.2.0
  */
 @Experimental
@@ -224,7 +224,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
   /**
    * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
    *
-   * @note, ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note ProcessingTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
   @throws[IllegalStateException]("when state is either not initialized, or already removed")
@@ -240,7 +240,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * Set the timeout timestamp for this key as milliseconds in epoch time.
    * This timestamp cannot be older than the current watermark.
    *
-   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   def setTimeoutTimestamp(timestampMs: Long): Unit
 
@@ -254,7 +254,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * The final timestamp (including the additional duration) cannot be older than the
    * current watermark.
    *
-   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit
 
@@ -265,7 +265,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * Set the timeout timestamp for this key as a java.sql.Date.
    * This timestamp cannot be older than the current watermark.
    *
-   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   def setTimeoutTimestamp(timestamp: java.sql.Date): Unit
 
@@ -279,7 +279,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * The final timestamp (including the additional duration) cannot be older than the
    * current watermark.
    *
-   * @note, EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
+   * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   def setTimeoutTimestamp(timestamp: java.sql.Date, additionalDuration: String): Unit
 }

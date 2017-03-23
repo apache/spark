@@ -298,7 +298,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * For a static batch Dataset, the function will be invoked once per group. For a streaming
    * Dataset, the function will be invoked for each group repeatedly in every trigger, and
    * updates to each group's state will be saved across invocations.
-   * See [[GroupState]] for more details.
+   * See `GroupState` for more details.
    *
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
@@ -328,7 +328,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * For a static batch Dataset, the function will be invoked once per group. For a streaming
    * Dataset, the function will be invoked for each group repeatedly in every trigger, and
    * updates to each group's state will be saved across invocations.
-   * See [[GroupState]] for more details.
+   * See `GroupState` for more details.
    *
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
@@ -360,7 +360,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * For a static batch Dataset, the function will be invoked once per group. For a streaming
    * Dataset, the function will be invoked for each group repeatedly in every trigger, and
    * updates to each group's state will be saved across invocations.
-   * See [[GroupState]] for more details.
+   * See `GroupState` for more details.
    *
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
@@ -400,7 +400,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * For a static batch Dataset, the function will be invoked once per group. For a streaming
    * Dataset, the function will be invoked for each group repeatedly in every trigger, and
    * updates to each group's state will be saved across invocations.
-   * See [[GroupState]] for more details.
+   * See `GroupState` for more details.
    *
    * @tparam S The type of the user-defined state. Must be encodable to Spark SQL types.
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
