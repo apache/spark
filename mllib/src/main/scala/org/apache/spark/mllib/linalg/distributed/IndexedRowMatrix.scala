@@ -98,6 +98,42 @@ class IndexedRowMatrix @Since("1.0.0") (
     toBlockMatrix(1024, 1024)
   }
 
+  def toBlockMatrixPlus(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
+    /*
+    PLAN:
+    1. For each row, partition into ceil(numCols/colsPerBlock) of size colsPerBlock, aware that last partition may be smaller.
+    2.
+    */
+    require(rowsPerBlock > 0,
+      s"rowsPerBlock needs to be greater than 0. rowsPerBlock: $rowsPerBlock")
+    require(colsPerBlock > 0,
+      s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
+    val m = numRows().toInt
+    val n = numCols().toInt
+
+    val temp = rows.flatMap({ir =>
+      val blockRow = ir.index / rowsPerBlock
+      val rowInBlock = ir.index % rowsPerBlock
+
+      val partitionedArray: Iterator[Array[Double]] = ir.vector.toArray.grouped(colsPerBlock)
+      val partitionedArrayWithIndices = partitionedArray.zipWithIndex
+
+      partitionedArrayWithIndices.map(tuple =>
+        tuple match { case (values, blockColumn) =>
+          ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values))})
+    })
+
+    val rdd: RDD[((Int, Int), Matrix)] = temp.groupByKey(new GridPartitioner(m, n, rowsPerBlock, colsPerBlock)).map(tuple =>
+      tuple match {case (gridcoords, itr: Iterable[(Int, Array[Double])]) =>
+        val array = new Array[Double](rowsPerBlock * colsPerBlock)
+        itr.foreach(element => element match { case (rowWithinBlock, values) =>
+          values.copyToArray(array, rowWithinBlock * n)
+        })
+        (gridcoords, new DenseMatrix(rowsPerBlock, colsPerBlock, array))
+    })
+    new BlockMatrix(rdd, rowsPerBlock, colsPerBlock)
+  }
+
   /**
    * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
