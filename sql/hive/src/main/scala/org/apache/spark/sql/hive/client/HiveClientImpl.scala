@@ -828,7 +828,7 @@ private[hive] class HiveClientImpl(
       hiveTable.setFields(schema.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
-    hiveTable.setOwner(conf.getUser)
+    hiveTable.setOwner(state.getAuthenticator().getUserName())
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
     table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
