@@ -24,14 +24,22 @@ package org.apache.spark.mllib.evaluation.binary
  * @param numNegatives number of negative labels
  */
 private[evaluation] class BinaryLabelCounter(
-    var numPositives: Long = 0L,
-    var numNegatives: Long = 0L) extends Serializable {
+    var numPositives: Double = 0.0,
+    var numNegatives: Double = 0.0) extends Serializable {
 
   /** Processes a label. */
   def +=(label: Double): BinaryLabelCounter = {
     // Though we assume 1.0 for positive and 0.0 for negative, the following check will handle
     // -1.0 for negative as well.
-    if (label > 0.5) numPositives += 1L else numNegatives += 1L
+    if (label > 0.5) numPositives += 1.0 else numNegatives += 1.0
+    this
+  }
+
+  /** Processes a label with a weight. */
+  def +=(label: Double, weight: Double): BinaryLabelCounter = {
+    // Though we assume 1.0 for positive and 0.0 for negative, the following check will handle
+    // -1.0 for negative as well.
+    if (label > 0.5) numPositives += weight else numNegatives += weight
     this
   }
 
