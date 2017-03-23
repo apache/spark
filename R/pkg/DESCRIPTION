@@ -51,6 +51,7 @@ Collate:
     'serialize.R'
     'sparkR.R'
     'stats.R'
+    'streaming.R'
     'types.R'
     'utils.R'
     'window.R'

@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
+import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
@@ -370,21 +371,22 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .option("checkpointLocation", checkpointLocationURI.toString)
       .trigger(ProcessingTime(10.seconds))
       .start()
+    q.processAllAvailable()
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.sqlContext,
-      s"$checkpointLocationURI/sources/0",
-      None,
-      "org.apache.spark.sql.streaming.test",
-      Map.empty)
+      any(),
+      meq(s"$checkpointLocationURI/sources/0"),
+      meq(None),
+      meq("org.apache.spark.sql.streaming.test"),
+      meq(Map.empty))
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.sqlContext,
-      s"$checkpointLocationURI/sources/1",
-      None,
-      "org.apache.spark.sql.streaming.test",
-      Map.empty)
+      any(),
+      meq(s"$checkpointLocationURI/sources/1"),
+      meq(None),
+      meq("org.apache.spark.sql.streaming.test"),
+      meq(Map.empty))
   }
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath

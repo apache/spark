@@ -708,7 +708,29 @@ object SQLConf {
     buildConf("spark.sql.cbo.joinReorder.dp.threshold")
       .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
       .intConf
+      .checkValue(number => number > 0, "The maximum number must be a positive integer.")
       .createWithDefault(12)
+
+  val JOIN_REORDER_CARD_WEIGHT =
+    buildConf("spark.sql.cbo.joinReorder.card.weight")
+      .internal()
+      .doc("The weight of cardinality (number of rows) for plan cost comparison in join reorder: " +
+        "rows * weight + size * (1 - weight).")
+      .doubleConf
+      .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
+      .createWithDefault(0.7)
+
+  val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
+    .doc("When true, it enables join reordering based on star schema detection. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val STARSCHEMA_FACT_TABLE_RATIO = buildConf("spark.sql.cbo.starJoinFTRatio")
+    .internal()
+    .doc("Specifies the upper limit of the ratio between the largest fact tables" +
+      " for a star join to be considered. ")
+    .doubleConf
+    .createWithDefault(0.9)
 
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
@@ -973,6 +995,8 @@ class SQLConf extends Serializable with Logging {
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
+  def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
+
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def sortMergeJoinExecBufferSpillThreshold: Int =
@@ -982,6 +1006,10 @@ class SQLConf extends Serializable with Logging {
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
+
+  def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
   /** ********************** SQLConf functionality methods ************ */
 
