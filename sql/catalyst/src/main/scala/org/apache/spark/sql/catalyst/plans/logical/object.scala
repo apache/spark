@@ -44,7 +44,7 @@ object CatalystSerde {
     val enc = encoderFor[T]
     val dataType = enc.deserializer.dataType
     val nullable = !enc.clsTag.runtimeClass.isPrimitive
-    AttributeReference("obj", dataType, nullable = nullable)()
+    AttributeReference("obj", dataType, nullable)()
   }
 }
 
