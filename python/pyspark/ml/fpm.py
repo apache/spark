@@ -85,10 +85,6 @@ class HasItemsCol(Params):
     itemsCol = Param(Params._dummy(), "itemsCol",
                      "items column name", typeConverter=TypeConverters.toString)
 
-    def __init__(self):
-        super(HasItemsCol, self).__init__()
-        self._setDefault(itemsCol='items')
-
     def setItemsCol(self, value):
         """
         Sets the value of :py:attr:`itemsCol`.
