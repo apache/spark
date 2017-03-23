@@ -343,9 +343,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   override def sql: String = {
-    val fieldTypes = fields.map { f =>
-      s"${quoteIdentifier(f.name)}: ${f.dataType.sql} (nullable = ${f.nullable})"
-    }
+    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
 
@@ -382,7 +380,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override private[spark] def asNullable: StructType = {
     val newFields = fields.map {
-      case StructField(name, dataType, _, metadata) =>
+      case StructField(name, dataType, nullable, metadata) =>
         StructField(name, dataType.asNullable, nullable = true, metadata)
     }
 
