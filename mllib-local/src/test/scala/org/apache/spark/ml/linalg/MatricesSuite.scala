@@ -200,6 +200,11 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(dm8 === dm1)
     assert(!dm8.isTransposed)
     assert(dm8.values.equals(dm1.values))
+
+    val dm9 = dm2.toDense
+    assert(dm9 === dm2)
+    assert(dm9.isTransposed)
+    assert(dm9.values.equals(dm2.values))
   }
 
   test("dense to sparse") {
@@ -261,6 +266,11 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm9 === dm2)
     assert(sm9.values === Array(4.0, 5.0, 2.0))
     assert(sm9.isTransposed)
+
+    val sm10 = dm2.toSparse
+    assert(sm10 === dm2)
+    assert(sm10.values === Array(4.0, 5.0, 2.0))
+    assert(sm10.isTransposed)
   }
 
   test("sparse to sparse") {
@@ -317,8 +327,8 @@ class MatricesSuite extends SparkMLFunSuite {
 
     val sm12 = sm4.toSparse
     assert(sm12 === sm4)
-    assert(sm12.values === Array(4.0, 2.0, 5.0))
-    assert(!sm12.isTransposed)
+    assert(sm12.values === Array(4.0, 5.0, 2.0))
+    assert(sm12.isTransposed)
 
     val sm13 = smZeros.toSparse
     assert(sm13 === smZeros)
@@ -371,8 +381,8 @@ class MatricesSuite extends SparkMLFunSuite {
 
     val dm3 = sm2.toDense
     assert(dm3 === sm2)
-    assert(!dm3.isTransposed)
-    assert(dm3.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+    assert(dm3.isTransposed)
+    assert(dm3.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
 
     val dm4 = sm2.toDenseRowMajor
     assert(dm4 === sm2)
