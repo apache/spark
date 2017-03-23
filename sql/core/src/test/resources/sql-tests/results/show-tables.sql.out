@@ -123,7 +123,7 @@ show_t3	true	CatalogTable(
 	Created: 
 	Last Access: 
 	Type: VIEW
-	Schema: [StructField(e,IntegerType,true)]
+	Schema: STRUCT<`e`: INT (nullable = true)>
 	Storage())
 
 showdb	show_t1	false	CatalogTable(
@@ -131,7 +131,7 @@ showdb	show_t1	false	CatalogTable(
 	Created: 
 	Last Access: 
 	Type: MANAGED
-	Schema: [StructField(a,StringType,true), StructField(b,IntegerType,true), StructField(c,StringType,true), StructField(d,StringType,true)]
+	Schema: STRUCT<`a`: STRING (nullable = true), `b`: INT (nullable = true), `c`: STRING (nullable = true), `d`: STRING (nullable = true)>
 	Provider: parquet
 	Partition Columns: [`c`, `d`]
 	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1)
@@ -142,7 +142,7 @@ showdb	show_t2	false	CatalogTable(
 	Created: 
 	Last Access: 
 	Type: MANAGED
-	Schema: [StructField(b,StringType,true), StructField(d,IntegerType,true)]
+	Schema: STRUCT<`b`: STRING (nullable = true), `d`: INT (nullable = true)>
 	Provider: parquet
 	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t2))
 

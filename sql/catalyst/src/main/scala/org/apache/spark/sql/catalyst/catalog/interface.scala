@@ -283,7 +283,7 @@ case class CatalogTable(
         s"Created: ${new Date(createTime).toString}",
         s"Last Access: ${new Date(lastAccessTime).toString}",
         s"Type: ${tableType.name}",
-        if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
+        if (schema.nonEmpty) s"Schema: ${schema.sql}" else "",
         if (provider.isDefined) s"Provider: ${provider.get}" else "",
         if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
       ) ++ bucketStrings ++ Seq(
