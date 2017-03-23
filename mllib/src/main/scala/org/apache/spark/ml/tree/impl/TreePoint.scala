@@ -36,13 +36,11 @@ import org.apache.spark.rdd.RDD
  *      or any categorical feature used in regression or binary classification.
  *
  * @param label  Label from LabeledPoint
- * @param _binnedFeatures  Binned feature values.
+ * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[spark] class TreePoint(val label: Double, _binnedFeatures: SparseVector[Int])
+private[spark] class TreePoint(val label: Double, val binnedFeatures: SparseVector[Int])
   extends Serializable {
-
-  def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
 }
 
 private[spark] object TreePoint {
