@@ -149,7 +149,7 @@ sealed trait Matrix extends Serializable {
    *          corresponding value in the matrix with type `Double`.
    */
   @Since("2.2.0")
-  def foreachActive(f: (Int, Int, Double) => Unit)
+  def foreachActive(f: (Int, Int, Double) => Unit): Unit
 
   /**
    * Find the number of non-zero active values.
@@ -175,13 +175,13 @@ sealed trait Matrix extends Serializable {
    * Converts this matrix to a sparse matrix in column major order.
    */
   @Since("2.2.0")
-  def toCSC: SparseMatrix = toSparseMatrix(colMajor = true)
+  def toSparseColMajor: SparseMatrix = toSparseMatrix(colMajor = true)
 
   /**
    * Converts this matrix to a sparse matrix in row major order.
    */
   @Since("2.2.0")
-  def toCSR: SparseMatrix = toSparseMatrix(colMajor = false)
+  def toSparseRowMajor: SparseMatrix = toSparseMatrix(colMajor = false)
 
   /**
    * Converts this matrix to a sparse matrix in column major order.
@@ -220,7 +220,11 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.2.0")
   def compressedColMajor: Matrix = {
-    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = true)) toDenseColMajor else toCSC
+    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = true)) {
+      toDenseColMajor
+    } else {
+      toSparseColMajor
+    }
   }
 
   /**
@@ -228,7 +232,11 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.2.0")
   def compressedRowMajor: Matrix = {
-    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = false)) toDenseRowMajor else toCSR
+    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = false)) {
+      toDenseRowMajor
+    } else {
+      toSparseRowMajor
+    }
   }
 
   /**
@@ -432,21 +440,10 @@ class DenseMatrix @Since("2.0.0") (
    * @param colMajor Whether the resulting `DenseMatrix` values will be in column major order.
    */
   private[ml] override def toDenseMatrix(colMajor: Boolean): DenseMatrix = {
-    if (!(isTransposed ^ colMajor)) {
-      val newValues = new Array[Double](numCols * numRows)
-      var j = 0
-      while (j < numCols * numRows) {
-        val newIndex = if (isTransposed) {
-          // it is row major and we want column major
-          j / numCols + (j % numCols) * numRows
-        } else {
-          // it is column major and we want row major
-          j / numRows + (j % numRows) * numCols
-        }
-        newValues(newIndex) = values(j)
-        j += 1
-      }
-      new DenseMatrix(numRows, numCols, newValues, isTransposed = !isTransposed)
+    if (isTransposed && colMajor) {
+      new DenseMatrix(numRows, numCols, toArray, isTransposed = false)
+    } else if (!isTransposed && !colMajor) {
+      new DenseMatrix(numRows, numCols, transpose.toArray, isTransposed = true)
     } else {
       this
     }
@@ -735,20 +732,18 @@ class SparseMatrix @Since("2.0.0") (
    *                    order.
    */
   private[ml] override def toSparseMatrix(colMajor: Boolean): SparseMatrix = {
-    if (!(colMajor ^ isTransposed)) {
-      // breeze transpose rearranges values in column major and removes explicit zeros
-      if (!isTransposed) {
-        // it is row major and we want col major
-        val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]].t
-        Matrices.fromBreeze(breezeTransposed).transpose.asInstanceOf[SparseMatrix]
-      } else {
-        // it is col major and we want row major
-        val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]]
-        Matrices.fromBreeze(breezeTransposed).asInstanceOf[SparseMatrix]
-      }
+    if (!isTransposed && !colMajor) {
+      // it is row major and we want col major, use breeze to remove explicit zeros
+      val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]].t
+      Matrices.fromBreeze(breezeTransposed).transpose.asInstanceOf[SparseMatrix]
+    } else if (isTransposed && colMajor) {
+      // it is col major and we want row major, use breeze to remove explicit zeros
+      val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]]
+      Matrices.fromBreeze(breezeTransposed).asInstanceOf[SparseMatrix]
     } else {
       val nnz = numNonzeros
       if (nnz != numActives) {
+        // remove explicit zeros
         val rr = new Array[Int](nnz)
         val vv = new Array[Double](nnz)
         val numPtrs = if (isTransposed) numRows else numCols
