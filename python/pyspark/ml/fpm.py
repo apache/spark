@@ -129,15 +129,18 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                HasSupport, HasConfidence, JavaMLWritable, JavaMLReadable):
-    """A parallel FP-growth algorithm to mine frequent itemsets
-
-    * Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_
-    * Han et al., Mining frequent patterns without candidate generation [HAN2000]_
+    """A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
+    Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_.
+    PFP distributes computation in such a way that each worker executes an
+    independent group of mining tasks. The FP-Growth algorithm is described in
+    Han et al., Mining frequent patterns without candidate generation [HAN2000]_
 
     .. [LI2008] http://dx.doi.org/10.1145/1454008.1454027
     .. [HAN2000] http://dx.doi.org/10.1145/335191.335372
 
-     .. note:: Internally `transform` `collects` and `broadcasts` association rules.
+    .. note:: Experimental
+    .. note:: null values in the feature column are ignored during fit().
+    .. note:: Internally `transform` `collects` and `broadcasts` association rules.
 
     >>> from pyspark.sql.functions import split
     >>> data = (spark.read
