@@ -464,7 +464,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(dagScheduler.abortedPartitions.size === 0)
   }
 
-  test("Failed tasks should be aborted after fetch failure") {
+  test("Failed tasks should be aborted in zombie mode") {
     val rescheduleDelay = 300L
     val conf = new SparkConf().
       set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
