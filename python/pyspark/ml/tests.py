@@ -42,7 +42,7 @@ import tempfile
 import array as pyarray
 import numpy as np
 from numpy import (
-    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
+    abs, all, arange, array, array_equal, dot, exp, inf, mean, ones, random, tile, zeros)
 from numpy import sum as array_sum
 import inspect
 
@@ -50,19 +50,20 @@ from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
+from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
-from pyspark.ml.linalg import Vector, SparseVector, DenseVector, VectorUDT,\
-    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT, _convert_to_vector
-from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
-from pyspark.ml.recommendation import ALS
-from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
-    GeneralizedLinearRegression
-from pyspark.ml.tuning import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
+from pyspark.ml.linalg import (
+    DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT,
+    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors, _convert_to_vector)
+from pyspark.ml.param import Param, Params, TypeConverters
+from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
+from pyspark.ml.recommendation import ALS
+from pyspark.ml.regression import (
+    DecisionTreeRegressor, GeneralizedLinearRegression, LinearRegression)
+from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
-from pyspark.ml.common import _java2py, _py2java
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
