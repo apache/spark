@@ -101,6 +101,8 @@ class HasItemsCol(Params):
 class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """Model fitted by FPGrowth.
 
+    .. note:: Experimental
+
     .. versionadded:: 2.2.0
     """
     @property
@@ -176,6 +178,8 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().prediction)
     ['x', 'y', 'z']
+
+    .. note:: Experimental
 
     .. versionadded:: 2.2.0
     """
