@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
 
 // scalastyle:off println
 
+
 /**
  * A builder object that provides summary statistics about a given column.
  *
@@ -102,7 +103,26 @@ object Summarizer extends Logging {
     new SummaryBuilderImpl(typedMetrics, computeMetrics)
   }
 
-  def mean(col: Column): Column = metrics("mean").summary(col)
+  def mean(col: Column): Column = getSingleMetric(col, "mean")
+
+  def variance(col: Column): Column = getSingleMetric(col, "variance")
+
+  def count(col: Column): Column = getSingleMetric(col, "count")
+
+  def numNonZeros(col: Column): Column = getSingleMetric(col, "numNonZeros")
+
+  def max(col: Column): Column = getSingleMetric(col, "max")
+
+  def min(col: Column): Column = getSingleMetric(col, "min")
+
+  def normL1(col: Column): Column = getSingleMetric(col, "normL1")
+
+  def normL2(col: Column): Column = getSingleMetric(col, "normL2")
+
+  private def getSingleMetric(col: Column, metric: String): Column = {
+    val c1 = metrics(metric).summary(col)
+    c1.getField(metric).as(s"$metric($col)")
+  }
 }
 
 private[ml] class SummaryBuilderImpl(
@@ -111,6 +131,9 @@ private[ml] class SummaryBuilderImpl(
 
   override def summary(column: Column): Column = {
     val start = SummaryBuilderImpl.Buffer.fromMetrics(requestedCompMetrics)
+    println(s"summary: requestedMetrics=$requestedMetrics")
+    println(s"summary: requestedCompMetrics=$requestedCompMetrics")
+    println(s"summary: start=$start")
     val agg = SummaryBuilderImpl.MetricsAggregate(
       requestedMetrics,
       start,
@@ -129,9 +152,9 @@ object SummaryBuilderImpl extends Logging {
   @throws[IllegalArgumentException]("When the list is empty or not a subset of known metrics")
   def getRelevantMetrics(requested: Seq[String]): (Seq[Metrics], Seq[ComputeMetrics]) = {
     val all = requested.map { req =>
-      val (_, metric, deps) = allMetrics.find(tup => tup._1 == req).getOrElse {
+      val (_, metric, _, deps) = allMetrics.find(tup => tup._1 == req).getOrElse {
         throw new IllegalArgumentException(s"Metric $req cannot be found." +
-          s" Valid metris are $implementedMetrics")
+          s" Valid metrics are $implementedMetrics")
       }
       metric -> deps
     }
@@ -143,17 +166,15 @@ object SummaryBuilderImpl extends Logging {
   }
 
   def structureForMetrics(metrics: Seq[Metrics]): StructType = {
-    val fields = metrics.map { m =>
-      // All types are vectors, except for one.
-//      val tpe = if (m == Count) { LongType } else { SQLDataTypes.VectorType }
-      val tpe = if (m == Count) { LongType } else { ArrayType(DoubleType, containsNull = false) }
-      // We know the metric is part of the list.
-      val (name, _, _) = allMetrics.find(tup => tup._2 == m).get
-      StructField(name, tpe, nullable = false)
+    val dct = allMetrics.map { case (n, m, dt, _) => m -> (n, dt) }.toMap
+    val fields = metrics.map(dct.apply).map { case (n, dt) =>
+        StructField(n, dt, nullable = false)
     }
     StructType(fields)
   }
 
+  private val arrayDType = ArrayType(DoubleType, containsNull = false)
+  private val arrayLType = ArrayType(LongType, containsNull = false)
 
   /**
    * All the metrics that can be currently computed by Spark for vectors.
@@ -161,16 +182,16 @@ object SummaryBuilderImpl extends Logging {
    * This list associates the user name, the internal (typed) name, and the list of computation
    * metrics that need to de computed internally to get the final result.
    */
-  private val allMetrics = Seq(
-    ("mean", Mean, Seq(ComputeMean, ComputeWeightSum, ComputeTotalWeightSum)), // Vector
-    ("variance", Variance, Seq(ComputeTotalWeightSum, ComputeWeightSquareSum, ComputeMean,
-                               ComputeM2n)), // Vector
-    ("count", Count, Seq(ComputeCount)), // Long
-    ("numNonZeros", NumNonZeros, Seq(ComputeNNZ)), // Vector
-    ("max", Max, Seq(ComputeMax, ComputeTotalWeightSum, ComputeNNZ, ComputeCount)), // Vector
-    ("min", Min, Seq(ComputeMin, ComputeTotalWeightSum, ComputeNNZ, ComputeCount)), // Vector
-    ("normL2", NormL2, Seq(ComputeTotalWeightSum, ComputeM2)), // Vector
-    ("normL1", Min, Seq(ComputeTotalWeightSum, ComputeL1)) // Vector
+  private val allMetrics: Seq[(String, Metrics, DataType, Seq[ComputeMetrics])] = Seq(
+    ("mean", Mean, arrayDType, Seq(ComputeMean, ComputeWeightSum, ComputeTotalWeightSum)),
+    ("variance", Variance, arrayDType, Seq(ComputeTotalWeightSum, ComputeWeightSum,
+                                           ComputeWeightSquareSum, ComputeMean, ComputeM2n)),
+    ("count", Count, LongType, Seq(ComputeCount)),
+    ("numNonZeros", NumNonZeros, arrayLType, Seq(ComputeNNZ)),
+    ("max", Max, arrayDType, Seq(ComputeMax)),
+    ("min", Min, arrayDType, Seq(ComputeMin)),
+    ("normL2", NormL2, arrayDType, Seq(ComputeTotalWeightSum, ComputeM2)),
+    ("normL1", Min, arrayDType, Seq(ComputeTotalWeightSum, ComputeL1))
   )
 
   /**
@@ -223,8 +244,18 @@ object SummaryBuilderImpl extends Logging {
     var weightSum: Array[Double] = null,      // 8
     var nnz: Array[Long] = null,              // 9
     var max: Array[Double] = null,            // 10
-    var min: Array[Double] = null)            // 11
+    var min: Array[Double] = null             // 11
+  ) {
+      override def toString: String = {
+        def v(x: Array[Double]) = if (x==null) "null" else x.toSeq.mkString("[", " ", "]")
+        def vl(x: Array[Long]) = if (x==null) "null" else x.toSeq.mkString("[", " ", "]")
 
+        s"Buffer(n=$n mean=${v(mean)} m2n=${v(m2n)} m2=${v(m2)} l1=${v(l1)}" +
+          s" totalCount=$totalCount totalWeightSum=$totalWeightSum" +
+          s" totalWeightSquareSum=$totalWeightSquareSum weightSum=${v(weightSum)} nnz=${vl(nnz)}" +
+          s" max=${v(max)} min=${v(min)})"
+      }
+    }
   object Buffer {
     // Recursive function, but the number of cases is really small.
     def fromMetrics(requested: Seq[ComputeMetrics]): Buffer = {
@@ -294,6 +325,7 @@ object SummaryBuilderImpl extends Logging {
           }
 
           if (buffer.mean != null) {
+            assert(buffer.weightSum != null)
             val prevMean = buffer.mean(index)
             val diff = value - prevMean
             buffer.mean(index) += w * diff / (buffer.weightSum(index) + w)
@@ -548,7 +580,7 @@ object SummaryBuilderImpl extends Logging {
       val weightSum2 = if (other.weightSum == null) null else { other.weightSum.clone() }
 
       val weightSum = if (weightSum1 == null) null else {
-        require(weightSum2 != null)
+        require(weightSum2 != null, s"buffer=$buffer other=$other")
         val arr: Array[Double] = Array.ofDim(buffer.n)
         b(arr) :+= b(weightSum1) :- b(weightSum1)
         arr
@@ -615,20 +647,20 @@ object SummaryBuilderImpl extends Logging {
       inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[Buffer] {
 
-    private lazy val row = new UnsafeRow(1)
+//    private lazy val row = new UnsafeRow(1)
 
-    override def eval(buff: Buffer): Row = {
+    override def eval(buff: Buffer): InternalRow = {
       val metrics = requested.map({
-        case Mean => Buffer.mean(buff)
-        case Variance => Buffer.variance(buff)
+        case Mean => UnsafeArrayData.fromPrimitiveArray(Buffer.mean(buff))
+        case Variance => UnsafeArrayData.fromPrimitiveArray(Buffer.variance(buff))
         case Count => Buffer.totalCount(buff)
-        case NumNonZeros => Buffer.nnz(buff)
-        case Max => Buffer.max(buff)
-        case Min => Buffer.min(buff)
-        case NormL2 => Buffer.l2(buff)
-        case NormL1 => Buffer.l1(buff)
+        case NumNonZeros => UnsafeArrayData.fromPrimitiveArray(Buffer.nnz(buff))
+        case Max => UnsafeArrayData.fromPrimitiveArray(Buffer.max(buff))
+        case Min => UnsafeArrayData.fromPrimitiveArray(Buffer.min(buff))
+        case NormL2 => UnsafeArrayData.fromPrimitiveArray(Buffer.l2(buff))
+        case NormL1 => UnsafeArrayData.fromPrimitiveArray(Buffer.l1(buff))
       })
-      Row(metrics: _*)
+      InternalRow.apply(metrics: _*)
     }
 
     override def children: Seq[Expression] = child :: Nil
@@ -659,14 +691,15 @@ object SummaryBuilderImpl extends Logging {
 
     override def serialize(buff: Buffer): Array[Byte] = {
       val x = Buffer.write(buff)
-      println(s"serialize: buff=$buff")
+      println(s"serialize: ${buff.hashCode()} x=${x.length} buff=$buff")
       val b2 = deserialize(x)
-      println(s"serialize: b2=$b2")
+      println(s"serialize: ${buff.hashCode()} b2=$b2")
       x
     }
 
     override def deserialize(bytes: Array[Byte]): Buffer = {
-      Buffer.read(bytes, row)
+//      Buffer.read(bytes, row)
+      Buffer.read(bytes, new UnsafeRow(1))
     }
 
     override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): MetricsAggregate = {

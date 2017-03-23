@@ -22,6 +22,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 
 // scalastyle:off println
 
@@ -33,7 +34,15 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   private val seed = 42
   private val eps: Double = 1e-5
 
-  private case class ExpectedMetrics(mean: Vector, min: Vector)
+  private case class ExpectedMetrics(
+      mean: Seq[Double],
+      variance: Seq[Double],
+      count: Long,
+      numNonZeros: Seq[Long],
+      max: Seq[Double],
+      min: Seq[Double],
+      normL2: Seq[Double],
+      normL1: Seq[Double])
 
   // The input is expected to be either a sparse vector, a dense vector or an array of doubles
   // (which will be converted to a dense vector)
@@ -46,13 +55,49 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   private def testExample(input: Seq[Any], exp: ExpectedMetrics): Unit = {
     val inputVec: Seq[Vector] = input.map {
       case x: Array[Double] => Vectors.dense(x)
+      case x: Seq[Double] => Vectors.dense(x.toArray)
       case x: Vector => x
       case x => throw new Exception(x.toString)
     }
     val df = sc.parallelize(inputVec).map(Tuple1.apply).toDF("features")
     val c = df.col("features")
 
-    compare(df.select(metrics("mean").summary(c), mean(c)), Seq(exp.mean, exp.mean))
+    compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), exp.mean))
+
+    compare(df.select(metrics("variance").summary(c), variance(c)),
+      Seq(Row(exp.variance), exp.variance))
+
+    compare(df.select(metrics("count").summary(c), count(c)),
+      Seq(Row(exp.count), exp.count))
+
+    compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
+      Seq(Row(exp.numNonZeros), exp.numNonZeros))
+
+    println("STARTING MIN")
+
+    compare(df.select(metrics("min").summary(c), min(c)),
+      Seq(Row(exp.min), exp.min))
+
+    println("STARTING MAX")
+
+    compare(df.select(metrics("max").summary(c), max(c)),
+      Seq(Row(exp.max), exp.max))
+
+    println("STARTING NORML1")
+
+    compare(df.select(metrics("normL1").summary(c), normL1(c)),
+      Seq(Row(exp.normL1), exp.normL1))
+
+    println("STARTING NORML2")
+
+    compare(df.select(metrics("normL2").summary(c), normL2(c)),
+      Seq(Row(exp.normL2), exp.normL2))
+
+    compare(df.select(
+      metrics("mean", "variance", "count", "numNonZeros").summary(c),
+      mean(c), variance(c), count(c), numNonZeros(c)),
+      Seq(Row(exp.mean, exp.variance, exp.count, exp.numNonZeros),
+        exp.mean, exp.variance, exp.count, exp.numNonZeros))
   }
 
   private def denseData(input: Seq[Seq[Double]]): DataFrame = {
@@ -67,6 +112,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val Seq(row) = coll
     val res = row.toSeq
     println(s"compare: ress=${res.map(_.getClass)}")
+    println(s"compare: row=${row}")
     val names = df.schema.fieldNames.zipWithIndex.map { case (n, idx) => s"$n ($idx)" }
     assert(res.size === exp.size, (res.size, exp.size))
     for (((x1, x2), name) <- res.zip(exp).zip(names)) {
@@ -78,12 +124,25 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   private def compareStructures(x1: Any, x2: Any, name: String): Unit = (x1, x2) match {
     case (d1: Double, d2: Double) =>
       assert(Vectors.dense(d1) ~== Vectors.dense(d2) absTol 1e-4, name)
+    case (r1: GenericRowWithSchema, r2: Row) =>
+      assert(r1.size === r2.size, (r1, r2))
+      for (((fname, x1), x2) <- r1.schema.fieldNames.zip(r1.toSeq).zip(r2.toSeq)) {
+        compareStructures(x1, x2, s"$name.$fname")
+      }
     case (r1: Row, r2: Row) =>
       assert(r1.size === r2.size, (r1, r2))
       for ((x1, x2) <- r1.toSeq.zip(r2.toSeq)) { compareStructures(x1, x2, name) }
     case (v1: Vector, v2: Vector) =>
       assert(v1 ~== v2 absTol 1e-4, name)
     case (l1: Long, l2: Long) => assert(l1 === l2)
+    case (s1: Seq[_], s2: Seq[_]) =>
+      assert(s1.size === s2.size, s"$name ${(s1, s2)}")
+      for (((x1, idx), x2) <- s1.zipWithIndex.zip(s2)) {
+        compareStructures(x1, x2, s"$name.$idx")
+      }
+    case (arr1: Array[_], arr2: Array[_]) =>
+      assert(arr1.toSeq === arr2.toSeq)
+    case _ => throw new Exception(s"$name: ${x1.getClass} ${x2.getClass} $x1 $x2")
   }
 
   test("debugging test") {
@@ -112,14 +171,21 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("no element, working metrics") {
     val df = denseData(Nil)
     val c = df.col("features")
-    val res = df.select(metrics("count").summary(c))
-    compare(res, Seq(Row(0L)))
+    val res = df.select(metrics("count").summary(c), count(c))
+    compare(res, Seq(Row(0L), 0L))
   }
 
   test("single element in vector, all metrics") {
-    testExample(Seq(Array(1.0, 2.0)), ExpectedMetrics(
-      Vectors.dense(1.0, 2.0),
-      Vectors.dense(1.0, 2.0)
+    val x = Seq(1.0, 2.0)
+    testExample(Seq(x), ExpectedMetrics(
+      mean = x,
+      variance = Seq(0.0, 0.0),
+      count = 1,
+      numNonZeros = Seq(1, 1),
+      max = x,
+      min = x,
+      normL1 = x,
+      normL2 = x
     ))
   }
 
