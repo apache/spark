@@ -744,6 +744,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
         self.assertEqual(df.first(), Row(key=1, value="1"))
 
+    def test_create_dataframe_from_objects(self):
+        data = [MyObject(1, "1"), MyObject(2, "2")]
+        df = self.sqlCtx.createDataFrame(data)
+        self.assertEqual(df.dtypes, [("key", "bigint"), ("value", "string")])
+        self.assertEqual(df.first(), Row(key=1, value="1"))
+
     def test_select_null_literal(self):
         df = self.spark.sql("select null as col")
         self.assertEqual(Row(col=None), df.first())
