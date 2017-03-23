@@ -67,13 +67,11 @@ object BlockReplicationUtils {
    */
   // scalastyle:on line.size.limit
   private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {
-    val indices = (n - m + 1 to n).foldLeft(Set.empty[Int]) {case (set, i) =>
+    val indices = (n - m + 1 to n).foldLeft(mutable.LinkedHashSet.empty[Int]) {case (set, i) =>
       val t = r.nextInt(i) + 1
       if (set.contains(t)) set + i else set + t
     }
-    // we shuffle the result to ensure a random arrangement within the sample
-    // to avoid any bias from set implementations
-    r.shuffle(indices.map(_ - 1).toList)
+    indices.map(_ - 1).toList
   }
 
   /**
@@ -140,8 +138,10 @@ class BasicBlockReplicationPolicy
 
   /**
    * Method to prioritize a bunch of candidate peers of a block manager. This implementation
-   * replicates the behavior of block replication in HDFS, a peer is chosen within the rack,
-   * one outside and that's it. This works best with a total replication factor of 3.
+   * replicates the behavior of block replication in HDFS. For a given number of replicas needed,
+   * we choose a peer within the rack, one outside and remaining blockmanagers are chosen at
+   * random, in that order till we meet the number of replicas needed.
+   * This works best with a total replication factor of 3, like HDFS.
    *
    * @param blockManagerId    Id of the current BlockManager for self identification
    * @param peers             A list of peers of a BlockManager
@@ -163,7 +163,7 @@ class BasicBlockReplicationPolicy
 
     val random = new Random(blockId.hashCode)
 
-    // if block doesn't have topology info, we can't do much, so we randlomly shuffle
+    // if block doesn't have topology info, we can't do much, so we randomly shuffle
     // if there is, we see what's needed from peersReplicatedTo and based on numReplicas,
     // we choose whats needed
     if (blockManagerId.topologyInfo.isEmpty || numReplicas == 0) {
