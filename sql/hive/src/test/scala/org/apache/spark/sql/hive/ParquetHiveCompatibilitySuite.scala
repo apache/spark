@@ -154,14 +154,13 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   }
 
   test("SPARK-16344: array of struct with a single field named 'array_element'") {
-
     testParquetHiveCompatibility(
       Row(Seq(Row(1))),
       "ARRAY<STRUCT<array_element: INT>>")
   }
 
-  // Check creating parquet tables, writing data into them, and reading it back out under a
-  // variety of conditions:
+  // Check creating parquet tables with timestamps, writing data into them, and reading it back out
+  // under a variety of conditions:
   // * global conf for setting table tz by default
   // * tables with explicit tz and those without
   // * altering table properties directly
