@@ -158,6 +158,49 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     )
   }
 
+  testQuietly("OneTime trigger, commit log, and exception") {
+    import Trigger.Once
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS().map { 6 / _}
+
+    testStream(mapped)(
+      AssertOnQuery(_.isActive === true),
+      StopStream,
+      AddData(inputData, 1, 2),
+      StartStream(trigger = Once),
+      CheckAnswer(6, 3),
+      StopStream, // clears out StreamTest state
+      AssertOnQuery { q =>
+        // both commit log and offset log contain the same (latest) batch id
+        q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) ==
+          q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
+      },
+      AssertOnQuery { q =>
+        // blow away commit log and sink result
+        q.batchCommitLog.purge(1)
+        q.sink.asInstanceOf[MemorySink].clear()
+        true
+      },
+      StartStream(trigger = Once),
+      CheckAnswer(6, 3), // ensure we fall back to offset log and reprocess batch
+      StopStream,
+      AddData(inputData, 3),
+      StartStream(trigger = Once),
+      CheckLastBatch(2), // commit log should be back in place
+      StopStream,
+      AddData(inputData, 0),
+      StartStream(trigger = Once),
+      ExpectFailure[SparkException](),
+      AssertOnQuery(_.isActive === false),
+      AssertOnQuery(q => {
+        q.exception.get.startOffset ===
+          q.committedOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString &&
+          q.exception.get.endOffset ===
+            q.availableOffsets.toOffsetSeq(Seq(inputData), OffsetSeqMetadata()).toString
+      }, "incorrect start offset or end offset on exception")
+    )
+  }
+
   testQuietly("status, lastProgress, and recentProgress") {
     import StreamingQuerySuite._
     clock = new StreamManualClock
@@ -237,6 +280,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AdvanceManualClock(500), // time = 1100 to unblock job
       AssertOnQuery { _ => clock.getTimeMillis() === 1100 },
       CheckAnswer(2),
+      AssertStreamExecThreadToWaitForClock(),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
@@ -275,6 +319,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       AddData(inputData, 1, 2),
       AdvanceManualClock(100), // allow another trigger
+      AssertStreamExecThreadToWaitForClock(),
       CheckAnswer(4),
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),
@@ -306,8 +351,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       // Test status and progress after query terminated with error
       StartStream(ProcessingTime(100), triggerClock = clock),
+      AdvanceManualClock(100), // ensure initial trigger completes before AddData
       AddData(inputData, 0),
-      AdvanceManualClock(100),
+      AdvanceManualClock(100), // allow another trigger
       ExpectFailure[SparkException](),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === false),

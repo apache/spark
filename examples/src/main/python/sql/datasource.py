@@ -169,6 +169,12 @@ def jdbc_dataset_example(spark):
     jdbcDF2.write \
         .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
               properties={"user": "username", "password": "password"})
+
+    # Specifying create table column data types on write
+    jdbcDF.write \
+        .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)") \
+        .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
+              properties={"user": "username", "password": "password"})
     # $example off:jdbc_dataset$
 
 
