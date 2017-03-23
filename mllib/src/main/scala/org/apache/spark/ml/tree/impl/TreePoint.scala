@@ -17,8 +17,9 @@
 
 package org.apache.spark.ml.tree.impl
 
+import breeze.linalg.SparseVector
+
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
 import org.apache.spark.rdd.RDD
 
@@ -38,12 +39,10 @@ import org.apache.spark.rdd.RDD
  * @param _binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[spark] class TreePoint(val label: Double, _binnedFeatures: Vector)
+private[spark] class TreePoint(val label: Double, _binnedFeatures: SparseVector[Int])
   extends Serializable {
 
-  // TODO: to implement a custom Int Vector, instead of Double
-
-  def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x).toInt
+  def binnedFeatures(x: Int): Int = _binnedFeatures.apply(x)
 }
 
 private[spark] object TreePoint {
@@ -93,7 +92,7 @@ private[spark] object TreePoint {
     val numFeatures = labeledPoint.features.size
 
     // use to construct a sparse vector
-    val arr: Seq[(Int, Double)] = Range(0, numFeatures).map{ idx =>
+    val (index, data) = Range(0, numFeatures).map{ idx =>
       val bin = findBin(idx, labeledPoint,
                         featureArity(idx), thresholds(idx))
 
@@ -102,11 +101,9 @@ private[spark] object TreePoint {
       } else {
         None
       }
-    }.map{ case Some((idx, value)) =>
-      (idx, value.toDouble)
-    }
+    }.flatten.unzip
 
-    val vec = Vectors.sparse(numFeatures, arr)
+    val vec = new SparseVector[Int](index.toArray, data.toArray, numFeatures)
 
     new TreePoint(labeledPoint.label, vec)
   }
