@@ -1141,8 +1141,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   }
 
   test("update application blacklist for shuffle-fetch") {
-    // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
-    // and killed task.
+    // Setup a taskset, and fail some one task for fetch failure.
     val conf = new SparkConf()
       .set(config.BLACKLIST_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_ENABLED, true)

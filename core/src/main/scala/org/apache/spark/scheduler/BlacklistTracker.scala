@@ -21,8 +21,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -177,7 +176,6 @@ private[scheduler] class BlacklistTracker (
     }
   }
 
-  @Experimental
   def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
     if (BLACKLIST_FETCH_FAILURE_ENABLED) {
       logWarning(
@@ -197,7 +195,7 @@ private[scheduler] class BlacklistTracker (
 
         executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(host, expiryTimeForNewBlacklists))
         // We hardcoded number of failure tasks to 1 for fetch failure, because there's no
-        // reattempt for this failure.
+        // reattempt for such failure.
         listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, 1))
         updateNextExpiryTime()
         killBlacklistedExecutor(exec)
@@ -205,7 +203,7 @@ private[scheduler] class BlacklistTracker (
         val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(exec, HashSet[String]())
         blacklistedExecsOnNode += exec
 
-        if (SparkEnv.get.blockManager.externalShuffleServiceEnabled &&
+        if (conf.getBoolean("spark.shuffle.service.enabled", false) &&
             !nodeIdToBlacklistExpiryTime.contains(host)) {
           logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
 

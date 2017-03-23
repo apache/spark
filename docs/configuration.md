@@ -1453,8 +1453,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     (Experimental) If set to "true", Spark will blacklist the executors immediately when the fetch failure
-    happened. If external shuffle service is enabled, then the whole node will be blacklisted. This configuration
-    is to handle some scenarios where shuffle fetch is available and cannot be recovered through retry.
+    happened. If external shuffle service is enabled, then the whole node will be blacklisted.
   </td>
 </tr>
 <tr>
