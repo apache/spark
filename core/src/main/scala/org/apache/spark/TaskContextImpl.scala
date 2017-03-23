@@ -38,7 +38,7 @@ import org.apache.spark.util._
  * callbacks are protected by locking on the context instance. For instance, this ensures
  * that you cannot add a completion listener in one thread while we are completing (and calling
  * the completion listeners) in another thread. Other state is immutable, however the exposed
- * [[TaskMetrics]] & [[MetricsSystem]] objects are not thread safe.
+ * `TaskMetrics` & `MetricsSystem` objects are not thread safe.
  */
 private[spark] class TaskContextImpl(
     val stageId: Int,

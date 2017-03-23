@@ -951,7 +951,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == null) {
-      throw new RuntimeException(errMsg);
+      throw new RuntimeException(errMsg)
     }
     result
   }
