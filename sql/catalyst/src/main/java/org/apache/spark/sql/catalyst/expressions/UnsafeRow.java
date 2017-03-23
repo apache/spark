@@ -578,8 +578,12 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
+    } else if (!(other instanceof InternalRow)) {
+      return false;
+    } else {
+      throw new IllegalArgumentException(
+        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
-    return false;
   }
 
   /**
