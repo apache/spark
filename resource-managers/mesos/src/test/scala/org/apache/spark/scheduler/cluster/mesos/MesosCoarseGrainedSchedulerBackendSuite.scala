@@ -502,7 +502,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("mesos ignored invalid labels and sets configurable labels on tasks") {
-    val taskLabelsString = "mesos:test,label:test,incorrec:label:here"
+    val taskLabelsString = "mesos:test,label:test,incorrect:label:here"
     setBackend(Map(
       "spark.mesos.task.labels" -> taskLabelsString
     ))
