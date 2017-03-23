@@ -50,12 +50,11 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
       assert(!df.queryExecution.toString.contains(rootPath.getName))
       assert(!df.queryExecution.simpleString.contains(rootPath.getName))
 
-      assert(df.queryExecution.sparkPlan.treeString(verbose = true)
-        .contains(REDACTION_REPLACEMENT_TEXT))
-      assert(df.queryExecution.executedPlan.treeString(verbose = true)
-        .contains(REDACTION_REPLACEMENT_TEXT))
-      assert(df.queryExecution.toString.contains(REDACTION_REPLACEMENT_TEXT))
-      assert(df.queryExecution.simpleString.contains(REDACTION_REPLACEMENT_TEXT))
+      val replacement = "*********"
+      assert(df.queryExecution.sparkPlan.treeString(verbose = true).contains(replacement))
+      assert(df.queryExecution.executedPlan.treeString(verbose = true).contains(replacement))
+      assert(df.queryExecution.toString.contains(replacement))
+      assert(df.queryExecution.simpleString.contains(replacement))
     }
   }
 }
