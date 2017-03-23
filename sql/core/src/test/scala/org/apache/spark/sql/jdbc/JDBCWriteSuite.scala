@@ -390,9 +390,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
   test("SPARK-10849: create table using user specified column type and verify on target table") {
     def testUserSpecifiedColTypes(
-      df: DataFrame,
-      createTableColTypes: String,
-      expectedTypes: Map[String, String]): Unit = {
+        df: DataFrame,
+        createTableColTypes: String,
+        expectedTypes: Map[String, String]): Unit = {
       df.write
         .mode(SaveMode.Overwrite)
         .option("createTableColumnTypes", createTableColTypes)
@@ -418,7 +418,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       }
     }
 
-    val data = Seq[Row](Row(1, "dave", "Boston", "electric cars"))
+    val data = Seq[Row](Row(1, "dave", "Boston"))
     val schema = StructType(
       StructField("id", IntegerType) ::
         StructField("first#name", StringType) ::

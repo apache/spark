@@ -706,8 +706,8 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-    df: DataFrame,
-    createTableColumnTypes: String): Map[String, String] = {
+      df: DataFrame,
+      createTableColumnTypes: String): Map[String, String] = {
     def typeName(f: StructField): String = {
       // char/varchar gets translated to string type. Real data type specified by the user
       // is available in the field metadata as HIVE_TYPE_STRING
