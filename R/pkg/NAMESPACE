@@ -175,6 +175,9 @@ exportMethods("arrange",
               "write.text",
               "write.ml")
 
+exportMethods("lapply","lapplyPartition", "map","reduce")
+
+
 exportClasses("Column")
 
 exportMethods("%in%",
