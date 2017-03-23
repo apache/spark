@@ -188,10 +188,17 @@ private[spark] object SerDe {
     (0 until len).map(_ => readString(in)).toArray
   }
 
+  def readZeroLengthArr(in: DataInputStream): Array[Nothing] = {
+    val len = readInt(in)
+    require(len == 0)
+    new Array(0)
+  }
+
   // All elements of an array must be of the same type
   def readArray(dis: DataInputStream, jvmObjectTracker: JVMObjectTracker): Array[_] = {
     val arrType = readObjectType(dis)
     arrType match {
+      case 'n' => readZeroLengthArr(dis)
       case 'i' => readIntArr(dis)
       case 'c' => readStringArr(dis)
       case 'd' => readDoubleArr(dis)

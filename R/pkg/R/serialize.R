@@ -163,10 +163,10 @@ writeType <- function(con, class) {
 
 # Used to pass arrays where all the elements are of the same type
 writeArray <- function(con, arr) {
-  # TODO: Empty lists are given type "character" right now.
-  # This may not work if the Java side expects array of any other type.
+  # When array length == 0, mark the data type as NULL,
+  # and scala side will generate Array[Nothing] with length == 0
   if (length(arr) == 0) {
-    elemType <- class("somestring")
+    elemType <- class(NULL)
   } else {
     elemType <- getSerdeType(arr[[1]])
   }
