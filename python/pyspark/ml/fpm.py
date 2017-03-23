@@ -108,7 +108,8 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @property
     @since("2.2.0")
     def freqItemsets(self):
-        """DataFrame with two columns:
+        """
+        DataFrame with two columns:
         * `items` - Itemset of the same type as the input column.
         * `freq`  - Frequency of the itemset (`LongType`).
         """
@@ -117,10 +118,12 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @property
     @since("2.2.0")
     def associationRules(self):
-        """Data with three columns:
+        """
+        Data with three columns:
         * `antecedent`  - Array of the same type as the input column.
         * `consequent`  - Single element array of the same type as the input column.
-        * `confidence`  - Confidence for the rule (`DoubleType`)."""
+        * `confidence`  - Confidence for the rule (`DoubleType`).
+        """
         return self._call_java("associationRules")
 
 
