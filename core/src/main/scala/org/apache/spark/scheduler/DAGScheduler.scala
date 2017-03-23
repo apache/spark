@@ -1185,9 +1185,9 @@ class DAGScheduler(
     }
 
     val stage = stageIdToStage(task.stageId)
-    stage.pendingPartitions -= task.partitionId
     event.reason match {
       case Success =>
+        stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>
             // Cast to ResultStage here because it's part of the ResultTask
@@ -1284,7 +1284,6 @@ class DAGScheduler(
         logInfo("Resubmitted " + task + ", so marking it as still running")
         stage match {
           case sms: ShuffleMapStage =>
-            sms.pendingPartitions += task.partitionId
 
           case _ =>
             assert(false, "TaskSetManagers should only send Resubmitted task statuses for " +
@@ -1292,6 +1291,7 @@ class DAGScheduler(
         }
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
+        stage.pendingPartitions -= task.partitionId
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 

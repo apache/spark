@@ -842,6 +842,10 @@ private[spark] class TaskSetManager(
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
+    if (reason != Success && isZombie) {
+      sched.dagScheduler.tasksAborted(tasks(index).stageId, Array(tasks(index)))
+    }
+
     if (successful(index)) {
       logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
         s" be re-executed (either because the task failed with a shuffle data fetch failure," +

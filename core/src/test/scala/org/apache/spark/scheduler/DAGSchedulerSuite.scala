@@ -900,14 +900,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // running task.
     assert(taskSets(3).tasks.size == 2)
 
-    // Fail the running tasks in taskSets(1) with ExceptionFailure. Since the
+    // Abort the running tasks in taskSets(1) (due to some exception failure). Since the
     // taskSet(1) is in zombie state now, the DagScheduler should rerun the
-    // failed task.
+    // aborted task.
 
-    val exceptionFailure = new ExceptionFailure(
-      new SparkException("fondue?"), Seq.empty)
-
-    runEvent(makeCompletionEvent(taskSets(1).tasks(2), exceptionFailure, "result"))
+    runEvent(new TasksAborted(1, List(taskSets(1).tasks(2))))
 
     // Finish the taskSet(3) successfully
     runEvent(makeCompletionEvent(
@@ -2438,7 +2435,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleIdToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
-    assert(scheduler.outputCommitCoordinator.isEmpty)
   }
 
   // Nothing in this test should break if the task info's fields are null, but

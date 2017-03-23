@@ -59,19 +59,11 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
    * exclusive lock on committing task output for that partition, as well as any known failed
    * attempts in the stage.
    *
-   * Entries are added to the top-level map when stages start and are removed they finish
-   * (either successfully or unsuccessfully).
+   * Entries are added to the top-level map when stages start.
    *
    * Access to this map should be guarded by synchronizing on the OutputCommitCoordinator instance.
    */
   private val stageStates = mutable.Map[StageId, StageState]()
-
-  /**
-   * Returns whether the OutputCommitCoordinator's internal data structures are all empty.
-   */
-  def isEmpty: Boolean = {
-    stageStates.isEmpty
-  }
 
   /**
    * Called by tasks to ask whether they can commit their output to HDFS.
@@ -112,7 +104,6 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
   private[scheduler] def stageStart(stage: StageId,
                                     partitionsToCompute: Seq[Int],
                                     maxPartitionId: Int): Unit = synchronized {
-    // stageStates(stage) = new StageState(maxPartitionId + 1)
     val stageState = stageStates.getOrElseUpdate(stage, new StageState(maxPartitionId + 1))
     for (i <- partitionsToCompute) {
       stageState.authorizedCommitters(i) = NO_AUTHORIZED_COMMITTER
