@@ -58,7 +58,8 @@ class HasConfidence(Params):
     minConfidence = Param(
         Params._dummy(),
         "minConfidence",
-        "Minimal confidence for generating Association Rule. [0.0, 1.0]",
+        """"Minimal confidence for generating Association Rule. [0.0, 1.0]
+        Note that minConfidence has no effect during fitting.""",
         typeConverter=TypeConverters.toFloat)
 
     def setMinConfidence(self, value):
