@@ -218,7 +218,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckLastBatch((10, 5)),
       StopStream,
-      AssertOnQuery { q => // clear the sink
+      AssertOnQuery { q => // purge commit and clear the sink
+        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        q.batchCommitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },

@@ -165,6 +165,8 @@ class StreamExecution(
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
+    case OneTimeTrigger => OneTimeExecutor()
+    case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
   /** Defines the internal state of execution */
@@ -208,6 +210,13 @@ class StreamExecution(
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
   val offsetLog = new OffsetSeqLog(sparkSession, checkpointFile("offsets"))
+
+  /**
+   * A log that records the batch ids that have completed. This is used to check if a batch was
+   * fully processed, and its output was committed to the sink, hence no need to process it again.
+   * This is used (for instance) during restart, to help identify which batch to run next.
+   */
+  val batchCommitLog = new BatchCommitLog(sparkSession, checkpointFile("commits"))
 
   /** Whether all fields of the query have been initialized */
   private def isInitialized: Boolean = state.get != INITIALIZING
@@ -291,10 +300,13 @@ class StreamExecution(
                   runBatch(sparkSessionToRunBatches)
                 }
               }
-
               // Report trigger as finished and construct progress object.
               finishTrigger(dataAvailable)
               if (dataAvailable) {
+                // Update committed offsets.
+                committedOffsets ++= availableOffsets
+                batchCommitLog.add(currentBatchId, null)
+                logDebug(s"batch ${currentBatchId} committed")
                 // We'll increase currentBatchId after we complete processing current batch's data
                 currentBatchId += 1
               } else {
@@ -306,9 +318,6 @@ class StreamExecution(
             } else {
               false
             }
-
-          // Update committed offsets.
-          committedOffsets ++= availableOffsets
           updateStatusMessage("Waiting for next trigger")
           continueToRun
         })
@@ -392,13 +401,33 @@ class StreamExecution(
    *  - currentBatchId
    *  - committedOffsets
    *  - availableOffsets
+   *  The basic structure of this method is as follows:
+   *
+   *  Identify (from the offset log) the offsets used to run the last batch
+   *  IF last batch exists THEN
+   *    Set the next batch to be executed as the last recovered batch
+   *    Check the commit log to see which batch was committed last
+   *    IF the last batch was committed THEN
+   *      Call getBatch using the last batch start and end offsets
+   *      // ^^^^ above line is needed since some sources assume last batch always re-executes
+   *      Setup for a new batch i.e., start = last batch end, and identify new end
+   *    DONE
+   *  ELSE
+   *    Identify a brand new batch
+   *  DONE
    */
   private def populateStartOffsets(sparkSessionToRunBatches: SparkSession): Unit = {
     offsetLog.getLatest() match {
-      case Some((batchId, nextOffsets)) =>
-        logInfo(s"Resuming streaming query, starting with batch $batchId")
-        currentBatchId = batchId
+      case Some((latestBatchId, nextOffsets)) =>
+        /* First assume that we are re-executing the latest known batch
+         * in the offset log */
+        currentBatchId = latestBatchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
+        /* Initialize committed offsets to a committed batch, which at this
+         * is the second latest batch id in the offset log. */
+        offsetLog.get(latestBatchId - 1).foreach { secondLatestBatchId =>
+          committedOffsets = secondLatestBatchId.toStreamProgress(sources)
+        }
 
         // update offset metadata
         nextOffsets.metadata.foreach { metadata =>
@@ -419,14 +448,37 @@ class StreamExecution(
             SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitionsToUse.toString)
         }
 
-        logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
-          s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
-
-        offsetLog.get(batchId - 1).foreach {
-          case lastOffsets =>
-            committedOffsets = lastOffsets.toStreamProgress(sources)
-            logDebug(s"Resuming with committed offsets: $committedOffsets")
+        /* identify the current batch id: if commit log indicates we successfully processed the
+         * latest batch id in the offset log, then we can safely move to the next batch
+         * i.e., committedBatchId + 1 */
+        batchCommitLog.getLatest() match {
+          case Some((latestCommittedBatchId, _)) =>
+            if (latestBatchId == latestCommittedBatchId) {
+              /* The last batch was successfully committed, so we can safely process a
+               * new next batch but first:
+               * Make a call to getBatch using the offsets from previous batch.
+               * because certain sources (e.g., KafkaSource) assume on restart the last
+               * batch will be executed before getOffset is called again. */
+              availableOffsets.foreach { ao: (Source, Offset) =>
+                val (source, end) = ao
+                if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
+                  val start = committedOffsets.get(source)
+                  source.getBatch(start, end)
+                }
+              }
+              currentBatchId = latestCommittedBatchId + 1
+              committedOffsets ++= availableOffsets
+              // Construct a new batch be recomputing availableOffsets
+              constructNextBatch()
+            } else if (latestCommittedBatchId < latestBatchId - 1) {
+              logWarning(s"Batch completion log latest batch id is " +
+                s"${latestCommittedBatchId}, which is not trailing " +
+                s"batchid $latestBatchId by one")
+            }
+          case None => logInfo("no commit log present")
         }
+        logDebug(s"Resuming at batch $currentBatchId with committed offsets " +
+          s"$committedOffsets and available offsets $availableOffsets")
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
@@ -523,6 +575,7 @@ class StreamExecution(
         // Note that purge is exclusive, i.e. it purges everything before the target ID.
         if (minBatchesToRetain < currentBatchId) {
           offsetLog.purge(currentBatchId - minBatchesToRetain)
+          batchCommitLog.purge(currentBatchId - minBatchesToRetain)
         }
       }
     } else {

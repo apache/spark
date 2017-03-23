@@ -30,6 +30,17 @@ trait TriggerExecutor {
 }
 
 /**
+ * A trigger executor that runs a single batch only, then terminates.
+ */
+case class OneTimeExecutor() extends TriggerExecutor {
+
+  /**
+   * Execute a single batch using `batchRunner`.
+   */
+  override def execute(batchRunner: () => Boolean): Unit = batchRunner()
+}
+
+/**
  * A trigger executor that runs a batch every `intervalMs` milliseconds.
  */
 case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock = new SystemClock())

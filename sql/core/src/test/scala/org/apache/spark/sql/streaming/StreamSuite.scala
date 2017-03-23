@@ -156,6 +156,15 @@ class StreamSuite extends StreamTest {
       AssertOnQuery(_.offsetLog.getLatest().get._1 == expectedId,
         s"offsetLog's latest should be $expectedId")
 
+    // Check the latest batchid in the commit log
+    def CheckCommitLogLatestBatchId(expectedId: Int): AssertOnQuery =
+      AssertOnQuery(_.batchCommitLog.getLatest().get._1 == expectedId,
+        s"commitLog's latest should be $expectedId")
+
+    // Ensure that there has not been an incremental execution after restart
+    def CheckNoIncrementalExecutionCurrentBatchId(): AssertOnQuery =
+      AssertOnQuery(_.lastExecution == null, s"lastExecution not expected to run")
+
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
     def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
@@ -181,6 +190,7 @@ class StreamSuite extends StreamTest {
       // Check the results of batch 0
       CheckAnswer(1, 2, 3),
       CheckIncrementalExecutionCurrentBatchId(0),
+      CheckCommitLogLatestBatchId(0),
       CheckOffsetLogLatestBatchId(0),
       CheckSinkLatestBatchId(0),
       // Add some data in batch 1
@@ -191,6 +201,7 @@ class StreamSuite extends StreamTest {
       // Check the results of batch 1
       CheckAnswer(1, 2, 3, 4, 5, 6),
       CheckIncrementalExecutionCurrentBatchId(1),
+      CheckCommitLogLatestBatchId(1),
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
 
@@ -203,6 +214,7 @@ class StreamSuite extends StreamTest {
       // the currentId does not get logged (e.g. as 2) even if the clock has advanced many times
       CheckAnswer(1, 2, 3, 4, 5, 6),
       CheckIncrementalExecutionCurrentBatchId(1),
+      CheckCommitLogLatestBatchId(1),
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
 
@@ -210,14 +222,15 @@ class StreamSuite extends StreamTest {
       StopStream,
       StartStream(ProcessingTime("10 seconds"), new StreamManualClock(60 * 1000)),
 
-      /* -- batch 1 rerun ----------------- */
-      // this batch 1 would re-run because the latest batch id logged in offset log is 1
+      /* -- batch 1 no rerun ----------------- */
+      // batch 1 would not re-run because the latest batch id logged in commit log is 1
       AdvanceManualClock(10 * 1000),
+      CheckNoIncrementalExecutionCurrentBatchId(),
 
       /* -- batch 2 ----------------------- */
       // Check the results of batch 1
       CheckAnswer(1, 2, 3, 4, 5, 6),
-      CheckIncrementalExecutionCurrentBatchId(1),
+      CheckCommitLogLatestBatchId(1),
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
       // Add some data in batch 2
@@ -228,6 +241,7 @@ class StreamSuite extends StreamTest {
       // Check the results of batch 2
       CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8, 9),
       CheckIncrementalExecutionCurrentBatchId(2),
+      CheckCommitLogLatestBatchId(2),
       CheckOffsetLogLatestBatchId(2),
       CheckSinkLatestBatchId(2))
   }
