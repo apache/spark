@@ -78,7 +78,9 @@ case class SortAggregateExec(
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      if (!hasInput && aggregateExpressions.isEmpty && groupingExpressions.isEmpty) {
+        Iterator[UnsafeRow]()
+      } else if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator[UnsafeRow]()
