@@ -395,7 +395,7 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.maxOnHeapMemory + row.maxOffHeapMemory;
+                                    return row.onHeapMemoryUsed + row.offHeapMemoryUsed;
                                 else
                                     var memoryUsed = row.onHeapMemoryUsed + row.offHeapMemoryUsed;
                                     var maxMemory = row.maxOnHeapMemory + row.maxOffHeapMemory;
@@ -406,7 +406,7 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.maxOnHeapMemory;
+                                    return row.onHeapMemoryUsed;
                                 else
                                     return (formatBytes(row.onHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.maxOnHeapMemory, type));
@@ -418,7 +418,7 @@ $(document).ready(function () {
                         {
                             data: function (row, type) {
                                 if (type !== 'display')
-                                    return row.maxOffHeapMemory;
+                                    return row.offHeapMemoryUsed;
                                 else
                                     return (formatBytes(row.offHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.maxOffHeapMemory, type));

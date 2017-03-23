@@ -26,9 +26,9 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "BlockManager"
 
-  private def registerGauge(name: String, f: BlockManagerMaster => Long): Unit = {
+  private def registerGauge(name: String, func: BlockManagerMaster => Long): Unit = {
     metricRegistry.register(name, new Gauge[Long] {
-      override def getValue: Long = f(blockManager.master) / 1024 / 1024
+      override def getValue: Long = func(blockManager.master) / 1024 / 1024
     })
   }
 
