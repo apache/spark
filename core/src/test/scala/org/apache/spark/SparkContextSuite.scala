@@ -577,7 +577,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         // second attempt succeeds immediately
       }
     }
-    assert(SparkContextSuite.taskSucceeded)
+    eventually(timeout(10.seconds)) {
+      assert(SparkContextSuite.taskSucceeded)
+    }
   }
 
   test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
