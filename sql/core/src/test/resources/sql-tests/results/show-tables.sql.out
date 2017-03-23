@@ -119,32 +119,42 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
 show_t3	true	CatalogTable(
-	Table: `show_t3`
-	Created: 
-	Last Access: 
-	Type: VIEW
-	Schema: STRUCT<`e`: INT (nullable = true)>
-	Storage())
+Table: `show_t3`
+Created: 
+Last Access: 
+Type: VIEW
+Storage()
+Schema: root
+ |-- e: integer (nullable = true)
+)
 
 showdb	show_t1	false	CatalogTable(
-	Table: `showdb`.`show_t1`
-	Created: 
-	Last Access: 
-	Type: MANAGED
-	Schema: STRUCT<`a`: STRING (nullable = true), `b`: INT (nullable = true), `c`: STRING (nullable = true), `d`: STRING (nullable = true)>
-	Provider: parquet
-	Partition Columns: [`c`, `d`]
-	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1)
-	Partition Provider: Catalog)
+Table: `showdb`.`show_t1`
+Created: 
+Last Access: 
+Type: MANAGED
+Provider: parquet
+Partition Columns: [`c`, `d`]
+Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1)
+Partition Provider: Catalog
+Schema: root
+ |-- a: string (nullable = true)
+ |-- b: integer (nullable = true)
+ |-- c: string (nullable = true)
+ |-- d: string (nullable = true)
+)
 
 showdb	show_t2	false	CatalogTable(
-	Table: `showdb`.`show_t2`
-	Created: 
-	Last Access: 
-	Type: MANAGED
-	Schema: STRUCT<`b`: STRING (nullable = true), `d`: INT (nullable = true)>
-	Provider: parquet
-	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t2))
+Table: `showdb`.`show_t2`
+Created: 
+Last Access: 
+Type: MANAGED
+Provider: parquet
+Storage(Location: sql/core/spark-warehouse/showdb.db/show_t2)
+Schema: root
+ |-- b: string (nullable = true)
+ |-- d: integer (nullable = true)
+)
 
 
 -- !query 13

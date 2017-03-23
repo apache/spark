@@ -283,7 +283,6 @@ case class CatalogTable(
         s"Created: ${new Date(createTime).toString}",
         s"Last Access: ${new Date(lastAccessTime).toString}",
         s"Type: ${tableType.name}",
-        if (schema.nonEmpty) s"Schema: ${schema.sql}" else "",
         if (provider.isDefined) s"Provider: ${provider.get}" else "",
         if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
       ) ++ bucketStrings ++ Seq(
@@ -292,9 +291,10 @@ case class CatalogTable(
         if (properties.nonEmpty) s"Properties: $tableProperties" else "",
         if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
         s"$storage",
-        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "")
+        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "",
+        if (schema.nonEmpty) s"Schema: ${schema.treeString}" else "")
 
-    output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
+    output.filter(_.nonEmpty).mkString("CatalogTable(\n", "\n", ")")
   }
 }
 

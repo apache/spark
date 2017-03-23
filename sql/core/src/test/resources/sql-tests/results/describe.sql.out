@@ -97,16 +97,21 @@ DESC EXTENDED t
 struct<col_name:string,data_type:string,comment:string>
 -- !query 6 output
 # Detailed Table Information	CatalogTable(
-	Table: `default`.`t`
-	Created: 
-	Last Access: 
-	Type: MANAGED
-	Schema: STRUCT<`a`: STRING (nullable = true), `b`: INT (nullable = true), `c`: STRING (nullable = true), `d`: STRING (nullable = true)>
-	Provider: parquet
-	Partition Columns: [`c`, `d`]
-	Comment: table_comment
-	Storage(Location: sql/core/spark-warehouse/t)
-	Partition Provider: Catalog)	                    
+Table: `default`.`t`
+Created: 
+Last Access: 
+Type: MANAGED
+Provider: parquet
+Partition Columns: [`c`, `d`]
+Comment: table_comment
+Storage(Location: sql/core/spark-warehouse/t)
+Partition Provider: Catalog
+Schema: root
+ |-- a: string (nullable = true)
+ |-- b: integer (nullable = true)
+ |-- c: string (nullable = true)
+ |-- d: string (nullable = true)
+)	                    
 # Partition Information	                    	                    
 # col_name          	data_type           	comment             
 a                   	string              	                    
