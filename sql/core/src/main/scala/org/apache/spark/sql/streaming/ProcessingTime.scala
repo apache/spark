@@ -28,61 +28,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * :: Experimental ::
- * Used to indicate how often results should be produced by a [[StreamingQuery]].
- *
- * @since 2.0.0
- */
-@Experimental
-@InterfaceStability.Evolving
-sealed trait Trigger
-
-/**
- * :: Experimental ::
- * A trigger that runs a query once then terminates
- *
- * Scala Example:
- * {{{
- *   df.writeStream.trigger(OneTime)
- * }}}
- *
- * Java Example:
- * {{{
- *   df.writeStream.trigger(OneTime.create())
- * }}}
- *
- * @since 2.2.0
- */
-@Experimental
-@InterfaceStability.Evolving
-case class OneTime() extends Trigger
-
-/**
- * :: Experimental ::
- * Used to create [[OneTime]] triggers for [[StreamingQuery]]s.
- *
- * @since 2.2.0
- */
-@Experimental
-@InterfaceStability.Evolving
-object OneTime {
-
-  /**
-   * Create a [[OneTime]] trigger.
-   *
-   * Example:
-   * {{{
-   *   df.writeStream.trigger(OneTime.create())
-   * }}}
-   *
-   * @since 2.2.0
-   */
-  def create(): OneTime = {
-    apply()
-  }
-}
-
-/**
- * :: Experimental ::
  * A trigger that runs a query periodically based on the processing time. If `interval` is 0,
  * the query will run as fast as possible.
  *
@@ -106,6 +51,7 @@ object OneTime {
  */
 @Experimental
 @InterfaceStability.Evolving
+@deprecated("use Trigger.ProcessingTimeTrigger(intervalMs)", "2.2.0")
 case class ProcessingTime(intervalMs: Long) extends Trigger {
   require(intervalMs >= 0, "the interval of trigger should not be negative")
 }
@@ -118,6 +64,7 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
  */
 @Experimental
 @InterfaceStability.Evolving
+@deprecated("use Trigger.ProcessingTimeTrigger(intervalMs)", "2.2.0")
 object ProcessingTime {
 
   /**
@@ -129,7 +76,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
+   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
    */
+  @deprecated("use Trigger.ProcessingTimeTrigger(interval)", "2.2.0")
   def apply(interval: String): ProcessingTime = {
     if (StringUtils.isBlank(interval)) {
       throw new IllegalArgumentException(
@@ -159,7 +108,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
+   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
    */
+  @deprecated("use Trigger.ProcessingTimeTrigger(interval)", "2.2.0")
   def apply(interval: Duration): ProcessingTime = {
     new ProcessingTime(interval.toMillis)
   }
@@ -173,7 +124,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
+   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
    */
+  @deprecated("use Trigger.ProcessingTimeTrigger(interval)", "2.2.0")
   def create(interval: String): ProcessingTime = {
     apply(interval)
   }
@@ -188,7 +141,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
+   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
    */
+  @deprecated("use Trigger.ProcessingTimeTrigger(interval, unit)", "2.2.0")
   def create(interval: Long, unit: TimeUnit): ProcessingTime = {
     new ProcessingTime(unit.toMillis(interval))
   }

@@ -165,7 +165,8 @@ class StreamExecution(
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
-    case _: OneTime => OneTimeExecutor()
+    case OneTimeTrigger => OneTimeExecutor()
+    case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
   /** Defines the internal state of execution */
