@@ -450,6 +450,19 @@ class SQLTests(ReusedPySparkTestCase):
                     Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
         self.assertEqual(ages_newlines.collect(), expected)
 
+    def test_ignorewhitespace_csv(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.spark.createDataFrame([[" a", "b  ", " c "]]).write.csv(
+            tmpPath,
+            ignoreLeadingWhiteSpace=False,
+            ignoreTrailingWhiteSpace=False)
+
+        expected = [Row(value=u' a,b  , c ')]
+        readback = self.spark.read.text(tmpPath)
+        self.assertEqual(readback.collect(), expected)
+        shutil.rmtree(tmpPath)
+
     def test_read_multiple_orc_file(self):
         df = self.spark.read.orc(["python/test_support/sql/orc_partitioned/b=0/c=0",
                                   "python/test_support/sql/orc_partitioned/b=1/c=1"])
