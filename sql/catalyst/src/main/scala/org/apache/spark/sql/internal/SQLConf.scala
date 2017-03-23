@@ -189,10 +189,10 @@ object SQLConf {
 
   val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
     .internal()
-    .doc("When true, the query optimizer will use constraint propagation in query plans to " +
-         "perform optimization. Constraint propagation can be computation expensive for large " +
-         "query plans. For such queries, disable this flag to get around this issue. Default " +
-         "is enabled")
+    .doc("When true, the query optimizer will infer and propagate data constraints in the query " +
+      "plan to optimize them. Constraint propagation can sometimes be computationally expensive" +
+      "for certain kinds of query plans (such as those with a large number of predicates and " +
+      "aliases) which might negatively impact overall runtime.")
     .booleanConf
     .createWithDefault(true)
 

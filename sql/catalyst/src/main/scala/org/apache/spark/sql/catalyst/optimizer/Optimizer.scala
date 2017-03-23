@@ -626,7 +626,6 @@ case class InferFiltersFromConstraints(conf: CatalystConf)
 
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
-      val constraintEnabled = conf.constraintPropagationEnabled
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
       if (newFilters.nonEmpty) {

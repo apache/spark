@@ -39,7 +39,7 @@ class PruneFiltersSuite extends PlanTest {
         PushPredicateThroughJoin) :: Nil
   }
 
-  object OptimizeDisableConstraintPropagation extends RuleExecutor[LogicalPlan] {
+  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
@@ -160,7 +160,8 @@ class PruneFiltersSuite extends PlanTest {
         ("tr1.a".attr > 10 || "tr1.c".attr < 10) &&
           'd.attr < 100)
 
-    val optimized = OptimizeDisableConstraintPropagation.execute(queryWithUselessFilter.analyze)
+    val optimized =
+      OptimizeWithConstraintPropagationDisabled.execute(queryWithUselessFilter.analyze)
     // When constraint propagation is disabled, the useless filter won't be pruned.
     // It gets pushed down. Because the rule `CombineFilters` runs only once, there are redundant
     // and duplicate filters.

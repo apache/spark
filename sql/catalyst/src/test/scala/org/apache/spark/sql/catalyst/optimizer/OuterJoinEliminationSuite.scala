@@ -36,6 +36,16 @@ class OuterJoinEliminationSuite extends PlanTest {
         PushPredicateThroughJoin) :: Nil
   }
 
+  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Subqueries", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Outer Join Elimination", Once,
+        EliminateOuterJoin(SimpleCatalystConf(caseSensitiveAnalysis = true,
+          constraintPropagationEnabled = false)),
+        PushPredicateThroughJoin) :: Nil
+  }
+
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation1 = LocalRelation('d.int, 'e.int, 'f.int)
 
@@ -231,5 +241,22 @@ class OuterJoinEliminationSuite extends PlanTest {
         .where(IsNotNull(Coalesce("e".attr :: "a".attr :: Nil))).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("no outer join elimination if constraint propagation is disabled") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    // The predicate "x.b + y.d >= 3" will be inferred constraints like:
+    // "x.b != null" and "y.d != null", if constraint propagation is enabled.
+    // When we disable it, the predicate can't be evaluated on left or right plan and used to
+    // filter out nulls. So the Outer Join will not be eliminated.
+    val originalQuery =
+      x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
+        .where("x.b".attr + "y.d".attr >= 3)
+
+    val optimized = OptimizeWithConstraintPropagationDisabled.execute(originalQuery.analyze)
+
+    comparePlans(optimized, originalQuery.analyze)
   }
 }

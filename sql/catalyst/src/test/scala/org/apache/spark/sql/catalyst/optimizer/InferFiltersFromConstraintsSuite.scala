@@ -36,7 +36,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         CombineFilters) :: Nil
   }
 
-  object OptimizeDisableConstraintPropagation extends RuleExecutor[LogicalPlan] {
+  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("InferAndPushDownFilters", FixedPoint(100),
         PushPredicateThroughJoin,
@@ -215,7 +215,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   test("No inferred filter when constraint propagation is disabled") {
     val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
-    val optimized = OptimizeDisableConstraintPropagation.execute(originalQuery)
+    val optimized = OptimizeWithConstraintPropagationDisabled.execute(originalQuery)
     comparePlans(optimized, originalQuery)
   }
 }
