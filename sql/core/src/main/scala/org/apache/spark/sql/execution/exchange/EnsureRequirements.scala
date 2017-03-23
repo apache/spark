@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec,
-  SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.aggregate.AggregateExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -293,6 +293,58 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
+  private def updatePartitioningByAliases(exprs: Seq[NamedExpression], partioning: Partitioning)
+    : Partitioning = {
+    val aliasSeq = exprs.flatMap(_.collectFirst {
+      case a @ Alias(child, _) => (child, a.toAttribute)
+    })
+
+    def maybeReplaceExpr(e: Expression): Expression = aliasSeq.find {
+      case (c, _) => c.semanticEquals(e)
+    }.map(_._2).getOrElse(e)
+
+    def maybeUpdatePartitioningExprs(p: Partitioning): Partitioning = p match {
+      case hash @ HashPartitioning(exprs, _) =>
+        hash.copy(expressions = exprs.map(maybeReplaceExpr))
+      case range @ RangePartitioning(ordering, _) =>
+        range.copy(ordering = ordering.map { order =>
+          order.copy(
+            child = maybeReplaceExpr(order.child),
+            sameOrderExpressions = order.sameOrderExpressions.map(maybeReplaceExpr)
+          )
+        })
+      case _ => p
+    }
+
+    partioning match {
+      case pc @ PartitioningCollection(ps) =>
+        pc.copy(partitionings = ps.map(maybeUpdatePartitioningExprs))
+      case _ =>
+        maybeUpdatePartitioningExprs(partioning)
+    }
+  }
+
+  private def hasAlias(exprs: Seq[NamedExpression]): Boolean = {
+    exprs.exists(_.collectFirst { case _: Alias => true }.isDefined)
+  }
+
+  // If children have alias names, `outputPartitioning`s ignore the alias expressions and
+  // `ensureDistributionAndOrdering` inserts unnecessary shuffles.
+  // To solve this, we update `outputPartitioning`s by using aliases here.
+  private def maybeUpdateChildrenOutputPartitioning(operator: SparkPlan): SparkPlan = {
+    val newChildren = operator.children.map {
+      case proj @ ProjectExec(projectList, _, _) if hasAlias(projectList) =>
+        val newOutputPartitionig = updatePartitioningByAliases(projectList, proj.outputPartitioning)
+        proj.copy(partitioning = Some(newOutputPartitionig))
+      case agg: AggregateExec if hasAlias(agg.resultExpressions) =>
+        val newOutputPartitionig =
+          updatePartitioningByAliases(agg.resultExpressions, agg.outputPartitioning)
+        agg.copy(partitioning = Some(newOutputPartitionig))
+      case p => p
+    }
+    operator.withNewChildren(newChildren)
+  }
+
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
     case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _) =>
@@ -301,6 +353,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         case _ => operator
       }
     case operator: SparkPlan =>
-      ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+      ensureDistributionAndOrdering(maybeUpdateChildrenOutputPartitioning(operator))
   }
 }

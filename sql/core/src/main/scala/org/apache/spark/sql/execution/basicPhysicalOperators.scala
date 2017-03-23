@@ -28,12 +28,20 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
-case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
+case class ProjectExec(
+    projectList: Seq[NamedExpression],
+    child: SparkPlan,
+    partitioning: Option[Partitioning] = None)
   extends UnaryExecNode with CodegenSupport {
+
+  override def producedAttributes: AttributeSet = partitioning.flatMap {
+    case e: Expression => Some(e.references)
+    case _ => None
+  }.getOrElse(AttributeSet.empty)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -77,7 +85,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputPartitioning: Partitioning = partitioning.getOrElse(child.outputPartitioning)
+
+  override def simpleString: String =
+    s"Project ${Utils.truncatedString(projectList, "[", ", ", "]")}"
 }
 
 

@@ -15,3 +15,10 @@ SELECT a, 'b' AS tag FROM t4;
 
 -- SPARK-19766 Constant alias columns in INNER JOIN should not be folded by FoldablePropagation rule
 SELECT tb.* FROM ta INNER JOIN tb ON ta.a = tb.a AND ta.tag = tb.tag;
+
+-- SPARK-19981 Correctly resolve partitioning when output has aliases
+SET spark.sql.autoBroadcastJoinThreshold = -1;
+CREATE TEMPORARY VIEW t5 AS SELECT * FROM VALUES (1, 1), (3, 0) AS (k, v) DISTRIBUTE BY (k);
+CREATE TEMPORARY VIEW t6 AS SELECT * FROM VALUES (1, 1), (5, 1) AS (k, v) DISTRIBUTE BY (k);
+EXPLAIN SELECT * FROM (SELECT k AS k1 FROM t5) t5a
+INNER JOIN (SELECT k AS k1 FROM t6) t6a ON t5a.k1 = t6a.k1;

@@ -73,3 +73,9 @@ where b.z != b.z;
 -- SPARK-24369 multiple distinct aggregations having the same argument set
 SELECT corr(DISTINCT x, y), corr(DISTINCT y, x), count(*)
   FROM (VALUES (1, 1), (2, 2), (2, 2)) t(x, y);
+
+-- SPARK-19981 Correctly resolve partitioning when output has aliases
+CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (1, 'a'), (1, 'b') AS (a, b) DISTRIBUTE BY a;
+EXPLAIN SELECT k, MAX(b) FROM (SELECT a AS k, b FROM t1) t GROUP BY k;
+CREATE OR REPLACE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (1, 2), (0, 3) AS (a, b);
+EXPLAIN SELECT k, COUNT(v) FROM (SELECT a AS k, MAX(b) AS v FROM t2 GROUP BY a) t GROUP BY k;
