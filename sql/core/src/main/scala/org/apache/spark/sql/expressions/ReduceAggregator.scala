@@ -27,19 +27,17 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  *
  * This class currently assumes there is at least one input row.
  */
-private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
+private[sql] class ReduceAggregator[T](func: (T, T) => T)(@transient implicit val enc: Encoder[T])
   extends Aggregator[T, (Boolean, T), T] {
-
-  private val encoder = implicitly[Encoder[T]]
 
   override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
 
   override def bufferEncoder: Encoder[(Boolean, T)] =
     ExpressionEncoder.tuple(
       ExpressionEncoder[Boolean](),
-      encoder.asInstanceOf[ExpressionEncoder[T]])
+      enc.asInstanceOf[ExpressionEncoder[T]])
 
-  override def outputEncoder: Encoder[T] = encoder
+  override def outputEncoder: Encoder[T] = enc
 
   override def reduce(b: (Boolean, T), a: T): (Boolean, T) = {
     if (b._1) {

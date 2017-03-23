@@ -448,6 +448,13 @@ object MapObjects {
   }
 }
 
+case class UnresolvedMapObjects(
+    function: Expression => Expression,
+    child: Expression,
+    customCollectionCls: Option[Class[_]] = None) extends UnaryExpression with Unevaluable {
+  override def dataType: DataType = throw new UnsupportedOperationException("not resolved")
+}
+
 /**
  * Applies the given expression to every element of a collection of items, returning the result
  * as an ArrayType or ObjectType. This is similar to a typical map operation, but where the lambda
