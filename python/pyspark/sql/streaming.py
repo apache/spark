@@ -770,13 +770,13 @@ class DataStreamWriter(object):
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError('Value for processingTime must be a non empty string. Got: %s' %
                                  processingTime)
+            interval = processingTime.strip()
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
-                self.interval)
+                interval)
         elif once is not None:
             if once != True:
                 raise ValueError('Value for once must be True. Got' % once)
-            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once(
-                self.interval)
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
         else:
             raise ValueError('No trigger provided')
         self._jwrite = self._jwrite.trigger(jTrigger)
