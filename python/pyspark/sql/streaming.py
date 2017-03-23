@@ -774,7 +774,7 @@ class DataStreamWriter(object):
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
                 interval)
         elif once is not None:
-            if once != True:
+            if once is True:
                 raise ValueError('Value for once must be True. Got' % once)
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
         else:

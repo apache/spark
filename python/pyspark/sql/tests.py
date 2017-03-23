@@ -1251,7 +1251,7 @@ class SQLTests(ReusedPySparkTestCase):
         except ValueError:
             pass
 
-        #Should not take multiple args
+        # Should not take multiple args
         try:
             df.writeStream.trigger(once=True, processingTime='5 seconds')
         except ValueError:
