@@ -45,8 +45,7 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
-import org.apache.spark.util.CommandLineUtils
+import org.apache.spark.util.{ChildFirstURLClassLoader, CommandLineUtils, MutableURLClassLoader, Utils}
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -152,6 +151,7 @@ object SparkSubmit extends CommandLineUtils {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
+        SparkHadoopUtil.get
         SparkHadoopUtil.get.runAsProxyUser(args.proxyUser) {
           () => runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
         }

@@ -25,6 +25,9 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -184,38 +187,48 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
     Utils.initDaemon(log)
 
-    SparkHadoopUtil.get.runAsSparkUser { () =>
-      // Debug code
-      Utils.checkHost(hostname)
+    // Debug code
+    Utils.checkHost(hostname)
 
-      // Bootstrap to fetch the driver's Spark properties.
-      val executorConf = new SparkConf
-      val port = executorConf.getInt("spark.executor.port", 0)
-      val fetcher = RpcEnv.create(
-        "driverPropsFetcher",
-        hostname,
-        port,
-        executorConf,
-        new SecurityManager(executorConf),
-        clientMode = true)
-      val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
-      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
-      fetcher.shutdown()
+    // Bootstrap to fetch the driver's Spark properties.
+    val executorConf = new SparkConf
+    val port = executorConf.getInt("spark.executor.port", 0)
+    val fetcher = RpcEnv.create(
+      "driverPropsFetcher",
+      hostname,
+      port,
+      executorConf,
+      new SecurityManager(executorConf),
+      clientMode = true)
+    val driver = fetcher.setupEndpointRefByURI(driverUrl)
+    val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
+    val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
+    fetcher.shutdown()
 
-      // Create SparkEnv using properties we fetched from the driver.
-      val driverConf = new SparkConf()
-      for ((key, value) <- props) {
-        // this is required for SSL in standalone mode
-        if (SparkConf.isExecutorStartupConf(key)) {
-          driverConf.setIfMissing(key, value)
-        } else {
-          driverConf.set(key, value)
-        }
+    // Create SparkEnv using properties we fetched from the driver.
+    val driverConf = new SparkConf()
+    for ((key, value) <- props) {
+      // this is required for SSL in standalone mode
+      if (SparkConf.isExecutorStartupConf(key)) {
+        driverConf.setIfMissing(key, value)
+      } else {
+        driverConf.set(key, value)
       }
-      if (driverConf.contains("spark.yarn.credentials.file")) {
-        logInfo("Will periodically update credentials from: " +
-          driverConf.get("spark.yarn.credentials.file"))
+    }
+
+    val containsCreds = driverConf.contains("spark.yarn.credentials.file")
+
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
+    val credentialFile = new Path(driverConf.get("spark.yarn.credentials.file"))
+    val remoteFs = FileSystem.get(hadoopConf)
+    val creds = new Credentials()
+    creds.readTokenStorageStream(remoteFs.open(credentialFile))
+
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+
+      UserGroupInformation.getCurrentUser.addCredentials(creds)
+      if (containsCreds) {
+        logInfo("Will periodically update credentials from: " + credentialFile)
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
