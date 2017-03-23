@@ -367,6 +367,8 @@ case class OuterReference(e: NamedExpression)
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
+  override def sql: String = e.sql
+  override def toString: String = e.toString
 }
 
 object VirtualColumn {

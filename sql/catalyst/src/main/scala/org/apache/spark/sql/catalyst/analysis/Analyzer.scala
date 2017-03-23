@@ -1210,6 +1210,29 @@ class Analyzer(
     private def checkAndGetOuterReferences(sub: LogicalPlan): Seq[Expression] = {
       val outerReferences = ArrayBuffer.empty[Expression]
 
+      // Validate that correlated aggregate expression do not contain a mixture
+      // of outer and local references.
+      def checkMixedReferencesInsideAggregation(expr: Expression): Unit = {
+        expr.foreach {
+          case a: AggregateExpression if containsOuter(a) =>
+            val outer = a.collect { case OuterReference(e) => e.toAttribute }
+            val local = a.references -- outer
+            if (local.nonEmpty) {
+              val msg =
+                s"""
+                   |Found an aggregate expression in a correlated predicate that has both
+                   |outer and local references, which is not supported yet.
+                   |Aggregate expression: ${a.sql}
+                   |Outer references: ${outer.map(_.sql).mkString(", ")}
+                   |Local references: ${local.map(_.sql).mkString(", ")}
+             """.
+                  stripMargin.replace("\n", " ").trim()
+              failAnalysis(msg)
+            }
+          case _ =>
+        }
+      }
+
       // Make sure a plan's subtree does not contain outer references
       def failOnOuterReferenceInSubTree(p: LogicalPlan): Unit = {
         if (hasOuterReferences(p)) {
@@ -1219,6 +1242,7 @@ class Analyzer(
 
       // Make sure a plan's expressions do not contain outer references
       def failOnOuterReference(p: LogicalPlan): Unit = {
+        p.expressions.foreach(checkMixedReferencesInsideAggregation)
         if (p.expressions.exists(containsOuter)) {
           failAnalysis(
             "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
@@ -1305,6 +1329,8 @@ class Analyzer(
             case _: EqualTo | _: EqualNullSafe => false
             case _ => true
           }
+
+          correlated.foreach(checkMixedReferencesInsideAggregation(_))
           // The aggregate expressions are treated in a special way by getOuterReferences. If the
           // aggregate expression contains only outer reference attributes then the entire aggregate
           // expression is isolated as an OuterReference.
