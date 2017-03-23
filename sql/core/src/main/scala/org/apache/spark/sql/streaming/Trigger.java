@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
  */
 @Experimental
 @InterfaceStability.Evolving
-public abstract class Trigger {
+public class Trigger {
 
   /**
    * :: Experimental ::
