@@ -210,19 +210,19 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           } else {
             lenDistribution[8]++;
           }
-          String[] ranges = {"[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)", "[1m, 10m)",
-            "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g"};
-          String[] rangesAndDistribute = new String[9];
-          for (int j = 0; j < 9; j++) {
-            rangesAndDistribute[j] = ranges[j] + ":" + lenDistribution[j];
-          }
-          logger.debug("For task {}.{} in stage {} (TID {}), the block sizes in MapStatus are " +
-            "inaccurate (average is {}, {} blocks underestimated, size of underestimated is {})," +
-            " distribution is {}.", taskContext.partitionId(), taskContext.attemptNumber(),
-            taskContext.stageId(), taskContext.taskAttemptId(), hc.getAvgSize(),
-            underestimatedBlocksNum, underestimatedBlocksSize,
-            String.join(", ", rangesAndDistribute));
         }
+        String[] ranges = {"[0, 1k)", "[1k, 10k)", "[10k, 100k)", "[100k, 1m)", "[1m, 10m)",
+          "[10m, 100m)", "[100m, 1g)", "[1g, 10g)", ">10g"};
+        String[] rangesAndDistribute = new String[9];
+        for (int j = 0; j < 9; j++) {
+          rangesAndDistribute[j] = ranges[j] + ":" + lenDistribution[j];
+        }
+        logger.debug("For task {}.{} in stage {} (TID {}), the block sizes in MapStatus are " +
+          "inaccurate (average is {}, {} blocks underestimated, size of underestimated is {})," +
+          " distribution is {}.", taskContext.partitionId(), taskContext.attemptNumber(),
+          taskContext.stageId(), taskContext.taskAttemptId(), hc.getAvgSize(),
+          underestimatedBlocksNum, underestimatedBlocksSize,
+          String.join(", ", rangesAndDistribute));
       }
     }
   }
