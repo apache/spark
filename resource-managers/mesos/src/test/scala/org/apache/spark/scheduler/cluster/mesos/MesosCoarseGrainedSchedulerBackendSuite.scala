@@ -464,6 +464,43 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(!uris.asScala.head.getCache)
   }
 
+  test("mesos sets configurable task name") {
+    val taskName = "mesos.test.task"
+    setBackend(Map(
+      "spark.mesos.task.name" -> taskName
+    ))
+
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+
+    // Add " 0" to the taskName to match the executor number that is appended
+    assert(launchedTasks.head.getName == s"$taskName 0")
+  }
+
+  test("mesos sets configurable label on tasks") {
+    val taskLabelsString = "mesos:test,label:test"
+    setBackend(Map(
+      "spark.mesos.task.labels" -> taskLabelsString
+    ))
+
+    // Build up the labels
+    val taskLabels = Protos.Labels.newBuilder()
+      .addLabels(Protos.Label.newBuilder()
+        .setKey("mesos").setValue("test").build())
+      .addLabels(Protos.Label.newBuilder()
+        .setKey("label").setValue("test").build())
+      .build()
+
+    val offers = List(Resources(backend.executorMemory(sc), 1))
+    offerResources(offers)
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+
+    val labels = launchedTasks.head.getLabels
+
+    assert(launchedTasks.head.getLabels.equals(taskLabels))
+  }
+
   test("mesos supports spark.mesos.network.name") {
     setBackend(Map(
       "spark.mesos.network.name" -> "test-network-name"
