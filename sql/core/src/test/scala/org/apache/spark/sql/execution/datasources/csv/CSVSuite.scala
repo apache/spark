@@ -1117,4 +1117,61 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(df2.schema === schema)
   }
 
+  test("ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - read") {
+    val input = " a,b  , c "
+
+    // For reading, default of both `ignoreLeadingWhiteSpace` and`ignoreTrailingWhiteSpace`
+    // are `false`. So, these are excluded.
+    val combinations = Seq(
+      (true, true),
+      (false, true),
+      (true, false))
+
+    // Check if read rows ignore whitespaces as configured.
+    val expectedRows = Seq(
+      Row("a", "b", "c"),
+      Row(" a", "b", " c"),
+      Row("a", "b  ", "c "))
+
+    combinations.zip(expectedRows)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        val df = spark.read
+          .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+          .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+          .csv(Seq(input).toDS())
+
+        checkAnswer(df, expected)
+      }
+  }
+
+  test("SPARK-18579: ignoreLeadingWhiteSpace and ignoreTrailingWhiteSpace options - write") {
+    val df = Seq((" a", "b  ", " c ")).toDF()
+
+    // For writing, default of both `ignoreLeadingWhiteSpace` and `ignoreTrailingWhiteSpace`
+    // are `true`. So, these are excluded.
+    val combinations = Seq(
+      (false, false),
+      (false, true),
+      (true, false))
+
+    // Check if written lines ignore each whitespaces as configured.
+    val expectedLines = Seq(
+      " a,b  , c ",
+      " a,b, c",
+      "a,b  ,c ")
+
+    combinations.zip(expectedLines)
+      .foreach { case ((ignoreLeadingWhiteSpace, ignoreTrailingWhiteSpace), expected) =>
+        withTempPath { path =>
+          df.write
+            .option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+            .option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+            .csv(path.getAbsolutePath)
+
+          // Read back the written lines.
+          val readBack = spark.read.text(path.getAbsolutePath)
+          checkAnswer(readBack, Row(expected))
+        }
+      }
+  }
 }

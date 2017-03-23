@@ -573,7 +573,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
-   * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
+   * <li>`quoteAll` (default `false`): a flag indicating whether all values should always be
    * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
@@ -586,6 +586,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
+   * whitespaces from values being written should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
+   * trailing whitespaces from values being written should be skipped.</li>
    * </ul>
    *
    * @since 2.0.0
