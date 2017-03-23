@@ -844,9 +844,9 @@ private[spark] class TaskSetManager(
 
     if (reason != Success && !reason.isInstanceOf[FetchFailed] && isZombie) {
       // If the TaskSetManager is in zombie mode, we should inform the DAGScheduler to abort
-      // the task in case of failure so that the DagScheduler can rerun it in the retry of the stage.
-      // Please note that we exclude fetch failed tasks, because they are handled by the DAGScheduler
-      // separately.
+      // the task in case of failure so that the DagScheduler can rerun it in the retry of
+      // the stage. Please note that we exclude fetch failed tasks, because they are handled
+      // by the DAGScheduler separately.
       sched.dagScheduler.tasksAborted(tasks(index).stageId, Array(tasks(index)))
     }
 
