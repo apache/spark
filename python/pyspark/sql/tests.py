@@ -1220,6 +1220,9 @@ class SQLTests(ReusedPySparkTestCase):
         csvpath = os.path.join(tempfile.mkdtemp(), 'data')
         df.write.option('quote', None).format('csv').save(csvpath)
 
+        csvpath = os.path.join(tempfile.mkdtemp(), 'data')
+        df.write.option('quote', None).format('csv').save(csvpath)
+
         shutil.rmtree(tmpPath)
 
     def test_save_and_load_builder(self):
