@@ -202,12 +202,14 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
   private[this] var generatedOrdering = GenerateOrdering.generate(ordering)
 
   def compare(a: InternalRow, b: InternalRow): Int = {
+    if (generatedOrdering == null) {
+      generatedOrdering = GenerateOrdering.generate(ordering)
+    }
     generatedOrdering.compare(a, b)
   }
 
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    generatedOrdering = GenerateOrdering.generate(ordering)
   }
 
   override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
