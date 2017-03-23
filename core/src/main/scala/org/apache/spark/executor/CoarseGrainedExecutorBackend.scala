@@ -217,18 +217,17 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
 
     val containsCreds = driverConf.contains("spark.yarn.credentials.file")
-
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
-    val credentialFile = new Path(driverConf.get("spark.yarn.credentials.file"))
-    val remoteFs = FileSystem.get(hadoopConf)
     val creds = new Credentials()
-    creds.readTokenStorageStream(remoteFs.open(credentialFile))
+    if (containsCreds) {
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
+      val credentialFile = new Path(driverConf.get("spark.yarn.credentials.file"))
+      val remoteFs = FileSystem.get(hadoopConf)
+      creds.readTokenStorageStream(remoteFs.open(credentialFile))
+    }
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
-
-      UserGroupInformation.getCurrentUser.addCredentials(creds)
       if (containsCreds) {
-        logInfo("Will periodically update credentials from: " + credentialFile)
+        UserGroupInformation.getCurrentUser.addCredentials(creds)
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
