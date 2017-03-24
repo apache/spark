@@ -246,8 +246,16 @@ package object config {
         "driver and executor environments contain sensitive information. When this regex matches " +
         "a property, its value is redacted from the environment UI and various logs like YARN " +
         "and event logs.")
-      .stringConf
-      .createWithDefault("(?i)secret|password")
+      .regexConf
+      .createWithDefault("(?i)secret|password".r)
+
+  private[spark] val STRING_REDACTION_PATTERN =
+    ConfigBuilder("spark.redaction.string.regex")
+      .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
+        "information. When this regex matches a string part, that string part is replaced by a " +
+        "dummy value. This is currently used to redact the output of SQL explain commands.")
+      .regexConf
+      .createOptional
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")

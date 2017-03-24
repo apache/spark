@@ -18,6 +18,9 @@
 package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
+import java.util.regex.PatternSyntaxException
+
+import scala.util.matching.Regex
 
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 
@@ -64,6 +67,13 @@ private object ConfigHelpers {
   }
 
   def byteToString(v: Long, unit: ByteUnit): String = unit.convertTo(v, ByteUnit.BYTE) + "b"
+
+  def regexFromString(str: String, key: String): Regex = {
+    try str.r catch {
+      case e: PatternSyntaxException =>
+        throw new IllegalArgumentException(s"$key should be a regex, but was $str", e)
+    }
+  }
 
 }
 
@@ -214,4 +224,7 @@ private[spark] case class ConfigBuilder(key: String) {
     new FallbackConfigEntry(key, _doc, _public, fallback)
   }
 
+  def regexConf: TypedConfigBuilder[Regex] = {
+    new TypedConfigBuilder(this, regexFromString(_, this.key), _.regex)
+  }
 }

@@ -19,9 +19,6 @@ package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.SparkConfWithEnv
@@ -96,6 +93,21 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1024L)
     conf.set(bytes.key, "1k")
     assert(conf.get(bytes) === 1L)
+  }
+
+  test("conf entry: regex") {
+    val conf = new SparkConf()
+    val rConf = ConfigBuilder(testKey("regex")).regexConf.createWithDefault(".*".r)
+
+    conf.set(rConf, "[0-9a-f]{8}".r)
+    assert(conf.get(rConf).regex === "[0-9a-f]{8}")
+
+    conf.set(rConf.key, "[0-9a-f]{4}")
+    assert(conf.get(rConf).regex === "[0-9a-f]{4}")
+
+    conf.set(rConf.key, "[.")
+    val e = intercept[IllegalArgumentException](conf.get(rConf))
+    assert(e.getMessage.contains("regex should be a regex, but was"))
   }
 
   test("conf entry: string seq") {
@@ -239,5 +251,4 @@ class ConfigEntrySuite extends SparkFunSuite {
       .createWithDefault(null)
     testEntryRef(nullConf, ref(nullConf))
   }
-
 }
