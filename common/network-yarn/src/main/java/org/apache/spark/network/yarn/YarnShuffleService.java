@@ -37,7 +37,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.metrics2.MetricsSource;
-import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -173,7 +172,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
       // register metrics on the block handler into the Node Manager's metrics system.
       try {
-        YarnShuffleServiceMetrics serviceMetrics = new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
+        YarnShuffleServiceMetrics serviceMetrics = new YarnShuffleServiceMetrics(
+          blockHandler.getAllMetrics());
         MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
 
         Method registerSourceMethod = metricsSystem.getClass().getDeclaredMethod("registerSource",
