@@ -1861,7 +1861,7 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
-   * Returns the value of the column `e` rounded to 0 decimal places.
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_UP round mode.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1869,8 +1869,8 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places if `scale` is greater than or equal to 0
-   * or at integral part when `scale` is less than 0.
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 1.5.0
