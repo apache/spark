@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import scala.util.control.NonFatal
+
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -108,7 +110,7 @@ object DataType {
   // Since we add an user-friendly API in the DDL parser, we employ DDL formats for the case.
   // To keep back-compatibility, we use `fromJson` first, and then try the new API.
   def fromString(text: String): DataType = {
-    try { fromJson(text) } catch { case _: Throwable => CatalystSqlParser.parseTableSchema(text) }
+    try { fromJson(text) } catch { case NonFatal(_) => CatalystSqlParser.parseTableSchema(text) }
   }
 
   private val nonDecimalNameToType = {
