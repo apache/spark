@@ -22,18 +22,14 @@ import breeze.linalg.{Vector => BV}
 import breeze.numerics
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors, VectorUDT}
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeArrayData, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final, TypedImperativeAggregate}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, UserDefinedFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
 import org.apache.spark.sql.types._
-
-// scalastyle:off println
 
 
 /**
@@ -131,9 +127,6 @@ private[ml] class SummaryBuilderImpl(
 
   override def summary(column: Column): Column = {
     val start = SummaryBuilderImpl.Buffer.fromMetrics(requestedCompMetrics)
-    println(s"summary: requestedMetrics=$requestedMetrics")
-    println(s"summary: requestedCompMetrics=$requestedCompMetrics")
-    println(s"summary: start=$start")
     val agg = SummaryBuilderImpl.MetricsAggregate(
       requestedMetrics,
       start,
@@ -308,7 +301,6 @@ object SummaryBuilderImpl extends Logging {
     val numFields = bufferSchema.fields.length
 
     def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
-      println(s"updateInPlace: buffer=$buffer v=$v w=$w")
       val startN = buffer.n
       if (startN == -1) {
         // The buffer was not initialized, we initialize it with the incoming row.
@@ -360,7 +352,6 @@ object SummaryBuilderImpl extends Logging {
           }
         }
       }
-      println(s"updateInPlace:2: buffer=$buffer v=$v w=$w")
     }
 
     /**
@@ -368,7 +359,6 @@ object SummaryBuilderImpl extends Logging {
      */
     @throws[SparkException]("When the buffers are not compatible")
     def mergeBuffers(buffer: Buffer, other: Buffer): Buffer = {
-      println(s"mergeBuffers: buffer=$buffer other=$other")
       if (buffer.n == -1) {
         // buffer is not initialized.
         if (other.n == -1) {
@@ -436,17 +426,14 @@ object SummaryBuilderImpl extends Logging {
     }
 
     def mean(buffer: Buffer): Array[Double] = {
-      println(s"Buffer:mean: buffer=$buffer")
       require(buffer.totalWeightSum > 0)
       require(buffer.mean != null)
       require(buffer.weightSum != null)
       val res = b(buffer.mean) :* b(buffer.weightSum) :/ buffer.totalWeightSum
-      println(s"Buffer:mean: buffer=$buffer res=$res")
       res.toArray
     }
 
     def variance(buffer: Buffer): Array[Double] = {
-      println(s"Buffer:variance: buffer=$buffer")
       import buffer._
       require(n >= 0, n)
       require(totalWeightSum > 0, totalWeightSum)
@@ -618,7 +605,6 @@ object SummaryBuilderImpl extends Logging {
      * Merges other into buffer.
      */
     private def mergeInitializedBuffers(buffer: Buffer, other: Buffer): Unit = {
-      println(s"mergeInitializedBuffers: buffer=$buffer other=$other")
       // Each buffer needs to be properly initialized.
       require(buffer.n > 0 && other.n > 0, (buffer.n, other.n))
       require(buffer.n == other.n, (buffer.n, other.n))
@@ -656,11 +642,7 @@ object SummaryBuilderImpl extends Logging {
         require(other.m2n != null)
         val w = (b(weightSum1) :* b(weightSum2)) :/ weightSum
         val z = (deltaMean :* deltaMean) :* w
-        println(s"weightSum1=$weightSum1 weightSum2=$weightSum2 weightSum=$weightSum z=$z")
-        println(s"mergeInitializedBuffers: buffer.m2n=${b(buffer.m2n)}")
-        println(s"mergeInitializedBuffers: other.m2n=${b(other.m2n)}")
         b(buffer.m2n) :+= b(other.m2n) :+ z
-        println(s"mergeInitializedBuffers: buffer.m2n_2=${b(buffer.m2n)}")
       }
 
       if (buffer.m2 != null) {
@@ -692,7 +674,6 @@ object SummaryBuilderImpl extends Logging {
         require(other.weightSum != null)
         b(buffer.weightSum) :+= b(other.weightSum)
       }
-      println(s"mergeInitializedBuffers:2: buffer=$buffer other=$other")
     }
   }
 
@@ -723,7 +704,6 @@ object SummaryBuilderImpl extends Logging {
     override def children: Seq[Expression] = child :: Nil
 
     override def update(buff: Buffer, row: InternalRow): Buffer = {
-      println(s"UPDATE: ROW=$row")
       // Unsafe rows do not play well with UDTs, it seems.
       // Directly call the deserializer.
       val v = udt.deserialize(row.getStruct(0, udt.sqlType.size))
@@ -748,9 +728,7 @@ object SummaryBuilderImpl extends Logging {
 
     override def serialize(buff: Buffer): Array[Byte] = {
       val x = Buffer.write(buff)
-      println(s"serialize: ${buff.hashCode()} x=${x.length} buff=$buff")
       val b2 = deserialize(x)
-      println(s"serialize: ${buff.hashCode()} b2=$b2")
       x
     }
 
