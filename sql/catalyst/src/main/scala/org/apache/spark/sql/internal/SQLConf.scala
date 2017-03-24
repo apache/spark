@@ -738,12 +738,6 @@ object SQLConf {
       .stringConf
       .createWithDefault(TimeZone.getDefault().getID())
 
-  val PARQUET_TABLE_INCLUDE_TIMEZONE =
-    buildConf("spark.sql.session.parquet.timeZone")
-      .doc("""Enables inclusion of parquet timezone property in newly created parquet tables""")
-      .booleanConf
-      .createWithDefault(false)
-
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
       .internal()

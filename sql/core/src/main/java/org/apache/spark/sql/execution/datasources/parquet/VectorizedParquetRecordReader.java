@@ -106,6 +106,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   /**
    * Implementation of RecordReader API.
    */
+  @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException, UnsupportedOperationException {
     super.initialize(inputSplit, taskAttemptContext);
