@@ -464,7 +464,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(!uris.asScala.head.getCache)
   }
 
-  test("mesos sets configurable task name") {
+  test("mesos sets task name to spark.app.name") {
     setBackend()
 
     val offers = List(Resources(backend.executorMemory(sc), 1))
@@ -472,7 +472,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val launchedTasks = verifyTaskLaunched(driver, "o1")
 
     // Add " 0" to the taskName to match the executor number that is appended
-    assert(launchedTasks.head.getName == s"${sc.appName} 0")
+    assert(launchedTasks.head.getName == "test-mesos-dynamic-alloc 0")
   }
 
   test("mesos supports spark.mesos.network.name") {
