@@ -263,8 +263,10 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     var keyIndex, newIndex = 0
     while (keyIndex < capacity) {
       if (data(2 * keyIndex) != null) {
-        data(2 * newIndex) = data(2 * keyIndex)
-        data(2 * newIndex + 1) = data(2 * keyIndex + 1)
+        if (keyIndex != newIndex) {
+          data(2 * newIndex) = data(2 * keyIndex)
+          data(2 * newIndex + 1) = data(2 * keyIndex + 1)
+        }
         newIndex += 1
       }
       keyIndex += 1
