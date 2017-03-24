@@ -226,7 +226,7 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.2.0")
   def compressedColMajor: Matrix = {
-    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = true)) {
+    if (getDenseSizeInBytes <= getSparseSizeInBytes(colMajor = true)) {
       this.toDenseColMajor
     } else {
       this.toSparseColMajor
@@ -238,7 +238,7 @@ sealed trait Matrix extends Serializable {
    */
   @Since("2.2.0")
   def compressedRowMajor: Matrix = {
-    if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = false)) {
+    if (getDenseSizeInBytes <= getSparseSizeInBytes(colMajor = false)) {
       this.toDenseRowMajor
     } else {
       this.toSparseRowMajor
@@ -254,7 +254,7 @@ sealed trait Matrix extends Serializable {
   def compressed: Matrix = {
     val cscSize = getSparseSizeInBytes(colMajor = true)
     val csrSize = getSparseSizeInBytes(colMajor = false)
-    if (getDenseSizeInBytes < math.min(cscSize, csrSize)) {
+    if (getDenseSizeInBytes <= math.min(cscSize, csrSize)) {
       // dense matrix size is the same for column major and row major, so maintain current layout
       this.toDense
     } else if (cscSize <= csrSize) {
@@ -1269,13 +1269,13 @@ object Matrices {
   }
 
   private[ml] def getSparseSize(numActives: Long, numPtrs: Long): Long = {
-    // 8 * values.length + 4 * rowIndices.length + 4 * colPtrs.length + 8 + 8 + 1
-    12L * numActives + 4L * numPtrs + 17L
+    // 8 * values.length + 4 * rowIndices.length + 4 * colPtrs.length + 12 + 12 + 12 + 1
+    12L * numActives + 4L * numPtrs + 37L
   }
 
   private[ml] def getDenseSize(numCols: Long, numRows: Long): Long = {
-    // 8 * values.length + 8 + 1
-    8L * numCols * numRows + 9L
+    // 8 * values.length + 12 + 1
+    8L * numCols * numRows + 13L
   }
 
 }

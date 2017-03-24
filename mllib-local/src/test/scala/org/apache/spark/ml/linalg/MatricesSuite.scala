@@ -457,20 +457,26 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm7 === dm4)
     assert(cm7.isColMajor)
     assert(cm7.getSizeInBytes === dm4.getSizeInBytes)
+
+    // this has the same size sparse or dense
+    val dm5 = new DenseMatrix(4, 4, Array.fill(7)(1.0) ++ Array.fill(9)(0.0))
+    // should choose dense to break ties
+    val cm8 = dm5.compressed.asInstanceOf[DenseMatrix]
+    assert(cm8.getSizeInBytes === dm5.toSparseColMajor.getSizeInBytes)
   }
 
   test("compressed sparse") {
     /*
        sm1 = 0.0 -1.0
              0.0  0.0
-            -4.0  0.0
+             0.0  0.0
              0.0  0.0
 
-       sm2 = 0.0 0.0 -4.0 0.0
-            -1.0 0.0  0.0 0.0
+       sm2 = 0.0 0.0 0.0 0.0
+            -1.0 0.0 0.0 0.0
      */
     // these should compress to sparse matrices
-    val sm1 = new SparseMatrix(4, 2, Array(0, 1, 2), Array(2, 0), Array(-4.0, -1.0))
+    val sm1 = new SparseMatrix(4, 2, Array(0, 0, 1), Array(0), Array(-1.0))
     val sm2 = sm1.transpose
 
     val cm1 = sm1.compressed.asInstanceOf[SparseMatrix]
@@ -485,7 +491,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm2.isRowMajor)
     // forced to be row major, so we have increased the size
     assert(cm2.getSizeInBytes > sm1.getSizeInBytes)
-    assert(cm2.getSizeInBytes <= sm1.toDense.getSizeInBytes)
+    assert(cm2.getSizeInBytes < sm1.toDense.getSizeInBytes)
 
     val cm9 = sm1.compressedColMajor.asInstanceOf[SparseMatrix]
     assert(cm9 === sm1)
@@ -503,7 +509,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm8.isColMajor)
     // forced to be col major, so we have increased the size
     assert(cm8.getSizeInBytes > sm2.getSizeInBytes)
-    assert(cm8.getSizeInBytes <= sm2.toDense.getSizeInBytes)
+    assert(cm8.getSizeInBytes < sm2.toDense.getSizeInBytes)
 
     val cm10 = sm2.compressedRowMajor.asInstanceOf[SparseMatrix]
     assert(cm10 === sm2)
@@ -557,6 +563,13 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm7 === sm5)
     assert(cm7.isRowMajor)
     assert(cm7.getSizeInBytes <= sm5.getSizeInBytes)
+
+    // this has the same size sparse or dense
+    val sm6 = new SparseMatrix(4, 4, Array(0, 4, 7, 7, 7), Array(0, 1, 2, 3, 0, 1, 2),
+      Array.fill(7)(1.0))
+    // should choose dense to break ties
+    val cm12 = sm6.compressed.asInstanceOf[DenseMatrix]
+    assert(cm12.getSizeInBytes === sm6.getSizeInBytes)
   }
 
   test("map, update") {
