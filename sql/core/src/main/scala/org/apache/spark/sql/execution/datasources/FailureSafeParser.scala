@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -69,15 +70,3 @@ class FailureSafeParser[IN](
     }
   }
 }
-
-/**
- * Exception thrown when the underlying parser meet a bad record and can't parse it.
- * @param record a function to return the record that cause the parser to fail
- * @param partialResult a function that returns an optional row, which is the partial result of
- *                      parsing this bad record.
- * @param cause the actual exception about why the record is bad and can't be parsed.
- */
-case class BadRecordException(
-    record: () => UTF8String,
-    partialResult: () => Option[InternalRow],
-    cause: Throwable) extends Exception(cause)
