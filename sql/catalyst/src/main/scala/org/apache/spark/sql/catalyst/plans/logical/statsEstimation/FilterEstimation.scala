@@ -201,6 +201,21 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case IsNotNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
         evaluateNullCheck(ar, isNull = false, update)
 
+      case op @ Equality(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ LessThan(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ LessThanOrEqual(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ GreaterThan(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
+      case op @ GreaterThanOrEqual(attrLeft: Attribute, attrRight: Attribute) =>
+        evaluateBinaryForTwoColumns(op, attrLeft, attrRight, update)
+
       case _ =>
         // TODO: it's difficult to support string operators without advanced statistics.
         // Hence, these string operators Like(_, _) | Contains(_, _) | StartsWith(_, _)
@@ -257,7 +272,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   /**
    * Returns a percentage of rows meeting a binary comparison expression.
    *
-   * @param op a binary comparison operator uch as =, <, <=, >, >=
+   * @param op a binary comparison operator such as =, <, <=, >, >=
    * @param attr an Attribute (or a column)
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
@@ -448,7 +463,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * Returns a percentage of rows meeting a binary comparison expression.
    * This method evaluate expression for Numeric/Date/Timestamp/Boolean columns.
    *
-   * @param op a binary comparison operator uch as =, <, <=, >, >=
+   * @param op a binary comparison operator such as =, <, <=, >, >=
    * @param attr an Attribute (or a column)
    * @param literal a literal value (or constant)
    * @param update a boolean flag to specify if we need to update ColumnStat of a given column
@@ -550,7 +565,130 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     Some(percent.toDouble)
   }
 
+  /**
+   * Returns a percentage of rows meeting a binary comparison expression containing two columns.
+   * In SQL queries, we also see predicate expressions involving two columns
+   * such as "column-1 (op) column-2" where column-1 and column-2 belong to same table.
+   * Note that, if column-1 and column-2 belong to different tables, then it is a join
+   * operator's work, NOT a filter operator's work.
+   *
+   * @param op a binary comparison operator such as =, <, <=, >, >=
+   * @param attrLeft the left Attribute (or a column)
+   * @param attrRight the right Attribute (or a column)
+   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   *               for subsequent conditions
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   */
+  def evaluateBinaryForTwoColumns(
+      op: BinaryComparison,
+      attrLeft: Attribute,
+      attrRight: Attribute,
+      update: Boolean): Option[Double] = {
+
+    if (!colStatsMap.contains(attrLeft)) {
+      logDebug("[CBO] No statistics for " + attrLeft)
+      return None
+    }
+    if (!colStatsMap.contains(attrRight)) {
+      logDebug("[CBO] No statistics for " + attrRight)
+      return None
+    }
+
+    attrLeft.dataType match {
+      case StringType | BinaryType =>
+        // TODO: It is difficult to support other binary comparisons for String/Binary
+        // type without min/max and advanced statistics like histogram.
+        logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
+        return None
+      case _ =>
+    }
+
+    val colStatLeft = colStatsMap(attrLeft)
+    val statsRangeLeft = Range(colStatLeft.min, colStatLeft.max, attrLeft.dataType)
+      .asInstanceOf[NumericRange]
+    val maxLeft = BigDecimal(statsRangeLeft.max)
+    val minLeft = BigDecimal(statsRangeLeft.min)
+    val ndvLeft = BigDecimal(colStatLeft.distinctCount)
+
+    val colStatRight = colStatsMap(attrRight)
+    val statsRangeRight = Range(colStatRight.min, colStatRight.max, attrRight.dataType)
+      .asInstanceOf[NumericRange]
+    val maxRight = BigDecimal(statsRangeRight.max)
+    val minRight = BigDecimal(statsRangeRight.min)
+    val ndvRight = BigDecimal(colStatRight.distinctCount)
+
+    // determine the overlapping degree between predicate range and column's range
+    val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
+      case _: EqualTo =>
+        ((maxLeft < minRight) || (maxRight < minLeft),
+          (minLeft == minRight) && (maxLeft == maxRight))
+      case _: LessThan =>
+        (minLeft >= maxRight, maxLeft <= minRight)
+      case _: LessThanOrEqual =>
+        (minLeft >= maxRight, maxLeft <= minRight)
+      case _: GreaterThan =>
+        (maxLeft <= minRight, minLeft >= maxRight)
+      case _: GreaterThanOrEqual =>
+        (maxLeft < minRight, minLeft > maxRight)
+    }
+
+    var percent = BigDecimal(1.0)
+    if (noOverlap) {
+      percent = 0.0
+    } else if (completeOverlap) {
+      percent = 1.0
+    } else {
+      // For partial overlap, we use an empirical value 1/3 as suggested by the book
+      // "Database Systems, the complete book".
+      percent = 1.0/3.0
+
+      if (update) {
+        // Need to adjust new min/max after the filter condition is applied
+
+        val ndv = BigDecimal(colStatLeft.distinctCount)
+        var newNdv = (ndv * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
+        if (newNdv < 1) newNdv = 1
+        var newMaxLeft = colStatLeft.max
+        var newMinLeft = colStatLeft.min
+        var newMaxRight = colStatRight.max
+        var newMinRight = colStatRight.min
+
+        op match {
+          case _: EqualTo =>
+            // need to set new min to the larger min value, and
+            // set the new max to the smaller max value.
+            if (minLeft < minRight) newMinLeft = colStatRight.min
+            else newMinRight = colStatLeft.min
+            if (maxLeft < maxRight) newMaxRight = colStatLeft.max
+            else newMaxLeft = colStatRight.max
+
+          case _: GreaterThan | _: GreaterThanOrEqual =>
+            // the left side should be greater than the right side.
+            // If not, we need to adjust it to narrow the range.
+            if (minLeft < minRight) newMinLeft = colStatRight.min
+            if (maxLeft < maxRight) newMaxRight = colStatLeft.max
+
+          case _: LessThan | _: LessThanOrEqual =>
+            // the left side should be less than the right side.
+            // If not, we need to adjust it to narrow the range.
+            if (minLeft > minRight) newMinRight = colStatLeft.min
+            if (maxLeft > maxRight) newMaxLeft = colStatRight.max
+        }
+
+        val newStatsLeft = colStatLeft.copy(distinctCount = newNdv, min = newMinLeft,
+          max = newMaxLeft, nullCount = 0)
+        colStatsMap(attrLeft) = newStatsLeft
+        val newStatsRight = colStatRight.copy(distinctCount = newNdv, min = newMinRight,
+          max = newMaxRight, nullCount = 0)
+        colStatsMap(attrRight) = newStatsRight
+      }
+    }
+
+    Some(percent.toDouble)
+  }
+
 }
+
 
 class ColumnStatsMap {
   private val baseMap: mutable.Map[ExprId, (Attribute, ColumnStat)] = mutable.HashMap.empty
