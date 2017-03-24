@@ -18,7 +18,7 @@
 package org.apache.spark.ml.stat
 
 import breeze.{linalg => la}
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import breeze.linalg.{Vector => BV}
 import breeze.numerics
 
 import org.apache.spark.SparkException
@@ -217,8 +217,8 @@ object SummaryBuilderImpl extends Logging {
   case object ComputeM2n extends ComputeMetrics
   case object ComputeM2 extends ComputeMetrics
   case object ComputeL1 extends ComputeMetrics
-  case object ComputeCount extends ComputeMetrics // Always computed
-  case object ComputeTotalWeightSum extends ComputeMetrics // Always computed
+  case object ComputeCount extends ComputeMetrics // Always computed -> TODO: remove
+  case object ComputeTotalWeightSum extends ComputeMetrics // Always computed -> TODO: remove
   case object ComputeWeightSquareSum extends ComputeMetrics
   case object ComputeWeightSum extends ComputeMetrics
   case object ComputeNNZ extends ComputeMetrics
@@ -256,6 +256,7 @@ object SummaryBuilderImpl extends Logging {
           s" max=${v(max)} min=${v(min)})"
       }
     }
+
   object Buffer extends Logging {
     // Recursive function, but the number of cases is really small.
     def fromMetrics(requested: Seq[ComputeMetrics]): Buffer = {
@@ -275,6 +276,15 @@ object SummaryBuilderImpl extends Logging {
           case _ => b // These cases are already being computed
         }
       }
+    }
+
+    /**
+     * (testing only). Makes a buffer with all the metrics enabled.
+     */
+    def allMetrics(): Buffer = {
+      fromMetrics(Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1, ComputeCount,
+        ComputeTotalWeightSum, ComputeWeightSquareSum, ComputeWeightSum, ComputeNNZ, ComputeMax,
+        ComputeMin))
     }
 
     val bufferSchema: StructType = {
@@ -443,6 +453,7 @@ object SummaryBuilderImpl extends Logging {
       require(buffer.mean != null)
       require(m2n != null)
       require(weightSum != null)
+
       val denom = totalWeightSum - (totalWeightSquareSum / totalWeightSum)
       if (denom > 0.0) {
         val normWs = b(weightSum) :/ totalWeightSum
@@ -500,8 +511,6 @@ object SummaryBuilderImpl extends Logging {
       }
     }
 
-//    private[this] lazy val projection = UnsafeProjection.create(bufferSchema)
-
     // Returns the array at a given index, or null if the array is null.
     private def nullableArrayD(row: UnsafeRow, ordinal: Int): Array[Double] = {
       if (row.isNullAt(ordinal)) {
@@ -523,24 +532,6 @@ object SummaryBuilderImpl extends Logging {
     private def b(x: Array[Double]): BV[Double] = Vectors.dense(x).asBreeze
 
     private def bl(x: Array[Long]): BV[Long] = BV.apply(x)
-
-    private def maxInPlace(x: Array[Double], y: Array[Double]): Unit = {
-      var i = 0
-      while(i < x.length) {
-        // Note: do not use conditions, it is wrong when handling NaNs.
-        x(i) = Math.max(x(i), y(i))
-        i += 1
-      }
-    }
-
-    private def minInPlace(x: Array[Double], y: Array[Double]): Unit = {
-      var i = 0
-      while(i < x.length) {
-        // Note: do not use conditions, it is wrong when handling NaNs.
-        x(i) = Math.min(x(i), y(i))
-        i += 1
-      }
-    }
 
     /**
      * Sets the content of a buffer based on a single row (initialization).
@@ -586,14 +577,14 @@ object SummaryBuilderImpl extends Logging {
           if (buffer.m2 != null) {
             buffer.m2 = Array.ofDim(n)
             v.foreachActive { (index, value) =>
-              buffer.weightSum(index) = w * value * value
+              buffer.m2(index) = w * value * value
             }
           }
 
           if (buffer.l1 != null) {
             buffer.l1 = Array.ofDim(n)
             v.foreachActive { (index, value) =>
-              buffer.weightSum(index) = w * math.abs(value)
+              buffer.l1(index) = w * math.abs(value)
             }
           }
       }
