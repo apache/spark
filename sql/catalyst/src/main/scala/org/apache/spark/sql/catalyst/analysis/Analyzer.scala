@@ -2502,7 +2502,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
         substitutedPlan.withNewChildren(expandedPlan :: Nil)
       } else if (windowExpressions.size > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
-          "of rows, therefore they are not currently not supported.")
+          "of rows, therefore they are currently not supported.")
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.sql.streaming.Trigger
 
 /**
- * :: DeveloperApi ::
- * Exception thrown when a task is explicitly killed (i.e., task failure is expected).
+ * A [[Trigger]] that process only one batch of data in a streaming query then terminates
+ * the query.
  */
-@DeveloperApi
-class TaskKilledException(val reason: String) extends RuntimeException {
-  def this() = this("unknown reason")
-}
+@Experimental
+@InterfaceStability.Evolving
+case object OneTimeTrigger extends Trigger
