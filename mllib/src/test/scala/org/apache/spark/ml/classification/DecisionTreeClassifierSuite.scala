@@ -385,6 +385,20 @@ class DecisionTreeClassifierSuite
     testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings ++ Map("maxDepth" -> 0),
       allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
+
+  test("read/write: ImpurityCalculator builder did not recognize impurity type: Gini") {
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val categoricalData: DataFrame =
+      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
+
+    // BUG: see SPARK-20043
+    val dt = new DecisionTreeClassifier().setImpurity("Gini")
+
+    val model = dt.fit(categoricalData)
+
+    testDefaultReadWrite(model, false)
+  }
 }
 
 private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {

@@ -178,6 +178,20 @@ class DecisionTreeRegressorSuite
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0),
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
+
+  test("read/write: ImpurityCalculator builder did not recognize impurity type: Variance") {
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+
+    // BUG: see SPARK-20043
+    val dt = new DecisionTreeRegressor().setImpurity("Variance")
+
+    val model = dt.fit(continuousData)
+
+    testDefaultReadWrite(model, false)
+  }
 }
 
 private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
