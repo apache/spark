@@ -26,18 +26,13 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-
-// scalastyle:off println
 
 class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import testImplicits._
   import Summarizer._
-
-  private val seed = 42
-  private val eps: Double = 1e-5
 
   private case class ExpectedMetrics(
       mean: Seq[Double],
@@ -163,14 +158,9 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   private def compare(df: DataFrame, exp: Seq[Any]): Unit = {
-    println(s"compare: df=$df")
     val coll = df.collect().toSeq
-    println(s"compare: coll=$coll")
     val Seq(row) = coll
     val res = row.toSeq
-    println(s"compare: ress=${res.map(_.getClass)}")
-    println(s"compare: row=${row}")
-    println(s"compare: exp=${exp}")
     val names = df.schema.fieldNames.zipWithIndex.map { case (n, idx) => s"$n ($idx)" }
     assert(res.size === exp.size, (res.size, exp.size))
     for (((x1, x2), name) <- res.zip(exp).zip(names)) {
@@ -226,13 +216,9 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("debugging test") {
     val df = denseData(Nil)
-    println(s">>> df=${df.collect().toSeq}")
     val c = df.col("features")
-    println(s">>>>> c=$c")
     val c1 = metrics("mean").summary(c)
-    println(s">>>>> c1=$c1")
     val res = df.select(c1)
-    println(s">>>>> res=$res")
     intercept[SparkException] {
       compare(res, Seq.empty)
     }
@@ -324,25 +310,14 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summarizer1 = makeBuffer(Seq(
       Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
       Vectors.dense(0.0, -1.0, -3.0)))
-//    val s1 = new MultivariateOnlineSummarizer
-//    Seq(
-//      Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
-//      Vectors.dense(0.0, -1.0, -3.0)).foreach(v => s1.add(OldVectors.fromML(v)))
 
     val summarizer2 = makeBuffer(Seq(
       Vectors.sparse(3, Seq((1, -5.1))),
       Vectors.dense(3.8, 0.0, 1.9),
       Vectors.dense(1.7, -0.6, 0.0),
       Vectors.sparse(3, Seq((1, 1.9), (2, 0.0)))))
-//    val s2 = new MultivariateOnlineSummarizer
-//    Seq(
-//      Vectors.sparse(3, Seq((1, -5.1))),
-//      Vectors.dense(3.8, 0.0, 1.9),
-//      Vectors.dense(1.7, -0.6, 0.0),
-//      Vectors.sparse(3, Seq((1, 1.9), (2, 0.0)))).foreach(v => s2.add(OldVectors.fromML(v)))
 
     val summarizer = Buffer.mergeBuffers(summarizer1, summarizer2)
-//    val s = s1.merge(s2)
 
     assert(b(Buffer.mean(summarizer)) ~==
       Vectors.dense(0.583333333333, -0.416666666666, -0.183333333333) absTol 1E-5, "mean mismatch")
@@ -359,7 +334,5 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(Buffer.totalCount(summarizer) === 6)
   }
-
-
 
 }
