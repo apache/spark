@@ -34,7 +34,7 @@ import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFor
 import org.scalatest.concurrent.Eventually
 import org.scalatest.Matchers._
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.Utils
 
 
@@ -540,6 +540,48 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  // Launches one task that will run forever. Once the SparkListener detects the task has
+  // started, kill and re-schedule it. The second run of the task will complete immediately.
+  // If this test times out, then the first version of the task wasn't killed successfully.
+  test("Killing tasks") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    SparkContextSuite.isTaskStarted = false
+    SparkContextSuite.taskKilled = false
+    SparkContextSuite.taskSucceeded = false
+
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        eventually(timeout(10.seconds)) {
+          assert(SparkContextSuite.isTaskStarted)
+        }
+        if (!SparkContextSuite.taskKilled) {
+          SparkContextSuite.taskKilled = true
+          sc.killTaskAttempt(taskStart.taskInfo.taskId, true, "first attempt will hang")
+        }
+      }
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (taskEnd.taskInfo.attemptNumber == 1 && taskEnd.reason == Success) {
+          SparkContextSuite.taskSucceeded = true
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    eventually(timeout(20.seconds)) {
+      sc.parallelize(1 to 1).foreach { x =>
+        // first attempt will hang
+        if (!SparkContextSuite.isTaskStarted) {
+          SparkContextSuite.isTaskStarted = true
+          Thread.sleep(9999999)
+        }
+        // second attempt succeeds immediately
+      }
+    }
+    eventually(timeout(10.seconds)) {
+      assert(SparkContextSuite.taskSucceeded)
+    }
+  }
+
   test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
     "open streams to help debugging") {
     val fs = new DebugFilesystem()
@@ -555,11 +597,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(exc.getCause() != null)
     stream.close()
   }
-
 }
 
 object SparkContextSuite {
   @volatile var cancelJob = false
   @volatile var cancelStage = false
   @volatile var isTaskStarted = false
+  @volatile var taskKilled = false
+  @volatile var taskSucceeded = false
 }

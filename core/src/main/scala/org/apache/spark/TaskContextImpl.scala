@@ -59,8 +59,8 @@ private[spark] class TaskContextImpl(
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new ArrayBuffer[TaskFailureListener]
 
-  // Whether the corresponding task has been killed.
-  @volatile private var interrupted: Boolean = false
+  // If defined, the corresponding task has been killed and this option contains the reason.
+  @volatile private var reasonIfKilled: Option[String] = None
 
   // Whether the task has completed.
   private var completed: Boolean = false
@@ -140,8 +140,19 @@ private[spark] class TaskContextImpl(
   }
 
   /** Marks the task for interruption, i.e. cancellation. */
-  private[spark] def markInterrupted(): Unit = {
-    interrupted = true
+  private[spark] def markInterrupted(reason: String): Unit = {
+    reasonIfKilled = Some(reason)
+  }
+
+  private[spark] override def killTaskIfInterrupted(): Unit = {
+    val reason = reasonIfKilled
+    if (reason.isDefined) {
+      throw new TaskKilledException(reason.get)
+    }
+  }
+
+  private[spark] override def getKillReason(): Option[String] = {
+    reasonIfKilled
   }
 
   @GuardedBy("this")
@@ -149,7 +160,7 @@ private[spark] class TaskContextImpl(
 
   override def isRunningLocally(): Boolean = false
 
-  override def isInterrupted(): Boolean = interrupted
+  override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
 
