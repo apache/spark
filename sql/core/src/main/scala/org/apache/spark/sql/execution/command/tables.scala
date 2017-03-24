@@ -560,7 +560,8 @@ case class DescribeTableCommand(
 
   private def describeExtendedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", table.toString, "")
+    append(buffer, "# Detailed Table Information", "", "")
+    append(buffer, table.simpleString, "", "")
   }
 
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -728,7 +729,7 @@ case class ShowTablesCommand(
         val tableName = tableIdent.table
         val isTemp = catalog.isTemporaryTable(tableIdent)
         if (isExtended) {
-          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).toString
+          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
           Row(database, tableName, isTemp, s"$information\n")
         } else {
           Row(database, tableName, isTemp)
@@ -745,7 +746,7 @@ case class ShowTablesCommand(
       val database = table.database.getOrElse("")
       val tableName = table.table
       val isTemp = catalog.isTemporaryTable(table)
-      val information = partition.toString
+      val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
   }

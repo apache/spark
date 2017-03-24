@@ -91,15 +91,20 @@ case class CatalogTablePartition(
     storage: CatalogStorageFormat,
     parameters: Map[String, String] = Map.empty) {
 
-  override def toString: String = {
+  private def toStringSeq: Seq[String] = {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
-    val output =
-      Seq(
-        s"Partition Values: [$specString]",
-        s"$storage",
-        s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+    Seq(
+      s"Partition Values: [$specString]",
+      s"$storage",
+      s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+  }
 
-    output.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  override def toString: String = {
+    toStringSeq.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+  }
+
+  def simpleString: String = {
+    toStringSeq.filter(_.nonEmpty).mkString("", "\n", "")
   }
 
   /** Return the partition location, assuming it is specified. */
@@ -261,7 +266,7 @@ case class CatalogTable(
       locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
-  override def toString: String = {
+  private def toStringSeq: Seq[String] = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val bucketStrings = bucketSpec match {
@@ -273,28 +278,32 @@ case class CatalogTable(
           if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumnsString" else "",
           if (sortColumnNames.nonEmpty) s"Sort Columns: $sortColumnsString" else ""
         )
-
       case _ => Nil
     }
 
-    val output =
-      Seq(s"Table: ${identifier.quotedString}",
-        if (owner.nonEmpty) s"Owner: $owner" else "",
-        s"Created: ${new Date(createTime).toString}",
-        s"Last Access: ${new Date(lastAccessTime).toString}",
-        s"Type: ${tableType.name}",
-        if (provider.isDefined) s"Provider: ${provider.get}" else "",
-        if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
-      ) ++ bucketStrings ++ Seq(
-        viewText.map("View: " + _).getOrElse(""),
-        comment.map("Comment: " + _).getOrElse(""),
-        if (properties.nonEmpty) s"Properties: $tableProperties" else "",
-        if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
-        s"$storage",
-        if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "",
-        if (schema.nonEmpty) s"Schema: ${schema.treeString}" else "")
+    Seq(s"Table: ${identifier.quotedString}",
+      if (owner.nonEmpty) s"Owner: $owner" else "",
+      s"Created: ${new Date(createTime).toString}",
+      s"Last Access: ${new Date(lastAccessTime).toString}",
+      s"Type: ${tableType.name}",
+      if (provider.isDefined) s"Provider: ${provider.get}" else "",
+      if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
+    ) ++ bucketStrings ++ Seq(
+      viewText.map("View: " + _).getOrElse(""),
+      comment.map("Comment: " + _).getOrElse(""),
+      if (properties.nonEmpty) s"Properties: $tableProperties" else "",
+      if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
+      s"$storage",
+      if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "",
+      if (schema.nonEmpty) s"Schema: ${schema.treeString}" else "")
+  }
 
-    output.filter(_.nonEmpty).mkString("CatalogTable(\n", "\n", ")")
+  override def toString: String = {
+    toStringSeq.filter(_.nonEmpty).mkString("CatalogTable(\n", "\n", ")")
+  }
+
+  def simpleString: String = {
+    toStringSeq.filter(_.nonEmpty).mkString("", "\n", "")
   }
 }
 

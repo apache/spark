@@ -118,18 +118,16 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query 12 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
-show_t3	true	CatalogTable(
-Table: `show_t3`
+show_t3	true	Table: `show_t3`
 Created: 
 Last Access: 
 Type: VIEW
 Storage()
 Schema: root
  |-- e: integer (nullable = true)
-)
 
-showdb	show_t1	false	CatalogTable(
-Table: `showdb`.`show_t1`
+
+showdb	show_t1	false	Table: `showdb`.`show_t1`
 Created: 
 Last Access: 
 Type: MANAGED
@@ -142,10 +140,9 @@ Schema: root
  |-- b: integer (nullable = true)
  |-- c: string (nullable = true)
  |-- d: string (nullable = true)
-)
 
-showdb	show_t2	false	CatalogTable(
-Table: `showdb`.`show_t2`
+
+showdb	show_t2	false	Table: `showdb`.`show_t2`
 Created: 
 Last Access: 
 Type: MANAGED
@@ -154,7 +151,6 @@ Storage(Location: sql/core/spark-warehouse/showdb.db/show_t2)
 Schema: root
  |-- b: string (nullable = true)
  |-- d: integer (nullable = true)
-)
 
 
 -- !query 13
@@ -176,10 +172,9 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 -- !query 14 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
-showdb	show_t1	false	CatalogPartition(
-	Partition Values: [c=Us, d=1]
-	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1)
-	Partition Parameters:{})
+showdb	show_t1	false	Partition Values: [c=Us, d=1]
+Storage(Location: sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1)
+Partition Parameters:{}
 
 
 -- !query 15
