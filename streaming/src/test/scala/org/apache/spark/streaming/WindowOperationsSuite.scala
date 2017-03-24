@@ -150,7 +150,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     val inputStream = new TestInputStream[Int](ssc, input, 1)
     val windowStream1 = inputStream.window(batchDuration * 2)
     assert(windowStream1.storageLevel === StorageLevel.NONE)
-    assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY_SER)
+    assert(inputStream.storageLevel === StorageLevel.MEMORY_AND_DISK_SER)
     windowStream1.persist(StorageLevel.MEMORY_ONLY)
     assert(windowStream1.storageLevel === StorageLevel.NONE)
     assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY)
