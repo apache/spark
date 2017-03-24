@@ -233,7 +233,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     max = Seq(0.0, 1.0, 2.0),
     min = Seq(0.0, -1.0, -2.0),
     normL1 = Seq(0.0, 2.0, 4.0),
-    normL2 = Seq(0.0, 2.0, 4.0)
+    normL2 = Seq(0.0, math.sqrt(2.0), math.sqrt(2.0) * 2.0)
   ))
 
 

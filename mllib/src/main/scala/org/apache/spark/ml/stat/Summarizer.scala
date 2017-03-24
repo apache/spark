@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.stat
 
+import breeze.{linalg => la}
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import breeze.numerics
 
@@ -418,6 +419,8 @@ object SummaryBuilderImpl extends Logging {
         gadD(buffer.max),
         gadD(buffer.min)
       )
+      // TODO: the projection should be passed as an argument.
+      val projection = UnsafeProjection.create(bufferSchema)
       projection.apply(ir).getBytes
     }
 
@@ -497,7 +500,7 @@ object SummaryBuilderImpl extends Logging {
       }
     }
 
-    private[this] lazy val projection = UnsafeProjection.create(bufferSchema)
+//    private[this] lazy val projection = UnsafeProjection.create(bufferSchema)
 
     // Returns the array at a given index, or null if the array is null.
     private def nullableArrayD(row: UnsafeRow, ordinal: Int): Array[Double] = {
@@ -635,11 +638,13 @@ object SummaryBuilderImpl extends Logging {
       val weightSum1 = if (buffer.weightSum == null) null else { buffer.weightSum.clone() }
       val weightSum2 = if (other.weightSum == null) null else { other.weightSum.clone() }
 
-      val weightSum = if (weightSum1 == null) null else {
+      // This sum is going to be used as a denominator. In order to guarantee that the
+      // division is well-defined, we add an epsilon to the zero coefficients.
+      // This is not going to change the value of the resul since the numerator will also be zero.
+      val weightSum: BV[Double] = if (weightSum1 == null) null else {
         require(weightSum2 != null, s"buffer=$buffer other=$other")
-        val arr: Array[Double] = Array.ofDim(buffer.n)
-        b(arr) :+= b(weightSum1) :- b(weightSum1)
-        arr
+        val b1 = b(weightSum1) :+ b(weightSum2)
+        la.max(b1, Double.MinPositiveValue)
       }
 
 
@@ -654,12 +659,12 @@ object SummaryBuilderImpl extends Logging {
       if (buffer.mean != null) {
         require(other.mean != null)
         require(weightSum != null)
-        b(buffer.mean) :+= b(deltaMean) :* (b(weightSum2) / b(weightSum))
+        b(buffer.mean) :+= b(deltaMean) :* (b(weightSum2) :/ weightSum)
       }
 
       if (buffer.m2n != null) {
         require(other.m2n != null)
-        val w = (b(weightSum1) :* b(weightSum2)) :/ b(weightSum)
+        val w = (b(weightSum1) :* b(weightSum2)) :/ weightSum
         b(buffer.m2n) :+= b(other.m2n) :+ (b(deltaMean) :* b(deltaMean)) :* w
       }
 
@@ -675,12 +680,12 @@ object SummaryBuilderImpl extends Logging {
 
       if (buffer.max != null) {
         require(other.max != null)
-        maxInPlace(buffer.max, other.max)
+        b(buffer.max) := la.max(b(buffer.max), b(other.max))
       }
 
       if (buffer.min != null) {
         require(other.min != null)
-        minInPlace(buffer.min, other.min)
+        b(buffer.min) := la.min(b(buffer.min), b(other.min))
       }
 
       if (buffer.nnz != null) {
