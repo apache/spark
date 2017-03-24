@@ -71,6 +71,11 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), exp.mean))
     }
 
+    registerTest(s"$name - mean only (direct)") {
+      val (df, c) = wrapped()
+      compare(df.select(mean(c)), Seq(exp.mean))
+    }
+
     registerTest(s"$name - variance only") {
       val (df, c) = wrapped()
       compare(df.select(metrics("variance").summary(c), variance(c)),
@@ -87,6 +92,12 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       val (df, c) = wrapped()
       compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
         Seq(Row(exp.numNonZeros), exp.numNonZeros))
+    }
+
+    registerTest(s"$name - numNonZeros only (direct)") {
+      val (df, c) = wrapped()
+      compare(df.select(numNonZeros(c)),
+        Seq(exp.numNonZeros))
     }
 
     registerTest(s"$name - min only") {

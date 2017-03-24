@@ -255,7 +255,7 @@ object SummaryBuilderImpl extends Logging {
           s" max=${v(max)} min=${v(min)})"
       }
     }
-  object Buffer {
+  object Buffer extends Logging {
     // Recursive function, but the number of cases is really small.
     def fromMetrics(requested: Seq[ComputeMetrics]): Buffer = {
       if (requested.isEmpty) {
@@ -297,6 +297,7 @@ object SummaryBuilderImpl extends Logging {
     val numFields = bufferSchema.fields.length
 
     def updateInPlace(buffer: Buffer, v: Vector, w: Double): Unit = {
+      println(s"updateInPlace: buffer=$buffer v=$v w=$w")
       val startN = buffer.n
       if (startN == -1) {
         // The buffer was not initialized, we initialize it with the incoming row.
@@ -348,6 +349,7 @@ object SummaryBuilderImpl extends Logging {
           }
         }
       }
+      println(s"updateInPlace:2: buffer=$buffer v=$v w=$w")
     }
 
     /**
@@ -355,6 +357,7 @@ object SummaryBuilderImpl extends Logging {
      */
     @throws[SparkException]("When the buffers are not compatible")
     def mergeBuffers(buffer: Buffer, other: Buffer): Buffer = {
+      println(s"mergeBuffers: buffer=$buffer other=$buffer")
       if (buffer.n == -1) {
         // buffer is not initialized.
         if (other.n == -1) {
@@ -378,9 +381,11 @@ object SummaryBuilderImpl extends Logging {
     /**
      * Reads a buffer from a serialized form, using the row object as an assistant.
      */
-    def read(bytes: Array[Byte], row2: UnsafeRow): Buffer = {
-      row2.pointTo(bytes, bytes.length)
-      val row = row2.getStruct(0, numFields)
+    def read(bytes: Array[Byte]): Buffer = {
+      assert(numFields == 12, numFields)
+      val row3 = new UnsafeRow(numFields)
+      row3.pointTo(bytes.clone(), bytes.length)
+      val row = row3.getStruct(0, numFields)
       new Buffer(
         n = row.getInt(0),
         mean = nullableArrayD(row, 1),
@@ -417,18 +422,21 @@ object SummaryBuilderImpl extends Logging {
     }
 
     def mean(buffer: Buffer): Array[Double] = {
+      println(s"Buffer:mean: buffer=$buffer")
       require(buffer.totalWeightSum > 0)
       require(buffer.mean != null)
       require(buffer.weightSum != null)
       val res = b(buffer.mean) :* b(buffer.weightSum) :/ buffer.totalWeightSum
+      println(s"Buffer:mean: buffer=$buffer res=$res")
       res.toArray
     }
 
     def variance(buffer: Buffer): Array[Double] = {
+      println(s"Buffer:variance: buffer=$buffer")
       import buffer._
-      require(n >= 0)
-      require(totalWeightSum > 0)
-      require(totalWeightSquareSum > 0)
+      require(n >= 0, n)
+      require(totalWeightSum > 0, totalWeightSum)
+      require(totalWeightSquareSum > 0, totalWeightSquareSum)
       require(buffer.mean != null)
       require(m2n != null)
       require(weightSum != null)
@@ -538,17 +546,19 @@ object SummaryBuilderImpl extends Logging {
      */
     private def fillBufferWithRow(buffer: Buffer, v: Vector, w: Double): Unit = {
       require(buffer.n == -1, (buffer.n, buffer))
-      buffer.n = v.size
+      val n = v.size
+      buffer.n = n
       buffer.totalCount = 1L
       buffer.totalWeightSum = w
       buffer.totalWeightSquareSum = w * w
 
       val arr = v.toArray
+      assert(arr.length == n, (arr.toSeq, n))
       if (buffer.mean != null) {
         buffer.mean = arr.clone()
       }
       if (buffer.m2n != null) {
-        buffer.m2n = Array.ofDim(buffer.n)
+        buffer.m2n = Array.ofDim(n)
       }
       if (buffer.max != null) {
         buffer.max = arr.clone()
@@ -561,51 +571,51 @@ object SummaryBuilderImpl extends Logging {
       v match {
         case dv: DenseVector =>
           if (buffer.m2 != null) {
-            buffer.m2 = Array.ofDim(buffer.n)
+            buffer.m2 = Array.ofDim(n)
             b(buffer.m2) := w * (b(arr) :* b(arr))
           }
           if (buffer.l1 != null) {
-            buffer.l1 = Array.ofDim(buffer.n)
+            buffer.l1 = Array.ofDim(n)
             b(buffer.l1) := numerics.abs(b(arr))
           }
 
         case sv: SparseVector =>
           if (buffer.m2 != null) {
-            buffer.m2 = Array.ofDim(buffer.n)
+            buffer.m2 = Array.ofDim(n)
             v.foreachActive { (index, value) =>
               buffer.weightSum(index) = w * value * value
             }
           }
 
           if (buffer.l1 != null) {
-            buffer.l1 = Array.ofDim(buffer.n)
+            buffer.l1 = Array.ofDim(n)
             v.foreachActive { (index, value) =>
               buffer.weightSum(index) = w * math.abs(value)
             }
           }
-
-
-        // In the case of the weightSum and NNZ, we also have to account for the value of
-        // the elements.
-        if (buffer.weightSum != null) {
-          buffer.weightSum = Array.ofDim(buffer.n)
-          v.foreachActive { (index, value) =>
-            if (value != 0.0) {
-              buffer.weightSum(index) = w
-            }
-          }
-        }
-
-        if (buffer.nnz != null) {
-          buffer.nnz = Array.ofDim(buffer.n)
-          v.foreachActive { (index, value) =>
-            if (value != 0.0) {
-              buffer.nnz(index) = 1L
-            }
-          }
-        }
-
       }
+
+      // In the case of the weightSum and NNZ, we also have to account for the value of
+      // the elements.
+      // TODO It would be nice to vectorize these operations too.
+      if (buffer.weightSum != null) {
+        buffer.weightSum = Array.ofDim(n)
+        v.foreachActive { (index, value) =>
+          if (value != 0.0) {
+            buffer.weightSum(index) = w
+          }
+        }
+      }
+
+      if (buffer.nnz != null) {
+        buffer.nnz = Array.ofDim(n)
+        v.foreachActive { (index, value) =>
+          if (value != 0.0) {
+            buffer.nnz(index) = 1L
+          }
+        }
+      }
+
     }
 
 
@@ -613,6 +623,7 @@ object SummaryBuilderImpl extends Logging {
      * Merges other into buffer.
      */
     private def mergeInitializedBuffers(buffer: Buffer, other: Buffer): Unit = {
+      println(s"mergeInitializedBuffers: buffer=$buffer other=$other")
       // Each buffer needs to be properly initialized.
       require(buffer.n > 0 && other.n > 0, (buffer.n, other.n))
       require(buffer.n == other.n, (buffer.n, other.n))
@@ -681,6 +692,7 @@ object SummaryBuilderImpl extends Logging {
         require(other.weightSum != null)
         b(buffer.weightSum) :+= b(other.weightSum)
       }
+      println(s"mergeInitializedBuffers:2: buffer=$buffer other=$other")
     }
   }
 
@@ -692,7 +704,7 @@ object SummaryBuilderImpl extends Logging {
       inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[Buffer] {
 
-    private lazy val row = new UnsafeRow(Buffer.numFields)
+//    private lazy val row = new UnsafeRow(Buffer.numFields)
 
     override def eval(buff: Buffer): InternalRow = {
       val metrics = requested.map({
@@ -744,7 +756,8 @@ object SummaryBuilderImpl extends Logging {
 
     override def deserialize(bytes: Array[Byte]): Buffer = {
 //      Buffer.read(bytes, row)
-      Buffer.read(bytes, new UnsafeRow(Buffer.numFields))
+      assert(Buffer.numFields == 12, Buffer.numFields)
+      Buffer.read(bytes)
     }
 
     override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): MetricsAggregate = {
