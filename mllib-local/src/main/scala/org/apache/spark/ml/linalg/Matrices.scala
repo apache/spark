@@ -193,7 +193,7 @@ sealed trait Matrix extends Serializable {
    * Converts this matrix to a sparse matrix while maintaining the layout of the current matrix.
    */
   @Since("2.2.0")
-  def toSparse: SparseMatrix = toSparseMatrix(colMajor = !isTransposed)
+  def toSparse: SparseMatrix = toSparseMatrix(colMajor = isColMajor)
 
   /**
    * Converts this matrix to a dense matrix.
@@ -207,7 +207,7 @@ sealed trait Matrix extends Serializable {
    * Converts this matrix to a dense matrix while maintaining the layout of the current matrix.
    */
   @Since("2.2.0")
-  def toDense: DenseMatrix = toDenseMatrix(colMajor = !isTransposed)
+  def toDense: DenseMatrix = toDenseMatrix(colMajor = isColMajor)
 
   /**
    * Converts this matrix to a dense matrix in row major order.
@@ -1269,13 +1269,24 @@ object Matrices {
   }
 
   private[ml] def getSparseSize(numActives: Long, numPtrs: Long): Long = {
-    // 8 * values.length + 4 * rowIndices.length + 4 * colPtrs.length + 12 + 12 + 12 + 1
-    12L * numActives + 4L * numPtrs + 37L
+    /*
+      Sparse matrices store two int arrays, one double array, two ints, and one boolean:
+      8 * values.length + 4 * rowIndices.length + 4 * colPtrs.length + arrayHeader * 3 + 2 * 4 + 1
+     */
+    val doubleBytes = java.lang.Double.BYTES
+    val intBytes = java.lang.Integer.BYTES
+    val arrayHeader = 12L
+    doubleBytes * numActives + intBytes * numActives + intBytes * numPtrs + arrayHeader * 3L + 9L
   }
 
   private[ml] def getDenseSize(numCols: Long, numRows: Long): Long = {
-    // 8 * values.length + 12 + 1
-    8L * numCols * numRows + 13L
+    /*
+      Dense matrices store one double array, two ints, and one boolean:
+      8 * values.length + arrayHeader + 2 * 4 + 1
+     */
+    val doubleBytes = java.lang.Double.BYTES
+    val arrayHeader = 12L
+    doubleBytes * numCols * numRows + arrayHeader + 9L
   }
 
 }
