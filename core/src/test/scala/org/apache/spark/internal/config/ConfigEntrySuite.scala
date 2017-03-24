@@ -98,6 +98,21 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1L)
   }
 
+  test("conf entry: regex") {
+    val conf = new SparkConf()
+    val rConf = ConfigBuilder(testKey("regex")).regexConf.createWithDefault(".*".r)
+
+    conf.set(rConf, "[0-9a-f]{8}".r)
+    assert(conf.get(rConf).regex === "[0-9a-f]{8}")
+
+    conf.set(rConf.key, "[0-9a-f]{4}")
+    assert(conf.get(rConf).regex === "[0-9a-f]{4}")
+
+    conf.set(rConf.key, "[.")
+    val e = intercept[IllegalArgumentException](conf.get(rConf))
+    assert(e.getMessage.contains("is not a valid regex"))
+  }
+
   test("conf entry: string seq") {
     val conf = new SparkConf()
     val seq = ConfigBuilder(testKey("seq")).stringConf.toSequence.createWithDefault(Seq())
@@ -239,5 +254,4 @@ class ConfigEntrySuite extends SparkFunSuite {
       .createWithDefault(null)
     testEntryRef(nullConf, ref(nullConf))
   }
-
 }
