@@ -747,6 +747,20 @@ abstract class DStream[T: ClassTag] (
   }
 
   /**
+   * Print the first specified number elements of each RDD in this DStream.
+   */
+  def processAllAndPrintFirst(num: Int) {
+    def foreachFunc = (rdd: RDD[T], time: Time) => {
+      val first11 = rdd.processAllAndTake(num)
+      println ("-------------------------------------------")
+      println ("Time: " + time)
+      println ("-------------------------------------------")
+      first11.take(num).foreach(println)
+    }
+    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
+  }
+
+  /**
    * Return a new DStream in which each RDD contains all the elements in seen in a
    * sliding window of time over this DStream. The new DStream generates RDDs with
    * the same interval as this DStream.

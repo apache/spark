@@ -927,6 +927,18 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Process all of the elements in this RDD, and take the first num elements of the RDD.
+   */
+  def processAllAndTake (num: Int): Array[T] = {
+    val buf = new ArrayBuffer[T]
+    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+    for (partition <- results; data <- partition if buf.size <= num){
+      buf += data
+    }
+    buf.toArray
+  }
+
+  /**
    * Return an array that contains all of the elements in this RDD.
    *
    * @note This method should only be used if the resulting array is expected to be small, as
