@@ -30,15 +30,16 @@ import org.apache.spark.sql.catalyst.rules._
 class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
+    val conf = SimpleCatalystConf(caseSensitiveAnalysis = true)
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("Constant Folding", FixedPoint(50),
-        NullPropagation(SimpleCatalystConf(caseSensitiveAnalysis = true)),
+        NullPropagation(conf),
         ConstantFolding,
         BooleanSimplification,
         SimplifyBinaryComparison,
-        PruneFilters) :: Nil
+        PruneFilters(conf)) :: Nil
   }
 
   val nullableRelation = LocalRelation('a.int.withNullability(true))
