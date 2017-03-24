@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.sources
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.sql.{sources, Row, SparkSession}
+import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -36,7 +38,13 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    Some(DataType.fromString(options("dataSchema")).asInstanceOf[StructType])
+    val schemaAsString = options("dataSchema")
+    val schema = try {
+      DataType.fromJson(schemaAsString)
+    } catch {
+      case NonFatal(_) => DataType.fromDdl(schemaAsString)
+    }
+    Some(schema.asInstanceOf[StructType])
   }
 
   override def prepareWrite(

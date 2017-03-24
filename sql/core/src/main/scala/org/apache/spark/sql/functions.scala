@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -3060,8 +3061,17 @@ object functions {
    * @group collection_funcs
    * @since 2.1.0
    */
-  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column =
-    from_json(e, DataType.fromString(schema), options)
+  def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
+    // Until Spark-2.1, we use json strings for defining schemas here. Since we add an user-friendly
+    // API in the DDL parser, we employ DDL formats for the case. To keep back-compatibility,
+    // we use `fromJson` first, and then try the new API.
+    val dataType = try {
+      DataType.fromJson(schema)
+    } catch {
+      case NonFatal(_) => DataType.fromDdl(schema)
+    }
+    from_json(e, dataType, options)
+  }
 
   /**
    * (Scala-specific) Converts a column containing a `StructType` or `ArrayType` of `StructType`s

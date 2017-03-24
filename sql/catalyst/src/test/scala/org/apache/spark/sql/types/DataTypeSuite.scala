@@ -171,9 +171,8 @@ class DataTypeSuite extends SparkFunSuite {
 
   // Test json formats only for the types that DDL formats do not support
   def checkDataTypeFromJson(dataType: DataType): Unit = {
-    test(s"fromJson - $dataType") {
+    test(s"from json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
-      assert(DataType.fromString(dataType.json) === dataType)
     }
   }
 
@@ -181,8 +180,8 @@ class DataTypeSuite extends SparkFunSuite {
     checkDataTypeFromJson(dataType)
 
     // Test DDL formats
-    test(s"fromString - $dataType") {
-      assert(DataType.fromString(s"a ${dataType.sql}") === new StructType().add("a", dataType))
+    test(s"from ddl - $dataType") {
+      assert(DataType.fromDdl(s"a ${dataType.sql}") === new StructType().add("a", dataType))
     }
   }
 
