@@ -39,7 +39,10 @@ object CatalystSerde {
   }
 
   def generateObjAttr[T : Encoder]: Attribute = {
-    AttributeReference("obj", encoderFor[T].deserializer.dataType, nullable = false)()
+    val enc = encoderFor[T]
+    val dataType = enc.deserializer.dataType
+    val nullable = !enc.clsTag.runtimeClass.isPrimitive
+    AttributeReference("obj", dataType, nullable)()
   }
 }
 
