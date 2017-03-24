@@ -176,15 +176,14 @@ object SummaryBuilderImpl extends Logging {
    * metrics that need to de computed internally to get the final result.
    */
   private val allMetrics: Seq[(String, Metrics, DataType, Seq[ComputeMetrics])] = Seq(
-    ("mean", Mean, arrayDType, Seq(ComputeMean, ComputeWeightSum, ComputeTotalWeightSum)),
-    ("variance", Variance, arrayDType, Seq(ComputeTotalWeightSum, ComputeWeightSum,
-                                           ComputeWeightSquareSum, ComputeMean, ComputeM2n)),
-    ("count", Count, LongType, Seq(ComputeCount)),
+    ("mean", Mean, arrayDType, Seq(ComputeMean, ComputeWeightSum)),
+    ("variance", Variance, arrayDType, Seq(ComputeWeightSum, ComputeMean, ComputeM2n)),
+    ("count", Count, LongType, Seq()),
     ("numNonZeros", NumNonZeros, arrayLType, Seq(ComputeNNZ)),
     ("max", Max, arrayDType, Seq(ComputeMax)),
     ("min", Min, arrayDType, Seq(ComputeMin)),
-    ("normL2", NormL2, arrayDType, Seq(ComputeTotalWeightSum, ComputeM2)),
-    ("normL1", NormL1, arrayDType, Seq(ComputeTotalWeightSum, ComputeL1))
+    ("normL2", NormL2, arrayDType, Seq(ComputeM2)),
+    ("normL1", NormL1, arrayDType, Seq(ComputeL1))
   )
 
   /**
@@ -210,9 +209,6 @@ object SummaryBuilderImpl extends Logging {
   case object ComputeM2n extends ComputeMetrics
   case object ComputeM2 extends ComputeMetrics
   case object ComputeL1 extends ComputeMetrics
-  case object ComputeCount extends ComputeMetrics // Always computed -> TODO: remove
-  case object ComputeTotalWeightSum extends ComputeMetrics // Always computed -> TODO: remove
-  case object ComputeWeightSquareSum extends ComputeMetrics
   case object ComputeWeightSum extends ComputeMetrics
   case object ComputeNNZ extends ComputeMetrics
   case object ComputeMax extends ComputeMetrics
@@ -275,8 +271,8 @@ object SummaryBuilderImpl extends Logging {
      * (testing only). Makes a buffer with all the metrics enabled.
      */
     def allMetrics(): Buffer = {
-      fromMetrics(Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1, ComputeCount,
-        ComputeTotalWeightSum, ComputeWeightSquareSum, ComputeWeightSum, ComputeNNZ, ComputeMax,
+      fromMetrics(Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1,
+        ComputeWeightSum, ComputeNNZ, ComputeMax,
         ComputeMin))
     }
 
@@ -382,12 +378,9 @@ object SummaryBuilderImpl extends Logging {
     /**
      * Reads a buffer from a serialized form, using the row object as an assistant.
      */
-    def read(bytes: Array[Byte]): Buffer = {
-      // TODO move this row outside to the aggregate
-      assert(numFields == 12, numFields)
-      val row3 = new UnsafeRow(numFields)
-      row3.pointTo(bytes.clone(), bytes.length)
-      val row = row3.getStruct(0, numFields)
+    def read(bytes: Array[Byte], backingRow: UnsafeRow): Buffer = {
+      backingRow.pointTo(bytes.clone(), bytes.length)
+      val row = backingRow.getStruct(0, numFields)
       new Buffer(
         n = row.getInt(0),
         mean = nullableArrayD(row, 1),
@@ -405,7 +398,7 @@ object SummaryBuilderImpl extends Logging {
     }
 
 
-    def write(buffer: Buffer): Array[Byte] = {
+    def write(buffer: Buffer, project: UnsafeProjection): Array[Byte] = {
       val ir = InternalRow.apply(
         buffer.n,
         gadD(buffer.mean),
@@ -420,9 +413,7 @@ object SummaryBuilderImpl extends Logging {
         gadD(buffer.max),
         gadD(buffer.min)
       )
-      // TODO: the projection should be passed as an argument.
-      val projection = UnsafeProjection.create(bufferSchema)
-      projection.apply(ir).getBytes
+      project.apply(ir).getBytes
     }
 
     def mean(buffer: Buffer): Array[Double] = {
@@ -685,7 +676,10 @@ object SummaryBuilderImpl extends Logging {
       inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[Buffer] {
 
-//    private lazy val row = new UnsafeRow(Buffer.numFields)
+    // These objects are not thread-safe, allocate them in the aggregator.
+    private[this] lazy val row = new UnsafeRow(Buffer.numFields)
+    private[this] lazy val projection = UnsafeProjection.create(Buffer.bufferSchema)
+
 
     override def eval(buff: Buffer): InternalRow = {
       val metrics = requested.map({
@@ -727,15 +721,11 @@ object SummaryBuilderImpl extends Logging {
     override def createAggregationBuffer(): Buffer = startBuffer.copy()
 
     override def serialize(buff: Buffer): Array[Byte] = {
-      val x = Buffer.write(buff)
-      val b2 = deserialize(x)
-      x
+      Buffer.write(buff, projection)
     }
 
     override def deserialize(bytes: Array[Byte]): Buffer = {
-//      Buffer.read(bytes, row)
-      assert(Buffer.numFields == 12, Buffer.numFields)
-      Buffer.read(bytes)
+      Buffer.read(bytes, row)
     }
 
     override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): MetricsAggregate = {

@@ -54,8 +54,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   private def testExample(name: String, input: Seq[Any], exp: ExpectedMetrics): Unit = {
     def inputVec: Seq[Vector] = input.map {
-      case x: Array[Double] => Vectors.dense(x)
-      case x: Seq[Double] => Vectors.dense(x.toArray)
+      case x: Array[Double @unchecked] => Vectors.dense(x)
+      case x: Seq[Double @unchecked] => Vectors.dense(x.toArray)
       case x: Vector => x
       case x => throw new Exception(x.toString)
     }
@@ -170,7 +170,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   // Compares structured content.
   private def compareStructures(x1: Any, x2: Any, name: String): Unit = (x1, x2) match {
-    case (y1: Seq[Double], v1: OldVector) =>
+    case (y1: Seq[Double @unchecked], v1: OldVector) =>
       compareStructures(y1, v1.toArray.toSeq, name)
     case (d1: Double, d2: Double) =>
       assert2(Vectors.dense(d1) ~== Vectors.dense(d2) absTol 1e-4, name)
