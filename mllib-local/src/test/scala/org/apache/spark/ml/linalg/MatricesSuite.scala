@@ -171,35 +171,30 @@ class MatricesSuite extends SparkMLFunSuite {
     val dm1 = new DenseMatrix(2, 3, Array(4.0, -1.0, 2.0, 7.0, -8.0, 4.0))
     val dm2 = new DenseMatrix(2, 3, Array(5.0, -9.0, 4.0, 1.0, -3.0, -8.0), isTransposed = true)
 
-    val dm3 = dm1.toDense
-    assert(dm3 === dm1)
-    assert(dm3.isColMajor)
-    assert(dm3.values.equals(dm1.values))
-
-    val dm4 = dm1.toDenseRowMajor
-    assert(dm4 === dm1)
-    assert(dm4.isRowMajor)
-    assert(dm4.values === Array(4.0, 2.0, -8.0, -1.0, 7.0, 4.0))
+    val dm8 = dm1.toDenseColMajor
+    assert(dm8 === dm1)
+    assert(dm8.isColMajor)
+    assert(dm8.values.equals(dm1.values))
 
     val dm5 = dm2.toDenseColMajor
     assert(dm5 === dm2)
     assert(dm5.isColMajor)
     assert(dm5.values === Array(5.0, 1.0, -9.0, -3.0, 4.0, -8.0))
 
+    val dm4 = dm1.toDenseRowMajor
+    assert(dm4 === dm1)
+    assert(dm4.isRowMajor)
+    assert(dm4.values === Array(4.0, 2.0, -8.0, -1.0, 7.0, 4.0))
+
     val dm6 = dm2.toDenseRowMajor
     assert(dm6 === dm2)
     assert(dm6.isRowMajor)
     assert(dm6.values.equals(dm2.values))
 
-    val dm7 = dm1.toDenseRowMajor
-    assert(dm7 === dm1)
-    assert(dm7.isRowMajor)
-    assert(dm7.values === Array(4.0, 2.0, -8.0, -1.0, 7.0, 4.0))
-
-    val dm8 = dm1.toDenseColMajor
-    assert(dm8 === dm1)
-    assert(dm8.isColMajor)
-    assert(dm8.values.equals(dm1.values))
+    val dm3 = dm1.toDense
+    assert(dm3 === dm1)
+    assert(dm3.isColMajor)
+    assert(dm3.values.equals(dm1.values))
 
     val dm9 = dm2.toDense
     assert(dm9 === dm2)
@@ -227,25 +222,25 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm1.isColMajor)
     assert(sm1.values === Array(4.0, 2.0, 5.0))
 
-    val sm2 = dm1.toSparseRowMajor
-    assert(sm2 === dm1)
-    assert(sm2.isRowMajor)
-    assert(sm2.values === Array(4.0, 5.0, 2.0))
-
     val sm3 = dm2.toSparseColMajor
     assert(sm3 === dm2)
     assert(sm3.isColMajor)
     assert(sm3.values === Array(4.0, 2.0, 5.0))
 
-    val sm4 = dm2.toSparseRowMajor
-    assert(sm4 === dm2)
-    assert(sm4.isRowMajor)
-    assert(sm4.values === Array(4.0, 5.0, 2.0))
-
     val sm5 = dm3.toSparseColMajor
     assert(sm5 === dm3)
     assert(sm5.values === Array.empty[Double])
     assert(sm5.isColMajor)
+
+    val sm2 = dm1.toSparseRowMajor
+    assert(sm2 === dm1)
+    assert(sm2.isRowMajor)
+    assert(sm2.values === Array(4.0, 5.0, 2.0))
+
+    val sm4 = dm2.toSparseRowMajor
+    assert(sm4 === dm2)
+    assert(sm4.isRowMajor)
+    assert(sm4.values === Array(4.0, 5.0, 2.0))
 
     val sm6 = dm3.toSparseRowMajor
     assert(sm6 === dm3)
@@ -256,16 +251,6 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm7 === dm1)
     assert(sm7.values === Array(4.0, 2.0, 5.0))
     assert(sm7.isColMajor)
-
-    val sm8 = dm1.toSparseColMajor
-    assert(sm8 === dm1)
-    assert(sm8.values === Array(4.0, 2.0, 5.0))
-    assert(sm8.isColMajor)
-
-    val sm9 = dm2.toSparseRowMajor
-    assert(sm9 === dm2)
-    assert(sm9.values === Array(4.0, 5.0, 2.0))
-    assert(sm9.isRowMajor)
 
     val sm10 = dm2.toSparse
     assert(sm10 === dm2)
@@ -290,11 +275,6 @@ class MatricesSuite extends SparkMLFunSuite {
     val smZeros = new SparseMatrix(2, 3, Array(0, 2, 4, 6), Array(0, 1, 0, 1, 0, 1),
       Array(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
-    val sm5 = sm1.toSparseRowMajor
-    assert(sm5 === sm1)
-    assert(sm5.isRowMajor)
-    assert(sm5.values === Array(4.0, 5.0, 2.0))
-
     val sm6 = sm1.toSparseColMajor
     assert(sm6 === sm1)
     assert(sm6.isColMajor)
@@ -305,35 +285,10 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm7.isColMajor)
     assert(sm7.values === Array(4.0, 2.0, 5.0))
 
-    val sm8 = sm2.toSparseRowMajor
-    assert(sm8 === sm2)
-    assert(sm8.isRowMajor)
-    assert(sm8.values.equals(sm2.values))
-
-    val sm9 = sm3.toSparse
-    assert(sm9 === sm3)
-    assert(sm9.values === Array(4.0, 2.0, 5.0))
-    assert(sm9.isColMajor)
-
-    val sm10 = sm3.toSparseRowMajor
-    assert(sm10 === sm3)
-    assert(sm10.values === Array(4.0, 5.0, 2.0))
-    assert(sm10.isRowMajor)
-
-    val sm11 = sm4.toSparseRowMajor
-    assert(sm11 === sm4)
-    assert(sm11.values === Array(4.0, 5.0, 2.0))
-    assert(sm11.isRowMajor)
-
-    val sm12 = sm4.toSparse
-    assert(sm12 === sm4)
-    assert(sm12.values === Array(4.0, 5.0, 2.0))
-    assert(sm12.isRowMajor)
-
-    val sm13 = smZeros.toSparse
-    assert(sm13 === smZeros)
-    assert(sm13.values === Array.empty[Double])
-    assert(sm13.isColMajor)
+    val sm16 = sm3.toSparseColMajor
+    assert(sm16 === sm3)
+    assert(sm16.isColMajor)
+    assert(sm16.values === Array(4.0, 2.0, 5.0))
 
     val sm14 = sm4.toSparseColMajor
     assert(sm14 === sm4)
@@ -345,15 +300,45 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(sm15.values === Array.empty[Double])
     assert(sm15.isColMajor)
 
-    val sm16 = sm3.toSparseRowMajor
-    assert(sm16 === sm4)
-    assert(sm16.values === Array(4.0, 5.0, 2.0))
-    assert(sm16.isRowMajor)
+    val sm5 = sm1.toSparseRowMajor
+    assert(sm5 === sm1)
+    assert(sm5.isRowMajor)
+    assert(sm5.values === Array(4.0, 5.0, 2.0))
+
+    val sm8 = sm2.toSparseRowMajor
+    assert(sm8 === sm2)
+    assert(sm8.isRowMajor)
+    assert(sm8.values.equals(sm2.values))
+
+    val sm10 = sm3.toSparseRowMajor
+    assert(sm10 === sm3)
+    assert(sm10.values === Array(4.0, 5.0, 2.0))
+    assert(sm10.isRowMajor)
+
+    val sm11 = sm4.toSparseRowMajor
+    assert(sm11 === sm4)
+    assert(sm11.values === Array(4.0, 5.0, 2.0))
+    assert(sm11.isRowMajor)
 
     val sm17 = smZeros.toSparseRowMajor
     assert(sm17 === smZeros)
     assert(sm17.values === Array.empty[Double])
     assert(sm17.isRowMajor)
+
+    val sm9 = sm3.toSparse
+    assert(sm9 === sm3)
+    assert(sm9.values === Array(4.0, 2.0, 5.0))
+    assert(sm9.isColMajor)
+
+    val sm12 = sm4.toSparse
+    assert(sm12 === sm4)
+    assert(sm12.values === Array(4.0, 5.0, 2.0))
+    assert(sm12.isRowMajor)
+
+    val sm13 = smZeros.toSparse
+    assert(sm13 === smZeros)
+    assert(sm13.values === Array.empty[Double])
+    assert(sm13.isColMajor)
   }
 
   test("sparse to dense") {
@@ -369,40 +354,40 @@ class MatricesSuite extends SparkMLFunSuite {
       isTransposed = true)
     val sm3 = new SparseMatrix(2, 3, Array(0, 0, 0, 0), Array.empty[Int], Array.empty[Double])
 
-    val dm1 = sm1.toDense
-    assert(dm1 === sm1)
-    assert(dm1.isColMajor)
-    assert(dm1.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+    val dm6 = sm1.toDenseColMajor
+    assert(dm6 === sm1)
+    assert(dm6.isColMajor)
+    assert(dm6.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+
+    val dm7 = sm2.toDenseColMajor
+    assert(dm7 === sm2)
+    assert(dm7.isColMajor)
+    assert(dm7.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
 
     val dm2 = sm1.toDenseRowMajor
     assert(dm2 === sm1)
     assert(dm2.isRowMajor)
     assert(dm2.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
 
-    val dm3 = sm2.toDense
-    assert(dm3 === sm2)
-    assert(dm3.isRowMajor)
-    assert(dm3.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
-
     val dm4 = sm2.toDenseRowMajor
     assert(dm4 === sm2)
     assert(dm4.isRowMajor)
     assert(dm4.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
 
+    val dm1 = sm1.toDense
+    assert(dm1 === sm1)
+    assert(dm1.isColMajor)
+    assert(dm1.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
+
+    val dm3 = sm2.toDense
+    assert(dm3 === sm2)
+    assert(dm3.isRowMajor)
+    assert(dm3.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
+
     val dm5 = sm3.toDense
     assert(dm5 === sm3)
     assert(dm5.isColMajor)
     assert(dm5.values === Array.fill(6)(0.0))
-
-    val dm6 = sm2.toDenseColMajor
-    assert(dm6 === sm2)
-    assert(dm6.isColMajor)
-    assert(dm6.values === Array(0.0, 0.0, 4.0, 2.0, 5.0, 0.0))
-
-    val dm7 = sm2.toDenseRowMajor
-    assert(dm7 === sm2)
-    assert(dm7.isRowMajor)
-    assert(dm7.values === Array(0.0, 4.0, 5.0, 0.0, 2.0, 0.0))
   }
 
   test("compressed dense") {
@@ -422,20 +407,20 @@ class MatricesSuite extends SparkMLFunSuite {
     val cm1 = dm1.compressed.asInstanceOf[SparseMatrix]
     assert(cm1 === dm1)
     assert(cm1.isRowMajor)
-    assert(cm1.getSizeInBytes <= dm1.getSizeInBytes)
+    assert(cm1.getSizeInBytes < dm1.getSizeInBytes)
 
     // force compressed column major
     val cm2 = dm1.compressedColMajor.asInstanceOf[SparseMatrix]
     assert(cm2 === dm1)
     assert(cm2.isColMajor)
-    assert(cm2.getSizeInBytes <= dm1.getSizeInBytes)
+    assert(cm2.getSizeInBytes < dm1.getSizeInBytes)
 
     // optimal compression layout for transpose is column major
     val dm2 = dm1.transpose
     val cm3 = dm2.compressed.asInstanceOf[SparseMatrix]
     assert(cm3 === dm2)
     assert(cm3.isColMajor)
-    assert(cm3.getSizeInBytes <= dm2.getSizeInBytes)
+    assert(cm3.getSizeInBytes < dm2.getSizeInBytes)
 
     /*
       dm3 = 1.0 1.0 1.0 0.0
@@ -454,19 +439,24 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm4 === dm3)
     assert(cm4.isColMajor)
     assert(cm4.values.equals(dm3.values))
-    assert(cm4.getSizeInBytes <= dm3.getSizeInBytes)
+    assert(cm4.getSizeInBytes === dm3.getSizeInBytes)
 
     // force compressed row major
     val cm5 = dm3.compressedRowMajor.asInstanceOf[DenseMatrix]
     assert(cm5 === dm3)
     assert(cm5.isRowMajor)
-    assert(cm5.getSizeInBytes <= dm3.getSizeInBytes)
+    assert(cm5.getSizeInBytes === dm3.getSizeInBytes)
 
     val cm6 = dm4.compressed.asInstanceOf[DenseMatrix]
     assert(cm6 === dm4)
     assert(cm6.isRowMajor)
     assert(cm6.values.equals(dm4.values))
-    assert(cm6.getSizeInBytes <= dm4.getSizeInBytes)
+    assert(cm6.getSizeInBytes === dm4.getSizeInBytes)
+
+    val cm7 = dm4.compressedColMajor.asInstanceOf[DenseMatrix]
+    assert(cm7 === dm4)
+    assert(cm7.isColMajor)
+    assert(cm7.getSizeInBytes === dm4.getSizeInBytes)
   }
 
   test("compressed sparse") {
@@ -488,7 +478,7 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm1 === sm1)
     assert(cm1.isColMajor)
     assert(cm1.values.equals(sm1.values))
-    assert(cm1.getSizeInBytes <= sm1.getSizeInBytes)
+    assert(cm1.getSizeInBytes === sm1.getSizeInBytes)
 
     val cm2 = sm1.compressedRowMajor.asInstanceOf[SparseMatrix]
     assert(cm2 === sm1)
@@ -497,17 +487,30 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(cm2.getSizeInBytes > sm1.getSizeInBytes)
     assert(cm2.getSizeInBytes <= sm1.toDense.getSizeInBytes)
 
+    val cm9 = sm1.compressedColMajor.asInstanceOf[SparseMatrix]
+    assert(cm9 === sm1)
+    assert(cm9.values.equals(sm1.values))
+    assert(cm9.getSizeInBytes === sm1.getSizeInBytes)
+
     val cm3 = sm2.compressed.asInstanceOf[SparseMatrix]
     assert(cm3 === sm2)
     assert(cm3.isRowMajor)
     assert(cm3.values.equals(sm2.values))
-    assert(cm3.getSizeInBytes <= sm2.getSizeInBytes)
+    assert(cm3.getSizeInBytes === sm2.getSizeInBytes)
 
     val cm8 = sm2.compressedColMajor.asInstanceOf[SparseMatrix]
     assert(cm8 === sm2)
     assert(cm8.isColMajor)
+    // forced to be col major, so we have increased the size
     assert(cm8.getSizeInBytes > sm2.getSizeInBytes)
     assert(cm8.getSizeInBytes <= sm2.toDense.getSizeInBytes)
+
+    val cm10 = sm2.compressedRowMajor.asInstanceOf[SparseMatrix]
+    assert(cm10 === sm2)
+    assert(cm10.isRowMajor)
+    assert(cm10.values.equals(sm2.values))
+    assert(cm10.getSizeInBytes === sm2.getSizeInBytes)
+
 
     /*
        sm3 = 0.0 -1.0
@@ -522,12 +525,17 @@ class MatricesSuite extends SparkMLFunSuite {
     val cm4 = sm3.compressed.asInstanceOf[DenseMatrix]
     assert(cm4 === sm3)
     assert(cm4.isColMajor)
-    assert(cm4.getSizeInBytes <= sm3.getSizeInBytes)
+    assert(cm4.getSizeInBytes < sm3.getSizeInBytes)
 
     val cm5 = sm3.compressedRowMajor.asInstanceOf[DenseMatrix]
     assert(cm5 === sm3)
     assert(cm5.isRowMajor)
-    assert(cm5.getSizeInBytes <= sm3.getSizeInBytes)
+    assert(cm5.getSizeInBytes < sm3.getSizeInBytes)
+
+    val cm11 = sm3.compressedColMajor.asInstanceOf[DenseMatrix]
+    assert(cm11 === sm3)
+    assert(cm11.isColMajor)
+    assert(cm11.getSizeInBytes < sm3.getSizeInBytes)
 
     /*
       sm4 = 1.0 0.0 0.0 ...

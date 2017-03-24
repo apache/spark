@@ -227,9 +227,9 @@ sealed trait Matrix extends Serializable {
   @Since("2.2.0")
   def compressedColMajor: Matrix = {
     if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = true)) {
-      toDenseColMajor
+      this.toDenseColMajor
     } else {
-      toSparseColMajor
+      this.toSparseColMajor
     }
   }
 
@@ -239,9 +239,9 @@ sealed trait Matrix extends Serializable {
   @Since("2.2.0")
   def compressedRowMajor: Matrix = {
     if (getDenseSizeInBytes < getSparseSizeInBytes(colMajor = false)) {
-      toDenseRowMajor
+      this.toDenseRowMajor
     } else {
-      toSparseRowMajor
+      this.toSparseRowMajor
     }
   }
 
@@ -256,11 +256,11 @@ sealed trait Matrix extends Serializable {
     val csrSize = getSparseSizeInBytes(colMajor = false)
     if (getDenseSizeInBytes < math.min(cscSize, csrSize)) {
       // dense matrix size is the same for column major and row major, so maintain current layout
-      toDense
+      this.toDense
     } else if (cscSize <= csrSize) {
-      toSparseColMajor
+      this.toSparseColMajor
     } else {
-      toSparseRowMajor
+      this.toSparseRowMajor
     }
   }
 
@@ -445,9 +445,9 @@ class DenseMatrix @Since("2.0.0") (
    */
   private[ml] override def toDenseMatrix(colMajor: Boolean): DenseMatrix = {
     if (isRowMajor && colMajor) {
-      new DenseMatrix(numRows, numCols, toArray, isTransposed = false)
+      new DenseMatrix(numRows, numCols, this.toArray, isTransposed = false)
     } else if (isColMajor && !colMajor) {
-      new DenseMatrix(numRows, numCols, transpose.toArray, isTransposed = true)
+      new DenseMatrix(numRows, numCols, this.transpose.toArray, isTransposed = true)
     } else {
       this
     }
@@ -782,7 +782,7 @@ class SparseMatrix @Since("2.0.0") (
    * @param colMajor Whether the resulting `DenseMatrix` values are in column major order.
    */
   private[ml] override def toDenseMatrix(colMajor: Boolean): DenseMatrix = {
-    if (colMajor) new DenseMatrix(numRows, numCols, toArray)
+    if (colMajor) new DenseMatrix(numRows, numCols, this.toArray)
     else new DenseMatrix(numRows, numCols, this.transpose.toArray, isTransposed = true)
   }
 
