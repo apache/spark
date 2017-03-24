@@ -104,7 +104,8 @@ private[spark] class MesosExecutorBackend
       logError("Received KillTask but executor was null")
     } else {
       // TODO: Determine the 'interruptOnCancel' property set for the given job.
-      executor.killTask(t.getValue.toLong, interruptThread = false)
+      executor.killTask(
+        t.getValue.toLong, interruptThread = false, reason = "killed by mesos")
     }
   }
 

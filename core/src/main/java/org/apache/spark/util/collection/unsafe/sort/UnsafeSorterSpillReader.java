@@ -24,7 +24,6 @@ import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
-import org.apache.spark.TaskKilledException;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
@@ -102,8 +101,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     // to avoid performance overhead. This check is added here in `loadNext()` instead of in
     // `hasNext()` because it's technically possible for the caller to be relying on
     // `getNumRecords()` instead of `hasNext()` to know when to stop.
-    if (taskContext != null && taskContext.isInterrupted()) {
-      throw new TaskKilledException();
+    if (taskContext != null) {
+      taskContext.killTaskIfInterrupted();
     }
     recordLength = din.readInt();
     keyPrefix = din.readLong();
