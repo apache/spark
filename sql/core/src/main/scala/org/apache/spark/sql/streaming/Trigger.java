@@ -43,7 +43,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(long intervalMs) {
-      return ProcessingTime.apply(intervalMs);
+      return ProcessingTime.create(intervalMs, TimeUnit.MILLISECONDS);
   }
 
   /**
