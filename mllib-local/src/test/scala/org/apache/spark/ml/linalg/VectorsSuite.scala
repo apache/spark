@@ -336,6 +336,11 @@ class VectorsSuite extends SparkMLFunSuite {
     val sv1 = Vectors.sparse(4, Array(0, 1, 2), Array(1.0, 2.0, 3.0))
     val sv1c = sv1.compressed.asInstanceOf[DenseVector]
     assert(sv1 === sv1c)
+
+    val sv2 = Vectors.sparse(Int.MaxValue, Array(0), Array(3.4))
+    val sv2c = sv2.compressed.asInstanceOf[SparseVector]
+    assert(sv2c === sv2)
+    assert(sv2c.numActives === 1)
   }
 
   test("SparseVector.slice") {
