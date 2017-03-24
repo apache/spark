@@ -40,13 +40,13 @@ class RPackageUtilsSuite
   with BeforeAndAfterEach
   with ResetSystemProperties {
 
-  private val main = MavenCoordinate("a", "b", "c")
-  private val dep1 = MavenCoordinate("a", "dep1", "c")
-  private val dep2 = MavenCoordinate("a", "dep2", "d")
+  private val main = new MavenCoordinate("a", "b", "c")
+  private val dep1 = new MavenCoordinate("a", "dep1", "c")
+  private val dep2 = new MavenCoordinate("a", "dep2", "d")
 
   private def getJarPath(coord: MavenCoordinate, repo: File): File = {
-    new File(IvyTestUtils.pathFromCoordinate(coord, repo, "jar", useIvyLayout = false),
-      IvyTestUtils.artifactName(coord, useIvyLayout = false, ".jar"))
+    new File(IvyTestUtils.pathFromCoordinate(coord, repo, None, useIvyLayout = false),
+      IvyTestUtils.artifactName(coord, useIvyLayout = false, None))
   }
 
   private val lineBuffer = ArrayBuffer[String]()
