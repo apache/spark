@@ -264,12 +264,19 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+
+  /* Security configuration. */
+
   private[spark] val CREDENTIALS_FILE_PATH = ConfigBuilder("spark.yarn.credentials.file")
     .internal()
     .stringConf
     .createWithDefault(null)
 
-  /* Security configuration. */
+  private[spark] val CREDENTIALS_IDENTITY = ConfigBuilder("spark.credentials.identity")
+    .internal()
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   private[spark] val CREDENTIAL_FILE_MAX_COUNT =
     ConfigBuilder("spark.yarn.credentials.file.retention.count")

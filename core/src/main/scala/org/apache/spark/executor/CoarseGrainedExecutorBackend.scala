@@ -19,23 +19,28 @@ package org.apache.spark.executor
 
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
-import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Success}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.token.Token
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -216,18 +221,23 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
     }
 
-    val containsCreds = driverConf.contains("spark.yarn.credentials.file")
     val creds = new Credentials()
-    if (containsCreds) {
-      val hadoopConf = SparkHadoopUtil.get.newConfiguration(driverConf)
-      val credentialFile = new Path(driverConf.get("spark.yarn.credentials.file"))
-      val remoteFs = FileSystem.get(hadoopConf)
-      creds.readTokenStorageStream(remoteFs.open(credentialFile))
+
+    if (driverConf.contains(CREDENTIALS_IDENTITY)) {
+      val tokenList = driverConf.get(CREDENTIALS_IDENTITY)
+      tokenList.foreach { tokenStr =>
+        val token = new Token[DelegationTokenIdentifier]
+        token.decodeFromUrlString(tokenStr)
+        creds.addToken(new Text(UUID.randomUUID().toString), token)
+      }
     }
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      if (containsCreds) {
-        UserGroupInformation.getCurrentUser.addCredentials(creds)
+      UserGroupInformation.getCurrentUser.addCredentials(creds)
+
+      if (driverConf.contains(CREDENTIALS_FILE_PATH)) {
+        logInfo("Will periodically update credentials from: " +
+          driverConf.get("spark.yarn.credentials.file"))
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 

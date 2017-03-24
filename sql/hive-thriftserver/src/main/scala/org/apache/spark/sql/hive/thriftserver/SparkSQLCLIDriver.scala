@@ -90,8 +90,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
 
-    if (UserGroupInformation.isSecurityEnabled &&
-      UserGroupInformation.getCurrentUser.getAuthenticationMethod == AuthenticationMethod.PROXY) {
+    if (UserGroupInformation.isSecurityEnabled) {
       obtainCredentials(cliConf)
     }
 
@@ -293,9 +292,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       s"$principal at $metastoreUri")
 
     try {
-      val hive = Hive.get(conf, classOf[HiveConf])
       val creds = new Credentials
       SparkHadoopUtil.get.doAsRealUser {
+        val hive = Hive.get(conf, classOf[HiveConf])
         val tokenStr = hive.getDelegationToken(currentUser.getUserName, principal)
         val hive2Token = new Token[DelegationTokenIdentifier]
         hive2Token.decodeFromUrlString(tokenStr)

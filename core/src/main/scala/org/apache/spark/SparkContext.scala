@@ -20,14 +20,14 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.language.implicitConversions
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
@@ -36,12 +36,13 @@ import com.google.common.collect.MapMaker
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
-import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
+import org.apache.hadoop.io._
+import org.apache.hadoop.mapred.{Utils => _, _}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
+import org.apache.spark.SparkContext.logInfo
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialRenewer}
@@ -56,10 +57,10 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
-import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
+import org.apache.spark.storage._
 import org.apache.spark.ui.jobs.JobProgressListener
+import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
 
 /**
@@ -501,6 +502,15 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
+    // we need to prepare credentials for executors both in conf and hdfs before they launch.
+    // oops, the appid has not been generated, where should I put the credentials files
+    // emm.. let give random id a try...
+
+    if (_conf.contains(PRINCIPAL.key)) {
+
+      _credentialRenewer = createCredentialRenewer()
+    }
+
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -555,13 +565,6 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     _executorAllocationManager.foreach(_.start())
 
-
-    if (_conf.contains(PRINCIPAL.key)) {
-
-      _credentialRenewer =
-        SparkContext.createCredentialRenewer(_conf, _hadoopConfiguration, master, _applicationId)
-    }
-
     _cleaner =
       if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
         Some(new ContextCleaner(this))
@@ -602,6 +605,37 @@ class SparkContext(config: SparkConf) extends Logging {
       } finally {
         throw e
       }
+  }
+
+  private def createCredentialRenewer(): CredentialRenewer = {
+    master match {
+      case "yarn" => null
+      case _ =>
+        val appStagingBaseDir = _conf.get(STAGING_DIR).map { new Path(_) }
+          .getOrElse(FileSystem.get(_hadoopConfiguration).getHomeDirectory())
+
+        val stagingDirPath =
+          appStagingBaseDir +
+            Path.SEPARATOR + ".sparkStaging" + Path.SEPARATOR + UUID.randomUUID().toString
+        val credentialsFile = "credentials-" + UUID.randomUUID().toString
+        _conf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
+        logInfo(s"Credentials file set to: $credentialsFile")
+        val credentials = new Credentials
+
+        val ccm = new ConfigurableCredentialManager(_conf, _hadoopConfiguration)
+        ccm.obtainCredentials(_hadoopConfiguration, credentials)
+        UserGroupInformation.getCurrentUser.addCredentials(credentials)
+        val tokenList = ArrayBuffer[String]()
+        credentials.getAllTokens.asScala.foreach { token =>
+          tokenList += (token.encodeToUrlString())
+        }
+        if (tokenList.nonEmpty) {
+          _conf.set(CREDENTIALS_IDENTITY, tokenList)
+        }
+        val credentialRenewer = ccm.credentialRenewer()
+        credentialRenewer.scheduleLoginFromKeytab()
+        credentialRenewer
+    }
   }
 
   /**
@@ -2681,28 +2715,6 @@ object SparkContext extends Logging {
     }
   }
 
-  private def createCredentialRenewer(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration,
-      master: String,
-      applicationId: String): CredentialRenewer = {
-    master match {
-      case "yarn" => null
-      case _ =>
-        val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
-          .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
-
-        val stagingDirPath =
-          appStagingBaseDir + Path.SEPARATOR + ".sparkStaging" + Path.SEPARATOR + applicationId
-        val credentialsFile = "credentials-" + UUID.randomUUID().toString
-        sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
-        logInfo(s"Credentials file set to: $credentialsFile")
-        val credentialRenewer =
-          new ConfigurableCredentialManager(sparkConf, hadoopConf).credentialRenewer()
-        credentialRenewer.scheduleLoginFromKeytab()
-        credentialRenewer
-    }
-  }
 
   /**
    * Create a task scheduler based on a given master URL.
