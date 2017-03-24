@@ -53,6 +53,12 @@ class JavaSparkContext(val sc: SparkContext)
   def this() = this(new SparkContext())
 
   /**
+   * Create a JavaSparkContext that loads settings from system properties (for instance, when
+   * launching with ./bin/spark-submit).
+   */
+  def this() = this(new SparkContext())
+
+  /**
    * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
    */
   def this(conf: SparkConf) = this(new SparkContext(conf))
