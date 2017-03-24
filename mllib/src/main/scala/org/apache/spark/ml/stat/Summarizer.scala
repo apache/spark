@@ -393,6 +393,7 @@ object SummaryBuilderImpl extends Logging {
      * Reads a buffer from a serialized form, using the row object as an assistant.
      */
     def read(bytes: Array[Byte]): Buffer = {
+      // TODO move this row outside to the aggregate
       assert(numFields == 12, numFields)
       val row3 = new UnsafeRow(numFields)
       row3.pointTo(bytes.clone(), bytes.length)
