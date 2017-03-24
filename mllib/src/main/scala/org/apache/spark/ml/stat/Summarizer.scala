@@ -368,7 +368,7 @@ object SummaryBuilderImpl extends Logging {
      */
     @throws[SparkException]("When the buffers are not compatible")
     def mergeBuffers(buffer: Buffer, other: Buffer): Buffer = {
-      println(s"mergeBuffers: buffer=$buffer other=$buffer")
+      println(s"mergeBuffers: buffer=$buffer other=$other")
       if (buffer.n == -1) {
         // buffer is not initialized.
         if (other.n == -1) {
@@ -624,7 +624,7 @@ object SummaryBuilderImpl extends Logging {
       // Mandatory scalar values
       buffer.totalWeightSquareSum += other.totalWeightSquareSum
       buffer.totalWeightSum += other.totalWeightSum
-      buffer.totalCount += buffer.totalCount
+      buffer.totalCount += other.totalCount
       // Keep the original weight sums.
       val weightSum1 = if (buffer.weightSum == null) null else { buffer.weightSum.clone() }
       val weightSum2 = if (other.weightSum == null) null else { other.weightSum.clone() }
@@ -634,29 +634,32 @@ object SummaryBuilderImpl extends Logging {
       // This is not going to change the value of the resul since the numerator will also be zero.
       val weightSum: BV[Double] = if (weightSum1 == null) null else {
         require(weightSum2 != null, s"buffer=$buffer other=$other")
-        val b1 = b(weightSum1) :+ b(weightSum2)
-        la.max(b1, Double.MinPositiveValue)
+        val x = b(weightSum1) :+ b(weightSum2)
+        la.max(x, Double.MinPositiveValue)
       }
 
 
       // Since the operations are dense, we can directly use BLAS calls here.
-      val deltaMean: Array[Double] = if (buffer.mean != null) {
+      val deltaMean: BV[Double] = if (buffer.mean != null) {
         require(other.mean != null)
-        val arr: Array[Double] = Array.ofDim(buffer.n)
-        b(arr) :+= b(other.mean) :- b(buffer.mean)
-        arr
+        b(other.mean) :- b(buffer.mean)
       } else { null }
 
       if (buffer.mean != null) {
         require(other.mean != null)
         require(weightSum != null)
-        b(buffer.mean) :+= b(deltaMean) :* (b(weightSum2) :/ weightSum)
+        b(buffer.mean) :+= deltaMean :* (b(weightSum2) :/ weightSum)
       }
 
       if (buffer.m2n != null) {
         require(other.m2n != null)
         val w = (b(weightSum1) :* b(weightSum2)) :/ weightSum
-        b(buffer.m2n) :+= b(other.m2n) :+ (b(deltaMean) :* b(deltaMean)) :* w
+        val z = (deltaMean :* deltaMean) :* w
+        println(s"weightSum1=$weightSum1 weightSum2=$weightSum2 weightSum=$weightSum z=$z")
+        println(s"mergeInitializedBuffers: buffer.m2n=${b(buffer.m2n)}")
+        println(s"mergeInitializedBuffers: other.m2n=${b(other.m2n)}")
+        b(buffer.m2n) :+= b(other.m2n) :+ z
+        println(s"mergeInitializedBuffers: buffer.m2n_2=${b(buffer.m2n)}")
       }
 
       if (buffer.m2 != null) {

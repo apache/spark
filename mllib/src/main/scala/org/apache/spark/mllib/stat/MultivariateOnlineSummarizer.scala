@@ -20,6 +20,8 @@ package org.apache.spark.mllib.stat
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
+// scalastyle:off println
+
 /**
  * :: DeveloperApi ::
  * MultivariateOnlineSummarizer implements [[MultivariateStatisticalSummary]] to compute the mean,
@@ -56,6 +58,17 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var nnz: Array[Long] = _
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
+
+  override def toString: String = {
+    def v(x: Array[Double]) = if (x==null) "null" else x.toSeq.mkString("[", " ", "]")
+    def vl(x: Array[Long]) = if (x==null) "null" else x.toSeq.mkString("[", " ", "]")
+
+    s"MultivariateOnlineSummarizer(n=$n mean=${v(currMean)} m2n=${v(currM2n)} m2=${v(currM2)} " +
+      s"l1=${v(currL1)}" +
+      s" totalCount=$totalCnt totalWeightSum=$totalWeightSum" +
+      s" totalWeightSquareSum=$weightSquareSum weightSum=${v(weightSum)} nnz=${vl(nnz)}" +
+      s" max=${v(currMax)} min=${v(currMin)})"
+  }
 
   /**
    * Add a new sample to this summarizer, and update the statistical summary.
@@ -131,6 +144,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    */
   @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
+    println(s"MultivariateOnlineSummarizer:merge: this=$this")
+    println(s"MultivariateOnlineSummarizer:merge: other=$other")
     if (this.totalWeightSum != 0.0 && other.totalWeightSum != 0.0) {
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
         s"Expecting $n but got ${other.n}.")
@@ -148,7 +163,11 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           // merge mean together
           currMean(i) += deltaMean * otherNnz / totalNnz
           // merge m2n together
+          val z = deltaMean * deltaMean * thisNnz * otherNnz / totalNnz
+          println(s"i=$i thisNnz=$thisNnz otherNnz=$otherNnz totalNnz=$totalNnz z=$z")
+          println(s"i=$i currM2n=${currM2n(i)} other.currM2n=${other.currM2n(i)}")
           currM2n(i) += other.currM2n(i) + deltaMean * deltaMean * thisNnz * otherNnz / totalNnz
+          println(s"i=$i >> currM2n=${currM2n(i)} other.currM2n=${other.currM2n(i)}")
           // merge m2 together
           currM2(i) += other.currM2(i)
           // merge l1 together
@@ -175,6 +194,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.currMax = other.currMax.clone()
       this.currMin = other.currMin.clone()
     }
+    println(s"MultivariateOnlineSummarizer:merge(2): this=$this")
     this
   }
 

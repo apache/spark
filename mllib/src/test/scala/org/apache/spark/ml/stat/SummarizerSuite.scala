@@ -67,7 +67,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val s = {
       val s2 = new MultivariateOnlineSummarizer
-      inputVec.foreach(v => s2OldVectors.fromML(v)))
+      inputVec.foreach(v => s2.add(OldVectors.fromML(v)))
       s2
     }
 
@@ -289,8 +289,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       numNonZeros = Seq(2, 1, 1),
       max = Seq(3.0, 0.0, 6.0),
       min = Seq(-1.0, -3, 0.0),
-      normL1 = Seq(4.0, 4.0, 6.0),
-      normL2 = Seq(0.0, 0.0, 0.0)
+      normL1 = Seq(4.0, 3.0, 6.0),
+      normL2 = Seq(math.sqrt(10), 3, 6.0)
   ))
 
   test("mixing dense and sparse vector input") {
@@ -324,14 +324,25 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val summarizer1 = makeBuffer(Seq(
       Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
       Vectors.dense(0.0, -1.0, -3.0)))
+//    val s1 = new MultivariateOnlineSummarizer
+//    Seq(
+//      Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+//      Vectors.dense(0.0, -1.0, -3.0)).foreach(v => s1.add(OldVectors.fromML(v)))
 
     val summarizer2 = makeBuffer(Seq(
       Vectors.sparse(3, Seq((1, -5.1))),
       Vectors.dense(3.8, 0.0, 1.9),
       Vectors.dense(1.7, -0.6, 0.0),
       Vectors.sparse(3, Seq((1, 1.9), (2, 0.0)))))
+//    val s2 = new MultivariateOnlineSummarizer
+//    Seq(
+//      Vectors.sparse(3, Seq((1, -5.1))),
+//      Vectors.dense(3.8, 0.0, 1.9),
+//      Vectors.dense(1.7, -0.6, 0.0),
+//      Vectors.sparse(3, Seq((1, 1.9), (2, 0.0)))).foreach(v => s2.add(OldVectors.fromML(v)))
 
     val summarizer = Buffer.mergeBuffers(summarizer1, summarizer2)
+//    val s = s1.merge(s2)
 
     assert(b(Buffer.mean(summarizer)) ~==
       Vectors.dense(0.583333333333, -0.416666666666, -0.183333333333) absTol 1E-5, "mean mismatch")
@@ -343,12 +354,12 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(l(Buffer.nnz(summarizer)) ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
 
     assert(b(Buffer.variance(summarizer)) ~==
-
       Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
       "variance mismatch")
 
     assert(Buffer.totalCount(summarizer) === 6)
   }
+
 
 
 }
