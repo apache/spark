@@ -57,17 +57,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
 
-  override def toString: String = {
-    def v(x: Array[Double]) = if (x==null) "null" else x.toSeq.mkString("[", " ", "]")
-    def vl(x: Array[Long]) = if (x==null) "null" else x.toSeq.mkString("[", " ", "]")
-
-    s"MultivariateOnlineSummarizer(n=$n mean=${v(currMean)} m2n=${v(currM2n)} m2=${v(currM2)} " +
-      s"l1=${v(currL1)}" +
-      s" totalCount=$totalCnt totalWeightSum=$totalWeightSum" +
-      s" totalWeightSquareSum=$weightSquareSum weightSum=${v(weightSum)} nnz=${vl(nnz)}" +
-      s" max=${v(currMax)} min=${v(currMin)})"
-  }
-
   /**
    * Add a new sample to this summarizer, and update the statistical summary.
    *
