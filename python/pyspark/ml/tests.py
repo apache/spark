@@ -1273,6 +1273,7 @@ class DefaultValuesTests(PySparkTestCase):
     """
 
     def check_params(self, py_stage):
+        import pyspark.ml.feature
         if not hasattr(py_stage, "_to_java"):
             return
         java_stage = py_stage._to_java()
@@ -1292,6 +1293,15 @@ class DefaultValuesTests(PySparkTestCase):
                     _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
                 py_stage._clear(p)
                 py_default = py_stage.getOrDefault(p)
+                if isinstance(py_stage, pyspark.ml.feature.Imputer) and p.name == "missingValue":
+                    # SPARK-15040 - default value for Imputer param 'missingValue' is NaN,
+                    # and NaN != NaN, so handle it specially here
+                    import math
+                    self.assertTrue(math.isnan(java_default) and math.isnan(py_default),
+                                    "Java default %s and python default %s are not both NaN for "
+                                    "param %s for Params %s"
+                                    % (str(java_default), str(py_default), p.name, str(py_stage)))
+                    return
                 self.assertEqual(java_default, py_default,
                                  "Java default %s != python default %s of param %s for Params %s"
                                  % (str(java_default), str(py_default), p.name, str(py_stage)))
