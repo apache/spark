@@ -51,7 +51,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  */
 @Experimental
 @InterfaceStability.Evolving
-@deprecated("use Trigger.ProcessingTimeTrigger(intervalMs)", "2.2.0")
+@deprecated("use Trigger.ProcessingTime(intervalMs)", "2.2.0")
 case class ProcessingTime(intervalMs: Long) extends Trigger {
   require(intervalMs >= 0, "the interval of trigger should not be negative")
 }
@@ -64,7 +64,7 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
  */
 @Experimental
 @InterfaceStability.Evolving
-@deprecated("use Trigger.ProcessingTimeTrigger(intervalMs)", "2.2.0")
+@deprecated("use Trigger.ProcessingTime(intervalMs)", "2.2.0")
 object ProcessingTime {
 
   /**
@@ -76,9 +76,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
-   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
+   * @deprecated use Trigger.ProcessingTime(interval)
    */
-  @deprecated("use Trigger.ProcessingTimeTrigger(interval)", "2.2.0")
+  @deprecated("use Trigger.ProcessingTime(interval)", "2.2.0")
   def apply(interval: String): ProcessingTime = {
     if (StringUtils.isBlank(interval)) {
       throw new IllegalArgumentException(
@@ -108,9 +108,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
-   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
+   * @deprecated use Trigger.ProcessingTime(interval)
    */
-  @deprecated("use Trigger.ProcessingTimeTrigger(interval)", "2.2.0")
+  @deprecated("use Trigger.ProcessingTime(interval)", "2.2.0")
   def apply(interval: Duration): ProcessingTime = {
     new ProcessingTime(interval.toMillis)
   }
@@ -124,9 +124,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
-   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
+   * @deprecated use Trigger.ProcessingTime(interval)
    */
-  @deprecated("use Trigger.ProcessingTimeTrigger(interval)", "2.2.0")
+  @deprecated("use Trigger.ProcessingTime(interval)", "2.2.0")
   def create(interval: String): ProcessingTime = {
     apply(interval)
   }
@@ -141,9 +141,9 @@ object ProcessingTime {
    * }}}
    *
    * @since 2.0.0
-   * @deprecated use Trigger.ProcessingTimeTrigger(interval)
+   * @deprecated use Trigger.ProcessingTime(interval, unit)
    */
-  @deprecated("use Trigger.ProcessingTimeTrigger(interval, unit)", "2.2.0")
+  @deprecated("use Trigger.ProcessingTime(interval, unit)", "2.2.0")
   def create(interval: Long, unit: TimeUnit): ProcessingTime = {
     new ProcessingTime(unit.toMillis(interval))
   }
