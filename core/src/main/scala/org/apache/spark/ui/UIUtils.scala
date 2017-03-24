@@ -207,7 +207,6 @@ private[spark] object UIUtils extends Logging {
       useDataTables: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
-    val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
