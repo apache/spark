@@ -36,7 +36,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-public class LevelDBIteratorSuite {
+/**
+ * This class should really be called "LevelDBIteratorSuite" but for some reason I don't know,
+ * sbt does not run the tests if it has that name.
+ */
+public class DBIteratorSuite {
 
   private static final int MIN_ENTRIES = 42;
   private static final int MAX_ENTRIES = 1024;
@@ -47,63 +51,32 @@ public class LevelDBIteratorSuite {
   private static LevelDB db;
   private static File dbpath;
 
-  private abstract class BaseComparator implements Comparator<CustomType1> {
+  private interface BaseComparator extends Comparator<CustomType1> {
     /**
      * Returns a comparator that falls back to natural order if this comparator's ordering
      * returns equality for two elements. Used to mimic how the index sorts things internally.
      */
-    BaseComparator fallback() {
-      return new BaseComparator() {
-        @Override
-        public int compare(CustomType1 t1, CustomType1 t2) {
-          int result = BaseComparator.this.compare(t1, t2);
-          if (result != 0) {
-            return result;
-          }
-
-          return t1.key.compareTo(t2.key);
+    default BaseComparator fallback() {
+      return (t1, t2) -> {
+        int result = BaseComparator.this.compare(t1, t2);
+        if (result != 0) {
+          return result;
         }
+
+        return t1.key.compareTo(t2.key);
       };
     }
 
     /** Reverses the order of this comparator. */
-    BaseComparator reverse() {
-      return new BaseComparator() {
-        @Override
-        public int compare(CustomType1 t1, CustomType1 t2) {
-          return -BaseComparator.this.compare(t1, t2);
-        }
-      };
+    default BaseComparator reverse() {
+      return (t1, t2) -> -BaseComparator.this.compare(t1, t2);
     }
   }
 
-  private final BaseComparator NATURAL_ORDER = new BaseComparator() {
-    @Override
-    public int compare(CustomType1 t1, CustomType1 t2) {
-      return t1.key.compareTo(t2.key);
-    }
-  };
-
-  private final BaseComparator REF_INDEX_ORDER = new BaseComparator() {
-    @Override
-    public int compare(CustomType1 t1, CustomType1 t2) {
-      return t1.id.compareTo(t2.id);
-    }
-  };
-
-  private final BaseComparator COPY_INDEX_ORDER = new BaseComparator() {
-    @Override
-    public int compare(CustomType1 t1, CustomType1 t2) {
-      return t1.name.compareTo(t2.name);
-    }
-  };
-
-  private final BaseComparator NUMERIC_INDEX_ORDER = new BaseComparator() {
-    @Override
-    public int compare(CustomType1 t1, CustomType1 t2) {
-      return t1.num - t2.num;
-    }
-  };
+  private final BaseComparator NATURAL_ORDER = (t1, t2) -> t1.key.compareTo(t2.key);
+  private final BaseComparator REF_INDEX_ORDER = (t1, t2) -> t1.id.compareTo(t2.id);
+  private final BaseComparator COPY_INDEX_ORDER = (t1, t2) -> t1.name.compareTo(t2.name);
+  private final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> t1.num - t2.num;
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -333,12 +306,7 @@ public class LevelDBIteratorSuite {
     Iterable<CustomType1> expected = indexOrder;
     if (first != null) {
       final BaseComparator expectedOrder = params.ascending ? order : order.reverse();
-      expected = Iterables.filter(expected, new Predicate<CustomType1>() {
-        @Override
-        public boolean apply(CustomType1 v) {
-          return expectedOrder.compare(first, v) <= 0;
-        }
-      });
+      expected = Iterables.filter(expected, v -> expectedOrder.compare(first, v) <= 0);
     }
 
     if (params.skip > 0) {

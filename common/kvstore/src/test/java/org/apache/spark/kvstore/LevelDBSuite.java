@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.collect.Iterators;
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
