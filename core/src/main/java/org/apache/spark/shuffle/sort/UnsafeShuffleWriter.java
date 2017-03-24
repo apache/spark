@@ -17,10 +17,10 @@
 
 package org.apache.spark.shuffle.sort;
 
+import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
-import javax.annotation.Nullable;
 
 import scala.Option;
 import scala.Product2;
