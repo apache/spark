@@ -119,6 +119,7 @@ class JDBCOptions(
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
   val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
+  val createTableColumnTypes = parameters.get(JDBC_CREATE_TABLE_COLUMN_TYPES)
   val batchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     require(size >= 1,
@@ -154,6 +155,7 @@ object JDBCOptions {
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
+  val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
 }
