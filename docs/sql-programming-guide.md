@@ -2078,6 +2078,13 @@ please use factory methods provided in
   </td>
 </tr>
 <tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DataType.DateType
+  </td>
+</tr>
+<tr>
   <td> <b>ArrayType</b> </td>
   <td> java.util.List </td>
   <td>
