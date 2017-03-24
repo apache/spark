@@ -179,7 +179,7 @@ public class YarnShuffleService extends AuxiliaryService {
         Method registerSourceMethod = metricsSystem.getClass().getDeclaredMethod("registerSource",
                 String.class, String.class, MetricsSource.class);
         registerSourceMethod.setAccessible(true);
-        registerSourceMethod.invoke(metricsSystem, "shuffleservice", "Metrics on the Spark " +
+        registerSourceMethod.invoke(metricsSystem, "shuffleService", "Metrics on the Spark " +
                 "Shuffle Service", serviceMetrics);
         logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
       } catch (Exception e) {
