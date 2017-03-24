@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
-import org.apache.spark.util.Utils
+import org.apache.spark.util
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**
  * Take the first `limit` elements and collect them to a single partition.
@@ -145,14 +146,14 @@ case class TakeOrderedAndProjectExec(
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val localTopK: RDD[InternalRow] = {
       child.execute().map(_.copy()).mapPartitions { iter =>
-        org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
+        util.collection.Utils.takeOrdered(iter, limit, serializer)(ord)
       }
     }
     val shuffled = new ShuffledRowRDD(
       ShuffleExchange.prepareShuffleDependency(
         localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
-      val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+      val topK = util.collection.Utils.takeOrdered(iter.map(_.copy()), limit, serializer)(ord)
       if (projectList != child.output) {
         val proj = UnsafeProjection.create(projectList, child.output)
         topK.map(r => proj(r))

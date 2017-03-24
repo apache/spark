@@ -18,8 +18,15 @@
 package org.apache.spark.util.collection
 
 import scala.collection.JavaConverters._
+import scala.runtime.ScalaRunTime
 
 import com.google.common.collect.{Ordering => GuavaOrdering}
+
+import org.apache.spark.{TaskContext}
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.{CompletionIterator, SizeEstimator}
+
+
 
 /**
  * Utility functions for collections.
@@ -35,5 +42,44 @@ private[spark] object Utils {
       override def compare(l: T, r: T): Int = ord.compare(l, r)
     }
     ordering.leastOf(input.asJava, num).iterator.asScala
+  }
+
+  /**
+   * Returns the first K elements from the input as defined by the specified implicit Ordering[T]
+   * and maintains the ordering.
+   */
+  def takeOrdered[T](input: Iterator[T], num: Int, ser: Serializer)
+      (implicit ord: Ordering[T]): Iterator[T] = {
+    val context = TaskContext.get()
+    if (context == null || !input.hasNext) {
+      return takeOrdered(input, num)(ord)
+    }
+
+    val iter = input.buffered
+    val head = iter.head
+    var size =
+      if (ScalaRunTime.isAnyVal(head)) {
+        SizeEstimator.primitiveSize(head.getClass)
+      } else {
+        SizeEstimator.estimate(head.asInstanceOf[AnyRef])
+      }
+
+    if (size == 0) {
+      size = 1024
+    }
+
+    val memory = Runtime.getRuntime.maxMemory()
+    val limit = (memory / size) * 0.1
+
+    if (num < limit) {
+      takeOrdered(iter, num)(ord)
+    } else {
+      val sorter = new ExternalSorter[T, Any, Any](context, None, None, Some(ord), ser)
+      sorter.insertAll(iter.map(x => (x, null)))
+      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
+      context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+      CompletionIterator[T, Iterator[T]](sorter.iterator.map(_._1).take(num), sorter.stop())
+    }
   }
 }
