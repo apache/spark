@@ -17,11 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.util.Arrays
 import java.util.NoSuchElementException
-
-import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 
@@ -39,7 +35,7 @@ class MedianHeapSuite extends SparkFunSuite {
     val medianHeap = new MedianHeap()
     array.foreach(medianHeap.insert(_))
     assert(medianHeap.size() === 10)
-    assert(medianHeap.median === ((array(4) + array(5)) / 2.0))
+    assert(medianHeap.median === 4.5)
   }
 
   test("Median should be correct when size of MedianHeap is odd") {
@@ -47,18 +43,18 @@ class MedianHeapSuite extends SparkFunSuite {
     val medianHeap = new MedianHeap()
     array.foreach(medianHeap.insert(_))
     assert(medianHeap.size() === 9)
-    assert(medianHeap.median === (array(4)))
+    assert(medianHeap.median === 4)
   }
 
   test("Median should be correct though there are duplicated numbers inside.") {
-    val array = Array(0, 0, 1, 1, 2, 2, 3, 3, 4, 4)
+    val array = Array(0, 0, 1, 1, 2, 3, 4)
     val medianHeap = new MedianHeap()
     array.foreach(medianHeap.insert(_))
-    assert(medianHeap.size === 10)
-    assert(medianHeap.median === ((array(4) + array(5)) / 2.0))
+    assert(medianHeap.size === 7)
+    assert(medianHeap.median === 1)
   }
 
-  test("Median should be correct when skew situations.") {
+  test("Median should be correct when input data is skewed.") {
     val medianHeap = new MedianHeap()
     (0 until 10).foreach(_ => medianHeap.insert(5))
     assert(medianHeap.median === 5)
