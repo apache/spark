@@ -213,8 +213,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def getNormalizedResult(session: SparkSession, sql: String): (StructType, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Command => true
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+      case _: Command => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
