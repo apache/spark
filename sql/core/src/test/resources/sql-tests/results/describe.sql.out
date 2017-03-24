@@ -23,13 +23,13 @@ DESCRIBE t
 -- !query 2 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 2 output
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
-c                   	string              	                    
 d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+c                   	string              	                    
 d                   	string
 
 
@@ -38,13 +38,13 @@ DESC t
 -- !query 3 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 3 output
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
-c                   	string              	                    
 d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+c                   	string              	                    
 d                   	string
 
 
@@ -53,13 +53,13 @@ DESC TABLE t
 -- !query 4 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 4 output
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
-c                   	string              	                    
 d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+c                   	string              	                    
 d                   	string
 
 
@@ -68,27 +68,29 @@ DESC FORMATTED t
 -- !query 5 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 5 output
-# Detailed Table Information	                    	                    
-# Partition Information	                    	                    
-# Storage Information	                    	                    
-# col_name          	data_type           	comment             
-Comment:            	table_comment       	                    
-Compressed:         	No                  	                    
-Created: 
-Database:           	default             	                    
-Last Access: 
-Location: sql/core/spark-warehouse/t	                    
-Owner:              	                    	                    
-Partition Provider: 	Catalog             	                    
-Storage Desc Parameters:	                    	                    
-Table Parameters:   	                    	                    
-Table Type:         	MANAGED             	                    
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
+d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
 c                   	string              	                    
 d                   	string              	                    
-d                   	string
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database:           	default             	                    
+Owner:              	                    	                    
+Created: 
+Last Access: 
+Location: sql/core/spark-warehouse/t	                    
+Table Type:         	MANAGED             	                    
+Comment:            	table_comment       	                    
+Table Parameters:   	                    	                    
+                    	                    	                    
+# Storage Information	                    	                    
+Compressed:         	No                  	                    
+Storage Desc Parameters:	                    	                    
+Partition Provider: 	Catalog
 
 
 -- !query 6
@@ -96,6 +98,15 @@ DESC EXTENDED t
 -- !query 6 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 6 output
+a                   	string              	                    
+b                   	int                 	                    
+c                   	string              	                    
+d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+c                   	string              	                    
+d                   	string              	                    
+                    	                    	                    
 # Detailed Table Information	CatalogTable(
 	Table: `default`.`t`
 	Created: 
@@ -106,15 +117,7 @@ struct<col_name:string,data_type:string,comment:string>
 	Partition Columns: [`c`, `d`]
 	Comment: table_comment
 	Storage(Location: sql/core/spark-warehouse/t)
-	Partition Provider: Catalog)	                    
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-a                   	string              	                    
-b                   	int                 	                    
-c                   	string              	                    
-c                   	string              	                    
-d                   	string              	                    
-d                   	string
+	Partition Provider: Catalog)
 
 
 -- !query 7
@@ -122,13 +125,13 @@ DESC t PARTITION (c='Us', d=1)
 -- !query 7 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 7 output
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
-c                   	string              	                    
 d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+c                   	string              	                    
 d                   	string
 
 
@@ -137,18 +140,19 @@ DESC EXTENDED t PARTITION (c='Us', d=1)
 -- !query 8 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 8 output
-# Partition Information	                    	                    
-# col_name          	data_type           	comment             
-Detailed Partition Information CatalogPartition(
-	Partition Values: [c=Us, d=1]
-	Storage(Location: sql/core/spark-warehouse/t/c=Us/d=1)
-	Partition Parameters:{})	                    	                    
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
+d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
 c                   	string              	                    
 d                   	string              	                    
-d                   	string
+                    	                    	                    
+Detailed Partition Information CatalogPartition(
+	Partition Values: [c=Us, d=1]
+	Storage(Location: sql/core/spark-warehouse/t/c=Us/d=1)
+	Partition Parameters:{})
 
 
 -- !query 9
@@ -156,23 +160,25 @@ DESC FORMATTED t PARTITION (c='Us', d=1)
 -- !query 9 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 9 output
-# Detailed Partition Information	                    	                    
-# Partition Information	                    	                    
-# Storage Information	                    	                    
-# col_name          	data_type           	comment             
-Compressed:         	No                  	                    
-Database:           	default             	                    
-Location: sql/core/spark-warehouse/t/c=Us/d=1	                    
-Partition Parameters:	                    	                    
-Partition Value:    	[Us, 1]             	                    
-Storage Desc Parameters:	                    	                    
-Table:              	t                   	                    
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
+d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
 c                   	string              	                    
 d                   	string              	                    
-d                   	string
+                    	                    	                    
+# Detailed Partition Information	                    	                    
+Partition Value:    	[Us, 1]             	                    
+Database:           	default             	                    
+Table:              	t                   	                    
+Location: sql/core/spark-warehouse/t/c=Us/d=1	                    
+Partition Parameters:	                    	                    
+                    	                    	                    
+# Storage Information	                    	                    
+Compressed:         	No                  	                    
+Storage Desc Parameters:
 
 
 -- !query 10
