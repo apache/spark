@@ -1,3 +1,7 @@
+import sys
+if sys.version < '3':
+    range = xrange
+
 import re
 
 RULES = (

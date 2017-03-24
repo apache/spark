@@ -15,9 +15,12 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version < '3':
+    range = xrange
+
 import glob
 import os
-import sys
 from itertools import chain
 import time
 import operator

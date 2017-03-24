@@ -91,6 +91,7 @@ import select
 import struct
 if sys.version < '3':
     import SocketServer
+    range = xrange
 else:
     import socketserver as SocketServer
 import threading

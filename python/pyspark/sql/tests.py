@@ -32,6 +32,10 @@ import time
 import datetime
 
 import py4j
+
+if sys.version < '3':
+    range = xrange
+
 try:
     import xmlrunner
 except ImportError:
