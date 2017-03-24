@@ -68,10 +68,10 @@ private object ConfigHelpers {
 
   def byteToString(v: Long, unit: ByteUnit): String = unit.convertTo(v, ByteUnit.BYTE) + "b"
 
-  def regexFromString(str: String): Regex = {
+  def regexFromString(str: String, key: String): Regex = {
     try str.r catch {
       case e: PatternSyntaxException =>
-        throw new IllegalArgumentException(s"$str is not a valid regex", e)
+        throw new IllegalArgumentException(s"$key should be a regex, but was $str", e)
     }
   }
 
@@ -225,6 +225,6 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def regexConf: TypedConfigBuilder[Regex] = {
-    new TypedConfigBuilder(this, regexFromString, _.regex)
+    new TypedConfigBuilder(this, regexFromString(_, this.key), _.regex)
   }
 }

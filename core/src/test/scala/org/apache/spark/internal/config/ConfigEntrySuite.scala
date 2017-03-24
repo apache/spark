@@ -19,9 +19,6 @@ package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.SparkConfWithEnv
@@ -110,7 +107,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     conf.set(rConf.key, "[.")
     val e = intercept[IllegalArgumentException](conf.get(rConf))
-    assert(e.getMessage.contains("is not a valid regex"))
+    assert(e.getMessage.contains("regex should be a regex, but was"))
   }
 
   test("conf entry: string seq") {
