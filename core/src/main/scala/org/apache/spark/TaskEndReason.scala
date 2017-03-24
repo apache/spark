@@ -213,7 +213,7 @@ case object TaskResultLost extends TaskFailedReason {
  */
 @DeveloperApi
 case class TaskKilled(
-    reason: String
+    reason: String,
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
     private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil)
   extends TaskFailedReason {

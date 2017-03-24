@@ -408,7 +408,7 @@ private[spark] object JsonProtocol {
         ("Loss Reason" -> reason.map(_.toString))
       case taskKilled: TaskKilled =>
         val accumUpdates = JArray(taskKilled.accumUpdates.map(accumulableInfoToJson).toList)
-        ("Kill Reason" -> taskKilled.reason)
+        ("Kill Reason" -> taskKilled.reason) ~
         ("Accumulator Updates" -> accumUpdates)
       case _ => emptyJson
     }
