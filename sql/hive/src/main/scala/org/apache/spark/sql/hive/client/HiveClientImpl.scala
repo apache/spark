@@ -443,7 +443,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
-    client.createTable(toHiveTable(table), ignoreIfExists)
+    client.createTable(toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
   override def dropTable(
