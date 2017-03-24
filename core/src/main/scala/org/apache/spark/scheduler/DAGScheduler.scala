@@ -1339,7 +1339,7 @@ class DAGScheduler(
               // assume all shuffle data on the node is bad.
               Some(bmAddress.host)
             } else {
-              // Deregister shuffle data just for one executor (we don't have any
+              // Unregister shuffle data just for one executor (we don't have any
               // reason to believe shuffle data has been lost for the entire host).
               None
             }
@@ -1385,10 +1385,10 @@ class DAGScheduler(
     // if the cluster manager explicitly tells us that the entire worker was lost, then
     // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    val filesLost = workerLost || !env.blockManager.externalShuffleServiceEnabled
+    val fileLost = workerLost || !env.blockManager.externalShuffleServiceEnabled
     removeExecutorAndUnregisterOutputs(
       execId = execId,
-      fileLost = filesLost,
+      fileLost = fileLost,
       hostToUnregisterOutputs = None,
       maybeEpoch = None)
   }
@@ -1704,8 +1704,7 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case ExecutorLost(execId, reason) =>
       val workerLost = reason match {
-        case SlaveLost(_, true) =>
-          true
+        case SlaveLost(_, true) => true
         case _ => false
       }
       dagScheduler.handleExecutorLost(execId, workerLost)
