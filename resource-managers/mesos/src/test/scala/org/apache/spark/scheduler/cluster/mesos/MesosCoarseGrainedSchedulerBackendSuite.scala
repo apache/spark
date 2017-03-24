@@ -465,63 +465,14 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   test("mesos sets configurable task name") {
-    val taskName = "mesos.test.task"
-    setBackend(Map(
-      "spark.mesos.task.name" -> taskName
-    ))
+    setBackend()
 
     val offers = List(Resources(backend.executorMemory(sc), 1))
     offerResources(offers)
     val launchedTasks = verifyTaskLaunched(driver, "o1")
 
     // Add " 0" to the taskName to match the executor number that is appended
-    assert(launchedTasks.head.getName == s"$taskName 0")
-  }
-
-  test("mesos sets configurable labels on tasks") {
-    val taskLabelsString = "mesos:test,label:test"
-    setBackend(Map(
-      "spark.mesos.task.labels" -> taskLabelsString
-    ))
-
-    // Build up the labels
-    val taskLabels = Protos.Labels.newBuilder()
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("mesos").setValue("test").build())
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("label").setValue("test").build())
-      .build()
-
-    val offers = List(Resources(backend.executorMemory(sc), 1))
-    offerResources(offers)
-    val launchedTasks = verifyTaskLaunched(driver, "o1")
-
-    val labels = launchedTasks.head.getLabels
-
-    assert(launchedTasks.head.getLabels.equals(taskLabels))
-  }
-
-  test("mesos ignored invalid labels and sets configurable labels on tasks") {
-    val taskLabelsString = "mesos:test,label:test,incorrect:label:here"
-    setBackend(Map(
-      "spark.mesos.task.labels" -> taskLabelsString
-    ))
-
-    // Build up the labels
-    val taskLabels = Protos.Labels.newBuilder()
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("mesos").setValue("test").build())
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("label").setValue("test").build())
-      .build()
-
-    val offers = List(Resources(backend.executorMemory(sc), 1))
-    offerResources(offers)
-    val launchedTasks = verifyTaskLaunched(driver, "o1")
-
-    val labels = launchedTasks.head.getLabels
-
-    assert(launchedTasks.head.getLabels.equals(taskLabels))
+    assert(launchedTasks.head.getName == s"${sc.appName} 0")
   }
 
   test("mesos supports spark.mesos.network.name") {
