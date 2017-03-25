@@ -41,8 +41,32 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
   val metastoreTableIdentifier: Option[TableIdentifier]
 
+  protected val nodeNamePrefix: String = ""
+
   override val nodeName: String = {
     s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
+  }
+
+  override def simpleString: String = {
+    val metadataEntries = metadata.toSeq.sorted.map {
+      case (key, value) =>
+        key + ": " + StringUtils.abbreviate(redact(value), 100)
+    }
+    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
+    s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
+  }
+
+  override def verboseString: String = redact(super.verboseString)
+
+  override def treeString(verbose: Boolean, addSuffix: Boolean): String = {
+    redact(super.treeString(verbose, addSuffix))
+  }
+
+  /**
+   * Shorthand for calling redactString() without specifying redacting rules
+   */
+  private def redact(text: String): String = {
+    Utils.redact(SparkSession.getActiveSession.get.sparkContext.conf, text)
   }
 }
 
@@ -83,15 +107,6 @@ case class RowDataSourceScanExec(
       numOutputRows += 1
       r
     }
-  }
-
-  override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
-      key + ": " + StringUtils.abbreviate(value, 100)
-    }
-
-    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
-      s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -307,13 +322,7 @@ case class FileSourceScanExec(
     }
   }
 
-  override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
-      key + ": " + StringUtils.abbreviate(value, 100)
-    }
-    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
-    s"File$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
-  }
+  override val nodeNamePrefix: String = "File"
 
   override protected def doProduce(ctx: CodegenContext): String = {
     if (supportsBatch) {

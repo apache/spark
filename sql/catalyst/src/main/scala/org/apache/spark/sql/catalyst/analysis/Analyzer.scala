@@ -486,14 +486,16 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
+          val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
           if (singleAgg) {
-            value.toString
+            stringValue
           } else {
             val suffix = aggregate match {
               case n: NamedExpression => n.name
               case _ => toPrettySQL(aggregate)
             }
-            value + "_" + suffix
+            stringValue + "_" + suffix
           }
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
@@ -2500,7 +2502,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
         substitutedPlan.withNewChildren(expandedPlan :: Nil)
       } else if (windowExpressions.size > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
-          "of rows, therefore they are not currently not supported.")
+          "of rows, therefore they are currently not supported.")
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

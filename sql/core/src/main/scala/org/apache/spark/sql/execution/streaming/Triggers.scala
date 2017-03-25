@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming;
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
-import org.junit.Test;
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.sql.streaming.Trigger
 
-public class JavaKeyedStateTimeoutSuite {
-
-  @Test
-  public void testTimeouts() {
-    assert(KeyedStateTimeout.ProcessingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
-  }
-}
+/**
+ * A [[Trigger]] that process only one batch of data in a streaming query then terminates
+ * the query.
+ */
+@Experimental
+@InterfaceStability.Evolving
+case object OneTimeTrigger extends Trigger

@@ -110,8 +110,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   val cancelledStages = new HashSet[Int]()
 
   val taskScheduler = new TaskScheduler() {
-    override def rootPool: Pool = null
-    override def schedulingMode: SchedulingMode = SchedulingMode.NONE
+    override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
+    override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
     override def start() = {}
     override def stop() = {}
     override def executorHeartbeatReceived(
@@ -126,6 +126,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def cancelTasks(stageId: Int, interruptThread: Boolean) {
       cancelledStages += stageId
     }
+    override def killTaskAttempt(
+      taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
@@ -542,14 +544,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // make sure that the DAGScheduler doesn't crash when the TaskScheduler
     // doesn't implement killTask()
     val noKillTaskScheduler = new TaskScheduler() {
-      override def rootPool: Pool = null
-      override def schedulingMode: SchedulingMode = SchedulingMode.NONE
+      override def schedulingMode: SchedulingMode = SchedulingMode.FIFO
+      override def rootPool: Pool = new Pool("", schedulingMode, 0, 0)
       override def start(): Unit = {}
       override def stop(): Unit = {}
       override def submitTasks(taskSet: TaskSet): Unit = {
         taskSets += taskSet
       }
       override def cancelTasks(stageId: Int, interruptThread: Boolean) {
+        throw new UnsupportedOperationException
+      }
+      override def killTaskAttempt(
+          taskId: Long, interruptThread: Boolean, reason: String): Boolean = {
         throw new UnsupportedOperationException
       }
       override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}

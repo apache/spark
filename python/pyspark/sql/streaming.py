@@ -277,44 +277,6 @@ class StreamingQueryManager(object):
         self._jsqm.resetTerminated()
 
 
-class Trigger(object):
-    """Used to indicate how often results should be produced by a :class:`StreamingQuery`.
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.0
-    """
-
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def _to_java_trigger(self, sqlContext):
-        """Internal method to construct the trigger on the jvm.
-        """
-        pass
-
-
-class ProcessingTime(Trigger):
-    """A trigger that runs a query periodically based on the processing time. If `interval` is 0,
-    the query will run as fast as possible.
-
-    The interval should be given as a string, e.g. '2 seconds', '5 minutes', ...
-
-    .. note:: Experimental
-
-    .. versionadded:: 2.0
-    """
-
-    def __init__(self, interval):
-        if type(interval) != str or len(interval.strip()) == 0:
-            raise ValueError("interval should be a non empty interval string, e.g. '2 seconds'.")
-        self.interval = interval
-
-    def _to_java_trigger(self, sqlContext):
-        return sqlContext._sc._jvm.org.apache.spark.sql.streaming.ProcessingTime.create(
-            self.interval)
-
-
 class DataStreamReader(OptionUtils):
     """
     Interface used to load a streaming :class:`DataFrame` from external storage systems
@@ -597,12 +559,12 @@ class DataStreamReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
-        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
-                                        being read should be skipped. If None is set, it uses
-                                        the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
-                                         being read should be skipped. If None is set, it uses
-                                         the default value, ``false``.
+        :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
+                                        values being read should be skipped. If None is set, it
+                                        uses the default value, ``false``.
+        :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
+                                         values being read should be skipped. If None is set, it
+                                         uses the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.
@@ -625,6 +587,8 @@ class DataStreamReader(OptionUtils):
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
                                   ``-1`` meaning unlimited length.
+        :param maxMalformedLogPerPartition: this parameter is no longer used since Spark 2.2.0.
+                                            If specified, it is ignored.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
@@ -788,7 +752,7 @@ class DataStreamWriter(object):
 
     @keyword_only
     @since(2.0)
-    def trigger(self, processingTime=None):
+    def trigger(self, processingTime=None, once=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
@@ -798,17 +762,26 @@ class DataStreamWriter(object):
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
+        >>> # trigger the query for just once batch of data
+        >>> writer = sdf.writeStream.trigger(once=True)
         """
-        from pyspark.sql.streaming import ProcessingTime
-        trigger = None
+        jTrigger = None
         if processingTime is not None:
+            if once is not None:
+                raise ValueError('Multiple triggers not allowed.')
             if type(processingTime) != str or len(processingTime.strip()) == 0:
-                raise ValueError('The processing time must be a non empty string. Got: %s' %
+                raise ValueError('Value for processingTime must be a non empty string. Got: %s' %
                                  processingTime)
-            trigger = ProcessingTime(processingTime)
-        if trigger is None:
-            raise ValueError('A trigger was not provided. Supported triggers: processingTime.')
-        self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._spark))
+            interval = processingTime.strip()
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
+                interval)
+        elif once is not None:
+            if once is not True:
+                raise ValueError('Value for once must be True. Got: %s' % once)
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
+        else:
+            raise ValueError('No trigger provided')
+        self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 
     @ignore_unicode_prefix
