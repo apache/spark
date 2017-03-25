@@ -225,6 +225,6 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def regexConf: TypedConfigBuilder[Regex] = {
-    new TypedConfigBuilder(this, regexFromString(_, this.key), _.regex)
+    new TypedConfigBuilder(this, regexFromString(_, this.key), _.toString)
   }
 }
