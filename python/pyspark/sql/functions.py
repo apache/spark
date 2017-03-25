@@ -1327,8 +1327,8 @@ def encode(col, charset):
 @since(1.5)
 def format_number(col, d):
     """
-    Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places,
-    and returns the result as a string.
+    Formats the number X to a format like '#,--#,--#.--', rounded to d decimal places
+    with HALF_EVEN round mode, and returns the result as a string.
 
     :param col: the column name of the numeric value to be formatted
     :param d: the N decimal places
@@ -1675,8 +1675,8 @@ def array(*cols):
 @since(1.5)
 def array_contains(col, value):
     """
-    Collection function: returns True if the array contains the given value. The collection
-    elements and value must be of the same type.
+    Collection function: returns null if the array is null, true if the array contains the
+    given value, and false otherwise.
 
     :param col: name of column containing array
     :param value: value to check for in array
@@ -1684,6 +1684,9 @@ def array_contains(col, value):
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(array_contains(df.data, "a")).collect()
     [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
+    >>> df = spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
+    >>> df.select(array_contains(df.data, 1)).collect()
+    [Row(array_contains(data, 1)=True), Row(array_contains(data, 1)=False)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
