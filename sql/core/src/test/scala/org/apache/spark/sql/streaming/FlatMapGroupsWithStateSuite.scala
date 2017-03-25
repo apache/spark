@@ -575,9 +575,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
       StopStream,
       StartStream(ProcessingTime("1 second"), triggerClock = clock),
+      AdvanceManualClock(10 * 1000),
 
       AddData(inputData, "c"),
-      AdvanceManualClock(20 * 1000),
+      AdvanceManualClock(1 * 1000),
       CheckLastBatch(("b", "-1"), ("c", "1")),
       assertNumStateRows(total = 1, updated = 2),
 
