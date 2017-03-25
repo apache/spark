@@ -84,7 +84,6 @@ for python in "${PYTHON_EXECS[@]}"; do
     if [ -n "$USE_CONDA" ]; then
       conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
       source activate "$VIRTUALENV_PATH"
-      conda install -y -c conda-forge pypandoc
     else
       mkdir -p "$VIRTUALENV_PATH"
       virtualenv --python=$python "$VIRTUALENV_PATH"
