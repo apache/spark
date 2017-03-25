@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -38,13 +36,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val schemaAsString = options("dataSchema")
-    val schema = try {
-      DataType.fromJson(schemaAsString)
-    } catch {
-      case NonFatal(_) => DataType.fromDdl(schemaAsString)
-    }
-    Some(schema.asInstanceOf[StructType])
+    Some(DataType.fromJson(options("dataSchema")).asInstanceOf[StructType])
   }
 
   override def prepareWrite(

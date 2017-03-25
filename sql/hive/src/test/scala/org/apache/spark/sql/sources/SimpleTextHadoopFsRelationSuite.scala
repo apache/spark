@@ -60,10 +60,6 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
-      checkQueries(
-        spark.read.format(dataSourceName)
-          .option("dataSchema", "a INT, b STRING, p1 INT")
-          .load(file.getCanonicalPath))
     }
   }
 

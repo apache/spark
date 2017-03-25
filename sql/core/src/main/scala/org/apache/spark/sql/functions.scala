@@ -3056,19 +3056,18 @@ object functions {
    * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string as a json string
+   * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
+   *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
+   *               format is also supported for the schema.
    *
    * @group collection_funcs
    * @since 2.1.0
    */
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
-    // Until Spark-2.1, we use json strings for defining schemas here. Since we add an user-friendly
-    // API in the DDL parser, we employ DDL formats for the case. To keep back-compatibility,
-    // we use `fromJson` first, and then try the new API.
     val dataType = try {
       DataType.fromJson(schema)
     } catch {
-      case NonFatal(_) => DataType.fromDdl(schema)
+      case NonFatal(_) => DataType.fromDDL(schema)
     }
     from_json(e, dataType, options)
   }

@@ -104,7 +104,11 @@ object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
-  def fromDdl(ddl: String): DataType = CatalystSqlParser.parseTableSchema(ddl)
+  /**
+   * Creates DataType for a given SQL DDL string, which is a comma separated list of field
+   * definitions, e.g., a INT, b STRING.
+   */
+  def fromDDL(ddl: String): DataType = CatalystSqlParser.parseTableSchema(ddl)
 
   private val nonDecimalNameToType = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,

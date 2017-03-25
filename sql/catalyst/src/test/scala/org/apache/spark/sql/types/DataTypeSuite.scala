@@ -169,22 +169,24 @@ class DataTypeSuite extends SparkFunSuite {
     assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
   }
 
-  // Test json formats only for the types that DDL formats do not support
   def checkDataTypeFromJson(dataType: DataType): Unit = {
-    test(s"from json - $dataType") {
+    test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
+    }
+  }
+
+  def checkDataTypeFromDDL(dataType: DataType): Unit = {
+    test(s"from DDL - $dataType") {
+      assert(DataType.fromDDL(s"a ${dataType.sql}") === new StructType().add("a", dataType))
     }
   }
 
   def checkDataTypeFromText(dataType: DataType): Unit = {
     checkDataTypeFromJson(dataType)
-
-    // Test DDL formats
-    test(s"from ddl - $dataType") {
-      assert(DataType.fromDdl(s"a ${dataType.sql}") === new StructType().add("a", dataType))
-    }
+    checkDataTypeFromDDL(dataType)
   }
 
+  // In some types, check json formats only because the types do not support DDL formats.
   checkDataTypeFromJson(NullType)
 
   checkDataTypeFromText(BooleanType)
