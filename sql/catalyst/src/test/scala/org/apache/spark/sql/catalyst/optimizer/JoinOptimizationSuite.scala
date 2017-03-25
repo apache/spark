@@ -21,19 +21,22 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.types.BooleanType
 
 class JoinOptimizationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", Once,
+      Batch("Eliminate Subqueries", Once,
         EliminateSubqueryAliases) ::
+      Batch("Subquery", Once,
+        OptimizeSubqueries) ::
       Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
         PushDownPredicate,
@@ -41,8 +44,18 @@ class JoinOptimizationSuite extends PlanTest {
         ReorderJoin(SimpleCatalystConf(true)),
         PushPredicateThroughJoin,
         ColumnPruning,
-        CollapseProject) :: Nil
+        CollapseProject) ::
+      Batch("RewriteSubquery", Once,
+        RewritePredicateSubquery) :: Nil
 
+  }
+
+  object OptimizeSubqueries extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case s: SubqueryExpression =>
+        val Subquery(newPlan) = Optimize.execute(Subquery(s.plan))
+        s.withNewPlan(newPlan)
+    }
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -121,6 +134,31 @@ class JoinOptimizationSuite extends PlanTest {
       val optimized = Optimize.execute(queryAnswerPair._1.analyze)
       comparePlans(optimized, analysis.EliminateSubqueryAliases(queryAnswerPair._2.analyze))
     }
+  }
+
+  test("reorder inner joins - don't put predicate with subquery into join condition") {
+    // ReorderJoin collects all predicates and try to put them into join condition when creating
+    // ordered join. If a predicate with a subquery is in a join condition instead of a filter
+    // condition, `RewritePredicateSubquery.rewriteExistentialExpr` would fail to convert the
+    // subquery to an ExistenceJoin, and thus result in error.
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+    val z = testRelation.subquery('z)
+    val w = testRelation1.subquery('w)
+    val exists: AttributeReference = AttributeReference("exists", BooleanType, nullable = false)()
+
+    val queryPlan = x.join(y).join(z)
+      .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr) &&
+        ("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr)))))
+
+    val expectedPlan = x.join(z, Inner, Some("x.b".attr === "z.b".attr))
+      .join(w, ExistenceJoin(exists), Some("z.c".attr === "w.d".attr))
+      .where("x.a".attr > 1 || exists)
+      .select("x.a".attr, "x.b".attr, "x.c".attr, "z.a".attr, "z.b".attr, "z.c".attr)
+      .join(y, Inner, Some("y.d".attr === "z.a".attr))
+
+    val optimized = Optimize.execute(queryPlan.analyze)
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(expectedPlan.analyze))
   }
 
   test("broadcasthint sets relation statistics to smallest value") {

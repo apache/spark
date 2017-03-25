@@ -289,6 +289,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)
+      case ExistenceJoin(exists: Attribute) =>
+        // `exists` must be an Attribute in ExistenceJoin
+        ExistenceJoin(transformExpression(exists).asInstanceOf[Attribute])
       case other: AnyRef => other
       case null => null
     }
