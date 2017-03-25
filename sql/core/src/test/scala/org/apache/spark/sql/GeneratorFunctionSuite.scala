@@ -87,7 +87,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
-  test("single explode_outer") {
+  ignore("single explode_outer") {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
       df.select(explode_outer('intList)),
@@ -101,7 +101,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
   }
 
-  test("single posexplode_outer") {
+  ignore("single posexplode_outer") {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
     checkAnswer(
       df.select(posexplode_outer('intList)),
@@ -156,7 +156,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row(6) :: Nil)
   }
 
-  test("aliased explode_outer") {
+  ignore("aliased explode_outer") {
     val df = Seq((1, Seq(1, 2, 3)), (2, Seq())).toDF("a", "intList")
 
     checkAnswer(
@@ -176,7 +176,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row("a", "b"))
   }
 
-  test("explode_outer on map") {
+  ignore("explode_outer on map") {
     val df = Seq((1, Map("a" -> "b")), (2, Map[String, String]()),
       (3, Map("c" -> "d"))).toDF("a", "map")
 
@@ -193,7 +193,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row("a", "b"))
   }
 
-  test("explode_outer on map with aliases") {
+  ignore("explode_outer on map with aliases") {
     val df = Seq((3, None), (1, Some(Map("a" -> "b")))).toDF("a", "map")
 
     checkAnswer(
@@ -270,7 +270,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row(1) :: Row(2) :: Nil)
   }
 
-  test("inline_outer") {
+  ignore("inline_outer") {
     val df = Seq((1, "2"), (3, "4"), (5, "6")).toDF("col1", "col2")
     val df2 = df.select(when('col1 === 1, null).otherwise(array(struct('col1, 'col2))).as("col1"))
     checkAnswer(
