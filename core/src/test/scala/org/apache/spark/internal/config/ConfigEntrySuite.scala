@@ -100,10 +100,10 @@ class ConfigEntrySuite extends SparkFunSuite {
     val rConf = ConfigBuilder(testKey("regex")).regexConf.createWithDefault(".*".r)
 
     conf.set(rConf, "[0-9a-f]{8}".r)
-    assert(conf.get(rConf).regex === "[0-9a-f]{8}")
+    assert(conf.get(rConf).toString === "[0-9a-f]{8}")
 
     conf.set(rConf.key, "[0-9a-f]{4}")
-    assert(conf.get(rConf).regex === "[0-9a-f]{4}")
+    assert(conf.get(rConf).toString === "[0-9a-f]{4}")
 
     conf.set(rConf.key, "[.")
     val e = intercept[IllegalArgumentException](conf.get(rConf))
