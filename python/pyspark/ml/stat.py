@@ -37,11 +37,9 @@ class ChiSquareTest(object):
       Name of label column in dataset, type str. Column should have any numerical type.
     :return:
       DataFrame, with a single row, containing the test result for each feature against the
-      label. The DataFrame will contain the following fields:
-        `pValues: Vector`
-        `degreesOfFreedom: Array[Int]`
-        `statistics: Vector`
-      Each of these fields has one value per feature.
+      label. The DataFrame will contain the following fields: `pValues`: `Vector`,
+      `degreesOfFreedom`: `Array[Int]`, and `statistics`: `Vector`. Each of these fields has one
+      value per feature.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.stat import ChiSquareTest
