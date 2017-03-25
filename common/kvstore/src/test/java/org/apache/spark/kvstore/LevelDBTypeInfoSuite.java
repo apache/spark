@@ -136,7 +136,7 @@ public class LevelDBTypeInfoSuite {
   }
 
   private LevelDBTypeInfo<?> newTypeInfo(Class<?> type) throws Exception {
-    return new LevelDBTypeInfo<>(null, type);
+    return new LevelDBTypeInfo<>(null, type, type.getName().getBytes(UTF_8));
   }
 
   private void assertBefore(byte[] key1, byte[] key2) {

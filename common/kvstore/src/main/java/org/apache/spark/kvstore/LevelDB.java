@@ -19,7 +19,9 @@ package org.apache.spark.kvstore;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -49,16 +51,20 @@ public class LevelDB implements KVStore {
   /** DB key where app metadata is stored. */
   private static final byte[] METADATA_KEY = "__meta__".getBytes(UTF_8);
 
+  /** DB key where type aliases are stored. */
+  private static final byte[] TYPE_ALIASES_KEY = "__types__".getBytes(UTF_8);
+
   final AtomicReference<DB> _db;
   final KVStoreSerializer serializer;
 
+  private final ConcurrentMap<String, byte[]> typeAliases;
   private final ConcurrentMap<Class<?>, LevelDBTypeInfo> types;
 
-  public LevelDB(File path) throws IOException {
+  public LevelDB(File path) throws Exception {
     this(path, new KVStoreSerializer());
   }
 
-  public LevelDB(File path, KVStoreSerializer serializer) throws IOException {
+  public LevelDB(File path, KVStoreSerializer serializer) throws Exception {
     this.serializer = serializer;
     this.types = new ConcurrentHashMap<>();
 
@@ -75,6 +81,14 @@ public class LevelDB implements KVStore {
     } else {
       db().put(STORE_VERSION_KEY, serializer.serialize(STORE_VERSION));
     }
+
+    Map<String, byte[]> aliases;
+    try {
+      aliases = get(TYPE_ALIASES_KEY, TypeAliases.class).aliases;
+    } catch (NoSuchElementException e) {
+      aliases = new HashMap<>();
+    }
+    typeAliases = new ConcurrentHashMap<>(aliases);
   }
 
   @Override
@@ -218,15 +232,15 @@ public class LevelDB implements KVStore {
 
   /** Returns metadata about indices for the given type. */
   <T> LevelDBTypeInfo<T> getTypeInfo(Class<T> type) throws Exception {
-    LevelDBTypeInfo<T> idx = types.get(type);
-    if (idx == null) {
-      LevelDBTypeInfo<T> tmp = new LevelDBTypeInfo<>(this, type);
-      idx = types.putIfAbsent(type, tmp);
-      if (idx == null) {
-        idx = tmp;
+    LevelDBTypeInfo<T> ti = types.get(type);
+    if (ti == null) {
+      LevelDBTypeInfo<T> tmp = new LevelDBTypeInfo<>(this, type, getTypeAlias(type));
+      ti = types.putIfAbsent(type, tmp);
+      if (ti == null) {
+        ti = tmp;
       }
     }
-    return idx;
+    return ti;
   }
 
   /**
@@ -247,6 +261,36 @@ public class LevelDB implements KVStore {
     for (LevelDBTypeInfo<?>.Index idx : ti.indices()) {
       idx.remove(batch, instance);
     }
+  }
+
+  private byte[] getTypeAlias(Class<?> klass) throws Exception {
+    byte[] alias = typeAliases.get(klass.getName());
+    if (alias == null) {
+      synchronized (typeAliases) {
+        byte[] tmp = String.valueOf(typeAliases.size()).getBytes(UTF_8);
+        alias = typeAliases.putIfAbsent(klass.getName(), tmp);
+        if (alias == null) {
+          alias = tmp;
+          put(TYPE_ALIASES_KEY, new TypeAliases(typeAliases));
+        }
+      }
+    }
+    return alias;
+  }
+
+  /** Needs to be public for Jackson. */
+  public static class TypeAliases {
+
+    public Map<String, byte[]> aliases;
+
+    TypeAliases(Map<String, byte[]> aliases) {
+      this.aliases = aliases;
+    }
+
+    TypeAliases() {
+      this(null);
+    }
+
   }
 
 }

@@ -62,7 +62,7 @@ class LevelDBTypeInfo<T> {
   private final Map<String, Index> indices;
   private final byte[] typePrefix;
 
-  LevelDBTypeInfo(LevelDB db, Class<T> type) throws Exception {
+  LevelDBTypeInfo(LevelDB db, Class<T> type, byte[] alias) throws Exception {
     this.db = db;
     this.type = type;
     this.indices = new HashMap<>();
@@ -88,21 +88,7 @@ class LevelDBTypeInfo<T> {
 
     ByteArrayOutputStream typePrefix = new ByteArrayOutputStream();
     typePrefix.write(utf8(ENTRY_PREFIX));
-
-    // Change fully-qualified class names to make keys more spread out by placing the
-    // class name first, and the package name afterwards.
-    String[] components = type.getName().split("\\.");
-    typePrefix.write(utf8(components[components.length - 1]));
-    if (components.length > 1) {
-      typePrefix.write(utf8("/"));
-    }
-    for (int i = 0; i < components.length - 1; i++) {
-      typePrefix.write(utf8(components[i]));
-      if (i < components.length - 2) {
-        typePrefix.write(utf8("."));
-      }
-    }
-    typePrefix.write(KEY_SEPARATOR);
+    typePrefix.write(alias);
     this.typePrefix = typePrefix.toByteArray();
   }
 
