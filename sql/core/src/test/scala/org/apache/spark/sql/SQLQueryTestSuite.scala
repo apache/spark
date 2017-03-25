@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
+import org.apache.spark.sql.execution.command.DescribeFunctionCommand
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -215,6 +216,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
+      case _: DescribeFunctionCommand => true
       case _ => plan.children.iterator.exists(isSorted)
     }
 

@@ -1503,64 +1503,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("describe function") {
-    checkAnswer(
-      sql("DESCRIBE FUNCTION log"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
-        Row("Function: log") ::
-        Row("Usage: log(base, expr) - Returns the logarithm of `expr` with `base`.") :: Nil
-    )
-    // predicate operator
-    checkAnswer(
-      sql("DESCRIBE FUNCTION or"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
-        Row("Function: or") ::
-        Row("Usage: expr1 or expr2 - Logical OR.") :: Nil
-    )
-    checkAnswer(
-      sql("DESCRIBE FUNCTION !"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
-        Row("Function: !") ::
-        Row("Usage: ! expr - Logical not.") :: Nil
-    )
-    // arithmetic operators
-    checkAnswer(
-      sql("DESCRIBE FUNCTION +"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
-        Row("Function: +") ::
-        Row("Usage: expr1 + expr2 - Returns `expr1`+`expr2`.") :: Nil
-    )
-    // comparison operators
-    checkAnswer(
-      sql("DESCRIBE FUNCTION <"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
-        Row("Function: <") ::
-        Row("Usage: expr1 < expr2 - Returns true if `expr1` is less than `expr2`.") :: Nil
-    )
-    // STRING
-    checkAnswer(
-      sql("DESCRIBE FUNCTION 'concat'"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
-        Row("Function: concat") ::
-        Row("Usage: concat(str1, str2, ..., strN) - " +
-            "Returns the concatenation of str1, str2, ..., strN.") :: Nil
-    )
-    // extended mode
-    checkAnswer(
-      sql("DESCRIBE FUNCTION EXTENDED ^"),
-      Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
-        Row(
-          """Extended Usage:
-            |    Examples:
-            |      > SELECT 3 ^ 5;
-            |       2
-            |  """.stripMargin) ::
-        Row("Function: ^") ::
-        Row("Usage: expr1 ^ expr2 - Returns the result of " +
-          "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
-    )
-  }
-
   test("create a data source table without schema") {
     import testImplicits._
     withTempPath { tempDir =>
