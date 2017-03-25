@@ -399,14 +399,9 @@ class LogisticRegression @Since("1.2.0") (
         logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
           s"will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
-        // TODO: use `compressed` after SPARK-17471
-        val coefMatrix = if (numFeatures < numCoefficientSets) {
-          new SparseMatrix(numCoefficientSets, numFeatures,
-            Array.fill(numFeatures + 1)(0), Array.empty[Int], Array.empty[Double])
-        } else {
-          new SparseMatrix(numCoefficientSets, numFeatures, Array.fill(numCoefficientSets + 1)(0),
-            Array.empty[Int], Array.empty[Double], isTransposed = true)
-        }
+        val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
+          new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
+          isTransposed = true).compressed
         val interceptVec = if (isMultinomial) {
           Vectors.sparse(numClasses, Seq((constantLabelIndex, Double.PositiveInfinity)))
         } else {
@@ -617,26 +612,13 @@ class LogisticRegression @Since("1.2.0") (
           denseCoefficientMatrix.update(_ - coefficientMean)
         }
 
-        // TODO: use `denseCoefficientMatrix.compressed` after SPARK-17471
-        val compressedCoefficientMatrix = if (isMultinomial) {
-          denseCoefficientMatrix
-        } else {
-          val compressedVector = Vectors.dense(denseCoefficientMatrix.values).compressed
-          compressedVector match {
-            case dv: DenseVector => denseCoefficientMatrix
-            case sv: SparseVector =>
-              new SparseMatrix(1, numFeatures, Array(0, sv.indices.length), sv.indices, sv.values,
-                isTransposed = true)
-          }
-        }
-
         // center the intercepts when using multinomial algorithm
         if ($(fitIntercept) && isMultinomial) {
           val interceptArray = interceptVec.toArray
           val interceptMean = interceptArray.sum / interceptArray.length
           (0 until interceptVec.size).foreach { i => interceptArray(i) -= interceptMean }
         }
-        (compressedCoefficientMatrix, interceptVec.compressed, arrayBuilder.result())
+        (denseCoefficientMatrix.compressed, interceptVec.compressed, arrayBuilder.result())
       }
     }
 
@@ -713,7 +695,7 @@ class LogisticRegressionModel private[spark] (
   // convert to appropriate vector representation without replicating data
   private lazy val _coefficients: Vector = {
     require(coefficientMatrix.isTransposed,
-      "LogisticRegressionModel coefficients should be row major.")
+      "LogisticRegressionModel coefficients should be row major for binomial model.")
     coefficientMatrix match {
       case dm: DenseMatrix => Vectors.dense(dm.values)
       case sm: SparseMatrix => Vectors.sparse(coefficientMatrix.numCols, sm.rowIndices, sm.values)
