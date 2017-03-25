@@ -775,20 +775,11 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // LeftSemi/LeftAnti over Project
     case join @ Join(project @ Project(projectList, grandChild), rightOp,
                      LeftSemiOrAnti(joinType), joinCond)
-      if projectList.forall(_.deterministic) &&
+      if !tooSimplePlan(grandChild) &&
+        projectList.forall(_.deterministic) &&
         !ScalarSubquery.hasScalarSubquery(projectList) &&
-        canPushThroughCondition(grandChild, joinCond) =>
-
-      // If this is over a simple Project, stop the push down
-      val simple = grandChild match {
-        case _: LeafNode => true
-        case Filter(_, l: LeafNode) => true
-        case _ => false
-      }
-      if (simple) {
-        // No push down
-        join
-      } else if (joinCond.isEmpty) {
+        canPushThroughCondition(grandChild, joinCond, rightOp) =>
+      if (joinCond.isEmpty) {
         // No join condition, just push down the Join below Project
         Project(projectList, Join(grandChild, rightOp, joinType, joinCond))
       } else {
@@ -1032,15 +1023,26 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
+  private def tooSimplePlan(plan: LogicalPlan) : Boolean = {
+    // If this is over a simple Project, stop the push down
+    plan match {
+      case _: LeafNode => true
+      case Filter(_, l: LeafNode) => true
+      case _ => false
+    }
+  }
+
   /**
-    * Check if we can safely push a filter through a projection, by making sure that predicate
-    * subqueries in the condition do not contain the same attributes as the plan they are moved
-    * into. This can happen when the plan and predicate subquery have the same source.
-    */
-  private def canPushThroughCondition(plan: LogicalPlan, condition: Option[Expression]): Boolean = {
+   * TODO: Update comment
+   * Check if we can safely push a join through a projection, by making sure that predicate
+   * subqueries in the condition do not contain the same attributes as the plan they are moved
+   * into. This can happen when the plan and predicate subquery have the same source.
+   */
+  private def canPushThroughCondition(plan: LogicalPlan, condition: Option[Expression],
+                                      rightOp: LogicalPlan): Boolean = {
     val attributes = plan.outputSet
     if (condition.isDefined) {
-      val matched = condition.get.references.intersect(attributes)
+      val matched = condition.get.references.intersect(rightOp.outputSet).intersect(attributes)
       matched.isEmpty
     } else true
   }
