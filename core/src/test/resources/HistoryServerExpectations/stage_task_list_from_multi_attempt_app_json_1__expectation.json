@@ -38,13 +38,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -87,13 +89,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -136,13 +140,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -185,13 +191,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -234,13 +242,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -283,13 +293,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -332,13 +344,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 }, {
@@ -381,13 +395,15 @@
       "localBlocksFetched" : 0,
       "fetchWaitTime" : 0,
       "remoteBytesRead" : 0,
+      "remoteBytesReadToMem" : 0,
       "localBytesRead" : 0,
       "recordsRead" : 0
     },
     "shuffleWriteMetrics" : {
       "bytesWritten" : 0,
       "writeTime" : 0,
-      "recordsWritten" : 0
+      "recordsWritten" : 0,
+      "underestimatedBlocksSize": 0
     }
   }
 } ]

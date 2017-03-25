@@ -1127,13 +1127,15 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
+      |      "Remote Bytes Read To Mem": 0,
       |      "Local Bytes Read": 1100,
       |      "Total Records Read": 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500,
-      |      "Shuffle Records Written": 12
+      |      "Shuffle Records Written": 12,
+      |      "Underestimated Blocks Size Writen" : 0
       |    },
       |    "Input Metrics" : {
       |      "Bytes Read" : 0,
@@ -1227,13 +1229,15 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Mem" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500,
-      |      "Shuffle Records Written": 12
+      |      "Shuffle Records Written": 12,
+      |      "Underestimated Blocks Size Writen" : 0
       |    },
       |    "Input Metrics": {
       |      "Bytes Read": 2100,
@@ -1327,13 +1331,15 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Local Blocks Fetched" : 0,
       |      "Fetch Wait Time" : 0,
       |      "Remote Bytes Read" : 0,
+      |      "Remote Bytes Read To Mem" : 0,
       |      "Local Bytes Read" : 0,
       |      "Total Records Read" : 0
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written" : 0,
       |      "Shuffle Write Time" : 0,
-      |      "Shuffle Records Written" : 0
+      |      "Shuffle Records Written" : 0,
+      |      "Underestimated Blocks Size Writen" : 0
       |    },
       |    "Input Metrics": {
       |      "Bytes Read": 2100,
