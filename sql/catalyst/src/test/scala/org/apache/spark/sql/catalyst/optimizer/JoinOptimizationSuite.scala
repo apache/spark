@@ -136,9 +136,9 @@ class JoinOptimizationSuite extends PlanTest {
     }
   }
 
-  test("reorder inner joins - don't put predicate with subquery into join condition") {
+  test("reorder inner joins - don't put predicate with IN subquery into join condition") {
     // ReorderJoin collects all predicates and try to put them into join condition when creating
-    // ordered join. If a predicate with a subquery is in a join condition instead of a filter
+    // ordered join. If a predicate with an IN subquery is in a join condition instead of a filter
     // condition, `RewritePredicateSubquery.rewriteExistentialExpr` would fail to convert the
     // subquery to an ExistenceJoin, and thus result in error.
     val x = testRelation.subquery('x)

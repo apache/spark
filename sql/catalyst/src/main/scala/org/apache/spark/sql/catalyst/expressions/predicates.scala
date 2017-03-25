@@ -90,7 +90,10 @@ trait PredicateHelper {
    * Returns true iff `expr` could be evaluated as a condition within join.
    */
   protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
-    case e: SubqueryExpression => false
+    case l: ListQuery => false
+    case e: SubqueryExpression =>
+      // non-correlated subquery will be replaced as literal
+      e.children.isEmpty
     case a: AttributeReference => true
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
