@@ -188,6 +188,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         double[] cp = new double[partitionLengths.length];
         for (int i = 0; i < partitionLengths.length; i++) {
           cp[i] = partitionLengths[i];
+          if (partitionLengths[i] > mapStatus.getSizeForBlock(i)) {
+            underestimatedBlocksNum++;
+          }
         }
         Distribution distribution = new Distribution(cp, 0, cp.length);
         double[] probabilities = {0.0, 0.25, 0.5, 0.75, 1.0};

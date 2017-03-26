@@ -77,7 +77,7 @@ private[spark] class SortShuffleWriter[K, V, C](
         case hc: HighlyCompressedMapStatus =>
           val underestimatedLengths = partitionLengths.filter(_ > hc.getAvgSize)
           writeMetrics.incUnderestimatedBlocksSize(underestimatedLengths.sum)
-          if (log.isDebugEnabled()) {
+          if (log.isDebugEnabled() && partitionLengths.length > 0) {
             // Distribution of sizes in MapStatus.
             Distribution(partitionLengths.map(_.toDouble)) match {
               case Some(distribution) =>
