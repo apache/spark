@@ -42,7 +42,7 @@ import tempfile
 import array as pyarray
 import numpy as np
 from numpy import (
-    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
+    abs, all, arange, array, array_equal, dot, exp, inf, mean, ones, random, tile, zeros)
 from numpy import sum as array_sum
 import inspect
 
@@ -50,18 +50,20 @@ from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
+from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
-from pyspark.ml.linalg import Vector, SparseVector, DenseVector, VectorUDT,\
-    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT, _convert_to_vector
+from pyspark.ml.fpm import FPGrowth, FPGrowthModel
+from pyspark.ml.linalg import (
+    DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT,
+    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors, _convert_to_vector)
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
 from pyspark.ml.recommendation import ALS
-from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
-    GeneralizedLinearRegression
+from pyspark.ml.regression import (
+    DecisionTreeRegressor, GeneralizedLinearRegression, LinearRegression)
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
-from pyspark.ml.common import _java2py, _py2java
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
@@ -1241,6 +1243,43 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         model2 = glr.setLinkPower(-1.0).fit(df)
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
+
+
+class FPGrowthTests(SparkSessionTestCase):
+    def setUp(self):
+        super(FPGrowthTests, self).setUp()
+        self.data = self.spark.createDataFrame(
+            [([1, 2], ), ([1, 2], ), ([1, 2, 3], ), ([1, 3], )],
+            ["items"])
+
+    def test_association_rules(self):
+        fp = FPGrowth()
+        fpm = fp.fit(self.data)
+
+        expected_association_rules = self.spark.createDataFrame(
+            [([3], [1], 1.0), ([2], [1], 1.0)],
+            ["antecedent", "consequent", "confidence"]
+        )
+        actual_association_rules = fpm.associationRules
+
+        self.assertEqual(actual_association_rules.subtract(expected_association_rules).count(), 0)
+        self.assertEqual(expected_association_rules.subtract(actual_association_rules).count(), 0)
+
+    def test_freq_itemsets(self):
+        fp = FPGrowth()
+        fpm = fp.fit(self.data)
+
+        expected_freq_itemsets = self.spark.createDataFrame(
+            [([1], 4), ([2], 3), ([2, 1], 3), ([3], 2), ([3, 1], 2)],
+            ["items", "freq"]
+        )
+        actual_freq_itemsets = fpm.freqItemsets
+
+        self.assertEqual(actual_freq_itemsets.subtract(expected_freq_itemsets).count(), 0)
+        self.assertEqual(expected_freq_itemsets.subtract(actual_freq_itemsets).count(), 0)
+
+    def tearDown(self):
+        del self.data
 
 
 class ALSTest(SparkSessionTestCase):
