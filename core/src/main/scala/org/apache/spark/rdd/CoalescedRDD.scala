@@ -58,7 +58,7 @@ private[spark] case class CoalescedRDDPartition(
       val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host)
       preferredLocation.exists(parentPreferredLocations.contains)
     }
-    if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
+    if (parents.isEmpty) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
 }
 
