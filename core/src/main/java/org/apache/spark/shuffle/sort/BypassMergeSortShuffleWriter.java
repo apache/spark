@@ -174,33 +174,13 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
     if (mapStatus instanceof HighlyCompressedMapStatus) {
-      HighlyCompressedMapStatus hc = (HighlyCompressedMapStatus) mapStatus;
-      long underestimatedBlocksSize = 0L;
-      for (int i = 0; i < partitionLengths.length; i++) {
-        if (partitionLengths[i] > mapStatus.getSizeForBlock(i)) {
-          underestimatedBlocksSize += partitionLengths[i];
-        }
-      }
-      writeMetrics.incUnderestimatedBlocksSize(underestimatedBlocksSize);
       if (logger.isDebugEnabled() && partitionLengths.length > 0) {
-        int underestimatedBlocksNum = 0;
-        // Distribution of sizes in MapStatus.
-        double[] cp = new double[partitionLengths.length];
-        for (int i = 0; i < partitionLengths.length; i++) {
-          cp[i] = partitionLengths[i];
-          if (partitionLengths[i] > mapStatus.getSizeForBlock(i)) {
-            underestimatedBlocksNum++;
-          }
+        Tuple2<String, Object> tuple = SortShuffleWriter$.MODULE$.genBlocksDistributionStr(
+          partitionLengths, (HighlyCompressedMapStatus) mapStatus, taskContext);
+        if (!tuple._1.isEmpty()) {
+          logger.debug(tuple._1);
         }
-        Distribution distribution = new Distribution(cp, 0, cp.length);
-        double[] probabilities = {0.0, 0.25, 0.5, 0.75, 1.0};
-        String distributionStr = distribution.getQuantiles(probabilities).mkString(", ");
-        logger.debug("For task {}.{} in stage {} (TID {}), the block sizes in MapStatus are " +
-          "inaccurate (average is {}, {} blocks underestimated, size of underestimated is {})," +
-          " distribution at the given probabilities(0, 0.25, 0.5, 0.75, 1.0) is {}.",
-          taskContext.partitionId(), taskContext.attemptNumber(), taskContext.stageId(),
-          taskContext.taskAttemptId(), hc.getAvgSize(),
-          underestimatedBlocksNum, underestimatedBlocksSize, distributionStr);
+        writeMetrics.incUnderestimatedBlocksSize((Long)(tuple._2));
       }
     }
   }

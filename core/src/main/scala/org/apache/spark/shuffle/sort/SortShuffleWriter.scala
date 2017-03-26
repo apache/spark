@@ -72,23 +72,13 @@ private[spark] class SortShuffleWriter[K, V, C](
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
-
       mapStatus match {
         case hc: HighlyCompressedMapStatus =>
-          val underestimatedLengths = partitionLengths.filter(_ > hc.getAvgSize)
-          writeMetrics.incUnderestimatedBlocksSize(underestimatedLengths.sum)
           if (log.isDebugEnabled() && partitionLengths.length > 0) {
-            // Distribution of sizes in MapStatus.
-            Distribution(partitionLengths.map(_.toDouble)) match {
-              case Some(distribution) =>
-                val distributionStr = distribution.getQuantiles().mkString(", ")
-                logDebug(s"For task ${context.partitionId()}.${context.attemptNumber()} in stage" +
-                  s" ${context.stageId()} (TID ${context.taskAttemptId()}), the block sizes in" +
-                  s" MapStatus are inaccurate (average is ${hc.getAvgSize}," +
-                  s" ${underestimatedLengths.length} blocks underestimated, sum of sizes is" +
-                  s" ${underestimatedLengths.sum}), distribution at the given probabilities" +
-                  s" (0, 0.25, 0.5, 0.75, 1.0) is $distributionStr.")
-              case None => // no-op
+            SortShuffleWriter.genBlocksDistributionStr(partitionLengths, hc, context) match {
+              case (logStr, underestimatedSize) if logStr.nonEmpty =>
+                logDebug(logStr)
+                writeMetrics.incUnderestimatedBlocksSize(underestimatedSize)
             }
           }
         case _ => // no-op
@@ -133,6 +123,21 @@ private[spark] object SortShuffleWriter {
     } else {
       val bypassMergeThreshold: Int = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
       dep.partitioner.numPartitions <= bypassMergeThreshold
+    }
+  }
+  def genBlocksDistributionStr(lens: Array[Long], hc: HighlyCompressedMapStatus,
+    ctx: TaskContext): (String, Long) = {
+    // Distribution of sizes in MapStatus.
+    Distribution(lens.map(_.toDouble)) match {
+      case Some(distribution) =>
+        val underestimatedLengths = lens.filter(_ > hc.getAvgSize).map(_ - hc.getAvgSize)
+        val distributionStr = distribution.getQuantiles().mkString(", ")
+        (s"For task ${ctx.partitionId()}.${ctx.attemptNumber()} in stage ${ctx.stageId()} " +
+          s"(TID ${ctx.taskAttemptId()}), the block sizes in MapStatus are highly compressed" +
+          s" (average is ${hc.getAvgSize}, ${underestimatedLengths.length} blocks underestimated," +
+          s" the size of underestimated is ${underestimatedLengths.sum}), distribution at " +
+          s"probabilities(0, 0.25, 0.5, 0.75, 1.0) is $distributionStr.", underestimatedLengths.sum)
+      case None => ("", 0L)
     }
   }
 }

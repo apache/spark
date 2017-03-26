@@ -49,7 +49,7 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   def writeTime: Long = _writeTime.sum
 
   /**
-   * The total amount of blocks whose sizes are underestimated in MapStatus.
+   * The sum of underestimated sizes of blocks in MapStatus.
    */
   def underestimatedBlocksSize: Long = _underestimatedBlocksSize.value
 
