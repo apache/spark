@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
@@ -75,6 +77,11 @@ class VectorizedHashMapGenerator(
           }
         }.mkString("\n").concat(";")
 
+    val columnVector = if (SparkEnv.get.memoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP) {
+      "OnHeapColumnVector"
+    } else {
+      "OffHeapColumnVector"
+    }
     s"""
        |  private org.apache.spark.sql.execution.vectorized.OnHeapColumnVector[] batchVectors;
        |  private org.apache.spark.sql.execution.vectorized.OnHeapColumnVector[] bufferVectors;
@@ -97,7 +104,7 @@ class VectorizedHashMapGenerator(
        |      schema, batchVectors, capacity);
        |
        |    bufferVectors = new org.apache.spark.sql.execution.vectorized
-       |      .OnHeapColumnVector[aggregateBufferSchema.fields().length];
+       |      .$columnVector[aggregateBufferSchema.fields().length];
        |    for (int i = 0; i < aggregateBufferSchema.fields().length; i++) {
        |      bufferVectors[i] = batchVectors[i + ${groupingKeys.length}];
        |    }
@@ -232,6 +239,15 @@ class VectorizedHashMapGenerator(
        |public java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarRow>
        |    rowIterator() {
        |  return batch.rowIterator();
+       |}
+     """.stripMargin
+  }
+
+  protected final def generateClose(): String = {
+    s"""
+       |public void close() {
+       |  aggregateBufferBatch.close();
+       |  batch.close();
        |}
      """.stripMargin
   }

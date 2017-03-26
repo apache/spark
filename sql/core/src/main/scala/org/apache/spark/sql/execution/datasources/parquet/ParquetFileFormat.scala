@@ -364,11 +364,12 @@ class ParquetFileFormat
       if (pushed.isDefined) {
         ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
+      val taskContext = Option(TaskContext.get())
       val parquetReader = if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader()
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
-        vectorizedReader.initBatch(partitionSchema, file.partitionValues)
+        vectorizedReader.initBatch(partitionSchema, file.partitionValues, taskContext.isDefined)
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
@@ -387,7 +388,7 @@ class ParquetFileFormat
       }
 
       val iter = new RecordReaderIterator(parquetReader)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+      taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
 
       // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
       if (parquetReader.isInstanceOf[VectorizedParquetRecordReader] &&

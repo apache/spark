@@ -27,6 +27,7 @@ import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.schema.Type;
 
+import org.apache.spark.SparkEnv;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
@@ -94,6 +95,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   private ColumnarBatch columnarBatch;
 
   private WritableColumnVector[] columnVectors;
+
+  private MemoryMode memoryMode = null;
 
   /**
    * If true, this class returns batches instead of rows.
@@ -204,11 +207,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public void initBatch() {
-    initBatch(DEFAULT_MEMORY_MODE, null, null);
+    assert(memoryMode != null);
+    initBatch(memoryMode, null, null);
   }
 
-  public void initBatch(StructType partitionColumns, InternalRow partitionValues) {
-    initBatch(DEFAULT_MEMORY_MODE, partitionColumns, partitionValues);
+  public void initBatch(StructType partitionColumns, InternalRow partitionValues, boolean isEnableOffHeap) {
+    memoryMode = (!isEnableOffHeap) ? MemoryMode.ON_HEAP : SparkEnv.get().memoryManager().tungstenMemoryMode();
+    initBatch(memoryMode, partitionColumns, partitionValues);
   }
 
   /**

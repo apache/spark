@@ -628,6 +628,7 @@ class AggregateBenchmark extends BenchmarkBase {
         }
         i += 1
       }
+      map.close
     }
 
     /*

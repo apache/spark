@@ -21,6 +21,8 @@ import java.util.Arrays;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.SparkEnv;
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.types.DataTypes.LongType;
@@ -40,7 +42,7 @@ import static org.apache.spark.sql.types.DataTypes.LongType;
  */
 public class AggregateHashMap {
 
-  private OnHeapColumnVector[] columnVectors;
+  private WritableColumnVector[] columnVectors;
   private ColumnarBatch batch;
   private int[] buckets;
   private int numBuckets;
@@ -62,7 +64,11 @@ public class AggregateHashMap {
 
     this.maxSteps = maxSteps;
     numBuckets = (int) (capacity / loadFactor);
-    columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
+    if (SparkEnv.get().memoryManager().tungstenMemoryMode() == MemoryMode.ON_HEAP) {
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
+    } else {
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, schema);
+    }
     batch = new ColumnarBatch(schema, columnVectors, capacity);
     buckets = new int[numBuckets];
     Arrays.fill(buckets, -1);
@@ -108,4 +114,6 @@ public class AggregateHashMap {
   private boolean equals(int idx, long key1) {
     return columnVectors[0].getLong(buckets[idx]) == key1;
   }
+
+  public void close() { batch.close(); }
 }
