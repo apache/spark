@@ -57,7 +57,25 @@ class DataType(object):
 
     @classmethod
     def typeName(cls):
-        return cls.__name__[:-4].lower()
+        typeTypeNameMap = {"DataType": "data",
+                           "NullType": "null",
+                           "StringType": "string",
+                           "BinaryType": "binary",
+                           "BooleanType": "boolean",
+                           "DateType": "Date",
+                           "TimestampType": "timestamp",
+                           "DecimalType": "decimal",
+                           "DoubleType": "double",
+                           "FloatType": "float",
+                           "ByteType": "byte",
+                           "IntegerType": "integer",
+                           "LongType": "long",
+                           "ShortType": "short",
+                           "ArrayType": "array",
+                           "MapType": "map",
+                           "StructField": "struct",
+                           "StructType": "struct"}
+        return typeTypeNameMap[cls.__name__]
 
     def simpleString(self):
         return self.typeName()
