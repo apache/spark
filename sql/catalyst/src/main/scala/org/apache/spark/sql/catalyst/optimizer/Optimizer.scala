@@ -592,12 +592,14 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 
 /**
  * Collapse Adjacent Window Expression.
- * - If the partition specs and order specs are the same, collapse into the parent.
+ * - If the partition specs and order specs are the same and the window expression are
+ *   independent, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild)) if ps1 == ps2 && os1 == os2 =>
-      w.copy(windowExpressions = we2 ++ we1, child = grandChild)
+    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
+        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty =>
+      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
   }
 }
 
