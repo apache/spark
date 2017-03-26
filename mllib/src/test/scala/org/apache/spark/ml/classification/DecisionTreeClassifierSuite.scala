@@ -386,7 +386,7 @@ class DecisionTreeClassifierSuite
       allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
 
-  test("SAPRK-20043: " +
+  test("SPARK-20043: " +
        "ImpurityCalculator builder fails for uppercase impurity type Gini in model read/write") {
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
