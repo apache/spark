@@ -40,6 +40,7 @@ class HasSupport(Params):
         """
         Sets the value of :py:attr:`minSupport`.
         """
+        return self._set(minSupport=value)
 
     def getMinSupport(self):
         """
