@@ -119,7 +119,7 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Data with three columns:
         * `antecedent`  - Array of the same type as the input column.
-        * `consequent`  - Single element array of the same type as the input column.
+        * `consequent`  - Array of the same type as the input column.
         * `confidence`  - Confidence for the rule (`DoubleType`).
         """
         return self._call_java("associationRules")
