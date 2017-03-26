@@ -62,7 +62,7 @@ class DataType(object):
                            "StringType": "string",
                            "BinaryType": "binary",
                            "BooleanType": "boolean",
-                           "DateType": "Date",
+                           "DateType": "date",
                            "TimestampType": "timestamp",
                            "DecimalType": "decimal",
                            "DoubleType": "double",
