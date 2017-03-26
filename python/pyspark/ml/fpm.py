@@ -25,23 +25,21 @@ __all__ = ["FPGrowth", "FPGrowthModel"]
 
 class HasSupport(Params):
     """
-    Mixin for param support: [0.0, 1.0].
+    Mixin for param support.
     """
 
     minSupport = Param(
         Params._dummy(),
         "minSupport",
-        "Minimal support level of the frequent pattern. [0.0, 1.0]. Any pattern that appears more "
-        "than (minSupport * size-of-the-dataset) times will be output",
+        """Minimal support level of the frequent pattern. [0.0, 1.0].
+        Any pattern that appears more than (minSupport * size-of-the-dataset)
+        times will be output""",
         typeConverter=TypeConverters.toFloat)
 
     def setMinSupport(self, value):
         """
         Sets the value of :py:attr:`minSupport`.
         """
-        if not (0 <= value <= 1):
-            raise ValueError("Support must be in range [0, 1]")
-        return self._set(minSupport=value)
 
     def getMinSupport(self):
         """
@@ -52,13 +50,13 @@ class HasSupport(Params):
 
 class HasConfidence(Params):
     """
-    Mixin for param confidence: [0.0, 1.0].
+    Mixin for param confidence.
     """
 
     minConfidence = Param(
         Params._dummy(),
         "minConfidence",
-        """"Minimal confidence for generating Association Rule. [0.0, 1.0]
+        """Minimal confidence for generating Association Rule. [0.0, 1.0]
         Note that minConfidence has no effect during fitting.""",
         typeConverter=TypeConverters.toFloat)
 
@@ -66,8 +64,6 @@ class HasConfidence(Params):
         """
         Sets the value of :py:attr:`minConfidence`.
         """
-        if not (0 <= value <= 1):
-            raise ValueError("Confidence must be in range [0, 1]")
         return self._set(minConfidence=value)
 
     def getMinConfidence(self):
