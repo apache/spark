@@ -21,6 +21,7 @@ import java.net.URI
 import java.util.Date
 
 import com.google.common.base.Objects
+import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, InternalRow, TableIdentifier}
@@ -57,20 +58,25 @@ case class CatalogStorageFormat(
     properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString = CatalogUtils.maskCredentials(properties) match {
-      case props if props.isEmpty => ""
-      case props => "Properties: " + props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    }
-    val output =
-      Seq(locationUri.map("Location: " + _).getOrElse(""),
-        inputFormat.map("InputFormat: " + _).getOrElse(""),
-        outputFormat.map("OutputFormat: " + _).getOrElse(""),
-        if (compressed) "Compressed" else "",
-        serde.map("Serde: " + _).getOrElse(""),
-        serdePropsToString)
-    output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("Storage(", ", ", ")")
   }
 
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    val map = new mutable.LinkedHashMap[String, String]()
+    locationUri.foreach(l => map.put("Location", l.toString))
+    serde.foreach(map.put("Serde Library", _))
+    inputFormat.foreach(map.put("InputFormat", _))
+    outputFormat.foreach(map.put("OutputFormat", _))
+    if (compressed) map.put("Compressed", "")
+    CatalogUtils.maskCredentials(properties) match {
+      case props if props.isEmpty => // No-op
+      case props =>
+        map.put("Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
+    }
+    map
+  }
 }
 
 object CatalogStorageFormat {
@@ -91,20 +97,27 @@ case class CatalogTablePartition(
     storage: CatalogStorageFormat,
     parameters: Map[String, String] = Map.empty) {
 
-  private def toStringSeq: Seq[String] = {
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    val map = new mutable.LinkedHashMap[String, String]()
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
-    Seq(
-      s"Partition Values: [$specString]",
-      s"$storage",
-      s"Partition Parameters:{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+    map.put("Partition Values", s"[$specString]")
+    map ++= storage.toLinkedHashMap
+    if (parameters.nonEmpty) {
+      map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
+    }
+    map
   }
 
   override def toString: String = {
-    toStringSeq.filter(_.nonEmpty).mkString("CatalogPartition(\n\t", "\n\t", ")")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("CatalogPartition(\n\t", "\n\t", ")")
   }
 
   def simpleString: String = {
-    toStringSeq.filter(_.nonEmpty).mkString("", "\n", "")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
   }
 
   /** Return the partition location, assuming it is specified. */
@@ -158,6 +171,14 @@ case class BucketSpec(
       ""
     }
     s"$numBuckets buckets, $bucketString$sortString"
+  }
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    mutable.LinkedHashMap[String, String](
+      "Num Buckets" -> numBuckets.toString,
+      "Bucket Columns" -> bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]"),
+      "Sort Columns" -> sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+    )
   }
 }
 
@@ -266,44 +287,48 @@ case class CatalogTable(
       locationUri, inputFormat, outputFormat, serde, compressed, properties))
   }
 
-  private def toStringSeq: Seq[String] = {
+
+  def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
+    val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
-    val bucketStrings = bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
-        val bucketColumnsString = bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
-        val sortColumnsString = sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
-        Seq(
-          s"Num Buckets: $numBuckets",
-          if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumnsString" else "",
-          if (sortColumnNames.nonEmpty) s"Sort Columns: $sortColumnsString" else ""
-        )
-      case _ => Nil
+
+    map.put("Table", identifier.quotedString)
+    if (owner.nonEmpty) map.put("Owner", owner)
+    map.put("Created", new Date(createTime).toString)
+    map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Type", tableType.name)
+    provider.foreach(map.put("Provider", _))
+    bucketSpec.foreach(map ++= _.toLinkedHashMap)
+    comment.foreach(map.put("Comment", _))
+    if (tableType == CatalogTableType.VIEW) {
+      viewText.foreach(map.put("View Text", _))
+      viewDefaultDatabase.foreach(map.put("View Default Database", _))
+      if (viewQueryColumnNames.nonEmpty) {
+        map.put("View Query Output Columns", viewQueryColumnNames.mkString("[", ", ", "]"))
+      }
     }
 
-    Seq(s"Table: ${identifier.quotedString}",
-      if (owner.nonEmpty) s"Owner: $owner" else "",
-      s"Created: ${new Date(createTime).toString}",
-      s"Last Access: ${new Date(lastAccessTime).toString}",
-      s"Type: ${tableType.name}",
-      if (provider.isDefined) s"Provider: ${provider.get}" else "",
-      if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
-    ) ++ bucketStrings ++ Seq(
-      viewText.map("View: " + _).getOrElse(""),
-      comment.map("Comment: " + _).getOrElse(""),
-      if (properties.nonEmpty) s"Properties: $tableProperties" else "",
-      if (stats.isDefined) s"Statistics: ${stats.get.simpleString}" else "",
-      s"$storage",
-      if (tracksPartitionsInCatalog) "Partition Provider: Catalog" else "",
-      if (schema.nonEmpty) s"Schema: ${schema.treeString}" else "")
+    if (properties.nonEmpty) map.put("Properties", tableProperties)
+    stats.foreach(s => map.put("Statistics", s.simpleString))
+    map ++= storage.toLinkedHashMap
+    if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
+    if (partitionColumnNames.nonEmpty) map.put("Partition Columns", partitionColumns)
+    if (schema.nonEmpty) map.put("Schema", schema.treeString)
+
+    map
   }
 
   override def toString: String = {
-    toStringSeq.filter(_.nonEmpty).mkString("CatalogTable(\n", "\n", ")")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("CatalogTable(\n", "\n", ")")
   }
 
   def simpleString: String = {
-    toStringSeq.filter(_.nonEmpty).mkString("", "\n", "")
+    toLinkedHashMap.map { case ((key, value)) =>
+      if (value.isEmpty) key else s"$key: $value"
+    }.mkString("", "\n", "")
   }
 }
 

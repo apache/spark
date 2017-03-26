@@ -78,19 +78,20 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Database:           	default             	                    
-Owner:              	                    	                    
+Table:              	`default`.`t`       	                    
 Created: 
 Last Access: 
-Location: sql/core/spark-warehouse/t	                    
-Table Type:         	MANAGED             	                    
+Type:               	MANAGED             	                    
+Provider:           	parquet             	                    
 Comment:            	table_comment       	                    
-Table Parameters:   	                    	                    
-                    	                    	                    
-# Storage Information	                    	                    
-Compressed:         	No                  	                    
-Storage Desc Parameters:	                    	                    
-Partition Provider: 	Catalog
+Location: sql/core/spark-warehouse/t	                    
+Partition Provider: 	Catalog             	                    
+Partition Columns:  	[`c`, `d`]          	                    
+Schema:             	root
+ |-- a: string (nullable = true)
+ |-- b: integer (nullable = true)
+ |-- c: string (nullable = true)
+ |-- d: string (nullable = true)
 
 
 -- !query 6
@@ -113,10 +114,10 @@ Created:
 Last Access: 
 Type: MANAGED
 Provider: parquet
-Partition Columns: [`c`, `d`]
 Comment: table_comment
-Storage(Location: sql/core/spark-warehouse/t)
+Location: sql/core/spark-warehouse/t
 Partition Provider: Catalog
+Partition Columns: [`c`, `d`]
 Schema: root
  |-- a: string (nullable = true)
  |-- b: integer (nullable = true)
@@ -153,10 +154,9 @@ d                   	string
 c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
-Detailed Partition Information CatalogPartition(
-	Partition Values: [c=Us, d=1]
-	Storage(Location: sql/core/spark-warehouse/t/c=Us/d=1)
-	Partition Parameters:{})
+# Detailed Partition Information	                    	                    
+Partition Values: [c=Us, d=1]
+Location: sql/core/spark-warehouse/t/c=Us/d=1
 
 
 -- !query 9
@@ -174,15 +174,13 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
-Partition Value:    	[Us, 1]             	                    
 Database:           	default             	                    
 Table:              	t                   	                    
+Partition Values:   	[c=Us, d=1]         	                    
 Location: sql/core/spark-warehouse/t/c=Us/d=1	                    
-Partition Parameters:	                    	                    
                     	                    	                    
-# Storage Information	                    	                    
-Compressed:         	No                  	                    
-Storage Desc Parameters:
+# Table Storage Information	                    	                    
+Location: sql/core/spark-warehouse/t
 
 
 -- !query 10

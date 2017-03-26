@@ -567,64 +567,7 @@ case class DescribeTableCommand(
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    append(buffer, "Database:", table.database, "")
-    append(buffer, "Owner:", table.owner, "")
-    append(buffer, "Created:", new Date(table.createTime).toString, "")
-    append(buffer, "Last Access:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", table.storage.locationUri.map(CatalogUtils.URIToString(_))
-      .getOrElse(""), "")
-    append(buffer, "Table Type:", table.tableType.name, "")
-    append(buffer, "Comment:", table.comment.getOrElse(""), "")
-    table.stats.foreach(s => append(buffer, "Statistics:", s.simpleString, ""))
-
-    append(buffer, "Table Parameters:", "", "")
-    table.properties.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
-    }
-
-    describeStorageInfo(table, buffer)
-
-    if (table.tableType == CatalogTableType.VIEW) describeViewInfo(table, buffer)
-
-    if (DDLUtils.isDatasourceTable(table) && table.tracksPartitionsInCatalog) {
-      append(buffer, "Partition Provider:", "Catalog", "")
-    }
-  }
-
-  private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Storage Information", "", "")
-    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
-    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
-    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
-    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
-    describeBucketingInfo(metadata, buffer)
-
-    append(buffer, "Storage Desc Parameters:", "", "")
-    val maskedProperties = CatalogUtils.maskCredentials(metadata.storage.properties)
-    maskedProperties.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
-    }
-  }
-
-  private def describeViewInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# View Information", "", "")
-    append(buffer, "View Text:", metadata.viewText.getOrElse(""), "")
-    append(buffer, "View Default Database:", metadata.viewDefaultDatabase.getOrElse(""), "")
-    append(buffer, "View Query Output Columns:",
-      metadata.viewQueryColumnNames.mkString("[", ", ", "]"), "")
-  }
-
-  private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    metadata.bucketSpec match {
-      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
-        append(buffer, "Num Buckets:", numBuckets.toString, "")
-        append(buffer, "Bucket Columns:", bucketColumnNames.mkString("[", ", ", "]"), "")
-        append(buffer, "Sort Columns:", sortColumnNames.mkString("[", ", ", "]"), "")
-
-      case _ =>
-    }
+    table.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
   }
 
   private def describeDetailedPartitionInfo(
@@ -642,7 +585,6 @@ case class DescribeTableCommand(
       describeExtendedDetailedPartitionInfo(table, metadata, partition, result)
     } else if (isFormatted) {
       describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
-      describeStorageInfo(metadata, result)
     }
   }
 
@@ -652,7 +594,8 @@ case class DescribeTableCommand(
       partition: CatalogTablePartition,
       buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
-    append(buffer, "Detailed Partition Information " + partition.toString, "", "")
+    append(buffer, "# Detailed Partition Information", "", "")
+    append(buffer, partition.simpleString, "", "")
   }
 
   private def describeFormattedDetailedPartitionInfo(
@@ -662,15 +605,17 @@ case class DescribeTableCommand(
       buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Partition Information", "", "")
-    append(buffer, "Partition Value:", s"[${partition.spec.values.mkString(", ")}]", "")
     append(buffer, "Database:", table.database, "")
     append(buffer, "Table:", tableIdentifier.table, "")
-    append(buffer, "Location:", partition.storage.locationUri.map(CatalogUtils.URIToString(_))
-      .getOrElse(""), "")
-    append(buffer, "Partition Parameters:", "", "")
-    partition.parameters.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
+    partition.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
+    append(buffer, "", "", "")
+    append(buffer, "# Table Storage Information", "", "")
+    table.bucketSpec match {
+      case Some(spec) =>
+        spec.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
+      case _ =>
     }
+    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
   }
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
