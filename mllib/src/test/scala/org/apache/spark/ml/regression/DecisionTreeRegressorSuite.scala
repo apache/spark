@@ -179,16 +179,18 @@ class DecisionTreeRegressorSuite
       TreeTests.allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
 
-  test("read/write: ImpurityCalculator builder did not recognize impurity type: Variance") {
+  test("SAPRK-20043: " +
+       "ImpurityCalculator builder fails for uppercase impurity type in model read/write") {
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val continuousData: DataFrame =
+    val data: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
 
-    // BUG: see SPARK-20043
-    val dt = new DecisionTreeRegressor().setImpurity("Variance")
+    val dt = new DecisionTreeRegressor()
+      .setImpurity("Variance")
+      .setMaxDepth(2)
 
-    val model = dt.fit(continuousData)
+    val model = dt.fit(data)
 
     testDefaultReadWrite(model, false)
   }

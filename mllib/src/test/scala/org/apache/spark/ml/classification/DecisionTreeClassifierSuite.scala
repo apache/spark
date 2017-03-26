@@ -386,16 +386,18 @@ class DecisionTreeClassifierSuite
       allParamSettings ++ Map("maxDepth" -> 0), checkModelData)
   }
 
-  test("read/write: ImpurityCalculator builder did not recognize impurity type: Gini") {
+  test("SAPRK-20043: " +
+       "ImpurityCalculator builder fails for uppercase impurity type Gini in model read/write") {
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val categoricalData: DataFrame =
-      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
+    val data: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
 
-    // BUG: see SPARK-20043
-    val dt = new DecisionTreeClassifier().setImpurity("Gini")
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(2)
 
-    val model = dt.fit(categoricalData)
+    val model = dt.fit(data)
 
     testDefaultReadWrite(model, false)
   }
