@@ -32,6 +32,10 @@ object TestingUtils {
    * the relative tolerance is meaningless, so the exception will be raised to warn users.
    */
   private def RelativeErrorComparison(x: Double, y: Double, eps: Double): Boolean = {
+    // Special case for NaNs
+    if (x.isNaN && y.isNaN) {
+      return true
+    }
     val absX = math.abs(x)
     val absY = math.abs(y)
     val diff = math.abs(x - y)
@@ -49,6 +53,10 @@ object TestingUtils {
    * Private helper function for comparing two values using absolute tolerance.
    */
   private def AbsoluteErrorComparison(x: Double, y: Double, eps: Double): Boolean = {
+    // Special case for NaNs
+    if (x.isNaN && y.isNaN) {
+      return true
+    }
     math.abs(x - y) < eps
   }
 

@@ -27,7 +27,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.stat.test.ChiSqTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class ChiSquareSuite
+class ChiSquareTestSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
@@ -45,7 +45,7 @@ class ChiSquareSuite
       LabeledPoint(1.0, Vectors.dense(3.5, 40.0)))
     for (numParts <- List(2, 4, 6, 8)) {
       val df = spark.createDataFrame(sc.parallelize(data, numParts))
-      val chi = ChiSquare.test(df, "features", "label")
+      val chi = ChiSquareTest.test(df, "features", "label")
       val (pValues: Vector, degreesOfFreedom: Array[Int], statistics: Vector) =
         chi.select("pValues", "degreesOfFreedom", "statistics")
           .as[(Vector, Array[Int], Vector)].head()
@@ -62,7 +62,7 @@ class ChiSquareSuite
       LabeledPoint(0.0, Vectors.sparse(numCols, Seq((100, 2.0)))),
       LabeledPoint(0.1, Vectors.sparse(numCols, Seq((200, 1.0)))))
     val df = spark.createDataFrame(sparseData)
-    val chi = ChiSquare.test(df, "features", "label")
+    val chi = ChiSquareTest.test(df, "features", "label")
     val (pValues: Vector, degreesOfFreedom: Array[Int], statistics: Vector) =
       chi.select("pValues", "degreesOfFreedom", "statistics")
         .as[(Vector, Array[Int], Vector)].head()
@@ -83,7 +83,7 @@ class ChiSquareSuite
     withClue("ChiSquare should throw an exception when given a continuous-valued label") {
       intercept[SparkException] {
         val df = spark.createDataFrame(continuousLabel)
-        ChiSquare.test(df, "features", "label")
+        ChiSquareTest.test(df, "features", "label")
       }
     }
     val continuousFeature = Seq.fill(tooManyCategories)(
@@ -91,7 +91,7 @@ class ChiSquareSuite
     withClue("ChiSquare should throw an exception when given continuous-valued features") {
       intercept[SparkException] {
         val df = spark.createDataFrame(continuousFeature)
-        ChiSquare.test(df, "features", "label")
+        ChiSquareTest.test(df, "features", "label")
       }
     }
   }

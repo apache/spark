@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.types._
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -445,6 +446,34 @@ abstract class SessionCatalogSuite extends PlanTest {
       intercept[NoSuchTableException] {
         catalog.alterTable(newTable("unknown_table", "db2"))
       }
+    }
+  }
+
+  test("alter table add columns") {
+    withBasicCatalog { sessionCatalog =>
+      sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
+      val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      sessionCatalog.alterTableSchema(
+        TableIdentifier("t1", Some("default")),
+        StructType(oldTab.dataSchema.add("c3", IntegerType) ++ oldTab.partitionSchema))
+
+      val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      // construct the expected table schema
+      val expectedTableSchema = StructType(oldTab.dataSchema.fields ++
+        Seq(StructField("c3", IntegerType)) ++ oldTab.partitionSchema)
+      assert(newTab.schema == expectedTableSchema)
+    }
+  }
+
+  test("alter table drop columns") {
+    withBasicCatalog { sessionCatalog =>
+      sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
+      val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
+      val e = intercept[AnalysisException] {
+        sessionCatalog.alterTableSchema(
+          TableIdentifier("t1", Some("default")), StructType(oldTab.schema.drop(1)))
+      }.getMessage
+      assert(e.contains("We don't support dropping columns yet."))
     }
   }
 
