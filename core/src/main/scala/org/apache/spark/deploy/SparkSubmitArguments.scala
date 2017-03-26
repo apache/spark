@@ -308,7 +308,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  driverExtraLibraryPath  $driverExtraLibraryPath
     |  driverExtraJavaOptions  $driverExtraJavaOptions
     |  supervise               $supervise
-    |  queue                   $queue(YARN Only)
+    |  queue                   $queue
     |  numExecutors            $numExecutors
     |  files                   $files
     |  pyFiles                 $pyFiles
