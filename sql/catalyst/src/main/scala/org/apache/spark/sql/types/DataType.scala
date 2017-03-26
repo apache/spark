@@ -105,7 +105,7 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   /**
-   * Creates DataType for a given SQL DDL string, which is a comma separated list of field
+   * Creates DataType for a given DDL-formatted string, which is a comma separated list of field
    * definitions, e.g., a INT, b STRING.
    */
   def fromDDL(ddl: String): DataType = CatalystSqlParser.parseTableSchema(ddl)
