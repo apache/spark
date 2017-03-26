@@ -54,7 +54,8 @@ class SessionCatalog(
     functionRegistry: FunctionRegistry,
     conf: CatalystConf,
     hadoopConf: Configuration,
-    parser: ParserInterface) extends Logging {
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader) extends Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -69,8 +70,8 @@ class SessionCatalog(
       functionRegistry,
       conf,
       new Configuration(),
-      CatalystSqlParser)
-    functionResourceLoader = DummyFunctionResourceLoader
+      CatalystSqlParser,
+      DummyFunctionResourceLoader)
   }
 
   // For testing only.
@@ -90,9 +91,7 @@ class SessionCatalog(
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
   @GuardedBy("this")
-  protected var currentDb = formatDatabaseName(DEFAULT_DATABASE)
-
-  @volatile var functionResourceLoader: FunctionResourceLoader = _
+  protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
@@ -1059,9 +1058,6 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
-    if (functionResourceLoader == null) {
-      throw new IllegalStateException("functionResourceLoader has not yet been initialized")
-    }
     resources.foreach(functionResourceLoader.loadResource)
   }
 
@@ -1259,28 +1255,13 @@ class SessionCatalog(
   }
 
   /**
-   * Create a new [[SessionCatalog]] with the provided parameters. `externalCatalog` and
-   * `globalTempViewManager` are `inherited`, while `currentDb` and `tempTables` are copied.
+   * Copy the current state of the catalog to another catalog.
    */
-  def newSessionCatalogWith(
-      conf: CatalystConf,
-      hadoopConf: Configuration,
-      functionRegistry: FunctionRegistry,
-      parser: ParserInterface): SessionCatalog = {
-    val catalog = new SessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
-      functionRegistry,
-      conf,
-      hadoopConf,
-      parser)
-
+  private[sql] def copyStateTo(target: SessionCatalog): Unit = {
     synchronized {
-      catalog.currentDb = currentDb
+      target.currentDb = currentDb
       // copy over temporary tables
-      tempTables.foreach(kv => catalog.tempTables.put(kv._1, kv._2))
+      tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
     }
-
-    catalog
   }
 }
