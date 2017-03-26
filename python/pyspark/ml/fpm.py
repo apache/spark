@@ -95,9 +95,10 @@ class HasItemsCol(Params):
 
 
 class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
-    """Model fitted by FPGrowth.
-
+    """
     .. note:: Experimental
+
+    Model fitted by FPGrowth.
 
     .. versionadded:: 2.2.0
     """
@@ -125,7 +126,10 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
                HasSupport, HasConfidence, JavaMLWritable, JavaMLReadable):
-    """A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
+    """
+    .. note:: Experimental
+
+    A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
     Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_.
     PFP distributes computation in such a way that each worker executes an
     independent group of mining tasks. The FP-Growth algorithm is described in
@@ -134,7 +138,6 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
     .. [LI2008] http://dx.doi.org/10.1145/1454008.1454027
     .. [HAN2000] http://dx.doi.org/10.1145/335191.335372
 
-    .. note:: Experimental
     .. note:: null values in the feature column are ignored during fit().
     .. note:: Internally `transform` `collects` and `broadcasts` association rules.
 
@@ -180,8 +183,6 @@ class FPGrowth(JavaEstimator, HasItemsCol, HasPredictionCol,
     >>> new_data = spark.createDataFrame([(["t", "s"], )], ["items"])
     >>> sorted(fpm.transform(new_data).first().prediction)
     ['x', 'y', 'z']
-
-    .. note:: Experimental
 
     .. versionadded:: 2.2.0
     """
