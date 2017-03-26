@@ -307,11 +307,11 @@ object ScalaReflection extends ScalaReflection {
           }
         }
 
-        val cls = t.companion.decl(TermName("newBuilder")) match {
+        val cls = t.dealias.companion.decl(TermName("newBuilder")) match {
           case NoSymbol => classOf[Seq[_]]
           case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
-        MapObjects(mapFunction, getPath, dataType, cls)
+        MapObjects(mapFunction, getPath, dataType, Some(cls))
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
