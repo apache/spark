@@ -81,7 +81,9 @@ private[spark] trait BlockData {
 
 }
 
-private[spark] class ByteBufferBlockData(val buffer: ChunkedByteBuffer) extends BlockData {
+private[spark] class ByteBufferBlockData(
+    val buffer: ChunkedByteBuffer,
+    val shouldDispose: Boolean) extends BlockData {
 
   override def toInputStream(): InputStream = buffer.toInputStream(dispose = false)
 
@@ -95,7 +97,11 @@ private[spark] class ByteBufferBlockData(val buffer: ChunkedByteBuffer) extends 
 
   override def size: Long = buffer.size
 
-  override def dispose(): Unit = buffer.unmap()
+  override def dispose(): Unit = {
+    if (shouldDispose) {
+      buffer.dispose()
+    }
+  }
 
 }
 
@@ -544,7 +550,7 @@ private[spark] class BlockManager(
       // downstream code will throw an exception.
       val buf = new ChunkedByteBuffer(
         shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
-      Some(new ByteBufferBlockData(buf))
+      Some(new ByteBufferBlockData(buf, true))
     } else {
       blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
     }
@@ -572,17 +578,17 @@ private[spark] class BlockManager(
       } else if (level.useMemory && memoryStore.contains(blockId)) {
         // The block was not found on disk, so serialize an in-memory copy:
         new ByteBufferBlockData(serializerManager.dataSerializeWithExplicitClassTag(
-          blockId, memoryStore.getValues(blockId).get, info.classTag))
+          blockId, memoryStore.getValues(blockId).get, info.classTag), true)
       } else {
         handleLocalReadFailure(blockId)
       }
     } else {  // storage level is serialized
       if (level.useMemory && memoryStore.contains(blockId)) {
-        new ByteBufferBlockData(memoryStore.getBytes(blockId).get)
+        new ByteBufferBlockData(memoryStore.getBytes(blockId).get, false)
       } else if (level.useDisk && diskStore.contains(blockId)) {
         val diskData = diskStore.getBytes(blockId)
         maybeCacheDiskBytesInMemory(info, blockId, level, diskData)
-          .map(new ByteBufferBlockData(_))
+          .map(new ByteBufferBlockData(_, false))
           .getOrElse(diskData)
       } else {
         handleLocalReadFailure(blockId)
@@ -850,7 +856,7 @@ private[spark] class BlockManager(
           // This is a blocking action and should run in futureExecutionContext which is a cached
           // thread pool. The ByteBufferBlockData wrapper is not disposed of to avoid releasing
           // buffers that are owned by the caller.
-          replicate(blockId, new ByteBufferBlockData(bytes), level, classTag)
+          replicate(blockId, new ByteBufferBlockData(bytes, false), level, classTag)
         }(futureExecutionContext)
       } else {
         null

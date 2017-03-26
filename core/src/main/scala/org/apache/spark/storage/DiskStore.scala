@@ -115,14 +115,14 @@ private[spark] class DiskStore(
             val buf = ByteBuffer.allocate(blockSize.toInt)
             JavaUtils.readFully(channel, buf)
             buf.flip()
-            new ByteBufferBlockData(new ChunkedByteBuffer(buf))
+            new ByteBufferBlockData(new ChunkedByteBuffer(buf), true)
           } {
             channel.close()
           }
         } else {
           Utils.tryWithSafeFinally {
             new ByteBufferBlockData(
-              new ChunkedByteBuffer(channel.map(MapMode.READ_ONLY, 0, file.length)))
+              new ChunkedByteBuffer(channel.map(MapMode.READ_ONLY, 0, file.length)), true)
           } {
             channel.close()
           }

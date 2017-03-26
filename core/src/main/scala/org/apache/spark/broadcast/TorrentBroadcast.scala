@@ -173,7 +173,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
                 throw new SparkException(
                   s"Failed to store $pieceId of $broadcastId in local BlockManager")
               }
-              blocks(pid) = new ByteBufferBlockData(b)
+              blocks(pid) = new ByteBufferBlockData(b, true)
             case None =>
               throw new SparkException(s"Failed to get $pieceId of $broadcastId")
           }
