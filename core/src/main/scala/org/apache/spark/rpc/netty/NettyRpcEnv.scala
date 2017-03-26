@@ -236,7 +236,8 @@ private[netty] class NettyRpcEnv(
 
       val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
         override def run(): Unit = {
-          onFailure(new TimeoutException(s"Cannot receive any reply in ${timeout.duration}"))
+          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteAddr} " +
+            s"in ${timeout.duration}"))
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
       promise.future.onComplete { v =>
