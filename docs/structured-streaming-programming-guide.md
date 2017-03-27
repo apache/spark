@@ -713,7 +713,7 @@ old windows correctly, as illustrated below.
 
 ![Handling Late Data](img/structured-streaming-late-data.png)
 
-However, to run this query for days, it is necessary for the system to bound the amount of 
+However, to run this query for days, it's necessary for the system to bound the amount of 
 intermediate in-memory state it accumulates. This means the system needs to know when an old 
 aggregate can be dropped from the in-memory state because the application is not going to receive 
 late data for that aggregate any more. To enable this, in Spark 2.1, we have introduced 
@@ -930,7 +930,7 @@ There are a few types of output modes.
 new rows added to the Result Table since the last trigger will be 
 outputted to the sink. This is supported for only those queries where 
 rows added to the Result Table is never going to change. Hence, this mode 
-guarantees that each row will be outputted only once (assuming 
+guarantees that each row will be output only once (assuming 
 fault-tolerant sink). For example, queries with only `select`, 
 `where`, `map`, `flatMap`, `filter`, `join`, etc. will support Append mode.
 
