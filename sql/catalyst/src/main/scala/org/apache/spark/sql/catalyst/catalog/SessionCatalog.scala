@@ -1256,12 +1256,15 @@ class SessionCatalog(
 
   /**
    * Copy the current state of the catalog to another catalog.
+   *
+   * This function is synchronized on this [[SessionCatalog]] (the source) to make sure the copied
+   * state is consistent. The target [[SessionCatalog]] is not synchronized, and should not be
+   * because the target [[SessionCatalog]] should not be published at this point. The caller must
+   * synchronize on the target if this assumption does not hold.
    */
-  private[sql] def copyStateTo(target: SessionCatalog): Unit = {
-    synchronized {
-      target.currentDb = currentDb
-      // copy over temporary tables
-      tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
-    }
+  private[sql] def copyStateTo(target: SessionCatalog): Unit = synchronized {
+    target.currentDb = currentDb
+    // copy over temporary tables
+    tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
   }
 }

@@ -137,7 +137,7 @@ private[sql] object SessionState {
    * Create a new [[SessionState]] for the given session.
    */
   def apply(session: SparkSession): SessionState = {
-    new SessionStateBuilder(session).build
+    new SessionStateBuilder(session).build()
   }
 
   def newHadoopConf(hadoopConf: Configuration, sqlConf: SQLConf): Configuration = {
@@ -242,7 +242,7 @@ abstract class BaseSessionStateBuilder(
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    *
-   * Note: this depends on the `conf` and `catalog` field.
+   * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -350,13 +350,13 @@ abstract class BaseSessionStateBuilder(
    */
   protected def createClone: (SparkSession, SessionState) => SessionState = {
     val createBuilder = newBuilder
-    (session, state) => createBuilder(session, Option(state)).build
+    (session, state) => createBuilder(session, Option(state)).build()
   }
 
   /**
    * Build the [[SessionState]].
    */
-  def build: SessionState = {
+  def build(): SessionState = {
     new SessionState(
       session.sparkContext,
       session.sharedState,
@@ -381,8 +381,8 @@ abstract class BaseSessionStateBuilder(
 @InterfaceStability.Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, state) {
+    parentState: Option[SessionState] = None)
+  extends BaseSessionStateBuilder(session, parentState) {
   override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
 }
 
@@ -409,7 +409,7 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
 }
 
 /**
- * Session based [[FunctionResourceLoader]].
+ * Session shared [[FunctionResourceLoader]].
  */
 @InterfaceStability.Unstable
 class SessionFunctionResourceLoader(session: SparkSession) extends FunctionResourceLoader {

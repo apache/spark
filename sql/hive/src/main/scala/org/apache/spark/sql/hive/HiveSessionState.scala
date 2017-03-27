@@ -131,7 +131,7 @@ private[hive] object HiveSessionState {
    * Create a new [[HiveSessionState]] for the given session.
    */
   def apply(session: SparkSession): SessionState = {
-    new HiveSessionStateBuilder(session).build
+    new HiveSessionStateBuilder(session).build()
   }
 }
 
@@ -217,7 +217,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
   override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
 
-  override def build: HiveSessionState = {
+  override def build(): HiveSessionState = {
     val metadataHive: HiveClient = externalCatalog.client.newSession()
     new HiveSessionState(
       session.sparkContext,
