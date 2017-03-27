@@ -49,22 +49,11 @@ class StorageStatus(
   private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
   private val _nonRddBlocks = new mutable.HashMap[BlockId, BlockStatus]
 
-  /**
-   * Storage information of the blocks that entails on-heap memory, off-heap memory and disk usage.
-   *
-   * As with the block maps, we store the storage information separately for RDD blocks and
-   * non-RDD blocks for the same reason. In particular, RDD storage information is stored
-   * in a map indexed by the RDD ID to the following 3-tuple case class:
-   *
-   *   (memory size, disk size, storage level)
-   *
-   * We assume that all the blocks that belong to the same RDD have the same storage level.
-   */
-  case class RddStorageInfo(memoryUsage: Long, diskUsage: Long, level: StorageLevel)
+  private case class RddStorageInfo(memoryUsage: Long, diskUsage: Long, level: StorageLevel)
   private val _rddStorageInfo = new mutable.HashMap[Int, RddStorageInfo]
 
-  // On-heap memory, off-heap memory and disk usage of non rdd storage
-  case class NonRddStorageInfo(var onHeapUsage: Long, var offHeapUsage: Long, var diskUsage: Long)
+  private case class NonRddStorageInfo(var onHeapUsage: Long, var offHeapUsage: Long,
+      var diskUsage: Long)
   private val _nonRddStorageInfo = NonRddStorageInfo(0L, 0L, 0L)
 
   /** Create a storage status with an initial set of blocks, leaving the source unmodified. */

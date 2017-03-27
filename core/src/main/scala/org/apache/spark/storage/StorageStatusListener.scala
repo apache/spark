@@ -74,6 +74,8 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
     synchronized {
       val blockManagerId = blockManagerAdded.blockManagerId
       val executorId = blockManagerId.executorId
+      // This two fields are compatible with old event logs, in which there only has max on heap
+      // memory in the event log. So maxOnHeapMem will use maxMem, maxOffHeapMem will set to 0.
       val maxOnHeapMem = blockManagerAdded.maxOnHeapMem.getOrElse(blockManagerAdded.maxMem)
       val maxOffHeapMem = blockManagerAdded.maxOffHeapMem.getOrElse(0L)
       val storageStatus = new StorageStatus(blockManagerId, maxOnHeapMem, maxOffHeapMem)
