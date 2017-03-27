@@ -45,28 +45,37 @@ import org.apache.spark.sql.SparkSession
 class BatchCommitLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[String](sparkSession, path) {
 
+  import BatchCommitLog._
+
+  def add(batchId: Long): Unit = {
+    super.add(batchId, SERIALIZED_VOID)
+  }
+
+  override def add(batchId: Long, metadata: String): Boolean = {
+    throw new UnsupportedOperationException(
+      "BatchCommitLog does not take any metadata, use 'add(batchId)' instead")
+  }
+
   override protected def deserialize(in: InputStream): String = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
-    parseVersion(lines.next().trim, BatchCommitLog.VERSION)
+    parseVersion(lines.next.trim, VERSION)
     // read metadata
-    lines.next().trim match {
-      case BatchCommitLog.SERIALIZED_VOID => null
-      case metadata => metadata
-    }
+    val metadata = lines.next.trim
+    assert(metadata == SERIALIZED_VOID, s"Batch commit log has unexpected metadata: $metadata ")
+    metadata
   }
 
   override protected def serialize(metadata: String, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(s"v${BatchCommitLog.VERSION}".getBytes(UTF_8))
+    out.write(s"v${VERSION}".getBytes(UTF_8))
     out.write('\n')
 
-    // write metadata or void
-    out.write((if (metadata == null) BatchCommitLog.SERIALIZED_VOID else metadata)
-      .getBytes(UTF_8))
+    // write metadata
+    out.write(SERIALIZED_VOID.getBytes(UTF_8))
   }
 }
 
