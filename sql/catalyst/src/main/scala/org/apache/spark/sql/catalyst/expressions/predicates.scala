@@ -90,7 +90,10 @@ trait PredicateHelper {
    * Returns true iff `expr` could be evaluated as a condition within join.
    */
   protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
-    case l: ListQuery => false
+    case l: ListQuery =>
+      // Now pulling up IN predicates is deferred to `RewritePredicateSubquery`. As a result,
+      // `ListQuery`'s children can be empty before that rule and falls into the next case.
+      false
     case e: SubqueryExpression =>
       // non-correlated subquery will be replaced as literal
       e.children.isEmpty
