@@ -77,7 +77,7 @@ abstract class Serializer {
    * position = 0
    * serOut.write(obj1)
    * serOut.flush()
-   * position = # of bytes writen to stream so far
+   * position = # of bytes written to stream so far
    * obj1Bytes = output[0:position-1]
    * serOut.write(obj2)
    * serOut.flush()
