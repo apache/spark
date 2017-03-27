@@ -22,17 +22,17 @@ import java.util.regex.{Matcher, Pattern}
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 
 /**
  * Contains util methods to interact with Hadoop from spark.

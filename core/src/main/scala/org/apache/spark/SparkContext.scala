@@ -42,7 +42,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.SparkContext.logInfo
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -506,6 +505,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // TODO: Separate credentials files by appID, and clean all files at the end of the application
     if (_conf.contains(PRINCIPAL.key)) {
       _credentialRenewer = createCredentialRenewer()
+      _credentialRenewer.foreach(_ => SparkHadoopUtil.get.startCredentialUpdater(_conf))
     }
 
     // Create and start the scheduler
@@ -610,7 +610,6 @@ class SparkContext(config: SparkConf) extends Logging {
       case _ =>
         val appStagingBaseDir = _conf.get(STAGING_DIR).map { new Path(_) }
           .getOrElse(FileSystem.get(_hadoopConfiguration).getHomeDirectory())
-
         val stagingDirPath =
           appStagingBaseDir +
             Path.SEPARATOR + ".sparkStaging" + Path.SEPARATOR + UUID.randomUUID().toString
@@ -618,10 +617,11 @@ class SparkContext(config: SparkConf) extends Logging {
         _conf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
         logInfo(s"Credentials file set to: $credentialsFile")
         val credentials = new Credentials
-
         val ccm = new ConfigurableCredentialManager(_conf, _hadoopConfiguration)
         ccm.obtainCredentials(_hadoopConfiguration, credentials)
+
         UserGroupInformation.getCurrentUser.addCredentials(credentials)
+
         val tokenList = ArrayBuffer[String]()
         credentials.getAllTokens.asScala.foreach { token =>
           tokenList += (token.encodeToUrlString())
@@ -1982,7 +1982,10 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     Utils.tryLogNonFatalError {
-      _credentialRenewer.foreach(_.stop())
+      _credentialRenewer.foreach { cr =>
+        cr.stop()
+        SparkHadoopUtil.get.stopCredentialUpdater()
+      }
     }
 
     // Unset YARN mode system env variable, to allow switching between cluster types.
