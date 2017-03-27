@@ -50,9 +50,11 @@ trait LDAOptimizer {
 
   /**
    * Initializer for the optimizer. LDA passes the common parameters to the optimizer and
-   * the internal structure can be initialized properly.
+   * the internal structure can be initialized properly. An initialModel can be provided
+   * (supported only by OnlineLDAOptimizer implementation
    */
-  private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer
+  private[clustering] def initialize(
+      initialModel: Option[LDAModel], docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer
 
   private[clustering] def next(): LDAOptimizer
 
@@ -118,8 +120,14 @@ final class EMLDAOptimizer extends LDAOptimizer {
    * Compute bipartite term/doc graph.
    */
   override private[clustering] def initialize(
+      initialModel: Option[LDAModel],
       docs: RDD[(Long, Vector)],
       lda: LDA): EMLDAOptimizer = {
+    if (initialModel.isDefined) {
+      throw new IllegalArgumentException(
+        "initialModel parameter is not supported by EMLDAOptimizer")
+    }
+
     // EMLDAOptimizer currently only supports symmetric document-topic priors
     val docConcentration = lda.getDocConcentration
 
@@ -411,33 +419,45 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   override private[clustering] def initialize(
+      initialModel: Option[LDAModel],
       docs: RDD[(Long, Vector)],
       lda: LDA): OnlineLDAOptimizer = {
-    this.k = lda.getK
-    this.corpusSize = docs.count()
-    this.vocabSize = docs.first()._2.size
-    this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
-      if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
-      else {
-        require(lda.getAsymmetricDocConcentration(0) >= 0,
-          s"all entries in alpha must be >=0, got: $alpha")
-        Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
-      }
-    } else {
-      require(lda.getAsymmetricDocConcentration.size == k,
-        s"alpha must have length k, got: $alpha")
-      lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
-        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
-      }
-      lda.getAsymmetricDocConcentration
-    }
-    this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
+
     this.randomGenerator = new Random(lda.getSeed)
-
     this.docs = docs
+    this.corpusSize = docs.count()
 
-    // Initialize the variational distribution q(beta|lambda)
-    this.lambda = getGammaMatrix(k, vocabSize)
+    initialModel match {
+      case Some(model) =>
+        require(model.vocabSize == docs.first()._2.size, "mismatched vocabulary size")
+        this.k = model.k
+        this.alpha = model.docConcentration
+        this.eta = model.topicConcentration
+        this.lambda = model.topicsMatrix.transpose.asBreeze.toDenseMatrix
+      case None =>
+        this.k = lda.getK
+        this.vocabSize = docs.first()._2.size
+        this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
+          if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+          else {
+            require(lda.getAsymmetricDocConcentration(0) >= 0,
+              s"all entries in alpha must be >=0, got: $alpha")
+            Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
+          }
+        } else {
+          require(lda.getAsymmetricDocConcentration.size == k,
+            s"alpha must have length k, got: $alpha")
+          lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
+            require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
+          }
+          lda.getAsymmetricDocConcentration
+        }
+        this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
+
+        // Initialize the variational distribution q(beta|lambda)
+        this.lambda = getGammaMatrix(k, vocabSize)
+    }
+
     this.iteration = 0
     this
   }

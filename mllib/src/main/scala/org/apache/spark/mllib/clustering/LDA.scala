@@ -317,6 +317,26 @@ class LDA private (
     this
   }
 
+  // Initial LDAModel can be provided rather than using random initialization
+  private var initialModel: Option[LDAModel] = None
+
+  /**
+   * Set the initial starting point, bypassing the random initialization.
+   * This is supported only for online optimizer, and the condition model.k == this.k must be met,
+   * failure results in an IllegalArgumentException.
+   */
+  @Since("2.2.0")
+  def setInitialModel(model: LDAModel): this.type = {
+    require(model.k == k, "mismatched number of topics")
+    this.ldaOptimizer match {
+      case _: OnlineLDAOptimizer =>
+        initialModel = Some(model)
+        this
+      case _ => throw new IllegalArgumentException(
+        "Only online optimizer supports initialization with a previous model.")
+    }
+  }
+
   /**
    * Learn an LDA model using the given dataset.
    *
@@ -328,7 +348,7 @@ class LDA private (
    */
   @Since("1.3.0")
   def run(documents: RDD[(Long, Vector)]): LDAModel = {
-    val state = ldaOptimizer.initialize(documents, this)
+    val state = ldaOptimizer.initialize(initialModel, documents, this)
     var iter = 0
     val iterationTimes = Array.fill[Double](maxIterations)(0)
     while (iter < maxIterations) {

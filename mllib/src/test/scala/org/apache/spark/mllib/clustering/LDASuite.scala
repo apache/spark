@@ -205,13 +205,29 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   test("OnlineLDAOptimizer initialization") {
     val lda = new LDA().setK(2)
     val corpus = sc.parallelize(tinyCorpus, 2)
-    val op = new OnlineLDAOptimizer().initialize(corpus, lda)
+    val op = new OnlineLDAOptimizer().initialize(None, corpus, lda)
     op.setKappa(0.9876).setMiniBatchFraction(0.123).setTau0(567)
     assert(op.getAlpha.toArray.forall(_ === 0.5)) // default 1.0 / k
-    assert(op.getEta === 0.5)   // default 1.0 / k
+    assert(op.getEta === 0.5) // default 1.0 / k
     assert(op.getKappa === 0.9876)
     assert(op.getMiniBatchFraction === 0.123)
     assert(op.getTau0 === 567)
+  }
+
+  test("OnlineLDAOptimizer initialization with a previous model") {
+    val alpha = Vectors.dense(Array.fill(tinyTopics.numRows)(1.0 / tinyTopics.numRows))
+    val model = new LocalLDAModel(tinyTopics, alpha, 1D, 100D)
+
+    val lda = new LDA().setK(tinyK)
+    val corpus = sc.parallelize(tinyCorpus, 2)
+    val op = new OnlineLDAOptimizer().initialize(Some(model), corpus, lda)
+
+    val model2 = op.getLDAModel(Array())
+    assert(model2.k === tinyK)
+    assert(model2.vocabSize === model.vocabSize)
+    assert(model2.docConcentration === model.docConcentration)
+    assert(model2.topicConcentration === model.topicConcentration)
+    assert(model2.topicsMatrix === model.topicsMatrix)
   }
 
   test("OnlineLDAOptimizer one iteration") {
@@ -231,7 +247,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMiniBatchFraction(1)
     val lda = new LDA().setK(k).setMaxIterations(1).setOptimizer(op).setSeed(12345)
 
-    val state = op.initialize(corpus, lda)
+    val state = op.initialize(None, corpus, lda)
     // override lambda to simulate an intermediate state
     //    [[ 1.1  1.2  1.3  0.9  0.8  0.7]
     //     [ 0.9  0.8  0.7  1.1  1.2  1.3]]
