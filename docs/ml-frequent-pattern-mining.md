@@ -45,9 +45,9 @@ The `FPGrowthModel` provides:
 * `freqItemsets`: frequent itemsets in the format of DataFrame("items"[Array], "freq"[Long])
 * `associationRules`: association rules generated with confidence above `minConfidence`, in the format of 
   DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double]).
-* `transform`: The transform method examines the input items against all the association rules and
+* `transform`: The transform method examines the input items in `itemsCol` against all the association rules and
   summarize the consequents as prediction. The prediction column has the same data type as the
-  input column and does not contain existing items in the input column.
+  `itemsCol` and does not contain existing items in the `itemsCol`.
 
 
 **Examples**
@@ -64,6 +64,12 @@ Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.fpm.FPGro
 Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/FPGrowth.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaFPGrowthExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.FPGrowth) for more details.
+
+{% include_example python/ml/fpgrowth_example.py %}
 </div>
 
 </div>
