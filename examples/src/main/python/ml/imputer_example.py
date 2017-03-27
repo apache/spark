@@ -20,14 +20,20 @@ from pyspark.ml.feature import Imputer
 # $example off$
 from pyspark.sql import SparkSession
 
+"""
+An example demonstrating Imputer.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/imputer_example.py
+"""
+
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("imputer example")\
+        .appName("ImputerExample")\
         .getOrCreate()
 
     # $example on$
-    dataFrame = spark.createDataFrame([
+    df = spark.createDataFrame([
         (1.0, float("nan")),
         (2.0, float("nan")),
         (float("nan"), 3.0),
@@ -36,10 +42,9 @@ if __name__ == "__main__":
     ], ["a", "b"])
 
     imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
+    imputerModel = imputer.fit(df)
 
-    imputerModel = imputer.fit(dataFrame)
-
-    imputedData = imputerModel.transform(dataFrame)
+    imputedData = imputerModel.transform(df)
     imputedData.select("a", "b", "out_a", "out_b").show()
     # $example off$
 
