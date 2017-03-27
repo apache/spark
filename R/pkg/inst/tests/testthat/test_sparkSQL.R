@@ -187,9 +187,9 @@ test_that("structField type strings", {
   typeStrings <- names(errorList)
 
   for (i in seq_along(typeStrings)){
-    typestring <- typeStrings[i]
+    typeString <- typeStrings[i]
     expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
-    expect_error(structField("_col", typestring), expected)
+    expect_error(structField("_col", typeString), expected)
   }
 })
 
