@@ -21,35 +21,37 @@ from pyspark.ml.wrapper import _jvm
 
 
 class ChiSquareTest(object):
-    """ Conduct Pearson's independence test for every feature against the label. For each feature,
+    """
+    .. note:: Experimental
+
+    Conduct Pearson's independence test for every feature against the label. For each feature,
     the (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
     statistic is computed. All label and feature values must be categorical.
 
     The null hypothesis is that the occurrence of the outcomes is statistically independent.
 
     :param dataset:
-      Dataset for running Chi square test. Instance of `pyspark.sql.DataFrame` with categorical
-      feature and label columns.
+      DataFrame of categorical labels and categorical features.
+      Real-valued features will be treated as categorical for each distinct value.
     :param featuresCol:
-      Name of features column in dataset, type `str`. Column should be of type `Vector`
-      (`VectorUDT`).
+      Name of features column in dataset, of type `Vector` (`VectorUDT`).
     :param labelCol:
-      Name of label column in dataset, type str. Column should have any numerical type.
+      Name of label column in dataset, of any numerical type.
     :return:
-      DataFrame, with a single row, containing the test result for each feature against the
-      label. The DataFrame will contain the following fields: `pValues`: `Vector`,
-      `degreesOfFreedom`: `Array[Int]`, and `statistics`: `Vector`. Each of these fields has one
-      value per feature.
+      DataFrame containing the test result for every feature against the label.
+      This DataFrame will contain a single Row with the following fields:
+      - `pValues: Vector`
+      - `degreesOfFreedom: Array[Int]`
+      - `statistics: Vector`
+      Each of these fields has one value per feature.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.stat import ChiSquareTest
-    >>> v0 = Vectors.dense([0, 0, 1])
-    >>> v1 = Vectors.dense([1, 0, 1])
-    >>> v2 = Vectors.dense([2, 1, 1])
-    >>> v3 = Vectors.dense([3, 1, 1])
-    >>> labels = [0, 0, 1, 1]
-    >>> dataset = spark.createDataFrame(zip(labels, [v0, v1, v2, v3]),
-    ...                                 ["label", "features"])
+    >>> dataset = [[0, Vectors.dense([0, 0, 1])],
+    ...            [0, Vectors.dense([1, 0, 1])],
+    ...            [1, Vectors.dense([2, 1, 1])],
+    ...            [1, Vectors.dense([3, 1, 1])]]
+    >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
     >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label')
     >>> chiSqResult.select("degreesOfFreedom").collect()[0]
     Row(degreesOfFreedom=[3, 1, 0])
@@ -57,11 +59,11 @@ class ChiSquareTest(object):
     .. versionadded:: 2.2.0
 
     """
-
     @staticmethod
     @since("2.2.0")
     def test(dataset, featuresCol, labelCol):
-        """ Perform a Pearson's independence test using dataset.
+        """
+        Perform a Pearson's independence test using dataset.
         """
         sc = SparkContext._active_spark_context
         javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest

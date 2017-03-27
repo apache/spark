@@ -53,7 +53,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvalu
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
-    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors, _convert_to_vector
+    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
 from pyspark.ml.recommendation import ALS
@@ -1740,15 +1740,14 @@ class WrapperTests(MLlibTestCase):
 
 class ChiSquareTestTests(SparkSessionTestCase):
 
-    def test_ChiSquareTest(self):
-        labels = [1, 2, 0]
-        vectors = [_convert_to_vector([0, 1, 2]),
-                   _convert_to_vector([1, 1, 1]),
-                   _convert_to_vector([2, 1, 0])]
-        data = zip(labels, vectors)
+    def test_chisquaretest(self):
+        data = [[0, Vectors.dense([0, 1, 2])],
+                [1, Vectors.dense([1, 1, 1])],
+                [2, Vectors.dense([2, 1, 0])]]
         df = self.spark.createDataFrame(data, ['label', 'feat'])
         res = ChiSquareTest.test(df, 'feat', 'label')
-        # pValues = res.select("pValues").collect())
+        # This line is hitting the collect bug described in #17218, commented for now.
+        # pValues = res.select("degreesOfFreedom").collect())
         self.assertIsInstance(res, DataFrame)
         fieldNames = set(field.name for field in res.schema.fields)
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
