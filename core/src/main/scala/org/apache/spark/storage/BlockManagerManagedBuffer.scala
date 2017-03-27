@@ -29,7 +29,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
  * so that the corresponding block's read lock can be released once this buffer's references
  * are released.
  *
- * If `dispose` is set to try, the [[BlockData]]will be disposed when the buffer's reference
+ * If `dispose` is set to true, the [[BlockData]]will be disposed when the buffer's reference
  * count drops to zero.
  *
  * This is effectively a wrapper / bridge to connect the BlockManager's notion of read locks
