@@ -24,7 +24,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
@@ -174,10 +174,16 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case InSet(ar: Attribute, set) =>
         evaluateInSet(ar, set, update)
 
-      case IsNull(ar: Attribute) =>
+      // In current stage, we don't have advanced statistics such as sketches or histograms.
+      // As a result, some operator can't estimate `nullCount` accurately. E.g. left outer join
+      // estimation does not accurately update `nullCount` currently.
+      // So for IsNull and IsNotNull predicates, we only estimate them when the child is a leaf
+      // node, whose `nullCount` is accurate.
+      // This is a limitation due to lack of advanced stats. We should remove it in the future.
+      case IsNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
         evaluateNullCheck(ar, isNull = true, update)
 
-      case IsNotNull(ar: Attribute) =>
+      case IsNotNull(ar: Attribute) if plan.child.isInstanceOf[LeafNode] =>
         evaluateNullCheck(ar, isNull = false, update)
 
       case _ =>
