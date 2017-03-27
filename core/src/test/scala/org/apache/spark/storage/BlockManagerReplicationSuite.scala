@@ -504,16 +504,11 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     assert(newLocations.forall(bmId => !executorsToRemove.contains(bmId)),
       "New locations contain stopped block managers.")
 
-    // this is to ensure the last read lock gets released before we try to
-    // check for read-locks. The check for read-locks using the method below is not
-    // idempotent, and therefore can't be used in an `eventually` block.
-    Thread.sleep(500)
-
-    // check if all the read-locks have been released
-    initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
-      val locks = bm.releaseAllLocksForTask(BlockInfo.NON_TASK_WRITER)
-      assert(locks.size === 0, "Read locks unreleased!")
+    // Make sure all locks have been released.
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
+        assert(bm.blockInfoManager.getTaskLockCount(BlockInfo.NON_TASK_WRITER) === 0)
+      }
     }
   }
-
 }
