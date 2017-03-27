@@ -322,6 +322,7 @@ class LDA private (
 
   /**
    * Set the initial starting point, bypassing the random initialization.
+   * This can be used for incremental learning.
    * This is supported only for online optimizer, and the condition model.k == this.k must be met,
    * failure results in an IllegalArgumentException.
    */

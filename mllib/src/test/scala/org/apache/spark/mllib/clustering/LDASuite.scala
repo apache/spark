@@ -291,6 +291,45 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("OnlineLDAOptimizer with toy data, and with incremental learning") {
+    val docs = sc.parallelize(toyData.take(3))
+    val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
+        .setGammaShape(1e10)
+    val lda = new LDA().setK(2)
+        .setDocConcentration(0.01)
+        .setTopicConcentration(0.01)
+        .setMaxIterations(100)
+        .setOptimizer(op)
+        .setSeed(12345)
+
+    val ldaModel = lda.run(docs)
+
+
+    val docs2 = sc.parallelize(toyData.takeRight(3))
+    val lda2 = new LDA().setK(2)
+        .setDocConcentration(0.01)
+        .setTopicConcentration(0.01)
+        .setMaxIterations(100)
+        .setOptimizer(op)
+        .setInitialModel(ldaModel)
+        .setSeed(12345)
+
+    val ldaModel2 = lda2.run(docs2)
+
+    val topicIndices = ldaModel2.describeTopics(maxTermsPerTopic = 10)
+    val topics = topicIndices.map { case (terms, termWeights) =>
+      terms.zip(termWeights)
+    }
+
+    // check distribution for each topic,
+    // should be close to values got with learning on the full corpus
+    // typical distribution is (0.3, 0.3, 0.3, 0.02, 0.02, 0.02)
+    topics.foreach { topic =>
+      val smalls = topic.filter(t => t._2 < 0.1).map(_._2)
+      assert(smalls.length == 3 && smalls.sum < 0.2)
+    }
+  }
+
   test("LocalLDAModel logLikelihood") {
     val ldaModel: LocalLDAModel = toyModel
 
