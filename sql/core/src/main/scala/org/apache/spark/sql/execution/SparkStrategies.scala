@@ -18,16 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Strategy
+import org.apache.spark.sql.{execution, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -257,6 +255,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Used to plan the streaming reservoir sample operator.
+   */
+  object ReservoirSampleStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ReservoirSample(keys, child, reservoirSize, true) =>
+        StreamingReservoirSampleExec(keys, PlanLater(child), reservoirSize) :: Nil
+
+      case _ => Nil
+    }
+  }
+
+  /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
   object Aggregation extends Strategy {
@@ -410,6 +420,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.window.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
+      case logical.ReservoirSample(keys, child, reservoirSize, false) =>
+        execution.ReservoirSampleExec(reservoirSize, PlanLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScanExec(output, data) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>

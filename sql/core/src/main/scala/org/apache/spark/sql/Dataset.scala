@@ -2020,6 +2020,21 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * :: Experimental ::
+   * (Scala-specific) Reservoir sampling implementation.
+   *
+   * @todo move this into sample operator.
+   * @group typedrel
+   * @since 2.0.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def reservoir(reservoirSize: Int): Dataset[T] = withTypedPlan {
+    val allColumns = queryExecution.analyzed.output
+    ReservoirSample(allColumns, logicalPlan, reservoirSize, isStreaming)
+  }
+
+  /**
    * Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
    *

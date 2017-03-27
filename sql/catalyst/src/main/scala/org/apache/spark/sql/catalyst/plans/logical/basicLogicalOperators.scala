@@ -843,6 +843,19 @@ case class Sample(
 }
 
 /**
+ * A logical plan for `reservoir`.
+ */
+case class ReservoirSample(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    reservoirSize: Int,
+    streaming: Boolean = false)
+  extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+}
+
+/**
  * Returns a new logical plan that dedups input rows.
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {

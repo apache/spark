@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.util.Random
+
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
@@ -32,6 +35,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
 
 /** Used to identify the state store for a given operator. */
@@ -125,8 +129,8 @@ case class StateStoreRestoreExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
-      operatorId = getStateId.operatorId,
-      storeVersion = getStateId.batchId,
+      getStateId.operatorId,
+      getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
@@ -319,4 +323,111 @@ case class StreamingDeduplicateExec(
 object StreamingDeduplicateExec {
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
+}
+
+/**
+ * Physical operator for executing streaming Sampling.
+ *
+ * @param reservoirSize number of random sample elements.
+ */
+case class StreamingReservoirSampleExec(
+    keyExpressions: Seq[Attribute],
+    child: SparkPlan,
+    reservoirSize: Int,
+    stateId: Option[OperatorStateId] = None,
+    eventTimeWatermark: Option[Long] = None,
+    outputMode: Option[OutputMode] = None)
+  extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  override def requiredChildDistribution: Seq[Distribution] =
+  ClusteredDistribution(keyExpressions) :: Nil
+
+  private val enc = Encoders.STRING.asInstanceOf[ExpressionEncoder[String]]
+  private val NUM_RECORDS_IN_PARTITION = enc.toRow("NUM_RECORDS_IN_PARTITION")
+    .asInstanceOf[UnsafeRow]
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    metrics
+    val fieldTypes = (keyExpressions.map(_.dataType) ++ Seq(LongType)).toArray
+    val withSumFieldTypes = (keyExpressions.map(_.dataType) ++ Seq(LongType)).toArray
+
+    child.execute().mapPartitionsWithStateStore(
+      getStateId.checkpointLocation,
+      getStateId.operatorId,
+      getStateId.batchId,
+      keyExpressions.toStructType,
+      child.output.toStructType,
+      sqlContext.sessionState,
+      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+
+      val numRecordsInPart = store.get(NUM_RECORDS_IN_PARTITION).map(value => {
+        value.get(0, LongType).asInstanceOf[Long]
+      }).getOrElse(0L)
+
+      val seed = Random.nextLong()
+      val rand = new XORShiftRandom(seed)
+      var numSamples = numRecordsInPart
+      var count = 0
+
+      val baseIterator = watermarkPredicate match {
+        case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+        case None => iter
+      }
+
+      baseIterator.foreach { r =>
+        count += 1
+        if (numSamples < reservoirSize) {
+          numSamples += 1
+          store.put(enc.toRow(numSamples.toString).asInstanceOf[UnsafeRow],
+            r.asInstanceOf[UnsafeRow])
+        } else {
+          val randomIdx = (rand.nextDouble() * (numRecordsInPart + count)).toLong
+          if (randomIdx <= reservoirSize) {
+            val replacementIdx = enc.toRow(randomIdx.toString).asInstanceOf[UnsafeRow]
+            store.put(replacementIdx, r.asInstanceOf[UnsafeRow])
+          }
+        }
+      }
+
+      val numRecordsTillNow = UnsafeProjection.create(Array[DataType](LongType))
+        .apply(InternalRow.apply(numRecordsInPart + count))
+      store.put(NUM_RECORDS_IN_PARTITION, numRecordsTillNow)
+      store.commit()
+
+      outputMode match {
+        case Some(Complete) =>
+          CompletionIterator[InternalRow, Iterator[InternalRow]](
+            store.iterator().filter(kv => {
+              !kv._1.asInstanceOf[UnsafeRow].equals(NUM_RECORDS_IN_PARTITION)
+            }).map(kv => {
+              UnsafeProjection.create(withSumFieldTypes).apply(InternalRow.fromSeq(
+                new JoinedRow(kv._2, numRecordsTillNow)
+                  .toSeq(withSumFieldTypes)))
+            }), {})
+        case Some(Update) =>
+          CompletionIterator[InternalRow, Iterator[InternalRow]](
+            store.updates()
+              .filter(update => !update.key.equals(NUM_RECORDS_IN_PARTITION))
+              .map(update => {
+                UnsafeProjection.create(withSumFieldTypes).apply(InternalRow.fromSeq(
+                    new JoinedRow(update.value, numRecordsTillNow)
+                      .toSeq(withSumFieldTypes)))
+              }), {})
+        case _ =>
+          throw new UnsupportedOperationException(s"Invalid output mode: $outputMode " +
+            s"for streaming sampling.")
+      }
+    }.repartition(1).mapPartitions(it => {
+      SamplingUtils.reservoirSampleWithWeight(
+        it.map(item => (item, item.getLong(keyExpressions.size))), reservoirSize)
+        .map(row =>
+          UnsafeProjection.create(fieldTypes)
+            .apply(InternalRow.fromSeq(row.toSeq(fieldTypes)))
+        ).iterator
+    })
+  }
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
