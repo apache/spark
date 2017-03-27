@@ -503,8 +503,7 @@ class SparkContext(config: SparkConf) extends Logging {
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // we need to prepare credentials for executors both in conf and hdfs before they launch.
-    // oops, the appid has not been generated, where should I put the credentials files
-    // emm.. let give random id a try...
+    // TODO: Separate credentials files by appID, and clean all files at the end of the application
     if (_conf.contains(PRINCIPAL.key)) {
       _credentialRenewer = createCredentialRenewer()
     }
