@@ -48,7 +48,7 @@ class BatchCommitLog(sparkSession: SparkSession, path: String)
   import BatchCommitLog._
 
   def add(batchId: Long): Unit = {
-    super.add(batchId, SERIALIZED_VOID)
+    super.add(batchId, EMPTY_JSON)
   }
 
   override def add(batchId: Long, metadata: String): Boolean = {
@@ -63,10 +63,7 @@ class BatchCommitLog(sparkSession: SparkSession, path: String)
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
     parseVersion(lines.next.trim, VERSION)
-    // read metadata
-    val metadata = lines.next.trim
-    assert(metadata == SERIALIZED_VOID, s"Batch commit log has unexpected metadata: $metadata ")
-    metadata
+    EMPTY_JSON
   }
 
   override protected def serialize(metadata: String, out: OutputStream): Unit = {
@@ -75,12 +72,12 @@ class BatchCommitLog(sparkSession: SparkSession, path: String)
     out.write('\n')
 
     // write metadata
-    out.write(SERIALIZED_VOID.getBytes(UTF_8))
+    out.write(EMPTY_JSON.getBytes(UTF_8))
   }
 }
 
 object BatchCommitLog {
   private val VERSION = 1
-  private val SERIALIZED_VOID = "{}"
+  private val EMPTY_JSON = "{}"
 }
 
