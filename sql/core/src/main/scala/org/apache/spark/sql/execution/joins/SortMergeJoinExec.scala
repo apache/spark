@@ -81,15 +81,35 @@ case class SortMergeJoinExec(
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
+    // For inner join, orders of both sides keys should be kept.
+    case Inner =>
+      val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
+      val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering)
+      leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
+        // Also add the right key and its `sameOrderExpressions`
+        SortOrder(lKey.child, Ascending, lKey.sameOrderExpressions + rKey.child ++ rKey
+          .sameOrderExpressions)
+      }
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
-    case LeftOuter => requiredOrders(leftKeys)
-    case RightOuter => requiredOrders(rightKeys)
+    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
+    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
     // There are null rows in both streams, so there is no order.
     case FullOuter => Nil
-    case _: InnerLike | LeftExistence(_) => requiredOrders(leftKeys)
+    case LeftExistence(_) => getKeyOrdering(leftKeys, left.outputOrdering)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
+  }
+
+  /**
+   * For SMJ, child's output must have been sorted on key or expressions with the same order as
+   * key, so we can get ordering for key from child's output ordering.
+   */
+  private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
+    : Seq[SortOrder] = {
+    keys.zip(childOutputOrdering).map { case (key, childOrder) =>
+      SortOrder(key, Ascending, childOrder.sameOrderExpressions + childOrder.child - key)
+    }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =

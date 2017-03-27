@@ -1370,9 +1370,8 @@ test_that("column functions", {
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
-  expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
-                        error = function(e) { stop(e) }),
-               paste0(".*(java.lang.NumberFormatException: For input string:).*"))
+  s <- collect(select(df, from_json(df$col, schema2)))
+  expect_equal(s[[1]][[1]], NA)
   s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
   expect_is(s[[1]][[1]]$date, "Date")
   expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")

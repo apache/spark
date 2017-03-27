@@ -450,6 +450,19 @@ class SQLTests(ReusedPySparkTestCase):
                     Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
         self.assertEqual(ages_newlines.collect(), expected)
 
+    def test_ignorewhitespace_csv(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.spark.createDataFrame([[" a", "b  ", " c "]]).write.csv(
+            tmpPath,
+            ignoreLeadingWhiteSpace=False,
+            ignoreTrailingWhiteSpace=False)
+
+        expected = [Row(value=u' a,b  , c ')]
+        readback = self.spark.read.text(tmpPath)
+        self.assertEqual(readback.collect(), expected)
+        shutil.rmtree(tmpPath)
+
     def test_read_multiple_orc_file(self):
         df = self.spark.read.orc(["python/test_support/sql/orc_partitioned/b=0/c=0",
                                   "python/test_support/sql/orc_partitioned/b=1/c=1"])
@@ -1116,6 +1129,14 @@ class SQLTests(ReusedPySparkTestCase):
         rndn2 = df.select('key', functions.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_array_contains_function(self):
+        from pyspark.sql.functions import array_contains
+
+        df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ['data'])
+        actual = df.select(array_contains(df.data, 1).alias('b')).collect()
+        # The value argument can be implicitly castable to the element's type of the array.
+        self.assertEqual([Row(b=True), Row(b=False)], actual)
+
     def test_between_function(self):
         df = self.sc.parallelize([
             Row(a=1, b=2, c=3),
@@ -1242,13 +1263,26 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
-    def test_stream_trigger_takes_keyword_args(self):
+    def test_stream_trigger(self):
         df = self.spark.readStream.format('text').load('python/test_support/sql/streaming')
+
+        # Should take at least one arg
+        try:
+            df.writeStream.trigger()
+        except ValueError:
+            pass
+
+        # Should not take multiple args
+        try:
+            df.writeStream.trigger(once=True, processingTime='5 seconds')
+        except ValueError:
+            pass
+
+        # Should take only keyword args
         try:
             df.writeStream.trigger('5 seconds')
             self.fail("Should have thrown an exception")
         except TypeError:
-            # should throw error
             pass
 
     def test_stream_read_options(self):
