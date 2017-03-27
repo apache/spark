@@ -140,6 +140,59 @@ test_that("structType and structField", {
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
 })
 
+test_that("structField type strings", {
+  # positive cases
+  primitiveTypes <- list(byte = "ByteType",
+                         integer = "IntegerType",
+                         float = "FloatType",
+                         double = "DoubleType",
+                         string = "StringType",
+                         binary = "BinaryType",
+                         boolean = "BooleanType",
+                         timestamp = "TimestampType",
+                         date = "DateType")
+
+  complexTypes <- list("map<string,integer>" = "MapType(StringType,IntegerType,true)",
+                       "array<string>" = "ArrayType(StringType,true)",
+                       "struct<a:string>" = "StructType(StructField(a,StringType,true))")
+
+  typeList <- c(primitiveTypes, complexTypes)
+  typeStrings <- names(typeList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- typeList[[i]]
+    testField <- structField("_col", typeString)
+    expect_is(testField, "structField")
+    expect_true(testField$nullable())
+    expect_equal(testField$dataType.toString(), expected)
+  }
+
+  # negative cases
+  primitiveErrors <- list(Byte = "Byte",
+                          INTEGER = "INTEGER",
+                          numeric = "numeric",
+                          character = "character",
+                          raw = "raw",
+                          logical = "logical")
+
+  complexErrors <- list("map<string, integer>" = " integer",
+                        "array<String>" = "String",
+                        "struct<a:string >" = "string ",
+                        "map <string,integer>" = "map <string,integer>",
+                        "array< string>" = " string",
+                        "struct<a: string>" = " string")
+
+  errorList <- c(primitiveErrors, complexErrors)
+  typeStrings <- names(errorList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
+    expect_error(structField("_col", typeString), expected)
+  }
+})
+
 test_that("create DataFrame from RDD", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- createDataFrame(rdd, list("a", "b"))
