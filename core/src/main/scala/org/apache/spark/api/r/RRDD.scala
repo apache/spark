@@ -136,7 +136,7 @@ private[r] object RRDD {
                          .mkString(File.separator))
     }
 
-    val jsc = new JavaSparkContext(sparkConf)
+    val jsc = new JavaSparkContext(SparkContext.getOrCreate(sparkConf))
     jars.foreach { jar =>
       jsc.addJar(jar)
     }
