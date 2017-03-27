@@ -71,6 +71,13 @@ test_that("spark.fpGrowth", {
     collect(spark.freqItemsets(loaded_model)))
 
   unlink(modelPath)
+
+  model_without_numpartitions <- spark.fpGrowth(data, minSupport = 0.3, minConfidence = 0.8)
+  expect_equal(
+    count(spark.freqItemsets(model_without_numpartitions)),
+    count(spark.freqItemsets(model))
+  )
+
 })
 
 sparkR.session.stop()
