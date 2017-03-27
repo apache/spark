@@ -22,13 +22,14 @@ import java.sql.Date
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
-import org.apache.spark.sql.execution.streaming.KeyedStateImpl._
-import org.apache.spark.sql.streaming.{KeyedState, KeyedStateTimeout}
+import org.apache.spark.sql.execution.streaming.GroupStateImpl._
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 
 /**
- * Internal implementation of the [[KeyedState]] interface. Methods are not thread-safe.
+ * Internal implementation of the [[GroupState]] interface. Methods are not thread-safe.
+ *
  * @param optionalValue Optional value of the state
  * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
  *                              for processing time timeouts
@@ -37,19 +38,19 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * @param hasTimedOut     Whether the key for which this state wrapped is being created is
  *                        getting timed out or not.
  */
-private[sql] class KeyedStateImpl[S](
+private[sql] class GroupStateImpl[S](
     optionalValue: Option[S],
     batchProcessingTimeMs: Long,
     eventTimeWatermarkMs: Long,
-    timeoutConf: KeyedStateTimeout,
-    override val hasTimedOut: Boolean) extends KeyedState[S] {
+    timeoutConf: GroupStateTimeout,
+    override val hasTimedOut: Boolean) extends GroupState[S] {
 
   // Constructor to create dummy state when using mapGroupsWithState in a batch query
   def this(optionalValue: Option[S]) = this(
     optionalValue,
     batchProcessingTimeMs = NO_TIMESTAMP,
     eventTimeWatermarkMs = NO_TIMESTAMP,
-    timeoutConf = KeyedStateTimeout.NoTimeout,
+    timeoutConf = GroupStateTimeout.NoTimeout,
     hasTimedOut = false)
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
@@ -169,7 +170,7 @@ private[sql] class KeyedStateImpl[S](
   }
 
   override def toString: String = {
-    s"KeyedState(${getOption.map(_.toString).getOrElse("<undefined>")})"
+    s"GroupState(${getOption.map(_.toString).getOrElse("<undefined>")})"
   }
 
   // ========= Internal API =========
@@ -221,7 +222,7 @@ private[sql] class KeyedStateImpl[S](
 }
 
 
-private[sql] object KeyedStateImpl {
+private[sql] object GroupStateImpl {
   // Value used represent the lack of valid timestamp as a long
   val NO_TIMESTAMP = -1L
 }
