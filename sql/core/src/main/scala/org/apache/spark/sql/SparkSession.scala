@@ -60,7 +60,7 @@ import org.apache.spark.util.Utils
  * The builder can also be used to create a new session:
  *
  * {{{
- *   SparkSession.builder()
+ *   SparkSession.builder
  *     .master("local")
  *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value")
@@ -323,7 +323,7 @@ class SparkSession private(
    *  // |-- age: integer (nullable = true)
    *
    *  dataFrame.createOrReplaceTempView("people")
-   *  sparkSession.sql("select name from people").collect.foreach(println)
+   *  sparkSession.sql("select name from people").show
    * }}}
    *
    * @since 2.0.0
