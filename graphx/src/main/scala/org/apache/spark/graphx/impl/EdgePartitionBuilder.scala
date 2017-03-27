@@ -34,6 +34,10 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag, VD: Cla
     edges += Edge(src, dst, d)
   }
 
+  def add(newEdge: Edge[ED]): Unit = {
+    edges += newEdge
+  }
+
   def toEdgePartition: EdgePartition[ED, VD] = {
     val edgeArray = edges.trim().array
     new Sorter(Edge.edgeArraySortDataFormat[ED])
