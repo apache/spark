@@ -25,9 +25,9 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 
 class RandomBlockReplicationPolicyBehavior extends SparkFunSuite
-    with Matchers
-    with BeforeAndAfter
-    with LocalSparkContext {
+  with Matchers
+  with BeforeAndAfter
+  with LocalSparkContext {
 
   // Implicitly convert strings to BlockIds for test clarity.
   protected implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
