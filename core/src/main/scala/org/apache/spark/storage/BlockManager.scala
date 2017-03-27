@@ -1181,7 +1181,7 @@ private[spark] class BlockManager(
         replication = maxReplicas)
       // we know we are called as a result of an executor removal, so we refresh peer cache
       // this way, we won't try to replicate to a missing executor with a stale reference
-      val peers = getPeers(true)
+      getPeers(forceFetch = true)
       try {
         replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
       } finally {
