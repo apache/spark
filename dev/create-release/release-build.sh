@@ -249,7 +249,7 @@ if [[ "$1" == "package" ]]; then
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
   # Put to new directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mput -O $dest_dir 'spark-*'
   LFTP mput -O $dest_dir 'pyspark-*'
   LFTP mput -O $dest_dir 'SparkR_*'
@@ -257,7 +257,7 @@ if [[ "$1" == "package" ]]; then
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mput -O $dest_dir 'spark-*'
   LFTP mput -O $dest_dir 'pyspark-*'
   LFTP mput -O $dest_dir 'SparkR_*'
@@ -275,13 +275,13 @@ if [[ "$1" == "docs" ]]; then
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
   echo "Copying release documentation to $dest_dir"
   # Put to new directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mirror -R _site $dest_dir
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
-  LFTP mkdir -p $dest_dir
+  LFTP mkdir -p $dest_dir || true
   LFTP mirror -R _site $dest_dir
   cd ..
   exit 0
