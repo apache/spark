@@ -19,7 +19,7 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal._
+import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf, WithTestConf}
 
 /**
  * A special [[SparkSession]] prepared for testing.
@@ -36,7 +36,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestSQLSessionStateBuilder(this, None).build
+    new TestSQLSessionStateBuilder(this, None).build()
   }
 
   // Needed for Java tests

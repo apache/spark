@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal._
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionFunctionResourceLoader, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 
 
@@ -45,7 +45,8 @@ import org.apache.spark.sql.streaming.StreamingQueryManager
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
  * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
  * @param optimizer Logical query plan optimizer.
- * @param planner Planner that converts optimized logical plans to physical plans
+ * @param planner Planner that converts optimized logical plans to physical plans and that takes
+ *                Hive-specific strategies into account.
  * @param streamingQueryManager Interface to start and stop streaming queries.
  * @param createQueryExecution Function used to create QueryExecution objects.
  * @param createClone Function used to create clones of the session state.
@@ -130,7 +131,7 @@ private[hive] object HiveSessionState {
   /**
    * Create a new [[HiveSessionState]] for the given session.
    */
-  def apply(session: SparkSession): SessionState = {
+  def apply(session: SparkSession): HiveSessionState = {
     new HiveSessionStateBuilder(session).build()
   }
 }
@@ -164,7 +165,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   }
 
   /**
-   * An logical query plan `Analyzer` with rules specific to Hive.
+   * A logical query plan `Analyzer` with rules specific to Hive.
    */
   override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =

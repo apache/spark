@@ -196,7 +196,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: HiveSessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState).build
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
   override def newSession(): TestHiveSparkSession = {
