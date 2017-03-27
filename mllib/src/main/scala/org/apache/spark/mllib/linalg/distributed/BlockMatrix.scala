@@ -515,12 +515,12 @@ class BlockMatrix @Since("1.3.0") (
         a.flatMap { case (leftRowIndex, leftColIndex, leftBlock) =>
           b.filter(_._1 == leftColIndex).map { case (rightRowIndex, rightColIndex, rightBlock) =>
             val C = rightBlock match {
-              case dense: DenseMatrix => leftBlock.multiply(dense)
-              case sparse: SparseMatrix => leftBlock.multiply(sparse.toDense)
+              case dense: DenseMatrix => leftBlock.multiply(dense).asBreeze
+              case sparse: SparseMatrix => leftBlock.asBreeze * sparse.asBreeze
               case _ =>
                 throw new SparkException(s"Unrecognized matrix type ${rightBlock.getClass}.")
             }
-            ((leftRowIndex, rightColIndex), C.asBreeze)
+            ((leftRowIndex, rightColIndex), C)
           }
         }
       }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)
