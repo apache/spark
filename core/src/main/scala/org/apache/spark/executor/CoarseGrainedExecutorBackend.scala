@@ -24,9 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
-import scala.util.{Failure, Success}
+import scala.util.{Success, Failure}
 
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.token.Token
@@ -42,7 +41,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{Utils, ThreadUtils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -223,8 +222,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
     val creds = new Credentials()
 
-    if (driverConf.contains(CREDENTIALS_IDENTITY)) {
-      val tokenList = driverConf.get(CREDENTIALS_IDENTITY)
+    if (driverConf.contains(CREDENTIALS_ENTITY)) {
+      val tokenList = driverConf.get(CREDENTIALS_ENTITY)
       tokenList.foreach { tokenStr =>
         val token = new Token[DelegationTokenIdentifier]
         token.decodeFromUrlString(tokenStr)
@@ -237,7 +236,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       if (driverConf.contains(CREDENTIALS_FILE_PATH)) {
         logInfo("Will periodically update credentials from: " +
-          driverConf.get("spark.yarn.credentials.file"))
+          driverConf.get(CREDENTIALS_FILE_PATH))
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 

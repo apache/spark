@@ -90,7 +90,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
 
-    if (UserGroupInformation.isSecurityEnabled) {
+    if (UserGroupInformation.isSecurityEnabled &&
+      UserGroupInformation.getCurrentUser.getAuthenticationMethod == AuthenticationMethod.PROXY) {
       obtainCredentials(cliConf)
     }
 

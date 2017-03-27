@@ -53,7 +53,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   }
 
   test("disable hive credential provider") {
-    sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
+    sparkConf.set("spark.security.credentials.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)

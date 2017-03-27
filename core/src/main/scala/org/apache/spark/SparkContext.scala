@@ -20,9 +20,9 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -38,15 +38,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io._
 import org.apache.hadoop.mapred.{Utils => _, _}
-import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkContext.logInfo
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialRenewer}
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialRenewer}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -57,10 +57,10 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
-import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.storage._
-import org.apache.spark.ui.jobs.JobProgressListener
+import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
+import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
 
 /**
@@ -218,7 +218,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
-  private var _credentialRenewer: CredentialRenewer = _
+  private var _credentialRenewer: Option[CredentialRenewer] = None
 
 
   /* ------------------------------------------------------------------------------------- *
@@ -505,9 +505,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // we need to prepare credentials for executors both in conf and hdfs before they launch.
     // oops, the appid has not been generated, where should I put the credentials files
     // emm.. let give random id a try...
-
     if (_conf.contains(PRINCIPAL.key)) {
-
       _credentialRenewer = createCredentialRenewer()
     }
 
@@ -607,9 +605,9 @@ class SparkContext(config: SparkConf) extends Logging {
       }
   }
 
-  private def createCredentialRenewer(): CredentialRenewer = {
+  private def createCredentialRenewer(): Option[CredentialRenewer] = {
     master match {
-      case "yarn" => null
+      case "yarn" => None
       case _ =>
         val appStagingBaseDir = _conf.get(STAGING_DIR).map { new Path(_) }
           .getOrElse(FileSystem.get(_hadoopConfiguration).getHomeDirectory())
@@ -630,11 +628,11 @@ class SparkContext(config: SparkConf) extends Logging {
           tokenList += (token.encodeToUrlString())
         }
         if (tokenList.nonEmpty) {
-          _conf.set(CREDENTIALS_IDENTITY, tokenList)
+          _conf.set(CREDENTIALS_ENTITY, tokenList)
         }
         val credentialRenewer = ccm.credentialRenewer()
         credentialRenewer.scheduleLoginFromKeytab()
-        credentialRenewer
+        Some(credentialRenewer)
     }
   }
 
@@ -1983,12 +1981,11 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       SparkEnv.set(null)
     }
-    if (_credentialRenewer != null) {
-      Utils.tryLogNonFatalError {
-        _credentialRenewer.stop()
-        _credentialRenewer = null
-      }
+
+    Utils.tryLogNonFatalError {
+      _credentialRenewer.foreach(_.stop())
     }
+
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()

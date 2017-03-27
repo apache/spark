@@ -23,8 +23,8 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.security.token.Token
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.Token
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil

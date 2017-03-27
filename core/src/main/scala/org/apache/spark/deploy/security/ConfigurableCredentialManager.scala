@@ -37,21 +37,21 @@ import org.apache.spark.util.Utils
  * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
  *
  * Also each credential provider is controlled by
- * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
+ * spark.security.credentials.{service}.enabled, it will not be loaded in if set to false.
  * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
- * the configuration spark.yarn.security.credentials.hive.enabled.
+ * the configuration spark.security.credentials.hive.enabled.
  */
 private[spark] final class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
-  private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
+  private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
   // Maintain all the registered credential providers
   private val credentialProviders = {
     val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader).asScala
 
-    // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
+    // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
     providers.filter { p =>
       sparkConf.getOption(providerEnabledConfig.format(p.serviceName))
         .orElse {

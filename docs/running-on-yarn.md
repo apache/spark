@@ -276,11 +276,11 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.access.hadoopFileSystems</code></td>
+  <td><code>spark.security.access.hadoopFileSystems</code></td>
   <td>(none)</td>
   <td>
     A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
-    example, <code>spark.yarn.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    example, <code>spark.security.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
     webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
     and Kerberos must be properly configured to be able to access them (either in the same realm
     or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
@@ -426,7 +426,7 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.security.credentials.${service}.enabled</code></td>
+  <td><code>spark.security.credentials.${service}.enabled</code></td>
   <td><code>true</code></td>
   <td>
   Controls whether to obtain credentials for services when security is enabled.
@@ -489,25 +489,25 @@ token for the cluster's default Hadoop filesystem, and potentially for HBase and
 
 An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
 the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
-and `spark.yarn.security.credentials.hbase.enabled` is not set to `false`.
+and `spark.security.credentials.hbase.enabled` is not set to `false`.
 
 Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
 includes a URI of the metadata store in `"hive.metastore.uris`, and
-`spark.yarn.security.credentials.hive.enabled` is not set to `false`.
+`spark.security.credentials.hive.enabled` is not set to `false`.
 
 If an application needs to interact with other secure Hadoop filesystems, then
 the tokens needed to access these clusters must be explicitly requested at
-launch time. This is done by listing them in the `spark.yarn.access.hadoopFileSystems` property.
+launch time. This is done by listing them in the `spark.security.access.hadoopFileSystems` property.
 
 ```
-spark.yarn.access.hadoopFileSystems hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
+spark.security.access.hadoopFileSystems hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
 ```
 
 Spark supports integrating with other security-aware services through Java Services mechanism (see
-`java.util.ServiceLoader`). To do that, implementations of `ServiceCredentialProvider`
+`java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.security.ServiceCredentialProvider`
 should be available to Spark by listing their names in the corresponding file in the jar's
 `META-INF/services` directory. These plug-ins can be disabled by setting
-`spark.yarn.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
+`spark.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
 
 ## Configuring the External Shuffle Service
@@ -571,11 +571,11 @@ the Spark configuration must be set to disable token collection for the services
 The Spark configuration must include the lines:
 
 ```
-spark.yarn.security.credentials.hive.enabled   false
-spark.yarn.security.credentials.hbase.enabled  false
+spark.security.credentials.hive.enabled   false
+spark.security.credentials.hbase.enabled  false
 ```
 
-The configuration option `spark.yarn.access.hadoopFileSystems` must be unset.
+The configuration option `spark.security.access.hadoopFileSystems` must be unset.
 
 ## Troubleshooting Kerberos
 

@@ -32,12 +32,13 @@ import org.apache.spark.util.ThreadUtils
 /**
  * The following methods are primarily meant to make sure long-running apps like Spark
  * Streaming apps can run without interruption while accessing secured services. The
- * scheduleLoginFromKeytab method is called on the AM to get the new credentials.
- * This method wakes up a thread that logs into the KDC
+ * scheduleLoginFromKeytab method is called on the AM(YARN mode)/Driver(Others) to get
+ * the new credentials. This method wakes up a thread that logs into the KDC
  * once 75% of the renewal interval of the original credentials used for the container
  * has elapsed. It then obtains new credentials and writes them to HDFS in a
  * pre-specified location - the prefix of which is specified in the sparkConf by
- * spark.yarn.credentials.file (so the file(s) would be named c-timestamp1-1, c-timestamp2-2 etc.
+ * spark.security.credentials.file (so the file(s) would be named c-timestamp1-1,
+ * c-timestamp2-2 etc.
  * - each update goes to a new file, with a monotonically increasing suffix), also the
  * timestamp1, timestamp2 here indicates the time of next update for CredentialUpdater.
  * After this, the credentials are renewed once 75% of the new tokens renewal interval has elapsed.
@@ -74,7 +75,7 @@ private[spark] class CredentialRenewer(
    * Schedule a login from the keytab and principal set using the --principal and --keytab
    * arguments to spark-submit. This login happens only when the credentials of the current user
    * are about to expire. This method reads spark.yarn.principal and spark.yarn.keytab from
-   * SparkConf to do the login. This method is a no-op in non-YARN mode.
+   * SparkConf to do the login.
    *
    */
   private[spark] def scheduleLoginFromKeytab(): Unit = {
