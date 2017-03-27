@@ -85,8 +85,11 @@ setMethod("spark.fpGrowth", signature(data = "SparkDataFrame"),
             if (!is.numeric(minConfidence) || minConfidence < 0 || minConfidence > 1) {
               stop("minConfidence should be a number [0, 1].")
             }
+            if (!is.null(numPartitions)) {
+              numPartitions <- as.integer(numPartitions)
+              stopifnot(numPartitions > 0)
+            }
 
-            numPartitions <- if (is.null(numPartitions)) NULL else as.integer(numPartitions)
             jobj <- callJStatic("org.apache.spark.ml.r.FPGrowthWrapper", "fit",
                                 data@sdf, as.numeric(minSupport), as.numeric(minConfidence),
                                 itemsCol, numPartitions)
