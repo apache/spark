@@ -27,7 +27,8 @@ import scala.xml.Node
 
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
@@ -319,6 +320,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
+            // SPARK-19676: force to check the access permission, otherwise failed to pass
+            // "FsHistoryProviderSuite.SPARK-3697: ignore directories that cannot be read."
+            // locally.
+            fs.access(entry.getPath, FsAction.READ)
             val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
             !entry.isDirectory() &&
               // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
