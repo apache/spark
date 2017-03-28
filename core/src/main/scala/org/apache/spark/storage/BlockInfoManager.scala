@@ -371,6 +371,12 @@ private[storage] class BlockInfoManager extends Logging {
     blocksWithReleasedLocks
   }
 
+  /** Returns the number of locks held by the given task.  Used only for testing. */
+  private[storage] def getTaskLockCount(taskAttemptId: TaskAttemptId): Int = {
+    readLocksByTask.get(taskAttemptId).map(_.size()).getOrElse(0) +
+      writeLocksByTask.get(taskAttemptId).map(_.size).getOrElse(0)
+  }
+
   /**
    * Returns the number of blocks tracked.
    */
