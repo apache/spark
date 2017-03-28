@@ -106,4 +106,30 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
     comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation))
   }
+
+  /** Fails the test if the join order in the two plans do not match */
+  protected def compareJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan) {
+    val normalized1 = normalizePlan(normalizeExprIds(plan1))
+    val normalized2 = normalizePlan(normalizeExprIds(plan2))
+    if (!sameJoinPlan(normalized1, normalized2)) {
+      fail(
+        s"""
+           |== FAIL: Plans do not match ===
+           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
+         """.stripMargin)
+    }
+  }
+
+  /** Consider symmetry for joins when comparing plans. */
+  private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    (plan1, plan2) match {
+      case (j1: Join, j2: Join) =>
+        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)) ||
+          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left))
+      case _ if plan1.children.nonEmpty && plan2.children.nonEmpty =>
+        (plan1.children, plan2.children).zipped.forall { case (c1, c2) => sameJoinPlan(c1, c2) }
+      case _ =>
+        plan1 == plan2
+    }
+  }
 }

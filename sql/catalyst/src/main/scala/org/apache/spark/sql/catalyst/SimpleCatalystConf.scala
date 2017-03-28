@@ -40,9 +40,11 @@ case class SimpleCatalystConf(
     override val cboEnabled: Boolean = false,
     override val joinReorderEnabled: Boolean = false,
     override val joinReorderDPThreshold: Int = 12,
+    override val starSchemaDetection: Boolean = false,
     override val warehousePath: String = "/user/hive/warehouse",
     override val sessionLocalTimeZone: String = TimeZone.getDefault().getID,
-    override val maxNestedViewDepth: Int = 100)
+    override val maxNestedViewDepth: Int = 100,
+    override val constraintPropagationEnabled: Boolean = true)
   extends SQLConf {
 
   override def clone(): SimpleCatalystConf = this.copy()

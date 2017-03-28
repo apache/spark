@@ -2632,8 +2632,8 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 
 #' format_number
 #'
-#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places,
-#' and returns the result as a string column.
+#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places
+#' with HALF_EVEN round mode, and returns the result as a string column.
 #'
 #' If x is 0, the result has no decimal point or fractional part.
 #' If x < 0, the result will be null.
@@ -3548,7 +3548,7 @@ setMethod("row_number",
 
 #' array_contains
 #'
-#' Returns true if the array contain the value.
+#' Returns null if the array is null, true if the array contains the value, and false otherwise.
 #'
 #' @param x A Column
 #' @param value A value to be checked if contained in the column

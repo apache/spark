@@ -29,8 +29,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
 import org.apache.spark.sql.execution.datasources.csv._
-import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -382,11 +382,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    val actualSchema =
+      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val createParser = CreateJacksonParser.string _
     val parsed = jsonDataset.rdd.mapPartitions { iter =>
-      val parser = new JacksonParser(schema, parsedOptions)
-      iter.flatMap(parser.parse(_, createParser, UTF8String.fromString))
+      val rawParser = new JacksonParser(actualSchema, parsedOptions)
+      val parser = new FailureSafeParser[String](
+        input => rawParser.parse(input, createParser, UTF8String.fromString),
+        parsedOptions.parseMode,
+        schema,
+        parsedOptions.columnNameOfCorruptRecord)
+      iter.flatMap(parser.parse)
     }
 
     Dataset.ofRows(
@@ -435,14 +442,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
+    val actualSchema =
+      StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 
     val parsed = linesWithoutHeader.mapPartitions { iter =>
-      val parser = new UnivocityParser(schema, parsedOptions)
-      iter.flatMap(line => parser.parse(line))
+      val rawParser = new UnivocityParser(actualSchema, parsedOptions)
+      val parser = new FailureSafeParser[String](
+        input => Seq(rawParser.parse(input)),
+        parsedOptions.parseMode,
+        schema,
+        parsedOptions.columnNameOfCorruptRecord)
+      iter.flatMap(parser.parse)
     }
 
     Dataset.ofRows(
@@ -474,9 +488,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
-   * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
-   * from values being read should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
+   * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
+   * whitespaces from values being read should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
    * 2.0.1, this applies to all supported types including the string type.</li>
@@ -495,10 +509,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
-   * <li>`maxMalformedLogPerPartition` (default `10`): sets the maximum number of malformed rows
-   * Spark will log for each partition. Malformed records beyond this number will be ignored.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing.
+   *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
    *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep

@@ -394,75 +394,6 @@ head(result[order(result$max_eruption, decreasing = TRUE), ])
 {% endhighlight %}
 </div>
 
-#### Data type mapping between R and Spark
-<table class="table">
-<tr><th>R</th><th>Spark</th></tr>
-<tr>
-  <td>byte</td>
-  <td>byte</td>
-</tr>
-<tr>
-  <td>integer</td>
-  <td>integer</td>
-</tr>
-<tr>
-  <td>float</td>
-  <td>float</td>
-</tr>
-<tr>
-  <td>double</td>
-  <td>double</td>
-</tr>
-<tr>
-  <td>numeric</td>
-  <td>double</td>
-</tr>
-<tr>
-  <td>character</td>
-  <td>string</td>
-</tr>
-<tr>
-  <td>string</td>
-  <td>string</td>
-</tr>
-<tr>
-  <td>binary</td>
-  <td>binary</td>
-</tr>
-<tr>
-  <td>raw</td>
-  <td>binary</td>
-</tr>
-<tr>
-  <td>logical</td>
-  <td>boolean</td>
-</tr>
-<tr>
-  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXct</a></td>
-  <td>timestamp</td>
-</tr>
-<tr>
-  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXlt</a></td>
-  <td>timestamp</td>
-</tr>
-<tr>
-  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html">Date</a></td>
-  <td>date</td>
-</tr>
-<tr>
-  <td>array</td>
-  <td>array</td>
-</tr>
-<tr>
-  <td>list</td>
-  <td>array</td>
-</tr>
-<tr>
-  <td>env</td>
-  <td>map</td>
-</tr>
-</table>
-
 #### Run local R functions distributed using `spark.lapply`
 
 ##### spark.lapply
@@ -556,6 +487,75 @@ SparkR supports a subset of the available R formula operators for model fitting,
 
 The following example shows how to save/load a MLlib model by SparkR.
 {% include_example read_write r/ml/ml.R %}
+
+# Data type mapping between R and Spark
+<table class="table">
+<tr><th>R</th><th>Spark</th></tr>
+<tr>
+  <td>byte</td>
+  <td>byte</td>
+</tr>
+<tr>
+  <td>integer</td>
+  <td>integer</td>
+</tr>
+<tr>
+  <td>float</td>
+  <td>float</td>
+</tr>
+<tr>
+  <td>double</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>numeric</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>character</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>string</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>binary</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>raw</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>logical</td>
+  <td>boolean</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXct</a></td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXlt</a></td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html">Date</a></td>
+  <td>date</td>
+</tr>
+<tr>
+  <td>array</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>list</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>env</td>
+  <td>map</td>
+</tr>
+</table>
 
 # R Function Name Conflicts
 
