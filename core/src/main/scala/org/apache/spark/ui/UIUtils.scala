@@ -513,7 +513,7 @@ private[spark] object UIUtils extends Logging {
     param
   }
 
-  def getTimeZoneOffset(): Int =
+  def getTimeZoneOffset() : Int =
     TimeZone.getDefault.getOffset(System.currentTimeMillis()) / 1000 / 60
 
   /**
