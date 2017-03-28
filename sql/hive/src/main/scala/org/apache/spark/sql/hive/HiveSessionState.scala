@@ -40,7 +40,7 @@ private[hive] object HiveSessionState {
 }
 
 /**
- * Builder that produces a [[HiveSessionState]].
+ * Builder that produces a Hive aware [[SessionState]].
  */
 @Experimental
 @InterfaceStability.Unstable

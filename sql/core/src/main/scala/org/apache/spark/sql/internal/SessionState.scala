@@ -37,38 +37,42 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
  *
- * @param sparkContext The [[SparkContext]].
- * @param sharedState The shared state.
+ * @param sharedState The state shared across sessions, e.g. global view manager, external catalog.
  * @param conf SQL-specific key-value configurations.
- * @param experimentalMethods The experimental methods.
+ * @param experimentalMethods Interface to add custom planning strategies and optimizers.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
+ * @param udf Interface exposed to the user for registering user-defined functions.
  * @param catalog Internal catalog for managing table and database states.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
  * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
  * @param optimizer Logical query plan optimizer.
  * @param planner Planner that converts optimized logical plans to physical plans
  * @param streamingQueryManager Interface to start and stop streaming queries.
+ * @param listenerManager Interface to register custom
+ *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s
+ * @param resourceLoader Session shared resource loader to load JARs, files, etc
  * @param createQueryExecution Function used to create QueryExecution objects.
  * @param createClone Function used to create clones of the session state.
  */
 private[sql] class SessionState(
-    sparkContext: SparkContext,
     sharedState: SharedState,
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
+    val udf: UDFRegistration,
     val catalog: SessionCatalog,
     val sqlParser: ParserInterface,
     val analyzer: Analyzer,
     val optimizer: Optimizer,
     val planner: SparkPlanner,
     val streamingQueryManager: StreamingQueryManager,
+    val listenerManager: ExecutionListenerManager,
     val resourceLoader: SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState) {
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
-    sparkContext.hadoopConfiguration,
+    sharedState.sparkContext.hadoopConfiguration,
     conf)
 
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
@@ -80,18 +84,6 @@ private[sql] class SessionState(
     }
     hadoopConf
   }
-
-  /**
-   * Interface exposed to the user for registering user-defined functions.
-   * Note that the user-defined functions must be deterministic.
-   */
-  val udf: UDFRegistration = new UDFRegistration(functionRegistry)
-
-  /**
-   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
-   * that listen for execution metrics.
-   */
-  val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
