@@ -423,9 +423,9 @@ object JdbcUtils extends Logging {
       }
 
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val array = nullSafeConvert[Object](
-          rs.getArray(pos + 1).getArray,
-          array => new GenericArrayData(elementConversion.apply(array)))
+        val array = nullSafeConvert[java.sql.Array](
+          input = rs.getArray(pos + 1),
+          array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
