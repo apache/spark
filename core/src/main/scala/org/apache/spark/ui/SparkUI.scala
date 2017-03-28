@@ -56,7 +56,7 @@ private[spark] class SparkUI private (
   with Logging
   with UIRoot {
 
-  val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
+  val killEnabled = sc.exists(_.conf.getBoolean("spark.ui.killEnabled", true))
 
   var appId: String = _
 

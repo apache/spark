@@ -116,7 +116,7 @@ private[spark] abstract class WebUI(
    * @param path Path in UI to unmount.
    */
   def removeStaticHandler(path: String): Unit = {
-    handlers.find(_.getContextPath() == path).foreach(detachHandler)
+    handlers.find(_.getContextPath == path).foreach(detachHandler)
   }
 
   /** Initialize all components of the server. */
@@ -124,7 +124,7 @@ private[spark] abstract class WebUI(
 
   /** Bind to the HTTP server behind this web interface. */
   def bind(): Unit = {
-    assert(!serverInfo.isDefined, s"Attempted to bind $className more than once!")
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
