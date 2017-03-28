@@ -80,3 +80,11 @@ pyspark.ml.evaluation module
     :members:
     :undoc-members:
     :inherited-members:
+
+pyspark.ml.fpm module
+----------------------------
+
+.. automodule:: pyspark.ml.fpm
+    :members:
+    :undoc-members:
+    :inherited-members:

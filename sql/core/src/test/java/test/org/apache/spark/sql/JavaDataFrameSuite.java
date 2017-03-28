@@ -423,4 +423,36 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1L, df.count());
     Assert.assertEquals(2L, df.collectAsList().get(0).getLong(0));
   }
+
+  public class CircularReference1Bean implements Serializable {
+    private CircularReference2Bean child;
+
+    public CircularReference2Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference2Bean child) {
+      this.child = child;
+    }
+  }
+
+  public class CircularReference2Bean implements Serializable {
+    private CircularReference1Bean child;
+
+    public CircularReference1Bean getChild() {
+      return child;
+    }
+
+    public void setChild(CircularReference1Bean child) {
+      this.child = child;
+    }
+  }
+
+  // Checks a simple case for DataFrame here and put exhaustive tests for the issue
+  // of circular references in `JavaDatasetSuite`.
+  @Test(expected = UnsupportedOperationException.class)
+  public void testCircularReferenceBean() {
+    CircularReference1Bean bean = new CircularReference1Bean();
+    spark.createDataFrame(Arrays.asList(bean), CircularReference1Bean.class);
+  }
 }

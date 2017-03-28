@@ -194,6 +194,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
 
+    clock.advance(1)
     // Tell it the task has finished
     manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
     assert(sched.endedTasks(0) === Success)
@@ -379,6 +380,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
+    clock.advance(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
@@ -396,6 +398,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
+    clock.advance(1)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
     // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
@@ -429,6 +432,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // affinity to exec1 on host1 - which we will fail.
     val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
     val clock = new ManualClock
+    clock.advance(1)
     // We don't directly use the application blacklist, but its presence triggers blacklisting
     // within the taskset.
     val mockListenerBus = mock(classOf[LiveListenerBus])
@@ -553,7 +557,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       Seq(TaskLocation("host1", "execB")),
       Seq(TaskLocation("host2", "execC")),
       Seq())
-    val manager = new TaskSetManager(sched, taskSet, 1, clock = new ManualClock)
+    val clock = new ManualClock()
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, 1, clock = clock)
     sched.addExecutor("execA", "host1")
     manager.executorAdded()
     sched.addExecutor("execC", "host2")
@@ -673,7 +679,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
     sched.initialize(new FakeSchedulerBackend() {
-      override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {}
+      override def killTask(
+        taskId: Long,
+        executorId: String,
+        interruptThread: Boolean,
+        reason: String): Unit = {}
     })
 
     // Keep track of the number of tasks that are resubmitted,
@@ -889,6 +899,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
     sc.conf.set("spark.speculation.multiplier", "0.0")
+    sc.conf.set("spark.speculation", "true")
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -906,6 +917,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(task.executorId === k)
     }
     assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+    clock.advance(1)
     // Complete the 3 tasks and leave 1 task in running
     for (id <- Set(0, 1, 2)) {
       manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
@@ -929,7 +941,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Complete the speculative attempt for the running task
     manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
     // Verify that it kills other running attempt
-    verify(sched.backend).killTask(3, "exec2", true)
+    verify(sched.backend).killTask(3, "exec2", true, "another attempt succeeded")
     // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
@@ -943,6 +955,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
     sc.conf.set("spark.speculation.multiplier", "0.0")
     sc.conf.set("spark.speculation.quantile", "0.6")
+    sc.conf.set("spark.speculation", "true")
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -963,6 +976,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       tasks += task
     }
     assert(sched.startedTasks.toSet === (0 until 5).toSet)
+    clock.advance(1)
     // Complete 3 tasks and leave 2 tasks in running
     for (id <- Set(0, 1, 2)) {
       manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
@@ -1015,14 +1029,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.handleSuccessfulTask(speculativeTask.taskId, createTaskResult(3, accumUpdatesByTask(3)))
     // Verify that it kills other running attempt
     val origTask = originalTasks(speculativeTask.index)
-    verify(sched.backend).killTask(origTask.taskId, "exec2", true)
+    verify(sched.backend).killTask(origTask.taskId, "exec2", true, "another attempt succeeded")
     // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
     assert(sched.endedTasks(3) === Success)
     // also because the scheduler is a mock, our manager isn't notified about the task killed event,
     // so we do that manually
-    manager.handleFailedTask(origTask.taskId, TaskState.KILLED, TaskKilled)
+    manager.handleFailedTask(origTask.taskId, TaskState.KILLED, TaskKilled("test"))
     // this task has "failed" 4 times, but one of them doesn't count, so keep running the stage
     assert(manager.tasksSuccessful === 4)
     assert(!manager.isZombie)
@@ -1039,7 +1053,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       createTaskResult(3, accumUpdatesByTask(3)))
     // Verify that it kills other running attempt
     val origTask2 = originalTasks(speculativeTask2.index)
-    verify(sched.backend).killTask(origTask2.taskId, "exec2", true)
+    verify(sched.backend).killTask(origTask2.taskId, "exec2", true, "another attempt succeeded")
     assert(manager.tasksSuccessful === 5)
     assert(manager.isZombie)
   }
@@ -1117,8 +1131,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
     tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
       TaskCommitDenied(0, 2, 0))
-    tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED,
-      TaskKilled)
+    tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED, TaskKilled("test"))
 
     // Make sure that the blacklist ignored all of the task failures above, since they aren't
     // the fault of the executor where the task was running.

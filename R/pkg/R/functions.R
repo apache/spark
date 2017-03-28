@@ -1795,10 +1795,10 @@ setMethod("to_date",
 
 #' to_json
 #'
-#' Converts a column containing a \code{structType} into a Column of JSON string.
-#' Resolving the Column can fail if an unsupported type is encountered.
+#' Converts a column containing a \code{structType} or array of \code{structType} into a Column
+#' of JSON string. Resolving the Column can fail if an unsupported type is encountered.
 #'
-#' @param x Column containing the struct
+#' @param x Column containing the struct or array of the structs
 #' @param ... additional named properties to control how it is converted, accepts the same options
 #'            as the JSON data source.
 #'
@@ -1809,8 +1809,13 @@ setMethod("to_date",
 #' @export
 #' @examples
 #' \dontrun{
-#' to_json(df$t, dateFormat = 'dd/MM/yyyy')
-#' select(df, to_json(df$t))
+#' # Converts a struct into a JSON object
+#' df <- sql("SELECT named_struct('date', cast('2000-01-01' as date)) as d")
+#' select(df, to_json(df$d, dateFormat = 'dd/MM/yyyy'))
+#'
+#' # Converts an array of structs into a JSON array
+#' df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' select(df, to_json(df$people))
 #'}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
@@ -2433,10 +2438,12 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' from_json
 #'
 #' Parses a column containing a JSON string into a Column of \code{structType} with the specified
-#' \code{schema}. If the string is unparseable, the Column will contains the value NA.
+#' \code{schema} or array of \code{structType} if \code{asJsonArray} is set to \code{TRUE}.
+#' If the string is unparseable, the Column will contains the value NA.
 #'
 #' @param x Column containing the JSON string.
 #' @param schema a structType object to use as the schema to use when parsing the JSON string.
+#' @param asJsonArray indicating if input string is JSON array of objects or a single object.
 #' @param ... additional named properties to control how the json is parsed, accepts the same
 #'            options as the JSON data source.
 #'
@@ -2452,11 +2459,18 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'}
 #' @note from_json since 2.2.0
 setMethod("from_json", signature(x = "Column", schema = "structType"),
-          function(x, schema, ...) {
+          function(x, schema, asJsonArray = FALSE, ...) {
+            if (asJsonArray) {
+              jschema <- callJStatic("org.apache.spark.sql.types.DataTypes",
+                                     "createArrayType",
+                                     schema$jobj)
+            } else {
+              jschema <- schema$jobj
+            }
             options <- varargsToStrEnv(...)
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_json",
-                              x@jc, schema$jobj, options)
+                              x@jc, jschema, options)
             column(jc)
           })
 
@@ -2618,8 +2632,8 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 
 #' format_number
 #'
-#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places,
-#' and returns the result as a string column.
+#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places
+#' with HALF_EVEN round mode, and returns the result as a string column.
 #'
 #' If x is 0, the result has no decimal point or fractional part.
 #' If x < 0, the result will be null.
@@ -3534,7 +3548,7 @@ setMethod("row_number",
 
 #' array_contains
 #'
-#' Returns true if the array contain the value.
+#' Returns null if the array is null, true if the array contains the value, and false otherwise.
 #'
 #' @param x A Column
 #' @param value A value to be checked if contained in the column

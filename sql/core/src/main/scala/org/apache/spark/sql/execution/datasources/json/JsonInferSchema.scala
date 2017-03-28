@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
+import org.apache.spark.sql.catalyst.util.PermissiveMode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -40,18 +41,11 @@ private[sql] object JsonInferSchema {
       json: RDD[T],
       configOptions: JSONOptions,
       createParser: (JsonFactory, T) => JsonParser): StructType = {
-    require(configOptions.samplingRatio > 0,
-      s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
-    val shouldHandleCorruptRecord = configOptions.permissive
+    val shouldHandleCorruptRecord = configOptions.parseMode == PermissiveMode
     val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
-    val schemaData = if (configOptions.samplingRatio > 0.99) {
-      json
-    } else {
-      json.sample(withReplacement = false, configOptions.samplingRatio, 1)
-    }
 
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
+    val rootType = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>

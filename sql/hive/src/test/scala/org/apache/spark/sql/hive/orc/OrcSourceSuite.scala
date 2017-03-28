@@ -157,19 +157,21 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     val location = Utils.createTempDir()
     val uri = location.toURI
     try {
+      hiveClient.runSqlHive("USE default")
       hiveClient.runSqlHive(
         """
-           |CREATE EXTERNAL TABLE hive_orc(
-           |  a STRING,
-           |  b CHAR(10),
-           |  c VARCHAR(10),
-           |  d ARRAY<CHAR(3)>)
-           |STORED AS orc""".stripMargin)
+          |CREATE EXTERNAL TABLE hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10),
+          |  d ARRAY<CHAR(3)>)
+          |STORED AS orc""".stripMargin)
       // Hive throws an exception if I assign the location in the create table statement.
       hiveClient.runSqlHive(
         s"ALTER TABLE hive_orc SET LOCATION '$uri'")
       hiveClient.runSqlHive(
-        """INSERT INTO TABLE hive_orc
+        """
+          |INSERT INTO TABLE hive_orc
           |SELECT 'a', 'b', 'c', ARRAY(CAST('d' AS CHAR(3)))
           |FROM (SELECT 1) t""".stripMargin)
 

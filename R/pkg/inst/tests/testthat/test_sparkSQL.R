@@ -60,6 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
+filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
@@ -137,6 +138,59 @@ test_that("structType and structField", {
   expect_is(testSchema, "structType")
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
+})
+
+test_that("structField type strings", {
+  # positive cases
+  primitiveTypes <- list(byte = "ByteType",
+                         integer = "IntegerType",
+                         float = "FloatType",
+                         double = "DoubleType",
+                         string = "StringType",
+                         binary = "BinaryType",
+                         boolean = "BooleanType",
+                         timestamp = "TimestampType",
+                         date = "DateType")
+
+  complexTypes <- list("map<string,integer>" = "MapType(StringType,IntegerType,true)",
+                       "array<string>" = "ArrayType(StringType,true)",
+                       "struct<a:string>" = "StructType(StructField(a,StringType,true))")
+
+  typeList <- c(primitiveTypes, complexTypes)
+  typeStrings <- names(typeList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- typeList[[i]]
+    testField <- structField("_col", typeString)
+    expect_is(testField, "structField")
+    expect_true(testField$nullable())
+    expect_equal(testField$dataType.toString(), expected)
+  }
+
+  # negative cases
+  primitiveErrors <- list(Byte = "Byte",
+                          INTEGER = "INTEGER",
+                          numeric = "numeric",
+                          character = "character",
+                          raw = "raw",
+                          logical = "logical")
+
+  complexErrors <- list("map<string, integer>" = " integer",
+                        "array<String>" = "String",
+                        "struct<a:string >" = "string ",
+                        "map <string,integer>" = "map <string,integer>",
+                        "array< string>" = " string",
+                        "struct<a: string>" = " string")
+
+  errorList <- c(primitiveErrors, complexErrors)
+  typeStrings <- names(errorList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
+    expect_error(structField("_col", typeString), expected)
+  }
 })
 
 test_that("create DataFrame from RDD", {
@@ -840,6 +894,17 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
   expect_true(is.data.frame(collect(df)))
 })
 
+test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
+  checkpointDir <- file.path(tempdir(), "cproot")
+  expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+
+  setCheckpointDir(checkpointDir)
+  df <- read.json(jsonPath)
+  df <- checkpoint(df)
+  expect_is(df, "SparkDataFrame")
+  expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+})
+
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
   df <- read.json(jsonPath)
   testSchema <- schema(df)
@@ -1339,6 +1404,10 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
   # Test to_json(), from_json()
+  df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
@@ -1354,9 +1423,8 @@ test_that("column functions", {
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
-  expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
-                        error = function(e) { stop(e) }),
-               paste0(".*(java.lang.NumberFormatException: For input string:).*"))
+  s <- collect(select(df, from_json(df$col, schema2)))
+  expect_equal(s[[1]][[1]], NA)
   s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
   expect_is(s[[1]][[1]]$date, "Date")
   expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
@@ -1364,6 +1432,18 @@ test_that("column functions", {
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
   expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
+
+  # check if array type in string is correctly supported.
+  jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
+  df <- as.DataFrame(list(list("people" = jsonArr)))
+  schema <- structType(structField("name", "string"))
+  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
+  expect_equal(ncol(arr), 1)
+  expect_equal(nrow(arr), 1)
+  expect_is(arr[[1]][[1]], "list")
+  expect_equal(length(arr$arrcol[[1]]), 2)
+  expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
+  expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
 })
 
 test_that("column binary mathfunctions", {
@@ -2592,8 +2672,8 @@ test_that("coalesce, repartition, numPartitions", {
 
   df2 <- repartition(df1, 10)
   expect_equal(getNumPartitions(df2), 10)
-  expect_equal(getNumPartitions(coalesce(df2, 13)), 5)
-  expect_equal(getNumPartitions(coalesce(df2, 7)), 5)
+  expect_equal(getNumPartitions(coalesce(df2, 13)), 10)
+  expect_equal(getNumPartitions(coalesce(df2, 7)), 7)
   expect_equal(getNumPartitions(coalesce(df2, 3)), 3)
 })
 
@@ -2895,6 +2975,39 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col1), "numeric")
   expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
+})
+
+compare_list <- function(list1, list2) {
+  # get testthat to show the diff by first making the 2 lists equal in length
+  expect_equal(length(list1), length(list2))
+  l <- max(length(list1), length(list2))
+  length(list1) <- l
+  length(list2) <- l
+  expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
+}
+
+# This should always be the **very last test** in this test file.
+test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  # Check that it is not creating any extra file.
+  # Does not check the tempdir which would be cleaned up after.
+  filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
+
+  expect_true(length(sparkRFilesBefore) > 0)
+  # first, ensure derby.log is not there
+  expect_false("derby.log" %in% filesAfter)
+  # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  # note: currently all other test files have enableHiveSupport = F, so we capture the list of files
+  # before creating a SparkSession with enableHiveSupport = T at the top of this test file
+  # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
+  # any test is run in run-all.R (sparkRFilesBefore).
+  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
+  # same as before any test is run.
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
+  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
 })
 
 unlink(parquetPath)

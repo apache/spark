@@ -307,54 +307,11 @@ object ScalaReflection extends ScalaReflection {
           }
         }
 
-        val array = Invoke(
-          MapObjects(mapFunction, getPath, dataType),
-          "array",
-          ObjectType(classOf[Array[Any]]))
-
-        val wrappedArray = StaticInvoke(
-          scala.collection.mutable.WrappedArray.getClass,
-          ObjectType(classOf[Seq[_]]),
-          "make",
-          array :: Nil)
-
-        if (localTypeOf[scala.collection.mutable.WrappedArray[_]] <:< t.erasure) {
-          wrappedArray
-        } else {
-          // Convert to another type using `to`
-          val cls = mirror.runtimeClass(t.typeSymbol.asClass)
-          import scala.collection.generic.CanBuildFrom
-          import scala.reflect.ClassTag
-
-          // Some canBuildFrom methods take an implicit ClassTag parameter
-          val cbfParams = try {
-            cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])
-            StaticInvoke(
-              ClassTag.getClass,
-              ObjectType(classOf[ClassTag[_]]),
-              "apply",
-              StaticInvoke(
-                cls,
-                ObjectType(classOf[Class[_]]),
-                "getClass"
-              ) :: Nil
-            ) :: Nil
-          } catch {
-            case _: NoSuchMethodException => Nil
-          }
-
-          Invoke(
-            wrappedArray,
-            "to",
-            ObjectType(cls),
-            StaticInvoke(
-              cls,
-              ObjectType(classOf[CanBuildFrom[_, _, _]]),
-              "canBuildFrom",
-              cbfParams
-            ) :: Nil
-          )
+        val cls = t.dealias.companion.decl(TermName("newBuilder")) match {
+          case NoSymbol => classOf[Seq[_]]
+          case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
+        MapObjects(mapFunction, getPath, dataType, Some(cls))
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
@@ -470,14 +427,15 @@ object ScalaReflection extends ScalaReflection {
   private def serializerFor(
       inputObject: Expression,
       tpe: `Type`,
-      walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
+      walkedTypePath: Seq[String],
+      seenTypeSet: Set[`Type`] = Set.empty): Expression = ScalaReflectionLock.synchronized {
 
     def toCatalystArray(input: Expression, elementType: `Type`): Expression = {
       dataTypeFor(elementType) match {
         case dt: ObjectType =>
           val clsName = getClassNameFromType(elementType)
           val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
-          MapObjects(serializerFor(_, elementType, newPath), input, dt)
+          MapObjects(serializerFor(_, elementType, newPath, seenTypeSet), input, dt)
 
          case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
                     FloatType | DoubleType) =>
@@ -511,7 +469,7 @@ object ScalaReflection extends ScalaReflection {
         val className = getClassNameFromType(optType)
         val newPath = s"""- option value class: "$className"""" +: walkedTypePath
         val unwrapped = UnwrapOption(dataTypeFor(optType), inputObject)
-        serializerFor(unwrapped, optType, newPath)
+        serializerFor(unwrapped, optType, newPath, seenTypeSet)
 
       // Since List[_] also belongs to localTypeOf[Product], we put this case before
       // "case t if definedByConstructorParams(t)" to make sure it will match to the
@@ -534,9 +492,9 @@ object ScalaReflection extends ScalaReflection {
         ExternalMapToCatalyst(
           inputObject,
           dataTypeFor(keyType),
-          serializerFor(_, keyType, keyPath),
+          serializerFor(_, keyType, keyPath, seenTypeSet),
           dataTypeFor(valueType),
-          serializerFor(_, valueType, valuePath),
+          serializerFor(_, valueType, valuePath, seenTypeSet),
           valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
 
       case t if t <:< localTypeOf[String] =>
@@ -622,6 +580,11 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "serialize", udt, inputObject :: Nil)
 
       case t if definedByConstructorParams(t) =>
+        if (seenTypeSet.contains(t)) {
+          throw new UnsupportedOperationException(
+            s"cannot have circular references in class, but got the circular reference of class $t")
+        }
+
         val params = getConstructorParameters(t)
         val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
           if (javaKeywords.contains(fieldName)) {
@@ -634,7 +597,8 @@ object ScalaReflection extends ScalaReflection {
             returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
-          expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil
+          expressions.Literal(fieldName) ::
+          serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t) :: Nil
         })
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
@@ -643,7 +607,6 @@ object ScalaReflection extends ScalaReflection {
         throw new UnsupportedOperationException(
           s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
     }
-
   }
 
   /**

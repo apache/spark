@@ -317,6 +317,9 @@ private[spark] class BlockManager(
 
   /**
    * Put the block locally, using the given storage level.
+   *
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
    */
   override def putBlockData(
       blockId: BlockId,
@@ -755,6 +758,9 @@ private[spark] class BlockManager(
   /**
    * Put a new block of serialized bytes to the block manager.
    *
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
+   *
    * @param encrypt If true, asks the block manager to encrypt the data block before storing,
    *                when I/O encryption is enabled. This is required for blocks that have been
    *                read from unencrypted sources, since all the BlockManager read APIs
@@ -773,7 +779,7 @@ private[spark] class BlockManager(
       if (encrypt && securityManager.ioEncryptionKey.isDefined) {
         try {
           val data = bytes.toByteBuffer
-          val in = new ByteBufferInputStream(data, true)
+          val in = new ByteBufferInputStream(data)
           val byteBufOut = new ByteBufferOutputStream(data.remaining())
           val out = CryptoStreamUtils.createCryptoOutputStream(byteBufOut, conf,
             securityManager.ioEncryptionKey.get)
@@ -799,6 +805,9 @@ private[spark] class BlockManager(
    * the values if necessary.
    *
    * If the block already exists, this method will not overwrite it.
+   *
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
    *
    * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
    *                     block already exists). If false, this method will hold no locks when it
@@ -843,7 +852,15 @@ private[spark] class BlockManager(
               false
           }
         } else {
-          memoryStore.putBytes(blockId, size, level.memoryMode, () => bytes)
+          val memoryMode = level.memoryMode
+          memoryStore.putBytes(blockId, size, memoryMode, () => {
+            if (memoryMode == MemoryMode.OFF_HEAP &&
+                bytes.chunks.exists(buffer => !buffer.isDirect)) {
+              bytes.copy(Platform.allocateDirectBuffer)
+            } else {
+              bytes
+            }
+          })
         }
         if (!putSucceeded && level.useDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
@@ -1048,7 +1065,7 @@ private[spark] class BlockManager(
           try {
             replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
-            bytesToReplicate.dispose()
+            bytesToReplicate.unmap()
           }
           logDebug("Put block %s remotely took %s"
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
@@ -1170,7 +1187,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       existingReplicas: Set[BlockManagerId],
       maxReplicas: Int): Unit = {
-    logInfo(s"Pro-actively replicating $blockId")
+    logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
     blockInfoManager.lockForReading(blockId).foreach { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
@@ -1179,9 +1196,13 @@ private[spark] class BlockManager(
         useOffHeap = info.level.useOffHeap,
         deserialized = info.level.deserialized,
         replication = maxReplicas)
+      // we know we are called as a result of an executor removal, so we refresh peer cache
+      // this way, we won't try to replicate to a missing executor with a stale reference
+      getPeers(forceFetch = true)
       try {
         replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
       } finally {
+        logDebug(s"Releasing lock for $blockId")
         releaseLock(blockId)
       }
     }

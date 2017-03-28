@@ -87,7 +87,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   /**
    * A catalog that interacts with external systems.
    */
-  val externalCatalog: ExternalCatalog =
+  lazy val externalCatalog: ExternalCatalog =
     SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,

@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.internal.io
 
 import java.io.IOException
-import java.text.NumberFormat
-import java.text.SimpleDateFormat
+import java.text.{NumberFormat, SimpleDateFormat}
 import java.util.{Date, Locale}
 
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
+import org.apache.spark.SerializableWritable
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.util.SerializableJobConf

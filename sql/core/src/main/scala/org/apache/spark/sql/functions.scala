@@ -1861,7 +1861,7 @@ object functions {
   def rint(columnName: String): Column = rint(Column(columnName))
 
   /**
-   * Returns the value of the column `e` rounded to 0 decimal places.
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_UP round mode.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -1869,8 +1869,8 @@ object functions {
   def round(e: Column): Column = round(e, 0)
 
   /**
-   * Round the value of `e` to `scale` decimal places if `scale` is greater than or equal to 0
-   * or at integral part when `scale` is less than 0.
+   * Round the value of `e` to `scale` decimal places with HALF_UP round mode
+   * if `scale` is greater than or equal to 0 or at integral part when `scale` is less than 0.
    *
    * @group math_funcs
    * @since 1.5.0
@@ -2191,8 +2191,8 @@ object functions {
   }
 
   /**
-   * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places,
-   * and returns the result as a string column.
+   * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places
+   * with HALF_EVEN round mode, and returns the result as a string column.
    *
    * If d is 0, the result has no decimal point or fractional part.
    * If d is less than 0, the result will be null.
@@ -2896,7 +2896,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns true if the array contains `value`
+   * Returns null if the array is null, true if the array contains `value`, and false otherwise.
    * @group collection_funcs
    * @since 1.5.0
    */
@@ -2978,7 +2978,8 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -2989,7 +2990,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    JsonToStruct(schema, options, e.expr)
+    JsonToStructs(schema, options, e.expr)
   }
 
   /**
@@ -3009,7 +3010,8 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
+   * string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3036,7 +3038,7 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
    * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3049,7 +3051,7 @@ object functions {
     from_json(e, schema, Map.empty[String, String])
 
   /**
-   * Parses a column containing a JSON string into a `StructType` or `ArrayType`
+   * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
    * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing JSON data.
@@ -3062,10 +3064,11 @@ object functions {
     from_json(e, DataType.fromJson(schema), options)
 
   /**
-   * (Scala-specific) Converts a column containing a `StructType` into a JSON string with the
-   * specified schema. Throws an exception, in the case of an unsupported type.
+   * (Scala-specific) Converts a column containing a `StructType` or `ArrayType` of `StructType`s
+   * into a JSON string with the specified schema. Throws an exception, in the case of an
+   * unsupported type.
    *
-   * @param e a struct column.
+   * @param e a column containing a struct or array of the structs.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
    *
@@ -3073,14 +3076,15 @@ object functions {
    * @since 2.1.0
    */
   def to_json(e: Column, options: Map[String, String]): Column = withExpr {
-    StructToJson(options, e.expr)
+    StructsToJson(options, e.expr)
   }
 
   /**
-   * (Java-specific) Converts a column containing a `StructType` into a JSON string with the
-   * specified schema. Throws an exception, in the case of an unsupported type.
+   * (Java-specific) Converts a column containing a `StructType` or `ArrayType` of `StructType`s
+   * into a JSON string with the specified schema. Throws an exception, in the case of an
+   * unsupported type.
    *
-   * @param e a struct column.
+   * @param e a column containing a struct or array of the structs.
    * @param options options to control how the struct column is converted into a json string.
    *                accepts the same options and the json data source.
    *
@@ -3091,10 +3095,10 @@ object functions {
     to_json(e, options.asScala.toMap)
 
   /**
-   * Converts a column containing a `StructType` into a JSON string with the
-   * specified schema. Throws an exception, in the case of an unsupported type.
+   * Converts a column containing a `StructType` or `ArrayType` of `StructType`s into a JSON string
+   * with the specified schema. Throws an exception, in the case of an unsupported type.
    *
-   * @param e a struct column.
+   * @param e a column containing a struct or array of the structs.
    *
    * @group collection_funcs
    * @since 2.1.0

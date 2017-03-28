@@ -218,7 +218,9 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckLastBatch((10, 5)),
       StopStream,
-      AssertOnQuery { q => // clear the sink
+      AssertOnQuery { q => // purge commit and clear the sink
+        val commit = q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) + 1L
+        q.batchCommitLog.purge(commit)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
@@ -304,6 +306,29 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       AddData(inputData, 25), // Evict items less than previous watermark.
       CheckAnswer((10, 1))
     )
+  }
+
+  test("delay threshold should not be negative.") {
+    val inputData = MemoryStream[Int].toDF()
+    var e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "-1 year")
+    }
+    assert(e.getMessage contains "should not be negative.")
+
+    e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "1 year -13 months")
+    }
+    assert(e.getMessage contains "should not be negative.")
+
+    e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "1 month -40 days")
+    }
+    assert(e.getMessage contains "should not be negative.")
+
+    e = intercept[IllegalArgumentException] {
+      inputData.withWatermark("value", "-10 seconds")
+    }
+    assert(e.getMessage contains "should not be negative.")
   }
 
   test("the new watermark should override the old one") {

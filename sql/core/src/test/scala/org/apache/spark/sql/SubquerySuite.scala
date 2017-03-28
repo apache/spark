@@ -622,7 +622,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
     checkAnswer(
-      sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
+      sql(
+        """
+          |select l.b, (select (r.c + count(*)) is null
+          |from r
+          |where l.a = r.c group by r.c) from l
+        """.stripMargin),
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
   }
@@ -823,6 +828,20 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           |               from t2 lateral view explode(arr_c2) q as c2
                           where t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
+    }
+  }
+
+  test("SPARK-19933 Do not eliminate top-level aliases in sub-queries") {
+    withTempView("t1", "t2") {
+      spark.range(4).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t1)"),
+        Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      spark.range(2).createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t2)"),
+        Row(0) :: Row(1) :: Nil)
     }
   }
 }
