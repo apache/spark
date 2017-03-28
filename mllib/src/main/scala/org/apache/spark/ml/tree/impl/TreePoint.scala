@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
-import breeze.linalg.SparseVector
+import breeze.linalg.{SparseVector => BSV}
 
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.{ContinuousSplit, Split}
@@ -39,8 +39,17 @@ import org.apache.spark.rdd.RDD
  * @param binnedFeatures  Binned feature values.
  *                        Same length as LabeledPoint.features, but values are bin indices.
  */
-private[spark] class TreePoint(val label: Double, val binnedFeatures: SparseVector[Int])
+private[spark] class TreePoint(val label: Double, val binnedFeatures: BSV[Int])
   extends Serializable {
+
+  /**
+   * Wrapper for binnedFeatures's apply method.
+   * hotfix for BUG: compile fails when [[org.apache.spark.ml.tree.LearningNode.predictImpl()]]
+   * use breeze.linalg.SparseVector.
+   * @param i index
+   * @return Gets the value of the ith element of binnedFeatures.
+   */
+  def _binnedFeatures(i: Int): Int = binnedFeatures(i)
 }
 
 private[spark] object TreePoint {
@@ -96,7 +105,7 @@ private[spark] object TreePoint {
       (idx, bin)
     }.filter(_._2 != 0).unzip
 
-    val vec = new SparseVector[Int](index.toArray, data.toArray, numFeatures)
+    val vec = new BSV[Int](index.toArray, data.toArray, numFeatures)
 
     new TreePoint(labeledPoint.label, vec)
   }
