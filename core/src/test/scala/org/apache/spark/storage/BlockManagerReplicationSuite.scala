@@ -493,27 +493,34 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     assert(blockLocations.size === replicationFactor)
 
     // remove a random blockManager
-    val executorsToRemove = blockLocations.take(replicationFactor - 1)
+    val executorsToRemove = blockLocations.take(replicationFactor - 1).toSet
     logInfo(s"Removing $executorsToRemove")
-    executorsToRemove.foreach{exec =>
-      master.removeExecutor(exec.executorId)
+    initialStores.filter(bm => executorsToRemove.contains(bm.blockManagerId)).foreach { bm =>
+      master.removeExecutor(bm.blockManagerId.executorId)
+      bm.stop()
       // giving enough time for replication to happen and new block be reported to master
-      Thread.sleep(200)
+      eventually(timeout(5 seconds), interval(100 millis)) {
+        val newLocations = master.getLocations(blockId).toSet
+        assert(newLocations.size === replicationFactor)
+      }
     }
 
-    val newLocations = eventually(timeout(5 seconds), interval(10 millis)) {
+    val newLocations = eventually(timeout(5 seconds), interval(100 millis)) {
       val _newLocations = master.getLocations(blockId).toSet
       assert(_newLocations.size === replicationFactor)
       _newLocations
     }
     logInfo(s"New locations : $newLocations")
-    // there should only be one common block manager between initial and new locations
-    assert(newLocations.intersect(blockLocations.toSet).size === 1)
 
-    // check if all the read locks have been released
-    initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
-      val locks = bm.releaseAllLocksForTask(BlockInfo.NON_TASK_WRITER)
-      assert(locks.size === 0, "Read locks unreleased!")
+    // new locations should not contain stopped block managers
+    assert(newLocations.forall(bmId => !executorsToRemove.contains(bmId)),
+      "New locations contain stopped block managers.")
+
+    // Make sure all locks have been released.
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      initialStores.filter(bm => newLocations.contains(bm.blockManagerId)).foreach { bm =>
+        assert(bm.blockInfoManager.getTaskLockCount(BlockInfo.NON_TASK_WRITER) === 0)
+      }
     }
   }
 }
