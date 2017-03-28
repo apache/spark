@@ -661,7 +661,7 @@ class DirectKafkaStreamSuite
       ssc.stop(true, true)
     }
 
-    val   kafkaParams = getKafkaParams(
+    val kafkaParams = getKafkaParams(
       "enable.auto.commit" -> "false",
       "auto.offset.reset" -> "earliest"
     )
