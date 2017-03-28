@@ -107,12 +107,12 @@ private[spark] object UIUtils extends Logging {
         }
       }
       // if time is more than a year
-      s"$yearString $weekString $dayString"
+      return s"$yearString $weekString $dayString"
     } catch {
       case e: Exception =>
         logError("Error converting time to string", e)
         // if there is some error, return blank string
-        ""
+        return ""
     }
   }
 
@@ -317,7 +317,7 @@ private[spark] object UIUtils extends Logging {
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
         <ul class="unstyled">
-          { header.split("\n").map(t => <li> {t} </li>)}
+          { header.split("\n").map { case t => <li> {t} </li> } }
         </ul>
       } else {
         Text(header)
@@ -447,7 +447,7 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span")
-      val illegalNodes = xml \\ "_"  filterNot { node =>
+      val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
         allowedNodeLabels.contains(node.label)
       }
       if (illegalNodes.nonEmpty) {
@@ -493,7 +493,7 @@ private[spark] object UIUtils extends Logging {
         }
       new RuleTransformer(rule).transform(xml)
     } catch {
-      case NonFatal(_) =>
+      case NonFatal(e) =>
         if (plainText) Text(desc) else <span class="description-input">{desc}</span>
     }
   }
@@ -514,7 +514,7 @@ private[spark] object UIUtils extends Logging {
   }
 
   def getTimeZoneOffset() : Int =
-    TimeZone.getDefault.getOffset(System.currentTimeMillis()) / 1000 / 60
+    TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
   /**
   * Return the correct Href after checking if master is running in the
