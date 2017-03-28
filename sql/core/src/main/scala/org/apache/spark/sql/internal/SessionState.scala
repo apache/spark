@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
-import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -48,8 +48,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @param optimizer Logical query plan optimizer.
  * @param planner Planner that converts optimized logical plans to physical plans
  * @param streamingQueryManager Interface to start and stop streaming queries.
- * @param listenerManager Interface to register custom
- *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s
+ * @param listenerManager Interface to register custom [[QueryExecutionListener]]s
  * @param resourceLoader Session shared resource loader to load JARs, files, etc
  * @param createQueryExecution Function used to create QueryExecution objects.
  * @param createClone Function used to create clones of the session state.
@@ -147,7 +146,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
   /**
    * Add a jar path to [[SparkContext]] and the classloader.
    *
-   * Note: this method seems not access any session state, but the subclass `HiveSessionState` needs
+   * Note: this method seems not access any session state, but a Hive based `SessionState` needs
    * to add the jar to its hive client for the current session. Hence, it still needs to be in
    * [[SessionState]].
    */

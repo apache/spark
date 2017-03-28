@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
  */
 private[hive] object HiveSessionState {
   /**
-   * Create a new Hive aware [[SessionState]]. for the given session.
+   * Create a new Hive aware [[SessionState]] for the given session.
    */
   def apply(session: SparkSession): SessionState = {
     new HiveSessionStateBuilder(session).build()
