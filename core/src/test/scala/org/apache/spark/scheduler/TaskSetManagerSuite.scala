@@ -1069,7 +1069,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val mockDAGScheduler = mock(classOf[DAGScheduler])
     sched.dagScheduler = mockDAGScheduler
     val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
     when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).then(new Answer[Unit] {
       override def answer(invocationOnMock: InvocationOnMock): Unit = {
         assert(manager.isZombie === true)
