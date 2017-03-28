@@ -69,7 +69,7 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     }
     val blockTableHTML = try {
       val _blockTable = new BlockPagedTable(
-        UIUtils.prependBaseUri(parent.basePath) + s"/storage/rdd/?id=$rddId",
+        UIUtils.prependBaseUri(parent.basePath) + s"/storage/rdd/?id=${rddId}",
         rddStorageInfo.partitions.get,
         blockPageSize,
         blockSortColumn,
