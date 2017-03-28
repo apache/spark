@@ -222,8 +222,6 @@ case class InsertIntoHiveTable(
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
     val hadoopConf = sessionState.newHadoopConf()
-    // Speed up FileOutputCommitter#commitJob for many output files. See: MAPREDUCE-4815
-    hadoopConf.setInt("mapreduce.fileoutputcommitter.algorithm.version", 2)
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
