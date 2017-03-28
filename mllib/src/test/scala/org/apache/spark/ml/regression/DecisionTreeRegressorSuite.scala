@@ -182,17 +182,15 @@ class DecisionTreeRegressorSuite
   test("SPARK-20043: " +
        "ImpurityCalculator builder fails for uppercase impurity type in model read/write") {
     val rdd = TreeTests.getTreeReadWriteData(sc)
-
     val data: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
 
     val dt = new DecisionTreeRegressor()
       .setImpurity("Variance")
       .setMaxDepth(2)
-
     val model = dt.fit(data)
 
-    testDefaultReadWrite(model, false)
+    testDefaultReadWrite(model)
   }
 }
 
