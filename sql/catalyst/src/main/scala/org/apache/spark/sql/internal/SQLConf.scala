@@ -218,6 +218,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
+    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+      "extended type. In this mode, the microsecond portion of the timestamp value will be" +
+      "truncated.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_CACHE_METADATA = buildConf("spark.sql.parquet.cacheMetadata")
     .doc("Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
     .booleanConf
