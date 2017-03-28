@@ -138,6 +138,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case l: Literal =>
         evaluateLiteral(l)
 
+      // For evaluateBinary method, we assume the literal on the right side of an operator.
+      // So we will change the order if not.
+
       // EqualTo/EqualNullSafe does not care about the order
       case Equality(ar: Attribute, l: Literal) =>
         evaluateEquality(ar, l, update)
