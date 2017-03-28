@@ -24,7 +24,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.util.Utils
 
 /**
@@ -103,12 +102,6 @@ abstract class DataType extends AbstractDataType {
 object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
-
-  /**
-   * Creates StructType for a given DDL-formatted string, which is a comma separated list of field
-   * definitions, e.g., a INT, b STRING.
-   */
-  def fromDDL(ddl: String): StructType = CatalystSqlParser.parseTableSchema(ddl)
 
   private val nonDecimalNameToType = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,

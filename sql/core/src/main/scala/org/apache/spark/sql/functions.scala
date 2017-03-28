@@ -3067,7 +3067,7 @@ object functions {
     val dataType = try {
       DataType.fromJson(schema)
     } catch {
-      case NonFatal(_) => DataType.fromDDL(schema)
+      case NonFatal(_) => StructType.fromDDL(schema)
     }
     from_json(e, dataType, options)
   }

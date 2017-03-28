@@ -177,7 +177,7 @@ class DataTypeSuite extends SparkFunSuite {
 
   def checkDataTypeFromDDL(dataType: DataType, ignoreNullability: Boolean = false): Unit = {
     test(s"from DDL - $dataType") {
-      val parsed = DataType.fromDDL(s"a ${dataType.sql}")
+      val parsed = StructType.fromDDL(s"a ${dataType.sql}")
       val expected = new StructType().add("a", dataType)
       if (!ignoreNullability) {
         assert(parsed === expected)
