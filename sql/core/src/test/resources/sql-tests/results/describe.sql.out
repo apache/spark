@@ -105,7 +105,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t	                    
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t	                    
 Partition Provider  	Catalog             	                    
 Partition Columns   	[`c`, `d`]          	                    
 Schema              	root
@@ -130,19 +130,19 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Table: `default`.`t`
+Table               	`default`.`t`       	                    
 Created[removed by SQLQueryTestSuite]
 Last Access[removed by SQLQueryTestSuite]
-Type: MANAGED
-Provider: parquet
-Num Buckets: 2
-Bucket Columns: [`a`]
-Sort Columns: [`b`]
-Comment: table_comment
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t
-Partition Provider: Catalog
-Partition Columns: [`c`, `d`]
-Schema: root
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Num Buckets         	2                   	                    
+Bucket Columns      	[`a`]               	                    
+Sort Columns        	[`b`]               	                    
+Comment             	table_comment       	                    
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t	                    
+Partition Provider  	Catalog             	                    
+Partition Columns   	[`c`, `d`]          	                    
+Schema              	root
  |-- a: string (nullable = true)
  |-- b: integer (nullable = true)
  |-- c: string (nullable = true)
@@ -179,8 +179,16 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
-Partition Values: [c=Us, d=1]
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t/c=Us/d=1
+Database            	default             	                    
+Table               	t                   	                    
+Partition Values    	[c=Us, d=1]         	                    
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t/c=Us/d=1	                    
+                    	                    	                    
+# Table Storage Information	                    	                    
+Num Buckets         	2                   	                    
+Bucket Columns      	[`a`]               	                    
+Sort Columns        	[`b`]               	                    
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t
 
 
 -- !query 11
@@ -198,16 +206,16 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Partition Information	                    	                    
-Database:           	default             	                    
-Table:              	t                   	                    
-Partition Values:   	[c=Us, d=1]         	                    
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Database            	default             	                    
+Table               	t                   	                    
+Partition Values    	[c=Us, d=1]         	                    
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t/c=Us/d=1	                    
                     	                    	                    
 # Table Storage Information	                    	                    
-Num Buckets:        	2                   	                    
-Bucket Columns:     	[`a`]               	                    
-Sort Columns:       	[`b`]               	                    
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t
+Num Buckets         	2                   	                    
+Bucket Columns      	[`a`]               	                    
+Sort Columns        	[`b`]               	                    
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t
 
 
 -- !query 12
@@ -356,15 +364,15 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Table: `default`.`v`
+Table               	`default`.`v`       	                    
 Created[removed by SQLQueryTestSuite]
 Last Access[removed by SQLQueryTestSuite]
-Type: VIEW
-View Text: SELECT * FROM t
-View Default Database: default
-View Query Output Columns: [a, b, c, d]
-Properties: [view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
-Schema: root
+Type                	VIEW                	                    
+View Text           	SELECT * FROM t     	                    
+View Default Database	default             	                    
+View Query Output Columns	[a, b, c, d]        	                    
+Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]	                    
+Schema              	root
  |-- a: string (nullable = true)
  |-- b: integer (nullable = true)
  |-- c: string (nullable = true)

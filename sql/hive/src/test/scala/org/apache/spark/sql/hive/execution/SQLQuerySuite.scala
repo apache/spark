@@ -603,7 +603,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
     sql(
       """CREATE TABLE ctas2
         | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
@@ -613,86 +613,76 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         | AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+        |   ORDER BY key, value""".stripMargin)
+
+    val storageCtas2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas2")).storage
+    assert(storageCtas2.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(storageCtas2.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(storageCtas2.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+
     sql(
       """CREATE TABLE ctas3
         | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
         | STORED AS textfile AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+        |   ORDER BY key, value""".stripMargin)
 
     // the table schema may like (key: integer, value: string)
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect()
+        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin)
     // do nothing cause the table ctas4 already existed.
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
+        | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
 
     checkAnswer(
       sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
-      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      sql("SELECT key, value FROM src ORDER BY key, value"))
     checkAnswer(
       sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
       sql(
         """
           SELECT key, value
           FROM src
-          ORDER BY key, value""").collect().toSeq)
+          ORDER BY key, value"""))
     checkAnswer(
       sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
       sql(
         """
           SELECT key, value
           FROM src
-          ORDER BY key, value""").collect().toSeq)
+          ORDER BY key, value"""))
     intercept[AnalysisException] {
       sql(
         """CREATE TABLE ctas4 AS
-          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
+          | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
     }
     checkAnswer(
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
       sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
-
-    /*
-    Disabled because our describe table does not output the serde information right now.
-    checkKeywordsExist(sql("DESC EXTENDED ctas2"),
-      "name:key", "type:string", "name:value", "ctas2",
-      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
-      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
-      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
-      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22", "MANAGED_TABLE"
-    )
-    */
 
     sql(
       """CREATE TABLE ctas5
         | STORED AS parquet AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect()
+        |   ORDER BY key, value""".stripMargin)
+    val storageCtas5 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas5")).storage
+    assert(storageCtas5.inputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+    assert(storageCtas5.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+    assert(storageCtas5.serde ==
+      Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
 
-    /*
-    Disabled because our describe table does not output the serde information right now.
-    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-      checkKeywordsExist(sql("DESC EXTENDED ctas5"),
-        "name:key", "type:string", "name:value", "ctas5",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
-        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-        "MANAGED_TABLE"
-      )
-    }
-    */
 
     // use the Hive SerDe for parquet tables
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
       checkAnswer(
         sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
-        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+        sql("SELECT key, value FROM src ORDER BY key, value"))
     }
   }
 

@@ -500,7 +500,6 @@ case class TruncateTableCommand(
 case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean,
     isFormatted: Boolean)
   extends RunnableCommand {
 
@@ -536,14 +535,10 @@ case class DescribeTableCommand(
 
       describePartitionInfo(metadata, result)
 
-      if (partitionSpec.isEmpty) {
-        if (isExtended) {
-          describeExtendedTableInfo(metadata, result)
-        } else if (isFormatted) {
-          describeFormattedTableInfo(metadata, result)
-        }
-      } else {
+      if (partitionSpec.nonEmpty) {
         describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
+      } else if (isFormatted) {
+        describeFormattedTableInfo(metadata, result)
       }
     }
 
@@ -556,12 +551,6 @@ case class DescribeTableCommand(
       append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
       describeSchema(table.partitionSchema, buffer)
     }
-  }
-
-  private def describeExtendedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", "", "")
-    append(buffer, table.simpleString, "", "")
   }
 
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -581,21 +570,7 @@ case class DescribeTableCommand(
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val partition = catalog.getPartition(table, partitionSpec)
-    if (isExtended) {
-      describeExtendedDetailedPartitionInfo(table, metadata, partition, result)
-    } else if (isFormatted) {
-      describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
-    }
-  }
-
-  private def describeExtendedDetailedPartitionInfo(
-      tableIdentifier: TableIdentifier,
-      table: CatalogTable,
-      partition: CatalogTablePartition,
-      buffer: ArrayBuffer[Row]): Unit = {
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Partition Information", "", "")
-    append(buffer, partition.simpleString, "", "")
+    if (isFormatted) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
   }
 
   private def describeFormattedDetailedPartitionInfo(
@@ -605,17 +580,17 @@ case class DescribeTableCommand(
       buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Partition Information", "", "")
-    append(buffer, "Database:", table.database, "")
-    append(buffer, "Table:", tableIdentifier.table, "")
-    partition.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
+    append(buffer, "Database", table.database, "")
+    append(buffer, "Table", tableIdentifier.table, "")
+    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
     append(buffer, "", "", "")
     append(buffer, "# Table Storage Information", "", "")
     table.bucketSpec match {
       case Some(spec) =>
-        spec.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
+        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
       case _ =>
     }
-    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
+    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {

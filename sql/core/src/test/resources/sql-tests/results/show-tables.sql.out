@@ -131,7 +131,7 @@ Created[removed by SQLQueryTestSuite]
 Last Access[removed by SQLQueryTestSuite]
 Type: MANAGED
 Provider: parquet
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t1
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t1
 Partition Provider: Catalog
 Partition Columns: [`c`, `d`]
 Schema: root
@@ -146,7 +146,7 @@ Created[removed by SQLQueryTestSuite]
 Last Access[removed by SQLQueryTestSuite]
 Type: MANAGED
 Provider: parquet
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t2
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t2
 Schema: root
  |-- b: string (nullable = true)
  |-- d: integer (nullable = true)
@@ -172,7 +172,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
-Location:[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
 
 
 -- !query 15
