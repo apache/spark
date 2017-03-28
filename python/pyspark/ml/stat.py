@@ -86,19 +86,8 @@ if __name__ == "__main__":
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['spark'] = spark
-    import tempfile
 
-    temp_path = tempfile.mkdtemp()
-    globs['temp_path'] = temp_path
-    try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        spark.stop()
-    finally:
-        from shutil import rmtree
-
-        try:
-            rmtree(temp_path)
-        except OSError:
-            pass
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    spark.stop()
     if failure_count:
         exit(-1)
