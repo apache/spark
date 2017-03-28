@@ -426,11 +426,16 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
 
   /** Get the epoch for map output for a shuffle, if it is available */
   def getEpochForMapOutput(shuffleId: Int, mapId: Int): Option[Long] = {
-    for {
-      mapStatus <- mapStatuses.get(shuffleId).flatMap { mapStatusArray =>
-        Option(mapStatusArray(mapId))
+    val arrayOpt = mapStatuses.get(shuffleId)
+    if (arrayOpt.isDefined && arrayOpt.get != null) {
+      val array = arrayOpt.get
+      array.synchronized {
+        if (array(mapId) != null) {
+          return Some(epochForMapStatus(shuffleId)(mapId))
+        }
       }
-    } yield epochForMapStatus(shuffleId)(mapId)
+    }
+    None
   }
 
   /**
