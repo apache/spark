@@ -175,15 +175,11 @@ class DataTypeSuite extends SparkFunSuite {
     }
   }
 
-  def checkDataTypeFromDDL(dataType: DataType, ignoreNullability: Boolean = false): Unit = {
+  def checkDataTypeFromDDL(dataType: DataType): Unit = {
     test(s"from DDL - $dataType") {
       val parsed = StructType.fromDDL(s"a ${dataType.sql}")
       val expected = new StructType().add("a", dataType)
-      if (!ignoreNullability) {
-        assert(parsed === expected)
-      } else {
-        assert(parsed.sameType(expected))
-      }
+      assert(parsed.sameType(expected))
     }
   }
 
@@ -232,13 +228,13 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromDDL(ArrayType(DoubleType, true))
 
   checkDataTypeFromJson(ArrayType(StringType, false))
-  checkDataTypeFromDDL(ArrayType(StringType, false), ignoreNullability = true)
+  checkDataTypeFromDDL(ArrayType(StringType, false))
 
   checkDataTypeFromJson(MapType(IntegerType, StringType, true))
   checkDataTypeFromDDL(MapType(IntegerType, StringType, true))
 
   checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
-  checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false), ignoreNullability = true)
+  checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
   val metadata = new MetadataBuilder()
     .putString("name", "age")
@@ -248,7 +244,7 @@ class DataTypeSuite extends SparkFunSuite {
     StructField("b", ArrayType(DoubleType), nullable = false),
     StructField("c", DoubleType, nullable = false, metadata)))
   checkDataTypeFromJson(structType)
-  checkDataTypeFromDDL(structType, ignoreNullability = true)
+  checkDataTypeFromDDL(structType)
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
     test(s"Check the default size of $dataType") {
