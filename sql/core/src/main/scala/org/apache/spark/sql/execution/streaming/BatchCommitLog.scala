@@ -45,33 +45,39 @@ import org.apache.spark.sql.SparkSession
 class BatchCommitLog(sparkSession: SparkSession, path: String)
   extends HDFSMetadataLog[String](sparkSession, path) {
 
+  import BatchCommitLog._
+
+  def add(batchId: Long): Unit = {
+    super.add(batchId, EMPTY_JSON)
+  }
+
+  override def add(batchId: Long, metadata: String): Boolean = {
+    throw new UnsupportedOperationException(
+      "BatchCommitLog does not take any metadata, use 'add(batchId)' instead")
+  }
+
   override protected def deserialize(in: InputStream): String = {
     // called inside a try-finally where the underlying stream is closed in the caller
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file in the offset commit log")
     }
-    parseVersion(lines.next().trim, BatchCommitLog.VERSION)
-    // read metadata
-    lines.next().trim match {
-      case BatchCommitLog.SERIALIZED_VOID => null
-      case metadata => metadata
-    }
+    parseVersion(lines.next.trim, VERSION)
+    EMPTY_JSON
   }
 
   override protected def serialize(metadata: String, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(s"v${BatchCommitLog.VERSION}".getBytes(UTF_8))
+    out.write(s"v${VERSION}".getBytes(UTF_8))
     out.write('\n')
 
-    // write metadata or void
-    out.write((if (metadata == null) BatchCommitLog.SERIALIZED_VOID else metadata)
-      .getBytes(UTF_8))
+    // write metadata
+    out.write(EMPTY_JSON.getBytes(UTF_8))
   }
 }
 
 object BatchCommitLog {
   private val VERSION = 1
-  private val SERIALIZED_VOID = "{}"
+  private val EMPTY_JSON = "{}"
 }
 
