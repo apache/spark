@@ -646,7 +646,7 @@ private[spark] class Client(
     // polluting the UI's environment page. This works for client mode; for cluster mode, this
     // is handled by the AM.
     CACHE_CONFIGS.foreach(sparkConf.remove)
-    LAUNCHER_CONFIGS.foreach(sparkConf.remove)
+    YarnCommandBuilderUtils.LAUNCHER_CONFIGS.foreach(sparkConf.remove)
 
     localResources
   }

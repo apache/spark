@@ -41,6 +41,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -175,7 +176,7 @@ private[spark] class ApplicationMaster(
     }
 
     // Clean up the spark launcher configuration so it doesn't show up in the Web UI for security.
-    LAUNCHER_CONFIGS.foreach { e =>
+    YarnCommandBuilderUtils.LAUNCHER_CONFIGS.foreach { e =>
       sparkConf.remove(e)
       sys.props.remove(e)
     }

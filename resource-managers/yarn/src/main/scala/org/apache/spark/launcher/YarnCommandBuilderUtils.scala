@@ -55,4 +55,9 @@ private[spark] object YarnCommandBuilderUtils {
     }
   }
 
+  private[yarn] val LAUNCHER_CONFIGS = Seq(
+    SparkLauncher.LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET,
+    SparkLauncher.LAUNCHER_INTERNAL_PORT)
+
+
 }
