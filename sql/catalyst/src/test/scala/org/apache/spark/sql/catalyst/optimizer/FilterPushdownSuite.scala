@@ -836,6 +836,26 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, answer)
   }
 
+  test("SPARK-20094: don't push predicate with IN subquery into join condition") {
+    val x = testRelation.subquery('x)
+    val z = testRelation.subquery('z)
+    val w = testRelation1.subquery('w)
+
+    val queryPlan = x
+      .join(z)
+      .where(("x.b".attr === "z.b".attr) &&
+        ("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr)))))
+      .analyze
+
+    val expectedPlan = x
+      .join(z, Inner, Some("x.b".attr === "z.b".attr))
+      .where("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr))))
+      .analyze
+
+    val optimized = Optimize.execute(queryPlan)
+    comparePlans(optimized, expectedPlan)
+  }
+
   test("Window: predicate push down -- basic") {
     val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
 
