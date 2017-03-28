@@ -24,7 +24,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.stat.SummaryBuilderImpl.Buffer
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, Statistics}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -333,6 +333,67 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       "variance mismatch")
 
     assert(Buffer.totalCount(summarizer) === 6)
+  }
+
+  // TODO: this test should not be committed. It is here to isolate some performance hotspots.
+  test("perf test") {
+    val n = 10000000
+    val rdd1 = sc.parallelize(1 to n).map { idx =>
+      OldVectors.dense(idx.toDouble)
+    }
+    val trieouts = 10
+    rdd1.cache()
+    rdd1.count()
+    val rdd2 = sc.parallelize(1 to n).map { idx =>
+      Vectors.dense(idx.toDouble)
+    }
+    rdd2.cache()
+    rdd2.count()
+    val df = rdd2.map(Tuple1.apply).toDF("features")
+    df.cache()
+    df.count()
+    val x = df.select(
+      metrics("mean", "variance", "count", "numNonZeros", "max", "min", "normL1",
+              "normL2").summary($"features"))
+    val x1 = df.select(metrics("variance").summary($"features"))
+
+    var times_df: List[Long] = Nil
+    for (_ <- 1 to trieouts) {
+      val t21 = System.nanoTime()
+      x.head()
+      val t22 = System.nanoTime()
+      times_df ::= (t22 - t21)
+    }
+
+    var times_rdd: List[Long] = Nil
+    for (_ <- 1 to trieouts) {
+      val t21 = System.nanoTime()
+      Statistics.colStats(rdd1)
+      val t22 = System.nanoTime()
+      times_rdd ::= (t22 - t21)
+    }
+
+    var times_df_variance: List[Long] = Nil
+    for (_ <- 1 to trieouts) {
+      val t21 = System.nanoTime()
+      x1.head()
+      val t22 = System.nanoTime()
+      times_df_variance ::= (t22 - t21)
+    }
+
+    def print(name: String, l: List[Long]): Unit = {
+      def f(z: Long) = (1e6 * n.toDouble) / z
+      val min = f(l.max)
+      val max = f(l.min)
+      val med = f(l.sorted.drop(l.size / 2).head)
+
+      // scalastyle:off println
+      println(s"dataframe = [$min ~ $med ~ $max] records / milli")
+    }
+
+    print("RDD", times_rdd)
+    print("Dataframes (variance only)", times_df_variance)
+    print("Dataframes", times_df)
   }
 
 }
