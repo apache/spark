@@ -140,7 +140,7 @@ echo "Spark version is $VERSION"
 if [ "$MAKE_TGZ" == "true" ]; then
   echo "Making spark-$VERSION-bin-$NAME.tgz"
 else
-  echo "Making distribution for Spark $VERSION in $DISTDIR..."
+  echo "Making distribution for Spark $VERSION in '$DISTDIR'..."
 fi
 
 # Build uber fat JAR
@@ -217,7 +217,7 @@ fi
 # Make R package - this is used for both CRAN release and packing R layout into distribution
 if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
-  R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
+  R_PACKAGE_VERSION=`grep Version "$SPARK_HOME"/R/pkg/DESCRIPTION | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
@@ -226,7 +226,7 @@ if [ "$MAKE_R" == "true" ]; then
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
   if [ "$R_PACKAGE_VERSION" != "$VERSION" ]; then
-    mv $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
+    mv "$SPARK_HOME"/R/SparkR_"$R_PACKAGE_VERSION".tar.gz "$SPARK_HOME"/R/SparkR_"$VERSION".tar.gz
   fi
 
   # Install source package to get it to generate vignettes rds files, etc.
@@ -245,7 +245,7 @@ cp -r "$SPARK_HOME/python" "$DISTDIR"
 
 # Remove the python distribution from dist/ if we built it
 if [ "$MAKE_PIP" == "true" ]; then
-  rm -f $DISTDIR/python/dist/pyspark-*.tar.gz
+  rm -f "$DISTDIR"/python/dist/pyspark-*.tar.gz
 fi
 
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"

@@ -37,11 +37,11 @@ export SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/..; pwd)"
 
 echo "Using Scala $SPARK_SCALA_VERSION"
 
-pushd $FWDIR > /dev/null
-. $FWDIR/find-r.sh
+pushd "$FWDIR" > /dev/null
+. "$FWDIR"/find-r.sh
 
 # Install the package (this will also generate the Rd files)
-. $FWDIR/install-dev.sh
+. "$FWDIR"/install-dev.sh
 
 # Now create HTML files
 

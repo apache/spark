@@ -20,14 +20,14 @@
 set -o pipefail
 set -e
 
-FWDIR="$(cd `dirname "${BASH_SOURCE[0]}"`; pwd)"
-pushd $FWDIR > /dev/null
+FWDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd)"
+pushd "$FWDIR" > /dev/null
 
-. $FWDIR/find-r.sh
+. "$FWDIR"/find-r.sh
 
 # Install the package (this is required for code in vignettes to run when building it later)
 # Build the latest docs, but not vignettes, which is built with the package next
-. $FWDIR/install-dev.sh
+. "$FWDIR"/install-dev.sh
 
 # Build source package with vignettes
 SPARK_HOME="$(cd "${FWDIR}"/..; pwd)"
@@ -40,7 +40,7 @@ fi
 
 if [ -d "$SPARK_JARS_DIR" ]; then
   # Build a zip file containing the source package with vignettes
-  SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/"R CMD build $FWDIR/pkg
+  SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/"R CMD build "$FWDIR"/pkg
 
   find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
 else
@@ -49,7 +49,7 @@ else
 fi
 
 # Run check as-cran.
-VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
+VERSION=`grep Version "$FWDIR"/pkg/DESCRIPTION | awk '{print $NF}'`
 
 CRAN_CHECK_OPTIONS="--as-cran"
 
