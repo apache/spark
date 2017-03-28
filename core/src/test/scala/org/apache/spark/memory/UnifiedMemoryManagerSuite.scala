@@ -24,6 +24,7 @@ import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
+  private val sc = new SparkConf()
   private val dummyBlock = TestBlockId("--")
 
   private val storageFraction: Double = 0.5
@@ -43,7 +44,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val conf = new SparkConf()
       .set("spark.memory.fraction", "1")
       .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
-      .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
+      .set("spark.memory.offHeap.size",
+        if (maxOffHeapExecutionMemory != 0L) { maxOffHeapExecutionMemory.toString } else {
+          sc.get("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
+        })
       .set("spark.memory.storageFraction", storageFraction.toString)
     UnifiedMemoryManager(conf, numCores = 1)
   }
