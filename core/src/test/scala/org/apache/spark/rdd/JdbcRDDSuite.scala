@@ -84,6 +84,19 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
     assert(rdd.reduce(_ + _) === 10100)
   }
 
+  test("limit functionality") {
+    sc = new SparkContext("local", "test")
+    val rdd = new LimitJdbcRDD(
+      sc,
+      () => { DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb") },
+      "SELECT DATA FROM FOO ORDER BY ID OFFSET ? ROWS  FETCH NEXT ? ROWS ONLY",
+      0, 10, 10,
+      (r: ResultSet) => { r.getInt(1) } ).cache()
+
+    assert(rdd.count === 100)
+    assert(rdd.reduce(_ + _) === 10100)
+  }
+
   test("large id overflow") {
     sc = new SparkContext("local", "test")
     val rdd = new JdbcRDD(

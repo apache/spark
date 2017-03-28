@@ -136,6 +136,25 @@ class JdbcRDD[T: ClassTag](
   }
 }
 
+class LimitJdbcRDD[T: ClassTag](
+                                 sc: SparkContext,
+                                 getConnection: () => Connection,
+                                 sql: String,
+                                 lowerBound: Long,
+                                 pageSize: Long,
+                                 numPartitions: Int,
+                                 mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _)
+  extends JdbcRDD[T](sc, getConnection, sql, lowerBound, pageSize, numPartitions, mapRow) {
+
+  override def getPartitions: Array[Partition] = {
+    (0 until numPartitions).map { i =>
+      val start = lowerBound + i * pageSize
+      val end = pageSize
+      new JdbcPartition(i, start.toLong, end.toLong)
+    }.toArray
+  }
+}
+
 object JdbcRDD {
   def resultSetToObjectArray(rs: ResultSet): Array[Object] = {
     Array.tabulate[Object](rs.getMetaData.getColumnCount)(i => rs.getObject(i + 1))
