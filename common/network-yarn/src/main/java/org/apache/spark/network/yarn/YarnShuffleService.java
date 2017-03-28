@@ -43,7 +43,6 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,13 +58,13 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
 
 /**
  * An external shuffle service used by Spark on Yarn.
- *
+ * <p>
  * This is intended to be a long-running auxiliary service that runs in the NodeManager process.
  * A Spark application may connect to this service by setting `spark.shuffle.service.enabled`.
  * The application also automatically derives the service port through `spark.shuffle.service.port`
  * specified in the Yarn configuration. This is so that both the clients and the server agree on
  * the same port to communicate on.
- *
+ * <p>
  * The service also optionally supports authentication. This ensures that executors from one
  * application cannot read the shuffle files written by those from another. This feature can be
  * enabled by setting `spark.authenticate` in the Yarn configuration before starting the NM.
@@ -100,7 +99,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final ObjectMapper mapper = new ObjectMapper();
   private static final String APP_CREDS_KEY_PREFIX = "AppCreds";
   private static final LevelDBProvider.StoreVersion CURRENT_VERSION = new LevelDBProvider
-      .StoreVersion(1, 0);
+    .StoreVersion(1, 0);
 
   // just for integration tests that want to look at this file -- in general not sensible as
   // a static
@@ -177,14 +176,14 @@ public class YarnShuffleService extends AuxiliaryService {
         MetricsSystemImpl metricsSystem = (MetricsSystemImpl) DefaultMetricsSystem.instance();
 
         Method registerSourceMethod = metricsSystem.getClass().getDeclaredMethod("registerSource",
-                String.class, String.class, MetricsSource.class);
+          String.class, String.class, MetricsSource.class);
         registerSourceMethod.setAccessible(true);
         registerSourceMethod.invoke(metricsSystem, "shuffleService", "Metrics on the Spark " +
-                "Shuffle Service", serviceMetrics);
+          "Shuffle Service", serviceMetrics);
         logger.info("Registered metrics with Hadoop's DefaultMetricsSystem");
       } catch (Exception e) {
         logger.warn("Unable to register Spark Shuffle Service metrics with Node Manager; " +
-                "proceeding without metrics", e);
+          "proceeding without metrics", e);
       }
 
       // If authentication is enabled, set up the shuffle server to use a
@@ -205,7 +204,7 @@ public class YarnShuffleService extends AuxiliaryService {
       boundPort = port;
       String authEnabledString = authEnabled ? "enabled" : "not enabled";
       logger.info("Started YARN shuffle service for Spark on port {}. " +
-        "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
+          "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
         registeredExecutorFile);
     } catch (Exception e) {
       if (stopOnFailure) {
@@ -222,7 +221,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
     // Make sure this is protected in case its not in the NM recovery dir
     FileSystem fs = FileSystem.getLocal(_conf);
-    fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short)0700));
+    fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short) 0700));
 
     db = LevelDBProvider.initLevelDB(secretsFile, CURRENT_VERSION, mapper);
     logger.info("Recovery location is: " + secretsFile.getPath());
@@ -363,10 +362,10 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   protected File initRecoveryDb(String dbFileName) {
     if (_recoveryPath != null) {
-        File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbFileName);
-        if (recoveryFile.exists()) {
-          return recoveryFile;
-        }
+      File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbFileName);
+      if (recoveryFile.exists()) {
+        return recoveryFile;
+      }
     }
     // db doesn't exist in recovery path go check local dirs for it
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
@@ -433,8 +432,8 @@ public class YarnShuffleService extends AuxiliaryService {
     @Override
     public String toString() {
       return Objects.toStringHelper(this)
-          .add("appId", appId)
-          .toString();
+        .add("appId", appId)
+        .toString();
     }
   }
 

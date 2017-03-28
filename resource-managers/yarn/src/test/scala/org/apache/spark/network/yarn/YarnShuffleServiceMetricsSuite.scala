@@ -16,15 +16,16 @@
  */
 package org.apache.spark.network.yarn
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.metrics2.MetricsRecordBuilder
 import org.mockito.Matchers._
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.Matchers
-import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
-import org.apache.spark.SparkFunSuite
 
 class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
