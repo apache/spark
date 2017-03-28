@@ -63,6 +63,7 @@ private[sql] class SessionState(
     val optimizer: Optimizer,
     val planner: SparkPlanner,
     val streamingQueryManager: StreamingQueryManager,
+    val resourceLoader: SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
     createClone: (SparkSession, SessionState) => SessionState) {
 
@@ -106,27 +107,6 @@ private[sql] class SessionState(
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
-
-  /**
-   * Add a jar path to [[SparkContext]] and the classloader.
-   *
-   * Note: this method seems not access any session state, but the subclass `HiveSessionState` needs
-   * to add the jar to its hive client for the current session. Hence, it still needs to be in
-   * [[SessionState]].
-   */
-  def addJar(path: String): Unit = {
-    sparkContext.addJar(path)
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
-    }
-    sharedState.jarClassLoader.addURL(jarURL)
-    Thread.currentThread().setContextClassLoader(sharedState.jarClassLoader)
-  }
 }
 
 private[sql] object SessionState {
@@ -160,15 +140,36 @@ class SessionStateBuilder(
  * Session shared [[FunctionResourceLoader]].
  */
 @InterfaceStability.Unstable
-class SessionFunctionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
+class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
     resource.resourceType match {
-      case JarResource => session.sessionState.addJar(resource.uri)
+      case JarResource => addJar(resource.uri)
       case FileResource => session.sparkContext.addFile(resource.uri)
       case ArchiveResource =>
         throw new AnalysisException(
           "Archive is not allowed to be loaded. If YARN mode is used, " +
             "please use --archives options while calling spark-submit.")
     }
+  }
+
+  /**
+   * Add a jar path to [[SparkContext]] and the classloader.
+   *
+   * Note: this method seems not access any session state, but the subclass `HiveSessionState` needs
+   * to add the jar to its hive client for the current session. Hence, it still needs to be in
+   * [[SessionState]].
+   */
+  def addJar(path: String): Unit = {
+    session.sparkContext.addJar(path)
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    session.sharedState.jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
 }
