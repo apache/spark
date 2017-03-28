@@ -144,8 +144,9 @@ private[sql] object ArrowConverters {
       case ByteType => new ArrowType.Int(8, true)
       case StringType => ArrowType.Utf8.INSTANCE
       case BinaryType => ArrowType.Binary.INSTANCE
-      case DateType => ArrowType.Date.INSTANCE
-      case TimestampType => new ArrowType.Timestamp(TimeUnit.MILLISECOND)
+      // TODO: Enable Date and Timestamp type with Arrow 0.3
+      // case DateType => ArrowType.Date.INSTANCE
+      // case TimestampType => new ArrowType.Timestamp(TimeUnit.MILLISECOND)
       case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dataType")
     }
   }
@@ -411,8 +412,9 @@ private[sql] object ColumnWriter {
       case ByteType => new ByteColumnWriter(ordinal, allocator)
       case StringType => new UTF8StringColumnWriter(ordinal, allocator)
       case BinaryType => new BinaryColumnWriter(ordinal, allocator)
-      case DateType => new DateColumnWriter(ordinal, allocator)
-      case TimestampType => new TimeStampColumnWriter(ordinal, allocator)
+      // TODO: Enable Date and Timestamp type with Arrow 0.3
+      // case DateType => new DateColumnWriter(ordinal, allocator)
+      // case TimestampType => new TimeStampColumnWriter(ordinal, allocator)
       case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dataType")
     }
   }
