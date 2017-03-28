@@ -24,6 +24,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -134,13 +135,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
     condition match {
-      // For evaluateBinary method, we assume the literal on the right side of an operator.
-      // So we will change the order if not.
+      case l: Literal =>
+        evaluateLiteral(l)
 
       // EqualTo/EqualNullSafe does not care about the order
-      case op @ Equality(ar: Attribute, l: Literal) =>
+      case Equality(ar: Attribute, l: Literal) =>
         evaluateEquality(ar, l, update)
-      case op @ Equality(l: Literal, ar: Attribute) =>
+      case Equality(l: Literal, ar: Attribute) =>
         evaluateEquality(ar, l, update)
 
       case op @ LessThan(ar: Attribute, l: Literal) =>
@@ -334,6 +335,26 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       Some(0.0)
     }
 
+  }
+
+  /**
+   * Returns a percentage of rows meeting a Literal expression.
+   * This method evaluates all the possible literal cases in Filter.
+   *
+   * FalseLiteral and TrueLiteral should be eliminated by optimizer, but null literal might be added
+   * by optimizer rule NullPropagation. For safety, we handle all the cases here.
+   *
+   * @param literal a literal value (or constant)
+   * @return an optional double value to show the percentage of rows meeting a given condition
+   */
+  def evaluateLiteral(literal: Literal): Option[Double] = {
+    literal match {
+      case Literal(null, _) => Some(0.0)
+      case FalseLiteral => Some(0.0)
+      case TrueLiteral => Some(1.0)
+      // Ideally, we should not hit the following branch
+      case _ => None
+    }
   }
 
   /**
