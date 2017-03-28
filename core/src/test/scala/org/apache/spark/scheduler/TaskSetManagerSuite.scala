@@ -22,8 +22,10 @@ import java.util.{Properties, Random}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.mockito.Matchers.{anyInt, anyString}
+import org.mockito.Matchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{mock, never, spy, verify, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 
 import org.apache.spark._
 import org.apache.spark.internal.config
@@ -1054,6 +1056,29 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     verify(sched.backend).killTask(origTask2.taskId, "exec2", true, "another attempt succeeded")
     assert(manager.tasksSuccessful === 5)
     assert(manager.isZombie)
+  }
+
+
+  test("SPARK-19868: DagScheduler only notified of taskEnd when state is ready") {
+    // dagScheduler.taskEnded() is async, so it may *seem* ok to call it before we've set all
+    // appropriate state, eg. isZombie.   However, this sets up a race that could go the wrong way.
+    // This is a super-focused regression test which checks the zombie state as soon as
+    // dagScheduler.taskEnded() is called, to ensure we haven't introduced a race.
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val mockDAGScheduler = mock(classOf[DAGScheduler])
+    sched.dagScheduler = mockDAGScheduler
+    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
+    when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).then(new Answer[Unit] {
+      override def answer(invocationOnMock: InvocationOnMock): Unit = {
+        assert(manager.isZombie === true)
+      }
+    })
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption.isDefined)
+    // this would fail, inside our mock dag scheduler, if it calls dagScheduler.taskEnded() too soon
+    manager.handleSuccessfulTask(0, createTaskResult(0))
   }
 
   test("SPARK-17894: Verify TaskSetManagers for different stage attempts have unique names") {
