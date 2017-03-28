@@ -38,40 +38,22 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   private final FileChannel fileChannel;
 
-  public NioBufferedFileInputStream(File file) throws IOException {
-    this(file, DEFAULT_BUFFER_SIZE_BYTES);
-  }
-
   public NioBufferedFileInputStream(File file, int bufferSizeInBytes) throws IOException {
     byteBuffer = ByteBuffer.allocateDirect(bufferSizeInBytes);
     fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
     byteBuffer.flip();
   }
 
-  @Override
-  public synchronized int read() throws IOException {
-    return isEndOfStream() ? -1 : byteBuffer.get() & 0xFF;
-  }
-
-  @Override
-  public synchronized int read(byte[] b, int offset, int len) throws IOException {
-    if (offset < 0 || len < 0 || offset + len > b.length) {
-      throw new IndexOutOfBoundsException();
-    }
-    if (isEndOfStream()) {
-      return -1;
-    }
-    len = Math.min(len, byteBuffer.remaining());
-    byteBuffer.get(b, offset, len);
-    return len;
+  public NioBufferedFileInputStream(File file) throws IOException {
+    this(file, DEFAULT_BUFFER_SIZE_BYTES);
   }
 
   /**
    * Checks weather data is left to be read from the input stream.
-   * @return true if no data is left, false otherwise
+   * @return true if data is left, false otherwise
    * @throws IOException
    */
-  private boolean isEndOfStream() throws IOException {
+  private boolean refill() throws IOException {
     if (!byteBuffer.hasRemaining()) {
       byteBuffer.clear();
       int nRead = 0;
@@ -79,11 +61,32 @@ public final class NioBufferedFileInputStream extends InputStream {
         nRead = fileChannel.read(byteBuffer);
       }
       if (nRead < 0) {
-        return true;
+        return false;
       }
       byteBuffer.flip();
     }
-    return false;
+    return true;
+  }
+
+  @Override
+  public synchronized int read() throws IOException {
+    if (!refill()) {
+      return -1;
+    }
+    return byteBuffer.get() & 0xFF;
+  }
+
+  @Override
+  public synchronized int read(byte[] b, int offset, int len) throws IOException {
+    if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
+      throw new IndexOutOfBoundsException();
+    }
+    if (!refill()) {
+      return -1;
+    }
+    len = Math.min(len, byteBuffer.remaining());
+    byteBuffer.get(b, offset, len);
+    return len;
   }
 
   @Override

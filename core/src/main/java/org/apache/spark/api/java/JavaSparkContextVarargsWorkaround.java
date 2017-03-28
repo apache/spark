@@ -18,7 +18,6 @@
 package org.apache.spark.api.java;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 // See
@@ -31,7 +30,9 @@ abstract class JavaSparkContextVarargsWorkaround {
       throw new IllegalArgumentException("Union called on empty list");
     }
     List<JavaRDD<T>> rest = new ArrayList<>(rdds.length - 1);
-    rest.addAll(Arrays.asList(rdds).subList(1, rdds.length));
+    for (int i = 1; i < rdds.length; i++) {
+      rest.add(rdds[i]);
+    }
     return union(rdds[0], rest);
   }
 
@@ -40,7 +41,9 @@ abstract class JavaSparkContextVarargsWorkaround {
       throw new IllegalArgumentException("Union called on empty list");
     }
     List<JavaDoubleRDD> rest = new ArrayList<>(rdds.length - 1);
-    rest.addAll(Arrays.asList(rdds).subList(1, rdds.length));
+    for (int i = 1; i < rdds.length; i++) {
+      rest.add(rdds[i]);
+    }
     return union(rdds[0], rest);
   }
 
@@ -50,7 +53,9 @@ abstract class JavaSparkContextVarargsWorkaround {
       throw new IllegalArgumentException("Union called on empty list");
     }
     List<JavaPairRDD<K, V>> rest = new ArrayList<>(rdds.length - 1);
-    rest.addAll(Arrays.asList(rdds).subList(1, rdds.length));
+    for (int i = 1; i < rdds.length; i++) {
+      rest.add(rdds[i]);
+    }
     return union(rdds[0], rest);
   }
 
