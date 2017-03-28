@@ -93,13 +93,8 @@ private[spark] object TreePoint {
     val (index, data) = Range(0, numFeatures).map{ idx =>
       val bin = findBin(idx, labeledPoint,
                         featureArity(idx), thresholds(idx))
-
-      if (bin != 0) {
-        Some((idx, bin))
-      } else {
-        None
-      }
-    }.flatten.unzip
+      (idx, bin)
+    }.filter(_._2 != 0).unzip
 
     val vec = new SparseVector[Int](index.toArray, data.toArray, numFeatures)
 
