@@ -26,7 +26,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 import org.apache.spark.{SparkConf, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.ui.SparkUI
@@ -133,11 +133,13 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 /**
  * Periodic updates from executors.
  * @param execId executor id
+ * @param executorMetrics metrics in executor level
  * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
+    executorMetrics: ExecutorMetrics,
     accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])])
   extends SparkListenerEvent
 
