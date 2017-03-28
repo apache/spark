@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -33,7 +34,19 @@ class PruneFiltersSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown and Pruning", Once,
         CombineFilters,
-        PruneFilters,
+        PruneFilters(SimpleCatalystConf(caseSensitiveAnalysis = true)),
+        PushDownPredicate,
+        PushPredicateThroughJoin) :: Nil
+  }
+
+  object OptimizeWithConstraintPropagationDisabled extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Subqueries", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Filter Pushdown and Pruning", Once,
+        CombineFilters,
+        PruneFilters(SimpleCatalystConf(caseSensitiveAnalysis = true,
+          constraintPropagationEnabled = false)),
         PushDownPredicate,
         PushPredicateThroughJoin) :: Nil
   }
@@ -131,6 +144,31 @@ class PruneFiltersSuite extends PlanTest {
     val originalQuery = testRelation.where(Rand(10) > 5).select('a).where(Rand(10) > 5).analyze
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer = testRelation.where(Rand(10) > 5).where(Rand(10) > 5).select('a).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("No pruning when constraint propagation is disabled") {
+    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
+    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
+
+    val query = tr1
+      .where("tr1.a".attr > 10 || "tr1.c".attr < 10)
+      .join(tr2.where('d.attr < 100), Inner, Some("tr1.a".attr === "tr2.a".attr))
+
+    val queryWithUselessFilter =
+      query.where(
+        ("tr1.a".attr > 10 || "tr1.c".attr < 10) &&
+          'd.attr < 100)
+
+    val optimized =
+      OptimizeWithConstraintPropagationDisabled.execute(queryWithUselessFilter.analyze)
+    // When constraint propagation is disabled, the useless filter won't be pruned.
+    // It gets pushed down. Because the rule `CombineFilters` runs only once, there are redundant
+    // and duplicate filters.
+    val correctAnswer = tr1
+      .where("tr1.a".attr > 10 || "tr1.c".attr < 10).where("tr1.a".attr > 10 || "tr1.c".attr < 10)
+      .join(tr2.where('d.attr < 100).where('d.attr < 100),
+          Inner, Some("tr1.a".attr === "tr2.a".attr)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }

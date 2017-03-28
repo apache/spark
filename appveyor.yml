@@ -27,6 +27,9 @@ branches:
 only_commits:
   files:
     - R/
+    - sql/core/src/main/scala/org/apache/spark/sql/api/r/
+    - core/src/main/scala/org/apache/spark/api/r/
+    - mllib/src/main/scala/org/apache/spark/ml/r/
 
 cache:
   - C:\Users\appveyor\.m2
