@@ -25,9 +25,9 @@
 setClass("FPGrowthModel", slots = list(jobj = "jobj"))
 
 #' FP-growth
-#' 
+#'
 #' A parallel FP-growth algorithm to mine frequent itemsets.
-#' For more details, see 
+#' For more details, see
 #' \href{https://spark.apache.org/docs/latest/mllib-frequent-pattern-mining.html#fp-growth}{
 #' FP-growth}.
 #'
@@ -99,7 +99,10 @@ setMethod("spark.fpGrowth", signature(data = "SparkDataFrame"),
 # Get frequent itemsets.
 
 #' @param object a fitted FPGrowth model.
-#' @return A DataFrame with frequent itemsets.
+#' @return A \code{DataFrame} with frequent itemsets.
+#'         The \code{DataFrame} contains two columns:
+#'         \code{items} (an array of the same type as the input column)
+#'         and \code{freq} (frequency of the itemset).
 #' @rdname spark.fpGrowth
 #' @aliases freqItemsets,FPGrowthModel-method
 #' @export
@@ -111,7 +114,11 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 
 # Get association rules.
 
-#' @return A DataFrame with association rules.
+#' @return A \code{DataFrame} with association rules.
+#'         The \code{DataFrame} contains three columns:
+#'         \code{antecedent} (an array of the same type as the input column),
+#'         \code{consequent} (an array of the same type as the input column),
+#'         and \code{condfidence} (confidence).
 #' @rdname spark.fpGrowth
 #' @aliases associationRules,FPGrowthModel-method
 #' @export
