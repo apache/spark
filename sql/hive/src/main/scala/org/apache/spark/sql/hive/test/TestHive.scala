@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -148,12 +148,14 @@ class TestHiveContext(
  *
  * @param sc SparkContext
  * @param existingSharedState optional [[SharedState]]
+ * @param parentSessionState optional parent [[SessionState]]
  * @param loadTestTables if true, load the test tables. They can only be loaded when running
  *                       in the JVM, i.e when calling from Python this flag has to be false.
  */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
     @transient private val existingSharedState: Option[TestHiveSharedState],
+    @transient private val parentSessionState: Option[HiveSessionState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
@@ -161,6 +163,7 @@ private[hive] class TestHiveSparkSession(
     this(
       sc,
       existingSharedState = None,
+      parentSessionState = None,
       loadTestTables)
   }
 
@@ -168,6 +171,7 @@ private[hive] class TestHiveSparkSession(
     this(
       sc,
       existingSharedState = Some(new TestHiveSharedState(sc, Some(hiveClient))),
+      parentSessionState = None,
       loadTestTables)
   }
 
@@ -192,36 +196,21 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: HiveSessionState = {
-    val testConf =
-      new SQLConf {
-        clear()
-        override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-        override def clear(): Unit = {
-          super.clear()
-          TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
-        }
-      }
-    val queryExecutionCreator = (plan: LogicalPlan) => new TestHiveQueryExecution(this, plan)
-    val initHelper = HiveSessionState(this, testConf)
-    SessionState.mergeSparkConf(testConf, sparkContext.getConf)
-
-    new HiveSessionState(
-      sparkContext,
-      sharedState,
-      testConf,
-      initHelper.experimentalMethods,
-      initHelper.functionRegistry,
-      initHelper.catalog,
-      initHelper.sqlParser,
-      initHelper.metadataHive,
-      initHelper.analyzer,
-      initHelper.streamingQueryManager,
-      queryExecutionCreator,
-      initHelper.plannerCreator)
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
   override def newSession(): TestHiveSparkSession = {
-    new TestHiveSparkSession(sc, Some(sharedState), loadTestTables)
+    new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
+  }
+
+  override def cloneSession(): SparkSession = {
+    val result = new TestHiveSparkSession(
+      sparkContext,
+      Some(sharedState),
+      Some(sessionState),
+      loadTestTables)
+    result.sessionState // force copy of SessionState
+    result
   }
 
   private var cacheTables: Boolean = false
@@ -594,4 +583,19 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
+}
+
+private[sql] class TestHiveSessionStateBuilder(
+    session: SparkSession,
+    state: Option[SessionState])
+  extends HiveSessionStateBuilder(session, state)
+  with WithTestConf {
+
+  override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
+
+  override def createQueryExecution: (LogicalPlan) => QueryExecution = { plan =>
+    new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
+  }
+
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
