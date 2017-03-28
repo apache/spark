@@ -91,8 +91,10 @@ trait PredicateHelper {
    */
   protected def canEvaluateWithinJoin(expr: Expression): Boolean = expr match {
     case l: ListQuery =>
-      // Now pulling up IN predicates is deferred to `RewritePredicateSubquery`. As a result,
-      // `ListQuery`'s children can be empty before that rule and falls into the next case.
+      // A ListQuery defines the query which we want to search in an IN subquery expression.
+      // Currently the only way to evaluate an IN subquery is to convert it to a
+      // LeftSemi/LeftAnti/ExistenceJoin by `RewritePredicateSubquery` rule.
+      // It cannot be evaluated as part of a Join operator.
       false
     case e: SubqueryExpression =>
       // non-correlated subquery will be replaced as literal
