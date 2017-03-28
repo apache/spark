@@ -567,7 +567,7 @@ case class DescribeTableCommand(
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    table.toLinkedHashMap.foreach(s => append(buffer, s._1 + ":", s._2, ""))
+    table.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
 
   private def describeDetailedPartitionInfo(
