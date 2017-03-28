@@ -67,6 +67,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   if (loadDefaults) {
     loadFromSystemProperties(false)
   }
+  // tentatively enable offHeap for test
+  set("spark.memory.offHeap.enabled", "true")
+  set("spark.memory.offHeap.size", "1gb")
 
   private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
