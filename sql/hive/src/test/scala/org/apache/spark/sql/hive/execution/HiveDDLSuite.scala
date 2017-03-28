@@ -128,11 +128,11 @@ class HiveDDLSuite
       dbPath: Option[String] = None): Boolean = {
     val expectedTablePath =
       if (dbPath.isEmpty) {
-        hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
+        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
       } else {
-        new Path(new Path(dbPath.get), tableIdentifier.table).toString
+        new Path(new Path(dbPath.get), tableIdentifier.table)
       }
-    val filesystemPath = new Path(expectedTablePath)
+    val filesystemPath = new Path(expectedTablePath.toString)
     val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }

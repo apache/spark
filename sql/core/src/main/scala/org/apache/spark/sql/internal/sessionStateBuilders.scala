@@ -110,6 +110,11 @@ abstract class BaseSessionStateBuilder(
   protected lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
 
   /**
+   * ResourceLoader that is used to load function resources and jars.
+   */
+  protected lazy val resourceLoader: SessionResourceLoader = new SessionResourceLoader(session)
+
+  /**
    * Catalog for managing table and database states. If there is a pre-existing catalog, the state
    * of that catalog (temp tables & current database) will be copied into the new catalog.
    *
@@ -123,7 +128,7 @@ abstract class BaseSessionStateBuilder(
       conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
-      new SessionFunctionResourceLoader(session))
+      resourceLoader)
     parentState.foreach(_.catalog.copyStateTo(catalog))
     catalog
   }
@@ -251,6 +256,7 @@ abstract class BaseSessionStateBuilder(
       optimizer,
       planner,
       streamingQueryManager,
+      resourceLoader,
       createQueryExecution,
       createClone)
   }
