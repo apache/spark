@@ -198,6 +198,19 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(originalPlan, bestPlan)
   }
 
+  test("keep the order of attributes in the final output") {
+    val outputLists = Seq("t1.k-1-2", "t1.v-1-10", "t3.v-1-100").permutations
+    while (outputLists.hasNext) {
+      val expectedOrder = outputLists.next().map(nameToAttr)
+      val expectedPlan =
+        t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+          .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+          .select(expectedOrder: _*)
+      // The plan should not change after optimization
+      assertEqualPlans(expectedPlan, expectedPlan)
+    }
+  }
+
   private def assertEqualPlans(
       originalPlan: LogicalPlan,
       groundTruthBestPlan: LogicalPlan): Unit = {

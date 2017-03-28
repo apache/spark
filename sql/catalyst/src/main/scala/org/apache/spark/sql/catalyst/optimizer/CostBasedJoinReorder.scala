@@ -40,10 +40,10 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
       val result = plan transformDown {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
         case j @ Join(_, _, _: InnerLike, Some(cond)) =>
-          reorder(j, j.outputSet)
+          reorder(j, j.output)
         case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond)))
           if projectList.forall(_.isInstanceOf[Attribute]) =>
-          reorder(p, p.outputSet)
+          reorder(p, p.output)
       }
       // After reordering is finished, convert OrderedJoin back to Join
       result transformDown {
@@ -52,7 +52,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
     }
   }
 
-  private def reorder(plan: LogicalPlan, output: AttributeSet): LogicalPlan = {
+  private def reorder(plan: LogicalPlan, output: Seq[Attribute]): LogicalPlan = {
     val (items, conditions) = extractInnerJoins(plan)
     // TODO: Compute the set of star-joins and use them in the join enumeration
     // algorithm to prune un-optimal plan choices.
@@ -140,7 +140,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       conf: SQLConf,
       items: Seq[LogicalPlan],
       conditions: Set[Expression],
-      topOutput: AttributeSet): LogicalPlan = {
+      output: Seq[Attribute]): LogicalPlan = {
 
     val startTime = System.nanoTime()
     // Level i maintains all found plans for i + 1 items.
@@ -152,9 +152,10 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
     // Build plans for next levels until the last level has only one plan. This plan contains
     // all items that can be joined, so there's no need to continue.
+    val topOutputSet = AttributeSet(output)
     while (foundPlans.size < items.length && foundPlans.last.size > 1) {
       // Build plans for the next level.
-      foundPlans += searchLevel(foundPlans, conf, conditions, topOutput)
+      foundPlans += searchLevel(foundPlans, conf, conditions, topOutputSet)
     }
 
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
@@ -163,7 +164,14 @@ object JoinReorderDP extends PredicateHelper with Logging {
 
     // The last level must have one and only one plan, because all items are joinable.
     assert(foundPlans.size == items.length && foundPlans.last.size == 1)
-    foundPlans.last.head._2.plan
+    foundPlans.last.head._2.plan match {
+      case p @ Project(projectList, j: Join) if projectList != output =>
+        assert(topOutputSet == p.outputSet)
+        // Keep the same order of final output attributes.
+        p.copy(projectList = output)
+      case finalPlan =>
+        finalPlan
+    }
   }
 
   /** Find all possible plans at the next level, based on existing levels. */
@@ -254,10 +262,10 @@ object JoinReorderDP extends PredicateHelper with Logging {
     val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
     val remainingConds = conditions -- collectedJoinConds
     val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
-    val neededFromNewJoin = newJoin.outputSet.filter(neededAttr.contains)
+    val neededFromNewJoin = newJoin.output.filter(neededAttr.contains)
     val newPlan =
       if ((newJoin.outputSet -- neededFromNewJoin).nonEmpty) {
-        Project(neededFromNewJoin.toSeq, newJoin)
+        Project(neededFromNewJoin, newJoin)
       } else {
         newJoin
       }
