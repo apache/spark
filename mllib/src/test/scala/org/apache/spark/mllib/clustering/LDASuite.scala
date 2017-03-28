@@ -215,10 +215,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("OnlineLDAOptimizer initialization with a previous model") {
-    val alpha = Vectors.dense(Array.fill(tinyTopics.numRows)(1.0 / tinyTopics.numRows))
+    val alpha = Vectors.dense(Array.fill(tinyK)(0.01))
     val model = new LocalLDAModel(tinyTopics, alpha, 1D, 100D)
 
-    val lda = new LDA().setK(tinyK)
+    val lda = new LDA().setK(tinyK).setDocConcentration(alpha).setTopicConcentration(1D)
     val corpus = sc.parallelize(tinyCorpus, 2)
     val op = new OnlineLDAOptimizer().initialize(Some(model), corpus, lda)
 

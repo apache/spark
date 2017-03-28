@@ -254,7 +254,6 @@ final class EMLDAOptimizer extends LDAOptimizer {
   }
 }
 
-
 /**
  * :: DeveloperApi ::
  *
@@ -422,41 +421,43 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       initialModel: Option[LDAModel],
       docs: RDD[(Long, Vector)],
       lda: LDA): OnlineLDAOptimizer = {
-
-    this.randomGenerator = new Random(lda.getSeed)
-    this.docs = docs
+    this.k = lda.getK
     this.corpusSize = docs.count()
+    this.vocabSize = docs.first()._2.size
+
+    this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
+      if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
+      else {
+        require(lda.getAsymmetricDocConcentration(0) >= 0,
+          s"all entries in alpha must be >=0, got: $alpha")
+        Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
+      }
+    } else {
+      require(lda.getAsymmetricDocConcentration.size == k,
+        s"alpha must have length k, got: $alpha")
+      lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
+        require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
+      }
+      lda.getAsymmetricDocConcentration
+    }
+    this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
+    this.randomGenerator = new Random(lda.getSeed)
 
     initialModel match {
-      case Some(model) =>
+      case Some(model: LocalLDAModel) =>
+        require(model.k == this.k, "mismatched number of topics")
         require(model.vocabSize == docs.first()._2.size, "mismatched vocabulary size")
-        this.k = model.k
-        this.alpha = model.docConcentration
-        this.eta = model.topicConcentration
+        require(model.docConcentration == this.alpha, "mismatched doc concentration")
+        require(model.topicConcentration == this.eta, "mismatched topic concentration")
         this.lambda = model.topicsMatrix.transpose.asBreeze.toDenseMatrix
       case None =>
-        this.k = lda.getK
-        this.vocabSize = docs.first()._2.size
-        this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
-          if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
-          else {
-            require(lda.getAsymmetricDocConcentration(0) >= 0,
-              s"all entries in alpha must be >=0, got: $alpha")
-            Vectors.dense(Array.fill(k)(lda.getAsymmetricDocConcentration(0)))
-          }
-        } else {
-          require(lda.getAsymmetricDocConcentration.size == k,
-            s"alpha must have length k, got: $alpha")
-          lda.getAsymmetricDocConcentration.foreachActive { case (_, x) =>
-            require(x >= 0, s"all entries in alpha must be >= 0, got: $alpha")
-          }
-          lda.getAsymmetricDocConcentration
-        }
-        this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
-
         // Initialize the variational distribution q(beta|lambda)
         this.lambda = getGammaMatrix(k, vocabSize)
+      case other =>
+        throw new IllegalArgumentException(s"mismatched model types, got $other")
     }
+
+    this.docs = docs
 
     this.iteration = 0
     this
