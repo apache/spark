@@ -207,8 +207,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   public void initBatch() {
-    assert(memoryMode != null);
-    initBatch(memoryMode, null, null);
+    initBatch((memoryMode != null) ? memoryMode : SparkEnv.get().memoryManager().tungstenMemoryMode(),
+      null, null);
   }
 
   public void initBatch(StructType partitionColumns, InternalRow partitionValues, boolean isEnableOffHeap) {
