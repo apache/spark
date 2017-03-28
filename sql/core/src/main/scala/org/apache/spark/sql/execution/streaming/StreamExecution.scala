@@ -305,7 +305,7 @@ class StreamExecution(
               if (dataAvailable) {
                 // Update committed offsets.
                 committedOffsets ++= availableOffsets
-                batchCommitLog.add(currentBatchId, null)
+                batchCommitLog.add(currentBatchId)
                 logDebug(s"batch ${currentBatchId} committed")
                 // We'll increase currentBatchId after we complete processing current batch's data
                 currentBatchId += 1
