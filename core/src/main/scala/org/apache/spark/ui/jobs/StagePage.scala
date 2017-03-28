@@ -762,7 +762,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
       s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
-        s"${UIUtils.getTimeZoneOffset})")}
+        s"${UIUtils.getTimeZoneOffset()})")}
     </script>
   }
 

@@ -184,7 +184,7 @@ private[ui] object RDDOperationGraph extends Logging {
     val internalEdges = new ListBuffer[RDDOperationEdge]
     val outgoingEdges = new ListBuffer[RDDOperationEdge]
     val incomingEdges = new ListBuffer[RDDOperationEdge]
-    edges.foreach { e =>
+    edges.foreach { case e: RDDOperationEdge =>
       val fromThisGraph = nodes.contains(e.fromId)
       val toThisGraph = nodes.contains(e.toId)
       (fromThisGraph, toThisGraph) match {

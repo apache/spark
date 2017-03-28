@@ -70,13 +70,13 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val jsEscapedName = StringEscapeUtils.escapeEcmaScript(escapedName)
       s"""
          |{
-         |  'className': 'stage job-timeline-object $status',
+         |  'className': 'stage job-timeline-object ${status}',
          |  'group': 'stages',
-         |  'start': new Date($submissionTime),
-         |  'end': new Date($completionTime),
+         |  'start': new Date(${submissionTime}),
+         |  'end': new Date(${completionTime}),
          |  'content': '<div class="job-timeline-content" data-toggle="tooltip"' +
          |   'data-placement="top" data-html="true"' +
-         |   'data-title="$jsEscapedName (Stage $stageId.$attemptId)<br>' +
+         |   'data-title="${jsEscapedName} (Stage ${stageId}.${attemptId})<br>' +
          |   'Status: ${status.toUpperCase}<br>' +
          |   'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
          |   '${
@@ -86,7 +86,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
                    ""
                  }
               }">' +
-         |    '$jsEscapedName (Stage $stageId.$attemptId)</div>',
+         |    '${jsEscapedName} (Stage ${stageId}.${attemptId})</div>',
          |}
        """.stripMargin
     }
@@ -135,7 +135,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           events += removedEvent
 
     }
-    events
+    events.toSeq
   }
 
   private def makeTimeline(
@@ -151,11 +151,11 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           |[
           |  {
           |    'id': 'executors',
-          |    'content': '<div>Executors</div>$EXECUTORS_LEGEND',
+          |    'content': '<div>Executors</div>${EXECUTORS_LEGEND}',
           |  },
           |  {
           |    'id': 'stages',
-          |    'content': '<div>Stages</div>$STAGES_LEGEND',
+          |    'content': '<div>Stages</div>${STAGES_LEGEND}',
           |  }
           |]
         """.stripMargin
@@ -178,8 +178,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       </div>
     </div> ++
     <script type="text/javascript">
-      {Unparsed(s"drawJobTimeline($groupJsonArrayAsStr, $eventArrayAsStr, " +
-      s"$appStartTime, ${UIUtils.getTimeZoneOffset});")}
+      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, " +
+      s"${appStartTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
   }
 
