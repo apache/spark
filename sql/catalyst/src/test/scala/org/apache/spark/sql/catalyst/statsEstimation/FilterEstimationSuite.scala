@@ -586,7 +586,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
           assert(filterColumnStat == kv._2)
         }
       }
-      // assert(filter.stats(conf) == expectedStats)
     }
   }
+
 }

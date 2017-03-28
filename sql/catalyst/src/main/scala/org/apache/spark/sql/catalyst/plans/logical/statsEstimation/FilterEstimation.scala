@@ -645,9 +645,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       if (update) {
         // Need to adjust new min/max after the filter condition is applied
 
-        val ndv = BigDecimal(colStatLeft.distinctCount)
-        var newNdv = (ndv * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
-        if (newNdv < 1) newNdv = 1
+        val ndvLeft = BigDecimal(colStatLeft.distinctCount)
+        var newNdvLeft = (ndvLeft * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
+        if (newNdvLeft < 1) newNdvLeft = 1
+        val ndvRight = BigDecimal(colStatLeft.distinctCount)
+        var newNdvRight = (ndvRight * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
+        if (newNdvRight < 1) newNdvRight = 1
+
         var newMaxLeft = colStatLeft.max
         var newMinLeft = colStatLeft.min
         var newMaxRight = colStatRight.max
@@ -675,10 +679,10 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             if (maxLeft > maxRight) newMaxLeft = colStatRight.max
         }
 
-        val newStatsLeft = colStatLeft.copy(distinctCount = newNdv, min = newMinLeft,
+        val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
           max = newMaxLeft, nullCount = 0)
         colStatsMap(attrLeft) = newStatsLeft
-        val newStatsRight = colStatRight.copy(distinctCount = newNdv, min = newMinRight,
+        val newStatsRight = colStatRight.copy(distinctCount = newNdvRight, min = newMinRight,
           max = newMaxRight, nullCount = 0)
         colStatsMap(attrRight) = newStatsRight
       }
