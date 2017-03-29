@@ -107,7 +107,6 @@ class TypedColumn[-T, U](
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
- *   'columnName                 // Scala short hand for a named column.
  * }}}
  *
  * [[Column]] objects can be composed to form complex expressions:
@@ -117,7 +116,7 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
- * @note The internal Catalyst [[Expression]] can be accessed via [[expr]], but this method is for
+ * @note The internal Catalyst expression can be accessed via [[expr]], but this method is for
  * debugging purposes only and can change in any future Spark releases.
  *
  * @groupname java_expr_ops Java-specific expression operators
