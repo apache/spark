@@ -156,7 +156,7 @@ class SparkSubmitSuite
       "userjar.jar")
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.queue should be ("thequeue")
-    appArgs.toString.contains("thequeue") should be (true)
+    appArgs.toString should include ("thequeue")
   }
 
   test("specify deploy mode through configuration") {
