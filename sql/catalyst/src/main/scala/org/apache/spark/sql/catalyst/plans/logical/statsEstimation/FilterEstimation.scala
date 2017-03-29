@@ -630,6 +630,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         (maxLeft <= minRight, minLeft >= maxRight)
       case _: GreaterThanOrEqual =>
         (maxLeft < minRight, minLeft > maxRight)
+      case _: EqualNullSafe =>
+        // For null-safe equality, we set it to partial overlap
+        (false, false)
     }
 
     var percent = BigDecimal(1.0)
@@ -680,10 +683,10 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         }
 
         val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
-          max = newMaxLeft, nullCount = 0)
+          max = newMaxLeft)
         colStatsMap(attrLeft) = newStatsLeft
         val newStatsRight = colStatRight.copy(distinctCount = newNdvRight, min = newMinRight,
-          max = newMaxRight, nullCount = 0)
+          max = newMaxRight)
         colStatsMap(attrRight) = newStatsRight
       }
     }
