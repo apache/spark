@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.Modifier
 
+import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -429,24 +430,34 @@ object MapObjects {
    * @param function The function applied on the collection elements.
    * @param inputData An expression that when evaluated returns a collection object.
    * @param elementType The data type of elements in the collection.
+   * @param customCollectionCls Class of the resulting collection (returning ObjectType)
+   *                            or None (returning ArrayType)
    */
   def apply(
       function: Expression => Expression,
       inputData: Expression,
-      elementType: DataType): MapObjects = {
-    val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
-    val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
+      elementType: DataType,
+      customCollectionCls: Option[Class[_]] = None): MapObjects = {
+    val id = curId.getAndIncrement()
+    val loopValue = s"MapObjects_loopValue$id"
+    val loopIsNull = s"MapObjects_loopIsNull$id"
     val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
-    MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData)
+    val builderValue = s"MapObjects_builderValue$id"
+    MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData,
+      customCollectionCls, builderValue)
   }
 }
 
 /**
  * Applies the given expression to every element of a collection of items, returning the result
- * as an ArrayType.  This is similar to a typical map operation, but where the lambda function
- * is expressed using catalyst expressions.
+ * as an ArrayType or ObjectType. This is similar to a typical map operation, but where the lambda
+ * function is expressed using catalyst expressions.
  *
- * The following collection ObjectTypes are currently supported:
+ * The type of the result is determined as follows:
+ * - ArrayType - when customCollectionCls is None
+ * - ObjectType(collection) - when customCollectionCls contains a collection class
+ *
+ * The following collection ObjectTypes are currently supported on input:
  *   Seq, Array, ArrayData, java.util.List
  *
  * @param loopValue the name of the loop variable that used when iterate the collection, and used
@@ -458,13 +469,19 @@ object MapObjects {
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
  * @param inputData An expression that when evaluated returns a collection object.
+ * @param customCollectionCls Class of the resulting collection (returning ObjectType)
+ *                            or None (returning ArrayType)
+ * @param builderValue The name of the builder variable used to construct the resulting collection
+ *                     (used only when returning ObjectType)
  */
 case class MapObjects private(
     loopValue: String,
     loopIsNull: String,
     loopVarDataType: DataType,
     lambdaFunction: Expression,
-    inputData: Expression) extends Expression with NonSQLExpression {
+    inputData: Expression,
+    customCollectionCls: Option[Class[_]],
+    builderValue: String) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = inputData.nullable
 
@@ -474,7 +491,8 @@ case class MapObjects private(
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def dataType: DataType =
-    ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable)
+    customCollectionCls.map(ObjectType.apply).getOrElse(
+      ArrayType(lambdaFunction.dataType, containsNull = lambdaFunction.nullable))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
@@ -557,15 +575,33 @@ case class MapObjects private(
       case _ => s"$loopIsNull = $loopValue == null;"
     }
 
+    val (initCollection, addElement, getResult): (String, String => String, String) =
+      customCollectionCls match {
+        case Some(cls) =>
+          // collection
+          val collObjectName = s"${cls.getName}$$.MODULE$$"
+          val getBuilderVar = s"$collObjectName.newBuilder()"
+
+          (s"""${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
+        $builderValue.sizeHint($dataLength);""",
+            genValue => s"$builderValue.$$plus$$eq($genValue);",
+            s"(${cls.getName}) $builderValue.result();")
+        case None =>
+          // array
+          (s"""$convertedType[] $convertedArray = null;
+        $convertedArray = $arrayConstructor;""",
+            genValue => s"$convertedArray[$loopIndex] = $genValue;",
+            s"new ${classOf[GenericArrayData].getName}($convertedArray);")
+      }
+
     val code = s"""
       ${genInputData.code}
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
 
       if (!${genInputData.isNull}) {
         $determineCollectionType
-        $convertedType[] $convertedArray = null;
         int $dataLength = $getLength;
-        $convertedArray = $arrayConstructor;
+        $initCollection
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
@@ -574,15 +610,15 @@ case class MapObjects private(
 
           ${genFunction.code}
           if (${genFunction.isNull}) {
-            $convertedArray[$loopIndex] = null;
+            ${addElement("null")}
           } else {
-            $convertedArray[$loopIndex] = $genFunctionValue;
+            ${addElement(genFunctionValue)}
           }
 
           $loopIndex += 1;
         }
 
-        ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
+        ${ev.value} = $getResult
       }
     """
     ev.copy(code = code, isNull = genInputData.isNull)

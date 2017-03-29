@@ -46,9 +46,9 @@ object ChiSquareTest {
       statistics: Vector)
 
   /**
-   * Conduct Pearson's independence test for every feature against the label across the input RDD.
-   * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
-   * the Chi-squared statistic is computed. All label and feature values must be categorical.
+   * Conduct Pearson's independence test for every feature against the label. For each feature, the
+   * (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
+   * statistic is computed. All label and feature values must be categorical.
    *
    * The null hypothesis is that the occurrence of the outcomes is statistically independent.
    *

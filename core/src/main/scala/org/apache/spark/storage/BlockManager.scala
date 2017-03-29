@@ -1187,7 +1187,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       existingReplicas: Set[BlockManagerId],
       maxReplicas: Int): Unit = {
-    logInfo(s"Pro-actively replicating $blockId")
+    logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
     blockInfoManager.lockForReading(blockId).foreach { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
@@ -1196,9 +1196,13 @@ private[spark] class BlockManager(
         useOffHeap = info.level.useOffHeap,
         deserialized = info.level.deserialized,
         replication = maxReplicas)
+      // we know we are called as a result of an executor removal, so we refresh peer cache
+      // this way, we won't try to replicate to a missing executor with a stale reference
+      getPeers(forceFetch = true)
       try {
         replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
       } finally {
+        logDebug(s"Releasing lock for $blockId")
         releaseLock(blockId)
       }
     }
