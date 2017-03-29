@@ -68,20 +68,14 @@ kafkaParams.put("enable.auto.commit", false);
 
 Collection<String> topics = Arrays.asList("topicA", "topicB");
 
-final JavaInputDStream<ConsumerRecord<String, String>> stream =
+JavaInputDStream<ConsumerRecord<String, String>> stream =
   KafkaUtils.createDirectStream(
     streamingContext,
     LocationStrategies.PreferConsistent(),
     ConsumerStrategies.<String, String>Subscribe(topics, kafkaParams)
   );
 
-stream.mapToPair(
-  new PairFunction<ConsumerRecord<String, String>, String, String>() {
-    @Override
-    public Tuple2<String, String> call(ConsumerRecord<String, String> record) {
-      return new Tuple2<>(record.key(), record.value());
-    }
-  })
+stream.mapToPair(record -> new Tuple2<>(record.key(), record.value()));
 {% endhighlight %}
 </div>
 </div>
@@ -162,19 +156,13 @@ stream.foreachRDD { rdd =>
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
-  @Override
-  public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
-    final OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-    rdd.foreachPartition(new VoidFunction<Iterator<ConsumerRecord<String, String>>>() {
-      @Override
-      public void call(Iterator<ConsumerRecord<String, String>> consumerRecords) {
-        OffsetRange o = offsetRanges[TaskContext.get().partitionId()];
-        System.out.println(
-          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset());
-      }
-    });
-  }
+stream.foreachRDD(rdd -> {
+  OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+  rdd.foreachPartition(consumerRecords -> {
+    OffsetRange o = offsetRanges[TaskContext.get().partitionId()];
+    System.out.println(
+      o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset());
+  });
 });
 {% endhighlight %}
 </div>
@@ -205,14 +193,11 @@ As with HasOffsetRanges, the cast to CanCommitOffsets will only succeed if calle
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
-  @Override
-  public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
-    OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+stream.foreachRDD(rdd -> {
+  OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
 
-    // some time later, after outputs have completed
-    ((CanCommitOffsets) stream.inputDStream()).commitAsync(offsetRanges);
-  }
+  // some time later, after outputs have completed
+  ((CanCommitOffsets) stream.inputDStream()).commitAsync(offsetRanges);
 });
 {% endhighlight %}
 </div>
@@ -268,21 +253,18 @@ JavaInputDStream<ConsumerRecord<String, String>> stream = KafkaUtils.createDirec
   ConsumerStrategies.<String, String>Assign(fromOffsets.keySet(), kafkaParams, fromOffsets)
 );
 
-stream.foreachRDD(new VoidFunction<JavaRDD<ConsumerRecord<String, String>>>() {
-  @Override
-  public void call(JavaRDD<ConsumerRecord<String, String>> rdd) {
-    OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-    
-    Object results = yourCalculation(rdd);
+stream.foreachRDD(rdd -> {
+  OffsetRange[] offsetRanges = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+  
+  Object results = yourCalculation(rdd);
 
-    // begin your transaction
+  // begin your transaction
 
-    // update results
-    // update offsets where the end of existing offsets matches the beginning of this batch of offsets
-    // assert that offsets were updated correctly
+  // update results
+  // update offsets where the end of existing offsets matches the beginning of this batch of offsets
+  // assert that offsets were updated correctly
 
-    // end your transaction
-  }
+  // end your transaction
 });
 {% endhighlight %}
 </div>

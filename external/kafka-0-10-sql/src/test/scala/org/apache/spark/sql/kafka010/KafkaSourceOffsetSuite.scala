@@ -55,7 +55,7 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSQLContext {
   }
 
 
-  testWithUninterruptibleThread("OffsetSeqLog serialization - deserialization") {
+  test("OffsetSeqLog serialization - deserialization") {
     withTempDir { temp =>
       // use non-existent directory to test whether log make the dir
       val dir = new File(temp, "dir")

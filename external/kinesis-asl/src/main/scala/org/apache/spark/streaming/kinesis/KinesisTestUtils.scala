@@ -30,7 +30,7 @@ import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
-import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.{AmazonKinesis, AmazonKinesisClient}
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark.internal.Logging
@@ -43,7 +43,7 @@ import org.apache.spark.internal.Logging
 private[kinesis] class KinesisTestUtils(streamShardCount: Int = 2) extends Logging {
 
   val endpointUrl = KinesisTestUtils.endpointUrl
-  val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
+  val regionName = KinesisTestUtils.getRegionNameByEndpoint(endpointUrl)
 
   private val createStreamTimeoutSeconds = 300
   private val describeStreamPollTimeSeconds = 1
@@ -204,6 +204,16 @@ private[kinesis] object KinesisTestUtils {
   val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
   val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
   val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+
+  def getRegionNameByEndpoint(endpoint: String): String = {
+    val uri = new java.net.URI(endpoint)
+    RegionUtils.getRegionsForService(AmazonKinesis.ENDPOINT_PREFIX)
+      .asScala
+      .find(_.getAvailableEndpoints.asScala.toSeq.contains(uri.getHost))
+      .map(_.getName)
+      .getOrElse(
+        throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
+  }
 
   lazy val shouldRunTests = {
     val isEnvSet = sys.env.get(envVarNameForEnablingTests) == Some("1")

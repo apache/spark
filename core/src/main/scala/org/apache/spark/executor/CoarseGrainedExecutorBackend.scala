@@ -97,11 +97,11 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.launchTask(this, taskDesc)
       }
 
-    case KillTask(taskId, _, interruptThread) =>
+    case KillTask(taskId, _, interruptThread, reason) =>
       if (executor == null) {
         exitExecutor(1, "Received KillTask command but executor was null")
       } else {
-        executor.killTask(taskId, interruptThread)
+        executor.killTask(taskId, interruptThread, reason)
       }
 
     case StopExecutor =>
@@ -199,7 +199,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         new SecurityManager(executorConf),
         clientMode = true)
       val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val cfg = driver.askWithRetry[SparkAppConfig](RetrieveSparkAppConfig)
+      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
       fetcher.shutdown()
 

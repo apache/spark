@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.sources
 
+import java.net.URI
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, Metadata, MetadataBuilder, StructType}
@@ -72,28 +75,29 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')
         """.stripMargin)
-      assert(getPathOption("src") == Some("/tmp/path"))
+      assert(getPathOption("src") == Some("file:/tmp/path"))
     }
 
     // should exist even path option is not specified when creating table
     withTable("src") {
       sql(s"CREATE TABLE src(i int) USING ${classOf[TestOptionsSource].getCanonicalName}")
-      assert(getPathOption("src") == Some(defaultTablePath("src")))
+      assert(getPathOption("src") == Some(CatalogUtils.URIToString(defaultTablePath("src"))))
     }
   }
 
   test("path option also exist for write path") {
     withTable("src") {
       withTempPath { p =>
-        val path = new Path(p.getAbsolutePath).toString
         sql(
           s"""
             |CREATE TABLE src
             |USING ${classOf[TestOptionsSource].getCanonicalName}
-            |OPTIONS (PATH '$path')
+            |OPTIONS (PATH '$p')
             |AS SELECT 1
           """.stripMargin)
-        assert(spark.table("src").schema.head.metadata.getString("path") == path)
+        assert(CatalogUtils.stringToURI(
+          spark.table("src").schema.head.metadata.getString("path")) ==
+          makeQualifiedPath(p.getAbsolutePath))
       }
     }
 
@@ -105,7 +109,8 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |AS SELECT 1
           """.stripMargin)
-      assert(spark.table("src").schema.head.metadata.getString("path") == defaultTablePath("src"))
+      assert(spark.table("src").schema.head.metadata.getString("path") ==
+        CatalogUtils.URIToString(defaultTablePath("src")))
     }
   }
 
@@ -123,7 +128,7 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
     withTable("src", "src2") {
       sql(s"CREATE TABLE src(i int) USING ${classOf[TestOptionsSource].getCanonicalName}")
       sql("ALTER TABLE src RENAME TO src2")
-      assert(getPathOption("src2") == Some(defaultTablePath("src2")))
+      assert(getPathOption("src2") == Some(CatalogUtils.URIToString(defaultTablePath("src2"))))
     }
   }
 
@@ -133,7 +138,7 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
     }.head
   }
 
-  private def defaultTablePath(tableName: String): String = {
+  private def defaultTablePath(tableName: String): URI = {
     spark.sessionState.catalog.defaultTablePath(TableIdentifier(tableName))
   }
 }

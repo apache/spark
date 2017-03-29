@@ -36,10 +36,11 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.json.JacksonGenerator
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans._
@@ -47,7 +48,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.{usePrettyExpression, DateTimeUtils}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand, GlobalTempView, LocalTempView}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -103,7 +104,7 @@ private[sql] object Dataset {
  * the following creates a new Dataset by applying a filter on the existing one:
  * {{{
  *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
- *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING)); // in Java 8
+ *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING));
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
@@ -175,19 +176,13 @@ class Dataset[T] private[sql](
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
-    def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
-      case _: Command |
-           _: InsertIntoTable => true
-      case _ => false
-    }
-
+    // For various commands (like DDL) and queries with side effects, we force query execution
+    // to happen right away to let these side effects take place eagerly.
     queryExecution.analyzed match {
-      // For various commands (like DDL) and queries with side effects, we force query execution
-      // to happen right away to let these side effects take place eagerly.
-      case p if hasSideEffects(p) =>
-        LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
-      case Union(children) if children.forall(hasSideEffects) =>
-        LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
+      case c: Command =>
+        LocalRelation(c.output, queryExecution.executedPlan.executeCollect())
+      case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
+        LocalRelation(u.output, queryExecution.executedPlan.executeCollect())
       case _ =>
         queryExecution.analyzed
     }
@@ -557,7 +552,8 @@ class Dataset[T] private[sql](
    * Spark will use this watermark for several purposes:
    *  - To know when a given time window aggregation can be finalized and thus can be emitted when
    *    using output modes that do not allow updates.
-   *  - To minimize the amount of state that we need to keep for on-going aggregations.
+   *  - To minimize the amount of state that we need to keep for on-going aggregations,
+   *    `mapGroupsWithState` and `dropDuplicates` operators.
    *
    *  The current watermark is computed by looking at the `MAX(eventTime)` seen across
    *  all of the partitions in the query minus a user specified `delayThreshold`.  Due to the cost
@@ -568,7 +564,7 @@ class Dataset[T] private[sql](
    * @param eventTime the name of the column that contains the event time of the row.
    * @param delayThreshold the minimum delay to wait to data to arrive late, relative to the latest
    *                       record that has been processed in the form of an interval
-   *                       (e.g. "1 minute" or "5 hours").
+   *                       (e.g. "1 minute" or "5 hours"). NOTE: This should not be negative.
    *
    * @group streaming
    * @since 2.1.0
@@ -581,6 +577,8 @@ class Dataset[T] private[sql](
     val parsedDelay =
       Option(CalendarInterval.fromString("interval " + delayThreshold))
         .getOrElse(throw new AnalysisException(s"Unable to parse time delay '$delayThreshold'"))
+    require(parsedDelay.milliseconds >= 0 && parsedDelay.months >= 0,
+      s"delay threshold ($delayThreshold) should not be negative.")
     EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan)
   }
 
@@ -1098,7 +1096,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan, None)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
@@ -1981,6 +1979,12 @@ class Dataset[T] private[sql](
    * Returns a new Dataset that contains only the unique rows from this Dataset.
    * This is an alias for `distinct`.
    *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
+   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1990,13 +1994,19 @@ class Dataset[T] private[sql](
    * (Scala-specific) Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
    *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
+   *
    * @group typedrel
    * @since 2.0.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
-    val groupCols = colNames.flatMap { colName =>
+    val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
       // It is possibly there are more than one columns with the same name,
       // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))
@@ -2006,20 +2016,18 @@ class Dataset[T] private[sql](
       }
       cols
     }
-    val groupColExprIds = groupCols.map(_.exprId)
-    val aggCols = logicalPlan.output.map { attr =>
-      if (groupColExprIds.contains(attr.exprId)) {
-        attr
-      } else {
-        Alias(new First(attr).toAggregateExpression(), attr.name)()
-      }
-    }
-    Aggregate(groupCols, aggCols, logicalPlan)
+    Deduplicate(groupCols, logicalPlan, isStreaming)
   }
 
   /**
    * Returns a new Dataset with duplicate rows removed, considering only
    * the subset of columns.
+   *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
    *
    * @group typedrel
    * @since 2.0.0
@@ -2029,6 +2037,12 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] with duplicate rows removed, considering only
    * the subset of columns.
+   *
+   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]], it
+   * will keep all data across triggers as intermediate state to drop duplicates rows. You can use
+   * [[withWatermark]] to limit how late the duplicate data can be and system will accordingly limit
+   * the state. In addition, too late data older than watermark will be dropped to avoid any
+   * possibility of duplicates.
    *
    * @group typedrel
    * @since 2.0.0
@@ -2410,7 +2424,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, Some(numPartitions))
+    RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions)
   }
 
   /**
@@ -2425,14 +2439,23 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): Dataset[T] = withTypedPlan {
-    RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions = None)
+    RepartitionByExpression(
+      partitionExprs.map(_.expr), logicalPlan, sparkSession.sessionState.conf.numShufflePartitions)
   }
 
   /**
-   * Returns a new Dataset that has exactly `numPartitions` partitions.
-   * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
-   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-   * the 100 new partitions will claim 10 of the current partitions.
+   * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
+   * are requested. If a larger number of partitions is requested, it will stay at the current
+   * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in
+   * a narrow dependency, e.g. if you go from 1000 partitions to 100 partitions, there will not
+   * be a shuffle, instead each of the 100 new partitions will claim 10 of the current partitions.
+   *
+   * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+   * this may result in your computation taking place on fewer nodes than
+   * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+   * you can call repartition. This will add a shuffle step, but means the
+   * current upstream partitions will be executed in parallel (per whatever
+   * the current partitioning is).
    *
    * @group typedrel
    * @since 1.6.0
@@ -2670,10 +2693,12 @@ class Dataset[T] private[sql](
    */
   def toJSON: Dataset[String] = {
     val rowSchema = this.schema
+    val sessionLocalTimeZone = sparkSession.sessionState.conf.sessionLocalTimeZone
     val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
-      val gen = new JacksonGenerator(rowSchema, writer)
+      val gen = new JacksonGenerator(rowSchema, writer,
+        new JSONOptions(Map.empty[String, String], sessionLocalTimeZone))
 
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
@@ -2710,6 +2735,8 @@ class Dataset[T] private[sql](
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles
+      case r: CatalogRelation if DDLUtils.isHiveTable(r.tableMeta) =>
+        r.tableMeta.storage.locationUri.map(_.toString).toArray
     }.flatten
     files.toSet.toArray
   }

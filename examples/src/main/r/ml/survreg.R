@@ -39,5 +39,8 @@ summary(aftModel)
 
 # Prediction
 aftPredictions <- predict(aftModel, aftTestDF)
-showDF(aftPredictions)
+head(aftPredictions)
 # $example off$
+
+sparkR.session.stop()
+

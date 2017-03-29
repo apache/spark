@@ -132,10 +132,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case ReviveOffers =>
         makeOffers()
 
-      case KillTask(taskId, executorId, interruptThread) =>
+      case KillTask(taskId, executorId, interruptThread, reason) =>
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
-            executorInfo.executorEndpoint.send(KillTask(taskId, executorId, interruptThread))
+            executorInfo.executorEndpoint.send(
+              KillTask(taskId, executorId, interruptThread, reason))
           case None =>
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
@@ -222,12 +223,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on all executors
     private def makeOffers() {
-      // Filter out executors under killing
-      val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
-      val workOffers = activeExecutors.map { case (id, executorData) =>
-        new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
-      }.toIndexedSeq
-      launchTasks(scheduler.resourceOffers(workOffers))
+      // Make sure no executor is killed while some task is launching on it
+      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+        // Filter out executors under killing
+        val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+        val workOffers = activeExecutors.map { case (id, executorData) =>
+          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+        }.toIndexedSeq
+        scheduler.resourceOffers(workOffers)
+      }
+      if (!taskDescs.isEmpty) {
+        launchTasks(taskDescs)
+      }
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -240,12 +247,20 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
-      // Filter out executors under killing
-      if (executorIsAlive(executorId)) {
-        val executorData = executorDataMap(executorId)
-        val workOffers = IndexedSeq(
-          new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
-        launchTasks(scheduler.resourceOffers(workOffers))
+      // Make sure no executor is killed while some task is launching on it
+      val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
+        // Filter out executors under killing
+        if (executorIsAlive(executorId)) {
+          val executorData = executorDataMap(executorId)
+          val workOffers = IndexedSeq(
+            new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
+          scheduler.resourceOffers(workOffers)
+        } else {
+          Seq.empty
+        }
+      }
+      if (!taskDescs.isEmpty) {
+        launchTasks(taskDescs)
       }
     }
 
@@ -372,7 +387,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     try {
       if (driverEndpoint != null) {
         logInfo("Shutting down all executors")
-        driverEndpoint.askWithRetry[Boolean](StopExecutors)
+        driverEndpoint.askSync[Boolean](StopExecutors)
       }
     } catch {
       case e: Exception =>
@@ -384,7 +399,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     stopExecutors()
     try {
       if (driverEndpoint != null) {
-        driverEndpoint.askWithRetry[Boolean](StopDriver)
+        driverEndpoint.askSync[Boolean](StopDriver)
       }
     } catch {
       case e: Exception =>
@@ -414,8 +429,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     driverEndpoint.send(ReviveOffers)
   }
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
-    driverEndpoint.send(KillTask(taskId, executorId, interruptThread))
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String) {
+    driverEndpoint.send(KillTask(taskId, executorId, interruptThread, reason))
   }
 
   override def defaultParallelism(): Int = {

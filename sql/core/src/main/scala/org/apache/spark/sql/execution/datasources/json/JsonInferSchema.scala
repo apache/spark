@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.json.JSONOptions
+import org.apache.spark.sql.catalyst.util.PermissiveMode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -36,26 +37,20 @@ private[sql] object JsonInferSchema {
    *   2. Merge types by choosing the lowest type necessary to cover equal keys
    *   3. Replace any remaining null fields with string, the top type
    */
-  def infer(
-      json: RDD[String],
-      columnNameOfCorruptRecord: String,
-      configOptions: JSONOptions): StructType = {
-    require(configOptions.samplingRatio > 0,
-      s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
-    val shouldHandleCorruptRecord = configOptions.permissive
-    val schemaData = if (configOptions.samplingRatio > 0.99) {
-      json
-    } else {
-      json.sample(withReplacement = false, configOptions.samplingRatio, 1)
-    }
+  def infer[T](
+      json: RDD[T],
+      configOptions: JSONOptions,
+      createParser: (JsonFactory, T) => JsonParser): StructType = {
+    val shouldHandleCorruptRecord = configOptions.parseMode == PermissiveMode
+    val columnNameOfCorruptRecord = configOptions.columnNameOfCorruptRecord
 
     // perform schema inference on each row and merge afterwards
-    val rootType = schemaData.mapPartitions { iter =>
+    val rootType = json.mapPartitions { iter =>
       val factory = new JsonFactory()
       configOptions.setJacksonOptions(factory)
       iter.flatMap { row =>
         try {
-          Utils.tryWithResource(factory.createParser(row)) { parser =>
+          Utils.tryWithResource(createParser(factory, row)) { parser =>
             parser.nextToken()
             Some(inferField(parser, configOptions))
           }
@@ -79,7 +74,7 @@ private[sql] object JsonInferSchema {
 
   private[this] val structFieldComparator = new Comparator[StructField] {
     override def compare(o1: StructField, o2: StructField): Int = {
-      o1.name.compare(o2.name)
+      o1.name.compareTo(o2.name)
     }
   }
 

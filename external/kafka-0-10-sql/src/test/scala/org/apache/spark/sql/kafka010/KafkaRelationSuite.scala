@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.Utils
 
 class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
 
@@ -147,6 +148,9 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
   }
 
   test("test late binding start offsets") {
+    // Kafka fails to remove the logs on Windows. See KAFKA-1194.
+    assume(!Utils.isWindows)
+
     var kafkaUtils: KafkaTestUtils = null
     try {
       /**

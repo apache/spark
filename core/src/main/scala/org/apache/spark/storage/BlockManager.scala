@@ -28,6 +28,8 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
+import com.google.common.io.ByteStreams
+
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
@@ -38,6 +40,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.memory._
@@ -314,6 +317,9 @@ private[spark] class BlockManager(
 
   /**
    * Put the block locally, using the given storage level.
+   *
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
    */
   override def putBlockData(
       blockId: BlockId,
@@ -752,15 +758,46 @@ private[spark] class BlockManager(
   /**
    * Put a new block of serialized bytes to the block manager.
    *
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
+   *
+   * @param encrypt If true, asks the block manager to encrypt the data block before storing,
+   *                when I/O encryption is enabled. This is required for blocks that have been
+   *                read from unencrypted sources, since all the BlockManager read APIs
+   *                automatically do decryption.
    * @return true if the block was stored or false if an error occurred.
    */
   def putBytes[T: ClassTag](
       blockId: BlockId,
       bytes: ChunkedByteBuffer,
       level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+      tellMaster: Boolean = true,
+      encrypt: Boolean = false): Boolean = {
     require(bytes != null, "Bytes is null")
-    doPutBytes(blockId, bytes, level, implicitly[ClassTag[T]], tellMaster)
+
+    val bytesToStore =
+      if (encrypt && securityManager.ioEncryptionKey.isDefined) {
+        try {
+          val data = bytes.toByteBuffer
+          val in = new ByteBufferInputStream(data)
+          val byteBufOut = new ByteBufferOutputStream(data.remaining())
+          val out = CryptoStreamUtils.createCryptoOutputStream(byteBufOut, conf,
+            securityManager.ioEncryptionKey.get)
+          try {
+            ByteStreams.copy(in, out)
+          } finally {
+            in.close()
+            out.close()
+          }
+          new ChunkedByteBuffer(byteBufOut.toByteBuffer)
+        } finally {
+          bytes.dispose()
+        }
+      } else {
+        bytes
+      }
+
+    doPutBytes(blockId, bytesToStore, level, implicitly[ClassTag[T]], tellMaster)
   }
 
   /**
@@ -768,6 +805,9 @@ private[spark] class BlockManager(
    * the values if necessary.
    *
    * If the block already exists, this method will not overwrite it.
+   *
+   * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
+   * so may corrupt or change the data stored by the `BlockManager`.
    *
    * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
    *                     block already exists). If false, this method will hold no locks when it
@@ -812,7 +852,15 @@ private[spark] class BlockManager(
               false
           }
         } else {
-          memoryStore.putBytes(blockId, size, level.memoryMode, () => bytes)
+          val memoryMode = level.memoryMode
+          memoryStore.putBytes(blockId, size, memoryMode, () => {
+            if (memoryMode == MemoryMode.OFF_HEAP &&
+                bytes.chunks.exists(buffer => !buffer.isDirect)) {
+              bytes.copy(Platform.allocateDirectBuffer)
+            } else {
+              bytes
+            }
+          })
         }
         if (!putSucceeded && level.useDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
@@ -1017,7 +1065,7 @@ private[spark] class BlockManager(
           try {
             replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
-            bytesToReplicate.dispose()
+            bytesToReplicate.unmap()
           }
           logDebug("Put block %s remotely took %s"
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
@@ -1129,6 +1177,38 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Called for pro-active replenishment of blocks lost due to executor failures
+   *
+   * @param blockId blockId being replicate
+   * @param existingReplicas existing block managers that have a replica
+   * @param maxReplicas maximum replicas needed
+   */
+  def replicateBlock(
+      blockId: BlockId,
+      existingReplicas: Set[BlockManagerId],
+      maxReplicas: Int): Unit = {
+    logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
+    blockInfoManager.lockForReading(blockId).foreach { info =>
+      val data = doGetLocalBytes(blockId, info)
+      val storageLevel = StorageLevel(
+        useDisk = info.level.useDisk,
+        useMemory = info.level.useMemory,
+        useOffHeap = info.level.useOffHeap,
+        deserialized = info.level.deserialized,
+        replication = maxReplicas)
+      // we know we are called as a result of an executor removal, so we refresh peer cache
+      // this way, we won't try to replicate to a missing executor with a stale reference
+      getPeers(forceFetch = true)
+      try {
+        replicate(blockId, data, storageLevel, info.classTag, existingReplicas)
+      } finally {
+        logDebug(s"Releasing lock for $blockId")
+        releaseLock(blockId)
+      }
+    }
+  }
+
+  /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
    */
@@ -1136,7 +1216,8 @@ private[spark] class BlockManager(
       blockId: BlockId,
       data: ChunkedByteBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Unit = {
+      classTag: ClassTag[_],
+      existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
 
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val tLevel = StorageLevel(
@@ -1150,20 +1231,22 @@ private[spark] class BlockManager(
 
     val startTime = System.nanoTime
 
-    var peersReplicatedTo = mutable.HashSet.empty[BlockManagerId]
+    var peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
     var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
+    val initialPeers = getPeers(false).filterNot(existingReplicas.contains(_))
+
     var peersForReplication = blockReplicationPolicy.prioritize(
       blockManagerId,
-      getPeers(false),
-      mutable.HashSet.empty,
+      initialPeers,
+      peersReplicatedTo,
       blockId,
       numPeersToReplicateTo)
 
     while(numFailures <= maxReplicationFailures &&
-        !peersForReplication.isEmpty &&
-        peersReplicatedTo.size != numPeersToReplicateTo) {
+      !peersForReplication.isEmpty &&
+      peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head
       try {
         val onePeerStartTime = System.nanoTime

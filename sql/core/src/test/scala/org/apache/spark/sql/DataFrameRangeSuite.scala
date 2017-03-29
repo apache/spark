@@ -23,14 +23,15 @@ import scala.util.Random
 
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.SparkException
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerTaskStart}
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 
 class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventually {
+  import testImplicits._
 
   test("SPARK-7150 range api") {
     // numSlice is greater than length
@@ -88,6 +89,22 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val n = 9L * 1000 * 1000 * 1000 * 1000 * 1000 * 1000
     val res13 = spark.range(-n, n, n / 9).select("id")
     assert(res13.count == 18)
+
+    // range with non aggregation operation
+    val res14 = spark.range(0, 100, 2).toDF.filter("50 <= id")
+    val len14 = res14.collect.length
+    assert(len14 == 25)
+
+    val res15 = spark.range(100, -100, -2).toDF.filter("id <= 0")
+    val len15 = res15.collect.length
+    assert(len15 == 50)
+
+    val res16 = spark.range(-1500, 1500, 3).toDF.filter("0 <= id")
+    val len16 = res16.collect.length
+    assert(len16 == 500)
+
+    val res17 = spark.range(10, 0, -1, 1).toDF.sortWithinPartitions("id")
+    assert(res17.collect === (1 to 10).map(i => Row(i)).toArray)
   }
 
   test("Range with randomized parameters") {
@@ -136,18 +153,23 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 
   test("Cancelling stage in a query with Range.") {
     val listener = new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-        Thread.sleep(100)
-        sparkContext.cancelStage(taskStart.stageId)
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        eventually(timeout(10.seconds)) {
+          assert(DataFrameRangeSuite.stageToKill > 0)
+        }
+        sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
       }
     }
 
     sparkContext.addSparkListener(listener)
     for (codegen <- Seq(true, false)) {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
+        DataFrameRangeSuite.stageToKill = -1
         val ex = intercept[SparkException] {
-          spark.range(100000L).crossJoin(spark.range(100000L))
-            .toDF("a", "b").agg(sum("a"), sum("b")).collect()
+          spark.range(1000000000L).map { x =>
+            DataFrameRangeSuite.stageToKill = TaskContext.get().stageId()
+            x
+          }.toDF("id").agg(sum("id")).collect()
         }
         ex.getCause() match {
           case null =>
@@ -155,7 +177,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
           case cause: SparkException =>
             assert(cause.getMessage().contains("cancelled"))
           case cause: Throwable =>
-            fail("Expected the casue to be SparkException, got " + cause.toString() + " instead.")
+            fail("Expected the cause to be SparkException, got " + cause.toString() + " instead.")
         }
       }
       eventually(timeout(20.seconds)) {
@@ -163,4 +185,8 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       }
     }
   }
+}
+
+object DataFrameRangeSuite {
+  @volatile var stageToKill = -1
 }

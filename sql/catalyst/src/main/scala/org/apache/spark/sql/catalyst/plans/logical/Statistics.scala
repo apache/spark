@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.math.{MathContext, RoundingMode}
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -24,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -54,8 +57,13 @@ case class Statistics(
 
   /** Readable string representation for the Statistics. */
   def simpleString: String = {
-    Seq(s"sizeInBytes=$sizeInBytes",
-      if (rowCount.isDefined) s"rowCount=${rowCount.get}" else "",
+    Seq(s"sizeInBytes=${Utils.bytesToString(sizeInBytes)}",
+      if (rowCount.isDefined) {
+        // Show row count in scientific notation.
+        s"rowCount=${BigDecimal(rowCount.get, new MathContext(3, RoundingMode.HALF_UP)).toString()}"
+      } else {
+        ""
+      },
       s"isBroadcastable=$isBroadcastable"
     ).filter(_.nonEmpty).mkString(", ")
   }

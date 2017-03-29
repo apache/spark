@@ -178,7 +178,7 @@ class IsotonicRegressionSuite
 
     val ir = new IsotonicRegression()
     testEstimatorAndModelReadWrite(ir, dataset, IsotonicRegressionSuite.allParamSettings,
-      checkModelData)
+      IsotonicRegressionSuite.allParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

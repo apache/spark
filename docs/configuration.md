@@ -1000,6 +1000,15 @@ Apart from these, the following properties are also available, and may be useful
     storage space to unroll the new block in its entirety.
   </td>
 </tr>
+<tr>
+  <td><code>spark.storage.replication.proactive<code></td>
+  <td>false</td>
+  <td>
+    Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
+    executor failures are replenished if there are any existing available replicas. This tries
+    to get the replication level of the block to the initial number.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
@@ -1496,6 +1505,11 @@ Apart from these, the following properties are also available, and may be useful
     value, -1, disables this mechanism and prevents the executor from self-destructing. The purpose
     of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
     an executor unusable.
+  </td>
+  <td><code>spark.stage.maxConsecutiveAttempts</code></td>
+  <td>4</td>
+  <td>
+    Number of consecutive stage attempts allowed before a stage is aborted.
   </td>
 </tr>
 </table>

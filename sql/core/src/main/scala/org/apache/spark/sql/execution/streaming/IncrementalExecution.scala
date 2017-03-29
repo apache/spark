@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
@@ -37,22 +37,20 @@ class IncrementalExecution(
     val outputMode: OutputMode,
     val checkpointLocation: String,
     val currentBatchId: Long,
-    val currentEventTimeWatermark: Long)
+    offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
-  // TODO: make this always part of planning.
-  val streamingExtraStrategies =
-    sparkSession.sessionState.planner.StatefulAggregationStrategy +:
-    sparkSession.sessionState.planner.MapGroupsWithStateStrategy +:
-    sparkSession.sessionState.planner.StreamingRelationStrategy +:
-    sparkSession.sessionState.experimentalMethods.extraStrategies
-
   // Modified planner with stateful operations.
-  override def planner: SparkPlanner =
-    new SparkPlanner(
+  override val planner: SparkPlanner = new SparkPlanner(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
-      streamingExtraStrategies)
+      sparkSession.sessionState.experimentalMethods) {
+    override def extraPlanningStrategies: Seq[Strategy] =
+      StatefulAggregationStrategy ::
+      FlatMapGroupsWithStateStrategy ::
+      StreamingRelationStrategy ::
+      StreamingDeduplicationStrategy :: Nil
+  }
 
   /**
    * See [SPARK-18339]
@@ -87,18 +85,30 @@ class IncrementalExecution(
           keys,
           Some(stateId),
           Some(outputMode),
-          Some(currentEventTimeWatermark),
+          Some(offsetSeqMetadata.batchWatermarkMs),
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))
-      case MapGroupsWithStateExec(
-             f, kDeser, vDeser, group, data, output, None, stateDeser, stateSer, child) =>
+
+      case StreamingDeduplicateExec(keys, child, None, None) =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
-        MapGroupsWithStateExec(
-          f, kDeser, vDeser, group, data, output, Some(stateId), stateDeser, stateSer, child)
+
+        StreamingDeduplicateExec(
+          keys,
+          child,
+          Some(stateId),
+          Some(offsetSeqMetadata.batchWatermarkMs))
+
+      case m: FlatMapGroupsWithStateExec =>
+        val stateId =
+          OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
+        m.copy(
+          stateId = Some(stateId),
+          batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
     }
   }
 

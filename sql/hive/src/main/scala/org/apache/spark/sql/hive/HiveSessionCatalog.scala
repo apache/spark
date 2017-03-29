@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -43,30 +43,24 @@ import org.apache.spark.util.Utils
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
-    sparkSession: SparkSession,
-    functionResourceLoader: FunctionResourceLoader,
+    private val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
-    parser: ParserInterface)
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader)
   extends SessionCatalog(
-    externalCatalog,
-    globalTempViewManager,
-    functionResourceLoader,
-    functionRegistry,
-    conf,
-    hadoopConf,
-    parser) {
+      externalCatalog,
+      globalTempViewManager,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser,
+      functionResourceLoader) {
 
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
-
-  // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
-  // essentially a cache for metastore tables. However, it relies on a lot of session-specific
-  // things so it would be a lot of work to split its functionality between HiveSessionCatalog
-  // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
 
   // These 2 rules must be run before all other DDL post-hoc resolution rules, i.e.
   // `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
@@ -80,7 +74,7 @@ private[sql] class HiveSessionCatalog(
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = metastoreCatalog.getQualifiedTableName(table)
-    sparkSession.sessionState.catalog.tableRelationCache.getIfPresent(key)
+    tableRelationCache.getIfPresent(key)
   }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
@@ -197,6 +191,11 @@ private[sql] class HiveSessionCatalog(
           functionRegistry.lookupFunction(functionName, children)
         }
     }
+  }
+
+  // TODO Removes this method after implementing Spark native "histogram_numeric".
+  override def functionExists(name: FunctionIdentifier): Boolean = {
+    super.functionExists(name) || hiveFunctions.contains(name.funcName)
   }
 
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */

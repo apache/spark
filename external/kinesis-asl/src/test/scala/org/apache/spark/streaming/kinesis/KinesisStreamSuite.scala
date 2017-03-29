@@ -49,7 +49,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
   // Dummy parameters for API testing
   private val dummyEndpointUrl = defaultEndpointUrl
-  private val dummyRegionName = RegionUtils.getRegionByEndpoint(dummyEndpointUrl).getName()
+  private val dummyRegionName = KinesisTestUtils.getRegionNameByEndpoint(dummyEndpointUrl)
   private val dummyAWSAccessKey = "dummyAccessKey"
   private val dummyAWSSecretKey = "dummySecretKey"
 
@@ -119,13 +119,13 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Generate block info data for testing
     val seqNumRanges1 = SequenceNumberRanges(
-      SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy"))
+      SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy", 67))
     val blockId1 = StreamBlockId(kinesisStream.id, 123)
     val blockInfo1 = ReceivedBlockInfo(
       0, None, Some(seqNumRanges1), new BlockManagerBasedStoreResult(blockId1, None))
 
     val seqNumRanges2 = SequenceNumberRanges(
-      SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb"))
+      SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb", 89))
     val blockId2 = StreamBlockId(kinesisStream.id, 345)
     val blockInfo2 = ReceivedBlockInfo(
       0, None, Some(seqNumRanges2), new BlockManagerBasedStoreResult(blockId2, None))
@@ -138,8 +138,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     assert(kinesisRDD.regionName === dummyRegionName)
     assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
-    assert(kinesisRDD.awsCredentialsOption ===
-      Some(SerializableAWSCredentials(dummyAWSAccessKey, dummyAWSSecretKey)))
+    assert(kinesisRDD.kinesisCreds === BasicCredentials(
+      awsAccessKeyId = dummyAWSAccessKey,
+      awsSecretKey = dummyAWSSecretKey))
     assert(nonEmptyRDD.partitions.size === blockInfos.size)
     nonEmptyRDD.partitions.foreach { _ shouldBe a [KinesisBackedBlockRDDPartition] }
     val partitions = nonEmptyRDD.partitions.map {
@@ -201,7 +202,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
     val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
-      Seconds(10), StorageLevel.MEMORY_ONLY, addFive,
+      Seconds(10), StorageLevel.MEMORY_ONLY, addFive(_),
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
     stream shouldBe a [ReceiverInputDStream[_]]

@@ -100,6 +100,7 @@ private[spark] class Client(
   private var principal: String = null
   private var keytab: String = null
   private var credentials: Credentials = null
+  private var amKeytabFileName: String = null
 
   private val launcherBackend = new LauncherBackend() {
     override def onStopRequest(): Unit = {
@@ -245,12 +246,27 @@ private[spark] class Client(
     }
 
     sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
-      val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
-      logAggregationContext.setRolledLogsIncludePattern(includePattern)
-      sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
-        logAggregationContext.setRolledLogsExcludePattern(excludePattern)
+      try {
+        val logAggregationContext = Records.newRecord(classOf[LogAggregationContext])
+
+        // These two methods were added in Hadoop 2.6.4, so we still need to use reflection to
+        // avoid compile error when building against Hadoop 2.6.0 ~ 2.6.3.
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
+        sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+        }
+
+        appContext.setLogAggregationContext(logAggregationContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
+            "does not support it", e)
       }
-      appContext.setLogAggregationContext(logAggregationContext)
     }
 
     appContext
@@ -311,6 +327,7 @@ private[spark] class Client(
       destDir: Path,
       srcPath: Path,
       replication: Short,
+      symlinkCache: Map[URI, Path],
       force: Boolean = false,
       destName: Option[String] = None): Path = {
     val destFs = destDir.getFileSystem(hadoopConf)
@@ -328,8 +345,12 @@ private[spark] class Client(
     // Resolve any symlinks in the URI path so using a "current" symlink to point to a specific
     // version shows the specific version in the distributed cache configuration
     val qualifiedDestPath = destFs.makeQualified(destPath)
-    val fc = FileContext.getFileContext(qualifiedDestPath.toUri(), hadoopConf)
-    fc.resolvePath(qualifiedDestPath)
+    val qualifiedDestDir = qualifiedDestPath.getParent
+    val resolvedDestDir = symlinkCache.getOrElseUpdate(qualifiedDestDir.toUri(), {
+      val fc = FileContext.getFileContext(qualifiedDestDir.toUri(), hadoopConf)
+      fc.resolvePath(qualifiedDestDir)
+    })
+    new Path(resolvedDestDir, qualifiedDestPath.getName())
   }
 
   /**
@@ -350,6 +371,9 @@ private[spark] class Client(
     val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
 
     if (credentials != null) {
+      // Add credentials to current user's UGI, so that following operations don't need to use the
+      // Kerberos tgt to get delegations again in the client side.
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 
@@ -385,6 +409,7 @@ private[spark] class Client(
     FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+    val symlinkCache: Map[URI, Path] = HashMap[URI, Path]()
 
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
@@ -430,7 +455,7 @@ private[spark] class Client(
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
           val linkname = targetDir.map(_ + "/").getOrElse("") +
             destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
-          val destPath = copyFileToRemote(destDir, localPath, replication)
+          val destPath = copyFileToRemote(destDir, localPath, replication, symlinkCache)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(
             destFs, hadoopConf, destPath, localResources, resType, linkname, statCache,
@@ -450,7 +475,7 @@ private[spark] class Client(
       logInfo("To enable the AM to login from keytab, credentials are being copied over to the AM" +
         " via the YARN Secure Distributed Cache.")
       val (_, localizedPath) = distribute(keytab,
-        destName = sparkConf.get(KEYTAB),
+        destName = Some(amKeytabFileName),
         appMasterOnly = true)
       require(localizedPath != null, "Keytab file already distributed.")
     }
@@ -482,8 +507,9 @@ private[spark] class Client(
               val path = getQualifiedLocalPath(Utils.resolveURI(jar), hadoopConf)
               val pathFs = FileSystem.get(path.toUri(), hadoopConf)
               pathFs.globStatus(path).filter(_.isFile()).foreach { entry =>
-                distribute(entry.getPath().toUri().toString(),
-                  targetDir = Some(LOCALIZED_LIB_DIR))
+                val uri = entry.getPath().toUri()
+                statCache.update(uri, entry)
+                distribute(uri.toString(), targetDir = Some(LOCALIZED_LIB_DIR))
               }
             } else {
               localJars += jar
@@ -599,7 +625,7 @@ private[spark] class Client(
     sparkConf.set(CACHED_CONF_ARCHIVE, remoteConfArchivePath.toString())
 
     val localConfArchive = new Path(createConfArchive().toURI())
-    copyFileToRemote(destDir, localConfArchive, replication, force = true,
+    copyFileToRemote(destDir, localConfArchive, replication, symlinkCache, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
     // Manually add the config archive to the cache manager so that the AM is launched with
@@ -686,6 +712,9 @@ private[spark] class Client(
       // Save Spark configuration to a file in the archive.
       val props = new Properties()
       sparkConf.getAll.foreach { case (k, v) => props.setProperty(k, v) }
+      // Override spark.yarn.key to point to the location in distributed cache which will be used
+      // by AM.
+      Option(amKeytabFileName).foreach { k => props.setProperty(KEYTAB.key, k) }
       confStream.putNextEntry(new ZipEntry(SPARK_CONF_FILE))
       val writer = new OutputStreamWriter(confStream, StandardCharsets.UTF_8)
       props.store(writer, "Spark configuration.")
@@ -722,14 +751,6 @@ private[spark] class Client(
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
       .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
 
-    // Keep this for backwards compatibility but users should move to the config
-    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
-    // Allow users to specify some environment variables.
-      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
-      // Pass SPARK_YARN_USER_ENV itself to the AM so it can use it to set up executor environments.
-      env("SPARK_YARN_USER_ENV") = userEnvs
-    }
-
     // If pyFiles contains any .py files, we need to add LOCALIZED_PYTHON_DIR to the PYTHONPATH
     // of the container processes too. Add all non-.py files directly to PYTHONPATH.
     //
@@ -756,41 +777,14 @@ private[spark] class Client(
       sparkConf.setExecutorEnv("PYTHONPATH", pythonPathStr)
     }
 
-    // In cluster mode, if the deprecated SPARK_JAVA_OPTS is set, we need to propagate it to
-    // executors. But we can't just set spark.executor.extraJavaOptions, because the driver's
-    // SparkContext will not let that set spark* system properties, which is expected behavior for
-    // Yarn clients. So propagate it through the environment.
-    //
-    // Note that to warn the user about the deprecation in cluster mode, some code from
-    // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
-    // described above).
     if (isClusterMode) {
-      sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
-        val warning =
-          s"""
-            |SPARK_JAVA_OPTS was detected (set to '$value').
-            |This is deprecated in Spark 1.0+.
-            |
-            |Please instead use:
-            | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
-            | - ./spark-submit with --driver-java-options to set -X options for a driver
-            | - spark.executor.extraJavaOptions to set -X options for executors
-          """.stripMargin
-        logWarning(warning)
-        for (proc <- Seq("driver", "executor")) {
-          val key = s"spark.$proc.extraJavaOptions"
-          if (sparkConf.contains(key)) {
-            throw new SparkException(s"Found both $key and SPARK_JAVA_OPTS. Use only the former.")
-          }
-        }
-        env("SPARK_JAVA_OPTS") = value
-      }
       // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
       Seq("PYSPARK_DRIVER_PYTHON", "PYSPARK_PYTHON").foreach { envname =>
         if (!env.contains(envname)) {
           sys.env.get(envname).foreach(env(envname) = _)
         }
       }
+      sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
@@ -856,8 +850,7 @@ private[spark] class Client(
 
     // Include driver-specific java options if we are launching a driver
     if (isClusterMode) {
-      val driverOpts = sparkConf.get(DRIVER_JAVA_OPTIONS).orElse(sys.env.get("SPARK_JAVA_OPTS"))
-      driverOpts.foreach { opts =>
+      sparkConf.get(DRIVER_JAVA_OPTIONS).foreach { opts =>
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
       val libraryPaths = Seq(sparkConf.get(DRIVER_LIBRARY_PATH),
@@ -889,7 +882,6 @@ private[spark] class Client(
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
-    YarnCommandBuilderUtils.addPermGenSizeOpt(javaOpts)
 
     val userClass =
       if (isClusterMode) {
@@ -974,8 +966,7 @@ private[spark] class Client(
       val f = new File(keytab)
       // Generate a file name that can be used for the keytab file, that does not conflict
       // with any user file.
-      val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      sparkConf.set(KEYTAB.key, keytabFileName)
+      amKeytabFileName = f.getName + "-" + UUID.randomUUID().toString
       sparkConf.set(PRINCIPAL.key, principal)
     }
     // Defensive copy of the credentials

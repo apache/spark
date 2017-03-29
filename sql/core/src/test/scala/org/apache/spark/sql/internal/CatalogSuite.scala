@@ -18,7 +18,6 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
-import java.net.URI
 
 import org.scalatest.BeforeAndAfterEach
 
@@ -459,7 +458,7 @@ class CatalogSuite
           options = Map("path" -> dir.getAbsolutePath))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
-        assert(table.storage.locationUri.get == dir.getAbsolutePath)
+        assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
 
         Seq((1)).toDF("i").write.insertInto("t")
         assert(dir.exists() && dir.listFiles().nonEmpty)
@@ -481,7 +480,7 @@ class CatalogSuite
         options = Map.empty[String, String])
       val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
       assert(table.tableType == CatalogTableType.MANAGED)
-      val tablePath = new File(new URI(table.storage.locationUri.get))
+      val tablePath = new File(table.storage.locationUri.get)
       assert(tablePath.exists() && tablePath.listFiles().isEmpty)
 
       Seq((1)).toDF("i").write.insertInto("t")
@@ -493,6 +492,25 @@ class CatalogSuite
     }
   }
 
-  // TODO: add tests for the rest of them
+  test("clone Catalog") {
+    // need to test tempTables are cloned
+    assert(spark.catalog.listTables().collect().isEmpty)
 
+    createTempTable("my_temp_table")
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+
+    // inheritance
+    val forkedSession = spark.cloneSession()
+    assert(spark ne forkedSession)
+    assert(spark.catalog ne forkedSession.catalog)
+    assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+
+    // independence
+    dropTable("my_temp_table") // drop table in original session
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
+    assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
+    forkedSession.sessionState.catalog
+      .createTempView("fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
+    assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
+  }
 }

@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
+import java.net.URI
+
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, ScriptTransformation}
@@ -91,18 +97,56 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 
       // Infers the schema, if empty, because the schema could be determined by Hive
       // serde.
-      val catalogTable = if (query.isEmpty) {
-        val withSchema = HiveUtils.inferSchema(withStorage)
-        if (withSchema.schema.length <= 0) {
+      val withSchema = if (query.isEmpty) {
+        val inferred = HiveUtils.inferSchema(withStorage)
+        if (inferred.schema.length <= 0) {
           throw new AnalysisException("Unable to infer the schema. " +
-            s"The schema specification is required to create the table ${withSchema.identifier}.")
+            s"The schema specification is required to create the table ${inferred.identifier}.")
         }
-        withSchema
+        inferred
       } else {
         withStorage
       }
 
-      c.copy(tableDesc = catalogTable)
+      c.copy(tableDesc = withSchema)
+  }
+}
+
+class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case relation: CatalogRelation
+        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      val table = relation.tableMeta
+      // TODO: check if this estimate is valid for tables after partition pruning.
+      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+      // relatively cheap if parameters for the table are populated into the metastore.
+      // Besides `totalSize`, there are also `numFiles`, `numRows`, `rawDataSize` keys
+      // (see StatsSetupConst in Hive) that we can look at in the future.
+      // When table is external,`totalSize` is always zero, which will influence join strategy
+      // so when `totalSize` is zero, use `rawDataSize` instead.
+      val totalSize = table.properties.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+      val rawDataSize = table.properties.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
+      val sizeInBytes = if (totalSize.isDefined && totalSize.get > 0) {
+        totalSize.get
+      } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+        rawDataSize.get
+      } else if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+        try {
+          val hadoopConf = session.sessionState.newHadoopConf()
+          val tablePath = new Path(table.location)
+          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+          fs.getContentSummary(tablePath).getLength
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to get table size from hdfs.", e)
+            session.sessionState.conf.defaultSizeInBytes
+        }
+      } else {
+        session.sessionState.conf.defaultSizeInBytes
+      }
+
+      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+      relation.copy(tableMeta = withStats)
   }
 }
 
@@ -114,29 +158,15 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case InsertIntoTable(table: MetastoreRelation, partSpec, query, overwrite, ifNotExists) =>
-      InsertIntoHiveTable(table, partSpec, query, overwrite, ifNotExists)
+    case InsertIntoTable(relation: CatalogRelation, partSpec, query, overwrite, ifNotExists)
+        if DDLUtils.isHiveTable(relation.tableMeta) =>
+      InsertIntoHiveTable(relation.tableMeta, partSpec, query, overwrite, ifNotExists)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
-  }
-}
-
-/**
- * Replaces `SimpleCatalogRelation` with [[MetastoreRelation]] if its table provider is hive.
- */
-class FindHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
-        if DDLUtils.isHiveTable(s.metadata) =>
-      i.copy(table =
-        MetastoreRelation(s.metadata.database, s.metadata.identifier.table)(s.metadata, session))
-
-    case s: SimpleCatalogRelation if DDLUtils.isHiveTable(s.metadata) =>
-      MetastoreRelation(s.metadata.database, s.metadata.identifier.table)(s.metadata, session)
   }
 }
 
@@ -161,10 +191,10 @@ private[hive] trait HiveStrategies {
    */
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
+      case PhysicalOperation(projectList, predicates, relation: CatalogRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
-        val partitionKeyIds = AttributeSet(relation.partitionKeys)
+        val partitionKeyIds = AttributeSet(relation.partitionCols)
         val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
           !predicate.references.isEmpty &&
           predicate.references.subsetOf(partitionKeyIds)

@@ -101,7 +101,7 @@ private[yarn] class YarnAllocator(
    * @see SPARK-12864
    */
   private var executorIdCounter: Int =
-    driverRef.askWithRetry[Int](RetrieveLastAllocatedExecutorId)
+    driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
   // Queue to store the timestamp of failed executors
   private val failedExecutorsTimeStamps = new Queue[Long]()
@@ -494,7 +494,8 @@ private[yarn] class YarnAllocator(
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       assert(container.getResource.getMemory >= resource.getMemory)
-      logInfo(s"Launching container $containerId on host $executorHostname")
+      logInfo(s"Launching container $containerId on host $executorHostname " +
+        s"for executor with ID $executorId")
 
       def updateInternalState(): Unit = synchronized {
         numExecutorsRunning += 1

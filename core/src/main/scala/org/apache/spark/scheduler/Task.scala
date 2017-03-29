@@ -17,19 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
-
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util._
 
 /**
@@ -94,8 +89,8 @@ private[spark] abstract class Task[T](
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
-    if (_killed) {
-      kill(interruptThread = false)
+    if (_reasonIfKilled != null) {
+      kill(interruptThread = false, _reasonIfKilled)
     }
 
     new CallerContext(
@@ -137,6 +132,8 @@ private[spark] abstract class Task[T](
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
+        // Though we unset the ThreadLocal here, the context member variable itself is still queried
+        // directly in the TaskRunner to check for FetchFailedExceptions.
         TaskContext.unset()
       }
     }
@@ -156,22 +153,22 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient protected var context: TaskContextImpl = _
+  @transient var context: TaskContextImpl = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
 
-  // A flag to indicate whether the task is killed. This is used in case context is not yet
-  // initialized when kill() is invoked.
-  @volatile @transient private var _killed = false
+  // If non-null, this task has been killed and the reason is as specified. This is used in case
+  // context is not yet initialized when kill() is invoked.
+  @volatile @transient private var _reasonIfKilled: String = null
 
   protected var _executorDeserializeTime: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
-   * Whether the task has been killed.
+   * If defined, this task has been killed and this option contains the reason.
    */
-  def killed: Boolean = _killed
+  def reasonIfKilled: Option[String] = Option(_reasonIfKilled)
 
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
@@ -204,10 +201,11 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean) {
-    _killed = true
+  def kill(interruptThread: Boolean, reason: String) {
+    require(reason != null)
+    _reasonIfKilled = reason
     if (context != null) {
-      context.markInterrupted()
+      context.markInterrupted(reason)
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()

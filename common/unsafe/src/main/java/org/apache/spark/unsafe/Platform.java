@@ -162,14 +162,9 @@ public final class Platform {
       constructor.setAccessible(true);
       Field cleanerField = cls.getDeclaredField("cleaner");
       cleanerField.setAccessible(true);
-      final long memory = allocateMemory(size);
+      long memory = allocateMemory(size);
       ByteBuffer buffer = (ByteBuffer) constructor.newInstance(memory, size);
-      Cleaner cleaner = Cleaner.create(buffer, new Runnable() {
-        @Override
-        public void run() {
-          freeMemory(memory);
-        }
-      });
+      Cleaner cleaner = Cleaner.create(buffer, () -> freeMemory(memory));
       cleanerField.set(buffer, cleaner);
       return buffer;
     } catch (Exception e) {

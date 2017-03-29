@@ -82,17 +82,20 @@ class SparkHadoopUtil extends Logging {
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
       // Explicitly check for S3 environment variables
-      if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
-          System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
-        val keyId = System.getenv("AWS_ACCESS_KEY_ID")
-        val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
-
+      val keyId = System.getenv("AWS_ACCESS_KEY_ID")
+      val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+      if (keyId != null && accessKey != null) {
         hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
         hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
         hadoopConf.set("fs.s3a.access.key", keyId)
         hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3a.secret.key", accessKey)
+
+        val sessionToken = System.getenv("AWS_SESSION_TOKEN")
+        if (sessionToken != null) {
+          hadoopConf.set("fs.s3a.session.token", sessionToken)
+        }
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>

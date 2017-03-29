@@ -492,9 +492,6 @@ def main():
 
     java_version = determine_java_version(java_exe)
 
-    if java_version.minor < 8:
-        print("[warn] Java 8 tests will not run because JDK version is < 1.8.")
-
     # install SparkR
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])

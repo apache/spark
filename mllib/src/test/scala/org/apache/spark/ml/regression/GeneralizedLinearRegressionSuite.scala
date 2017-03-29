@@ -1418,6 +1418,7 @@ class GeneralizedLinearRegressionSuite
 
     val glr = new GeneralizedLinearRegression()
     testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
+      GeneralizedLinearRegressionSuite.allParamSettings,
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
   }
 

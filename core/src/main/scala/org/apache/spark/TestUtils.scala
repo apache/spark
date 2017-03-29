@@ -200,9 +200,13 @@ private[spark] object TestUtils {
   /**
    * Returns the response code from an HTTP(S) URL.
    */
-  def httpResponseCode(url: URL, method: String = "GET"): Int = {
+  def httpResponseCode(
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): Int = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod(method)
+    headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
 
     // Disable cert and host name validation for HTTPS tests.
     if (connection.isInstanceOf[HttpsURLConnection]) {

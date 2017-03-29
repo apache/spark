@@ -25,8 +25,8 @@ class TableIdentifierParserSuite extends SparkFunSuite {
   // Add "$elem$", "$value$" & "$key$"
   val hiveNonReservedKeyword = Array("add", "admin", "after", "analyze", "archive", "asc", "before",
     "bucket", "buckets", "cascade", "change", "cluster", "clustered", "clusterstatus", "collection",
-    "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "data",
-    "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
+    "columns", "comment", "compact", "compactions", "compute", "concatenate", "continue", "cost",
+    "data", "day", "databases", "datetime", "dbproperties", "deferred", "defined", "delimited",
     "dependency", "desc", "directories", "directory", "disable", "distribute",
     "enable", "escaped", "exclusive", "explain", "export", "fields", "file", "fileformat", "first",
     "format", "formatted", "functions", "hold_ddltime", "hour", "idxproperties", "ignore", "index",

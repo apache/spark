@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, InnerLike, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 
 class JoinOptimizationSuite extends PlanTest {
 
@@ -38,7 +38,7 @@ class JoinOptimizationSuite extends PlanTest {
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
-        ReorderJoin,
+        ReorderJoin(SimpleCatalystConf(true)),
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) :: Nil
@@ -129,15 +129,15 @@ class JoinOptimizationSuite extends PlanTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          SubqueryAlias("x", input, None),
-          BroadcastHint(SubqueryAlias("y", input, None)), Cross, None)).analyze
+          SubqueryAlias("x", input),
+          BroadcastHint(SubqueryAlias("y", input)), Cross, None)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
-        Project(Seq($"x.key"), SubqueryAlias("x", input, None)),
-        BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input, None))),
+        Project(Seq($"x.key"), SubqueryAlias("x", input)),
+        BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
         Cross, None).analyze
 
     comparePlans(optimized, expected)

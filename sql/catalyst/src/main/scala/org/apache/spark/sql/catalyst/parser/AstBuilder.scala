@@ -76,7 +76,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
-    visit(ctx.dataType).asInstanceOf[DataType]
+    visitSparkDataType(ctx.dataType)
   }
 
   /* ********************************************************************************************
@@ -108,7 +108,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    SubqueryAlias(ctx.name.getText, plan(ctx.query), None)
+    SubqueryAlias(ctx.name.getText, plan(ctx.query))
   }
 
   /**
@@ -179,7 +179,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     InsertIntoTable(
-      UnresolvedRelation(tableIdent, None),
+      UnresolvedRelation(tableIdent),
       partitionKeys,
       query,
       ctx.OVERWRITE != null,
@@ -242,20 +242,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       Sort(sort.asScala.map(visitSortItem), global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       // DISTRIBUTE BY ...
-      RepartitionByExpression(expressionList(distributeBy), query)
+      withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
       // SORT BY ... DISTRIBUTE BY ...
       Sort(
         sort.asScala.map(visitSortItem),
         global = false,
-        RepartitionByExpression(expressionList(distributeBy), query))
+        withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
       // CLUSTER BY ...
       val expressions = expressionList(clusterBy)
       Sort(
         expressions.map(SortOrder(_, Ascending)),
         global = false,
-        RepartitionByExpression(expressions, query))
+        withRepartitionByExpression(ctx, expressions, query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
       // [EMPTY]
       query
@@ -271,6 +271,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     withWindow.optional(limit) {
       Limit(typedVisit(limit), withWindow)
     }
+  }
+
+  /**
+   * Create a clause for DISTRIBUTE BY.
+   */
+  protected def withRepartitionByExpression(
+      ctx: QueryOrganizationContext,
+      expressions: Seq[Expression],
+      query: LogicalPlan): LogicalPlan = {
+    throw new ParseException("DISTRIBUTE BY is not supported", ctx)
   }
 
   /**
@@ -380,7 +390,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
 
         // Window
-        withDistinct.optionalMap(windows)(withWindows)
+        val withWindow = withDistinct.optionalMap(windows)(withWindows)
+
+        // Hint
+        withWindow.optionalMap(hint)(withHints)
     }
   }
 
@@ -503,6 +516,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       Aggregate(mappedGroupByExpressions, selectExpressions, query)
     }
+  }
+
+  /**
+   * Add a Hint to a logical plan.
+   */
+  private def withHints(
+      ctx: HintContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val stmt = ctx.hintStatement
+    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
   }
 
   /**
@@ -632,17 +655,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * }}}
    */
   override def visitTable(ctx: TableContext): LogicalPlan = withOrigin(ctx) {
-    UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier), None)
+    UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val table = UnresolvedRelation(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.strictIdentifier).map(_.getText))
-    table.optionalMap(ctx.sample)(withSample)
+    val table = UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier))
+
+    val tableWithAlias = Option(ctx.strictIdentifier).map(_.getText) match {
+      case Some(strictIdentifier) =>
+        SubqueryAlias(strictIdentifier, table)
+      case _ => table
+    }
+    tableWithAlias.optionalMap(ctx.sample)(withSample)
   }
 
   /**
@@ -704,7 +731,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
   private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
-    SubqueryAlias(alias.getText, plan, None)
+    SubqueryAlias(alias.getText, plan)
   }
 
   /**
@@ -979,7 +1006,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), typedVisit(ctx.dataType))
+    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
   }
 
   /**
@@ -989,7 +1016,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-    val arguments = ctx.expression().asScala.map(expression) match {
+    val arguments = ctx.namedExpression().asScala.map(expression) match {
       case Seq(UnresolvedStar(None)) if name.toLowerCase == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
         Seq(Literal(1))
@@ -1100,7 +1127,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[CreateStruct]] expression.
    */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.expression.asScala.map(expression))
+    CreateStruct(ctx.namedExpression().asScala.map(expression))
   }
 
   /**
@@ -1202,7 +1229,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     } else {
       direction.defaultNullOrdering
     }
-    SortOrder(expression(ctx.expression), direction, nullOrdering)
+    SortOrder(expression(ctx.expression), direction, nullOrdering, Set.empty)
   }
 
   /**
@@ -1398,6 +1425,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * DataType parsing
    * ******************************************************************************************** */
   /**
+   * Create a Spark DataType.
+   */
+  private def visitSparkDataType(ctx: DataTypeContext): DataType = {
+    HiveStringType.replaceCharType(typedVisit(ctx))
+  }
+
+  /**
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
@@ -1411,8 +1445,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => TimestampType
-      case ("char" | "varchar" | "string", Nil) => StringType
-      case ("char" | "varchar", _ :: Nil) => StringType
+      case ("string", Nil) => StringType
+      case ("char", length :: Nil) => CharType(length.getText.toInt)
+      case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
       case ("binary", Nil) => BinaryType
       case ("decimal", Nil) => DecimalType.USER_DEFAULT
       case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
@@ -1434,7 +1469,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        createStructType(ctx.complexColTypeList())
+        StructType(Option(ctx.complexColTypeList).toSeq.flatMap(visitComplexColTypeList))
     }
   }
 
@@ -1453,12 +1488,28 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a [[StructField]] from a column definition.
+   * Create a top level [[StructField]] from a column definition.
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
-    if (STRING == null) structField else structField.withComment(string(STRING))
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    if (STRING != null) {
+      builder.putString("comment", string(STRING))
+    }
+    // Add Hive type string to metadata.
+    val rawDataType = typedVisit[DataType](ctx.dataType)
+    val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
+    if (rawDataType != cleanedDataType) {
+      builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
+    }
+
+    StructField(
+      identifier.getText,
+      cleanedDataType,
+      nullable = true,
+      builder.build())
   }
 
   /**

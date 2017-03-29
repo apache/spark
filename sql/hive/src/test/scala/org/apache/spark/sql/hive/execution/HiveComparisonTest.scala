@@ -385,7 +385,7 @@ abstract class HiveComparisonTest
               // also print out the query plans and results for those.
               val computedTablesMessages: String = try {
                 val tablesRead = new TestHiveQueryExecution(query).executedPlan.collect {
-                  case ts: HiveTableScanExec => ts.relation.tableName
+                  case ts: HiveTableScanExec => ts.relation.tableMeta.identifier
                 }.toSet
 
                 TestHive.reset()
@@ -393,7 +393,7 @@ abstract class HiveComparisonTest
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
                   case (q, e) => e.analyzed.collect {
-                    case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
+                    case i: InsertIntoHiveTable if tablesRead contains i.table.identifier =>
                       (q, e, i)
                   }
                 }

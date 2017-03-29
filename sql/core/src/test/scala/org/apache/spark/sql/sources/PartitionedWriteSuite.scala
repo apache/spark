@@ -18,11 +18,14 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.sql.Timestamp
 
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -120,6 +123,40 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
         // if custom partition path is detected by the task, it will throw an Exception
         // from OnlyDetectCustomPathFileCommitProtocol above.
         Seq((3, 2)).toDF("a", "b").write.mode("append").partitionBy("b").saveAsTable("t")
+      }
+    }
+  }
+
+  test("timeZone setting in dynamic partition writes") {
+    def checkPartitionValues(file: File, expected: String): Unit = {
+      val dir = file.getParentFile()
+      val value = ExternalCatalogUtils.unescapePathName(
+        dir.getName.substring(dir.getName.indexOf("=") + 1))
+      assert(value == expected)
+    }
+    val ts = Timestamp.valueOf("2016-12-01 00:00:00")
+    val df = Seq((1, ts)).toDF("i", "ts")
+    withTempPath { f =>
+      df.write.partitionBy("ts").parquet(f.getAbsolutePath)
+      val files = recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+      assert(files.length == 1)
+      checkPartitionValues(files.head, "2016-12-01 00:00:00")
+    }
+    withTempPath { f =>
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .partitionBy("ts").parquet(f.getAbsolutePath)
+      val files = recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+      assert(files.length == 1)
+      // use timeZone option "GMT" to format partition value.
+      checkPartitionValues(files.head, "2016-12-01 08:00:00")
+    }
+    withTempPath { f =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+        df.write.partitionBy("ts").parquet(f.getAbsolutePath)
+        val files = recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+        assert(files.length == 1)
+        // if there isn't timeZone option, then use session local timezone.
+        checkPartitionValues(files.head, "2016-12-01 08:00:00")
       }
     }
   }

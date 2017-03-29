@@ -379,8 +379,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            |)
          """.stripMargin)
 
-      val expectedPath =
-        sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
+      val expectedPath = sessionState.catalog.defaultTablePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
       val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
       fs.delete(filesystemPath, true)
@@ -486,7 +485,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql("DROP TABLE savedJsonTable")
           intercept[AnalysisException] {
             read.json(
-              sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
+              sessionState.catalog.defaultTablePath(TableIdentifier("savedJsonTable")).toString)
           }
         }
 
@@ -511,9 +510,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("create external table") {
     withTempPath { tempPath =>
       withTable("savedJsonTable", "createdJsonTable") {
-        val df = read.json(sparkContext.parallelize((1 to 10).map { i =>
+        val df = read.json((1 to 10).map { i =>
           s"""{ "a": $i, "b": "str$i" }"""
-        }))
+        }.toDS())
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           df.write
@@ -748,6 +747,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = new StructType,
+        provider = Some("json"),
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -755,7 +755,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           serde = None,
           compressed = false,
           properties = Map(
-            "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
+            "path" -> sessionState.catalog.defaultTablePath(TableIdentifier(tableName)).toString)
         ),
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
@@ -1010,7 +1010,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("not_skip_hive_metadata"),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          locationUri = Some(tempPath.getCanonicalPath),
+          locationUri = Some(tempPath.toURI),
           properties = Map("skipHiveMetadata" -> "false")
         ),
         schema = schema,
@@ -1276,6 +1276,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = new StructType,
+        provider = Some("json"),
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
@@ -1373,6 +1374,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             properties = Map("path" -> path.getAbsolutePath)
           ),
           schema = new StructType(),
+          provider = Some("parquet"),
           properties = Map(
             HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
         hiveClient.createTable(tableDesc, ignoreIfExists = false)

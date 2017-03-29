@@ -143,8 +143,8 @@ test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkp
   expect_false(rdd2@env$isCached)
 
   tempDir <- tempfile(pattern = "checkpoint")
-  setCheckpointDir(sc, tempDir)
-  checkpoint(rdd2)
+  setCheckpointDirSC(sc, tempDir)
+  checkpointRDD(rdd2)
   expect_true(rdd2@env$isCheckpointed)
 
   rdd2 <- lapply(rdd2, function(x) x)
@@ -315,7 +315,7 @@ test_that("repartition/coalesce on RDDs", {
   expect_true(count >= 0 && count <= 4)
 
   # coalesce
-  r3 <- coalesce(rdd, 1)
+  r3 <- coalesceRDD(rdd, 1)
   expect_equal(getNumPartitionsRDD(r3), 1L)
   count <- length(collectPartition(r3, 0L))
   expect_equal(count, 20)

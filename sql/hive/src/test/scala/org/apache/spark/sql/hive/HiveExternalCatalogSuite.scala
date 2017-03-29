@@ -52,7 +52,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   test("list partitions by filter") {
     val catalog = newBasicCatalog()
-    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1))
+    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1), "GMT")
     assert(selectedPartitions.length == 1)
     assert(selectedPartitions.head.spec == part1.spec)
   }

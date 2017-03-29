@@ -18,6 +18,7 @@
 package org.apache.spark.executor
 
 import java.io.{File, NotSerializableException}
+import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
@@ -52,7 +53,8 @@ private[spark] class Executor(
     executorHostname: String,
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
-    isLocal: Boolean = false)
+    isLocal: Boolean = false,
+    uncaughtExceptionHandler: UncaughtExceptionHandler = SparkUncaughtExceptionHandler)
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
@@ -78,7 +80,7 @@ private[spark] class Executor(
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
     // executor process to avoid surprising stalls.
-    Thread.setDefaultUncaughtExceptionHandler(SparkUncaughtExceptionHandler)
+    Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler)
   }
 
   // Start worker thread pool
@@ -148,13 +150,15 @@ private[spark] class Executor(
 
   startDriverHeartbeater()
 
+  private[executor] def numRunningTasks: Int = runningTasks.size()
+
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
   }
 
-  def killTask(taskId: Long, interruptThread: Boolean): Unit = {
+  def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
     val taskRunner = runningTasks.get(taskId)
     if (taskRunner != null) {
       if (taskReaperEnabled) {
@@ -164,7 +168,8 @@ private[spark] class Executor(
             case Some(existingReaper) => interruptThread && !existingReaper.interruptThread
           }
           if (shouldCreateReaper) {
-            val taskReaper = new TaskReaper(taskRunner, interruptThread = interruptThread)
+            val taskReaper = new TaskReaper(
+              taskRunner, interruptThread = interruptThread, reason = reason)
             taskReaperForTask(taskId) = taskReaper
             Some(taskReaper)
           } else {
@@ -174,7 +179,7 @@ private[spark] class Executor(
         // Execute the TaskReaper from outside of the synchronized block.
         maybeNewTaskReaper.foreach(taskReaperPool.execute)
       } else {
-        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.kill(interruptThread = interruptThread, reason = reason)
       }
     }
   }
@@ -185,8 +190,9 @@ private[spark] class Executor(
    * tasks instead of taking the JVM down.
    * @param interruptThread whether to interrupt the task thread
    */
-  def killAllTasks(interruptThread: Boolean) : Unit = {
-    runningTasks.keys().asScala.foreach(t => killTask(t, interruptThread = interruptThread))
+  def killAllTasks(interruptThread: Boolean, reason: String) : Unit = {
+    runningTasks.keys().asScala.foreach(t =>
+      killTask(t, interruptThread = interruptThread, reason = reason))
   }
 
   def stop(): Unit = {
@@ -213,8 +219,8 @@ private[spark] class Executor(
     val threadName = s"Executor task launch worker for task $taskId"
     private val taskName = taskDescription.name
 
-    /** Whether this task has been killed. */
-    @volatile private var killed = false
+    /** If specified, this task has been killed and this option contains the reason. */
+    @volatile private var reasonIfKilled: Option[String] = None
 
     @volatile private var threadId: Long = -1
 
@@ -235,13 +241,13 @@ private[spark] class Executor(
      */
     @volatile var task: Task[Any] = _
 
-    def kill(interruptThread: Boolean): Unit = {
-      logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
-      killed = true
+    def kill(interruptThread: Boolean, reason: String): Unit = {
+      logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
+      reasonIfKilled = Some(reason)
       if (task != null) {
         synchronized {
           if (!finished) {
-            task.kill(interruptThread)
+            task.kill(interruptThread, reason)
           }
         }
       }
@@ -292,12 +298,13 @@ private[spark] class Executor(
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
-        if (killed) {
+        val killReason = reasonIfKilled
+        if (killReason.isDefined) {
           // Throw an exception rather than returning, because returning within a try{} block
           // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
           // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
           // for the task.
-          throw new TaskKilledException
+          throw new TaskKilledException(killReason.get)
         }
 
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
@@ -340,15 +347,21 @@ private[spark] class Executor(
             }
           }
         }
+        task.context.fetchFailed.foreach { fetchFailure =>
+          // uh-oh.  it appears the user code has caught the fetch-failure without throwing any
+          // other exceptions.  Its *possible* this is what the user meant to do (though highly
+          // unlikely).  So we will log an error and keep going.
+          logError(s"TID ${taskId} completed successfully though internally it encountered " +
+            s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
+            s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
+        }
         val taskFinish = System.currentTimeMillis()
         val taskFinishCpu = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
           threadMXBean.getCurrentThreadCpuTime
         } else 0L
 
         // If the task has been killed, let's fail it.
-        if (task.killed) {
-          throw new TaskKilledException
-        }
+        task.context.killTaskIfInterrupted()
 
         val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
@@ -400,20 +413,31 @@ private[spark] class Executor(
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {
-        case ffe: FetchFailedException =>
-          val reason = ffe.toTaskFailedReason
+        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
+          val reason = task.context.fetchFailed.get.toTaskFailedReason
+          if (!t.isInstanceOf[FetchFailedException]) {
+            // there was a fetch failure in the task, but some user code wrapped that exception
+            // and threw something else.  Regardless, we treat it as a fetch failure.
+            val fetchFailedCls = classOf[FetchFailedException].getName
+            logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
+              s"failed, but the ${fetchFailedCls} was hidden by another " +
+              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
+              s"other exception: $t")
+          }
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
-        case _: TaskKilledException =>
-          logInfo(s"Executor killed $taskName (TID $taskId)")
+        case t: TaskKilledException =>
+          logInfo(s"Executor killed $taskName (TID $taskId), reason: ${t.reason}")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
 
-        case _: InterruptedException if task.killed =>
-          logInfo(s"Executor interrupted and killed $taskName (TID $taskId)")
+        case _: InterruptedException if task.reasonIfKilled.isDefined =>
+          val killReason = task.reasonIfKilled.getOrElse("unknown reason")
+          logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          execBackend.statusUpdate(
+            taskId, TaskState.KILLED, ser.serialize(TaskKilled(killReason)))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskFailedReason
@@ -453,12 +477,16 @@ private[spark] class Executor(
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
           if (Utils.isFatalError(t)) {
-            SparkUncaughtExceptionHandler.uncaughtException(t)
+            uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
 
       } finally {
         runningTasks.remove(taskId)
       }
+    }
+
+    private def hasFetchFailure: Boolean = {
+      task != null && task.context != null && task.context.fetchFailed.isDefined
     }
   }
 
@@ -487,7 +515,8 @@ private[spark] class Executor(
    */
   private class TaskReaper(
       taskRunner: TaskRunner,
-      val interruptThread: Boolean)
+      val interruptThread: Boolean,
+      val reason: String)
     extends Runnable {
 
     private[this] val taskId: Long = taskRunner.taskId
@@ -508,7 +537,7 @@ private[spark] class Executor(
         // Only attempt to kill the task once. If interruptThread = false then a second kill
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
         // effective to interrupt multiple times:
-        taskRunner.kill(interruptThread = interruptThread)
+        taskRunner.kill(interruptThread = interruptThread, reason = reason)
         // Monitor the killed task until it exits. The synchronization logic here is complicated
         // because we don't want to synchronize on the taskRunner while possibly taking a thread
         // dump, but we also need to be careful to avoid races between checking whether the task
@@ -677,7 +706,7 @@ private[spark] class Executor(
 
     val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
     try {
-      val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
+      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
       if (response.reregisterBlockManager) {
         logInfo("Told to re-register on heartbeat")

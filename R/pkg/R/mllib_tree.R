@@ -52,12 +52,14 @@ summary.treeEnsemble <- function(model) {
   numFeatures <- callJMethod(jobj, "numFeatures")
   features <-  callJMethod(jobj, "features")
   featureImportances <- callJMethod(callJMethod(jobj, "featureImportances"), "toString")
+  maxDepth <- callJMethod(jobj, "maxDepth")
   numTrees <- callJMethod(jobj, "numTrees")
   treeWeights <- callJMethod(jobj, "treeWeights")
   list(formula = formula,
        numFeatures = numFeatures,
        features = features,
        featureImportances = featureImportances,
+       maxDepth = maxDepth,
        numTrees = numTrees,
        treeWeights = treeWeights,
        jobj = jobj)
@@ -70,6 +72,7 @@ print.summary.treeEnsemble <- function(x) {
   cat("\nNumber of features: ", x$numFeatures)
   cat("\nFeatures: ", unlist(x$features))
   cat("\nFeature importances: ", x$featureImportances)
+  cat("\nMax Depth: ", x$maxDepth)
   cat("\nNumber of trees: ", x$numTrees)
   cat("\nTree weights: ", unlist(x$treeWeights))
 
@@ -143,14 +146,15 @@ print.summary.treeEnsemble <- function(x) {
 #'
 #' # fit a Gradient Boosted Tree Classification Model
 #' # label must be binary - Only binary classification is supported for GBT.
-#' df <- createDataFrame(iris[iris$Species != "virginica", ])
-#' model <- spark.gbt(df, Species ~ Petal_Length + Petal_Width, "classification")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.gbt(df, Survived ~ Age + Freq, "classification")
 #'
 #' # numeric label is also supported
-#' iris2 <- iris[iris$Species != "virginica", ]
-#' iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
-#' df <- createDataFrame(iris2)
-#' model <- spark.gbt(df, NumericSpecies ~ ., type = "classification")
+#' t2 <- as.data.frame(Titanic)
+#' t2$NumericGender <- ifelse(t2$Sex == "Male", 0, 1)
+#' df <- createDataFrame(t2)
+#' model <- spark.gbt(df, NumericGender ~ ., type = "classification")
 #' }
 #' @note spark.gbt since 2.1.0
 setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
@@ -196,8 +200,8 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
-#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
-#'         and \code{treeWeights} (tree weights).
+#'         \code{featureImportances} (feature importances), \code{maxDepth} (max depth of trees),
+#'         \code{numTrees} (number of trees), and \code{treeWeights} (tree weights).
 #' @rdname spark.gbt
 #' @aliases summary,GBTRegressionModel-method
 #' @export
@@ -351,8 +355,9 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' summary(savedModel)
 #'
 #' # fit a Random Forest Classification Model
-#' df <- createDataFrame(iris)
-#' model <- spark.randomForest(df, Species ~ Petal_Length + Petal_Width, "classification")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.randomForest(df, Survived ~ Freq + Age, "classification")
 #' }
 #' @note spark.randomForest since 2.1.0
 setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "formula"),
@@ -401,8 +406,8 @@ setMethod("spark.randomForest", signature(data = "SparkDataFrame", formula = "fo
 #' @return \code{summary} returns summary information of the fitted model, which is a list.
 #'         The list of components includes \code{formula} (formula),
 #'         \code{numFeatures} (number of features), \code{features} (list of features),
-#'         \code{featureImportances} (feature importances), \code{numTrees} (number of trees),
-#'         and \code{treeWeights} (tree weights).
+#'         \code{featureImportances} (feature importances), \code{maxDepth} (max depth of trees),
+#'         \code{numTrees} (number of trees), and \code{treeWeights} (tree weights).
 #' @rdname spark.randomForest
 #' @aliases summary,RandomForestRegressionModel-method
 #' @export

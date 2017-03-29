@@ -96,7 +96,8 @@ private[r] object LogisticRegressionWrapper
       family: String,
       standardization: Boolean,
       thresholds: Array[Double],
-      weightCol: String
+      weightCol: String,
+      aggregationDepth: Int
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
@@ -119,16 +120,18 @@ private[r] object LogisticRegressionWrapper
       .setFitIntercept(fitIntercept)
       .setFamily(family)
       .setStandardization(standardization)
-      .setWeightCol(weightCol)
       .setFeaturesCol(rFormula.getFeaturesCol)
       .setLabelCol(rFormula.getLabelCol)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
+      .setAggregationDepth(aggregationDepth)
 
     if (thresholds.length > 1) {
       lr.setThresholds(thresholds)
     } else {
       lr.setThreshold(thresholds(0))
     }
+
+    if (weightCol != null) lr.setWeightCol(weightCol)
 
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)

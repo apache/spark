@@ -381,6 +381,10 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
     <td>Details of the given operation and given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/environment</code></td>
+    <td>Environment details of the given application.</td>
   </tr>       
 </table>
 

@@ -17,9 +17,7 @@
 
 package org.apache.spark.network.crypto;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
-import javax.security.sasl.Sasl;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
@@ -35,7 +33,6 @@ import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**

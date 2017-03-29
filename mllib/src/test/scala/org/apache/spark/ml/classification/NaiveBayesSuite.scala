@@ -280,7 +280,8 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       assert(model.theta === model2.theta)
     }
     val nb = new NaiveBayes()
-    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(nb, dataset, NaiveBayesSuite.allParamSettings,
+      NaiveBayesSuite.allParamSettings, checkModelData)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

@@ -90,9 +90,9 @@ private[spark] object JettyUtils extends Logging {
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
             response.getWriter.print(servletParams.extractFn(result))
           } else {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED,
+            response.sendError(HttpServletResponse.SC_FORBIDDEN,
               "User is not authorized to access this page.")
           }
         } catch {

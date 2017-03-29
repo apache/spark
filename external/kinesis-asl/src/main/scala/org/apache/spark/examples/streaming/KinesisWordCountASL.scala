@@ -127,7 +127,7 @@ object KinesisWordCountASL extends Logging {
 
     // Get the region name from the endpoint URL to save Kinesis Client Library metadata in
     // DynamoDB of the same region as the Kinesis stream
-    val regionName = RegionUtils.getRegionByEndpoint(endpointUrl).getName()
+    val regionName = KinesisExampleUtils.getRegionNameByEndpoint(endpointUrl)
 
     // Setup the SparkConfig and StreamingContext
     val sparkConfig = new SparkConf().setAppName("KinesisWordCountASL")

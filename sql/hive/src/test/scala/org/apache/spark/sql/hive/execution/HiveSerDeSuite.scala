@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.execution.MetricsTestHelper
+import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -49,21 +49,15 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
 
   createQueryTest("Read Partitioned with AvroSerDe", "SELECT * FROM episodes_part")
 
-  test("Test input/generated/output metrics") {
+  test("Checking metrics correctness") {
     import TestHive._
 
     val episodesCnt = sql("select * from episodes").count()
-    val episodesRes = MetricsTestHelper.runAndGetMetrics(sql("select * from episodes").toDF())
-    assert(episodesRes.recordsRead === episodesCnt :: Nil)
-    assert(episodesRes.shuffleRecordsRead.sum === 0)
-    assert(episodesRes.generatedRows.isEmpty)
-    assert(episodesRes.outputRows === episodesCnt :: Nil)
+    val episodesRes = InputOutputMetricsHelper.run(sql("select * from episodes").toDF())
+    assert(episodesRes === (episodesCnt, 0L, episodesCnt) :: Nil)
 
     val serdeinsCnt = sql("select * from serdeins").count()
-    val serdeinsRes = MetricsTestHelper.runAndGetMetrics(sql("select * from serdeins").toDF())
-    assert(serdeinsRes.recordsRead === serdeinsCnt :: Nil)
-    assert(serdeinsRes.shuffleRecordsRead.sum === 0)
-    assert(serdeinsRes.generatedRows.isEmpty)
-    assert(serdeinsRes.outputRows === serdeinsCnt :: Nil)
+    val serdeinsRes = InputOutputMetricsHelper.run(sql("select * from serdeins").toDF())
+    assert(serdeinsRes === (serdeinsCnt, 0L, serdeinsCnt) :: Nil)
   }
 }

@@ -31,9 +31,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
@@ -81,8 +81,8 @@ public class JavaMetastoreDataSourcesSuite {
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
-    JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.read().json(rdd);
+    Dataset<String> ds = sqlContext.createDataset(jsonObjects, Encoders.STRING());
+    df = sqlContext.read().json(ds);
     df.createOrReplaceTempView("jsonTable");
   }
 

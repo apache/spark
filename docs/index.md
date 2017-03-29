@@ -26,11 +26,13 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 7+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
+Spark runs on Java 8+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
 
-Note that support for Java 7 and Python 2.6 are deprecated as of Spark 2.0.0, and support for 
+Note that support for Java 7 was removed as of Spark 2.2.0.
+
+Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and support for 
 Scala 2.10 and versions of Hadoop before 2.6 are deprecated as of Spark 2.1.0, and may be 
 removed in Spark 2.2.0.
 

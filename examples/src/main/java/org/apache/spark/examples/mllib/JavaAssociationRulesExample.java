@@ -38,9 +38,9 @@ public class JavaAssociationRulesExample {
 
     // $example on$
     JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
-      new FreqItemset<String>(new String[] {"a"}, 15L),
-      new FreqItemset<String>(new String[] {"b"}, 35L),
-      new FreqItemset<String>(new String[] {"a", "b"}, 12L)
+      new FreqItemset<>(new String[] {"a"}, 15L),
+      new FreqItemset<>(new String[] {"b"}, 35L),
+      new FreqItemset<>(new String[] {"a", "b"}, 12L)
     ));
 
     AssociationRules arules = new AssociationRules()
