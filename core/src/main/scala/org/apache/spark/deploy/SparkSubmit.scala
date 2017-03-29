@@ -485,12 +485,17 @@ object SparkSubmit {
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
-    if (deployMode == CLIENT) {
+    // Also add the main application jar and any added jars to classpath in case YARN client
+    // requires these jars.
+    if (deployMode == CLIENT || isYarnCluster) {
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
       if (args.jars != null) { childClasspath ++= args.jars.split(",") }
+    }
+
+    if (deployMode == CLIENT) {
       if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
 
