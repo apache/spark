@@ -323,7 +323,7 @@ class SparkSession private(
    *  // |-- age: integer (nullable = true)
    *
    *  dataFrame.createOrReplaceTempView("people")
-   *  sparkSession.sql("select name from people").show
+   *  sparkSession.sql("select name from people").collect.foreach(println)
    * }}}
    *
    * @since 2.0.0
