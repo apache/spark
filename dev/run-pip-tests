@@ -64,7 +64,6 @@ if ! hash pip 2>/dev/null; then
   exit 0
 fi
 
-set -x
 # Determine which version of PySpark we are building for archive name
 PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
