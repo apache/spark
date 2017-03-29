@@ -18,9 +18,11 @@
 package org.apache.spark.network.util;
 
 import java.io.Closeable;
+import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -341,6 +343,19 @@ public class JavaUtils {
       byte[] bytes = new byte[buffer.remaining()];
       buffer.get(bytes);
       return bytes;
+    }
+  }
+
+  /**
+   * Fills a buffer with data read from the channel.
+   */
+  public static void readFully(ReadableByteChannel channel, ByteBuffer dst) throws IOException {
+    int expected = dst.remaining();
+    while (dst.hasRemaining()) {
+      if (channel.read(dst) < 0) {
+        throw new EOFException(String.format("Not enough bytes in channel (expected %d).",
+          expected));
+      }
     }
   }
 

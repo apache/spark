@@ -250,8 +250,7 @@ class WriteAheadLogBackedBlockRDDSuite
     require(blockData.size === blockIds.size)
     val writer = new FileBasedWriteAheadLogWriter(new File(dir, "logFile").toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
-      writer.write(serializerManager.dataSerialize(id, data.iterator, allowEncryption = false)
-        .toByteBuffer)
+      writer.write(serializerManager.dataSerialize(id, data.iterator).toByteBuffer)
     }
     writer.close()
     segments

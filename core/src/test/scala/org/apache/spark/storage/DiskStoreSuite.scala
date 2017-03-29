@@ -18,15 +18,23 @@
 package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
-import java.util.Arrays
+import java.util.{Arrays, Random}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import com.google.common.io.{ByteStreams, Files}
+import io.netty.channel.FileRegion
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.network.util.{ByteArrayWritableChannel, JavaUtils}
+import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.io.ChunkedByteBuffer
 import org.apache.spark.util.Utils
 
 class DiskStoreSuite extends SparkFunSuite {
 
   test("reads of memory-mapped and non memory-mapped files are equivalent") {
+    val conf = new SparkConf()
+    val securityManager = new SecurityManager(conf)
+
     // It will cause error when we tried to re-open the filestore and the
     // memory-mapped byte buffer tot he file has not been GC on Windows.
     assume(!Utils.isWindows)
@@ -37,16 +45,18 @@ class DiskStoreSuite extends SparkFunSuite {
     val byteBuffer = new ChunkedByteBuffer(ByteBuffer.wrap(bytes))
 
     val blockId = BlockId("rdd_1_2")
-    val diskBlockManager = new DiskBlockManager(new SparkConf(), deleteFilesOnStop = true)
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
 
-    val diskStoreMapped = new DiskStore(new SparkConf().set(confKey, "0"), diskBlockManager)
+    val diskStoreMapped = new DiskStore(conf.clone().set(confKey, "0"), diskBlockManager,
+      securityManager)
     diskStoreMapped.putBytes(blockId, byteBuffer)
-    val mapped = diskStoreMapped.getBytes(blockId)
+    val mapped = diskStoreMapped.getBytes(blockId).asInstanceOf[ByteBufferBlockData].buffer
     assert(diskStoreMapped.remove(blockId))
 
-    val diskStoreNotMapped = new DiskStore(new SparkConf().set(confKey, "1m"), diskBlockManager)
+    val diskStoreNotMapped = new DiskStore(conf.clone().set(confKey, "1m"), diskBlockManager,
+      securityManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer)
-    val notMapped = diskStoreNotMapped.getBytes(blockId)
+    val notMapped = diskStoreNotMapped.getBytes(blockId).asInstanceOf[ByteBufferBlockData].buffer
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
     assert(notMapped.getChunks().forall(_.getClass.getName.endsWith("HeapByteBuffer")),
@@ -63,4 +73,95 @@ class DiskStoreSuite extends SparkFunSuite {
     assert(Arrays.equals(mapped.toArray, bytes))
     assert(Arrays.equals(notMapped.toArray, bytes))
   }
+
+  test("block size tracking") {
+    val conf = new SparkConf()
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
+
+    val blockId = BlockId("rdd_1_2")
+    diskStore.put(blockId) { chan =>
+      val buf = ByteBuffer.wrap(new Array[Byte](32))
+      while (buf.hasRemaining()) {
+        chan.write(buf)
+      }
+    }
+
+    assert(diskStore.getSize(blockId) === 32L)
+    diskStore.remove(blockId)
+    assert(diskStore.getSize(blockId) === 0L)
+  }
+
+  test("block data encryption") {
+    val testDir = Utils.createTempDir()
+    val testData = new Array[Byte](128 * 1024)
+    new Random().nextBytes(testData)
+
+    val conf = new SparkConf()
+    val securityManager = new SecurityManager(conf, Some(CryptoStreamUtils.createKey(conf)))
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
+
+    val blockId = BlockId("rdd_1_2")
+    diskStore.put(blockId) { chan =>
+      val buf = ByteBuffer.wrap(testData)
+      while (buf.hasRemaining()) {
+        chan.write(buf)
+      }
+    }
+
+    assert(diskStore.getSize(blockId) === testData.length)
+
+    val diskData = Files.toByteArray(diskBlockManager.getFile(blockId.name))
+    assert(!Arrays.equals(testData, diskData))
+
+    val blockData = diskStore.getBytes(blockId)
+    assert(blockData.isInstanceOf[EncryptedBlockData])
+    assert(blockData.size === testData.length)
+    Map(
+      "input stream" -> readViaInputStream _,
+      "chunked byte buffer" -> readViaChunkedByteBuffer _,
+      "nio byte buffer" -> readViaNioBuffer _,
+      "managed buffer" -> readViaManagedBuffer _
+    ).foreach { case (name, fn) =>
+      val readData = fn(blockData)
+      assert(readData.length === blockData.size, s"Size of data read via $name did not match.")
+      assert(Arrays.equals(testData, readData), s"Data read via $name did not match.")
+    }
+  }
+
+  private def readViaInputStream(data: BlockData): Array[Byte] = {
+    val is = data.toInputStream()
+    try {
+      ByteStreams.toByteArray(is)
+    } finally {
+      is.close()
+    }
+  }
+
+  private def readViaChunkedByteBuffer(data: BlockData): Array[Byte] = {
+    val buf = data.toChunkedByteBuffer(ByteBuffer.allocate _)
+    try {
+      buf.toArray
+    } finally {
+      buf.dispose()
+    }
+  }
+
+  private def readViaNioBuffer(data: BlockData): Array[Byte] = {
+    JavaUtils.bufferToArray(data.toByteBuffer())
+  }
+
+  private def readViaManagedBuffer(data: BlockData): Array[Byte] = {
+    val region = data.toNetty().asInstanceOf[FileRegion]
+    val byteChannel = new ByteArrayWritableChannel(data.size.toInt)
+
+    while (region.transfered() < region.count()) {
+      region.transferTo(byteChannel, region.transfered())
+    }
+
+    byteChannel.close()
+    byteChannel.getData
+  }
+
 }
