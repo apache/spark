@@ -239,7 +239,7 @@ object DateTimeUtils {
   }
 
   /*
-   * Converts the timestamp to milliseconds since epoc. In spark timestamp values have microseconds
+   * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
    * precision, so this conversion is lossy.
    */
   def toMillis(us: SQLTimestamp): Long = {
@@ -250,7 +250,7 @@ object DateTimeUtils {
   }
 
   /*
-   * Converts millseconds since epoc to SQLTimestamp.
+   * Converts millseconds since epoch to SQLTimestamp.
    */
   def fromMillis(millis: Long): SQLTimestamp = {
     millis * 1000L
