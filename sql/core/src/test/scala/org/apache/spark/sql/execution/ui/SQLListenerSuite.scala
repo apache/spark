@@ -479,7 +479,7 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
     longMetric("dummy") += expectedValue
 
     SQLMetrics.postDriverMetricUpdates(
-      sparkContext,
+      sc,
       sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
       metrics.values.toSeq)
     sc.emptyRDD
