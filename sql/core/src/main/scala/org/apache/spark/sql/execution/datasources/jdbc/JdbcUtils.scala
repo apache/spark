@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
@@ -482,9 +482,9 @@ object JdbcUtils extends Logging {
     }
   }
 
-  // A `JDBCInternalValueSetter` is responsible for setting a value from `InternalRow` into a field for
-  // `PreparedStatement`. The last argument `Int` means the index for the value to be set
-  // in the SQL statement and also used for the value in `Row`.
+  // A `JDBCInternalValueSetter` is responsible for setting a value from `InternalRow`
+  // into a field for `PreparedStatement`. The last argument `Int` means the index for
+  // the value to be set in the SQL statement and also used for the value in `Row`.
   private type JDBCInternalValueSetter = (PreparedStatement, InternalRow, Int) => Unit
 
   def makeInternalSetter(
@@ -878,16 +878,15 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(
-      df: DataFrame,
+  def schemaString(schema: StructType, sparkSession: SparkSession,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(schema, sparkSession, _))
       .getOrElse(Map.empty[String, String])
-    df.schema.fields.foreach { field =>
+    schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -903,7 +902,7 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      df: DataFrame,
+      schema: StructType, sparkSession: SparkSession,
       createTableColumnTypes: String): Map[String, String] = {
     def typeName(f: StructField): String = {
       // char/varchar gets translated to string type. Real data type specified by the user
@@ -916,7 +915,7 @@ object JdbcUtils extends Logging {
     }
 
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = df.sparkSession.sessionState.conf.resolver
+    val nameEquality = sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
     userSchema.fieldNames.foreach { col =>
@@ -930,15 +929,15 @@ object JdbcUtils extends Logging {
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+      schema.find(f => nameEquality(f.name, col)).getOrElse {
         throw new AnalysisException(
           s"createTableColumnTypes option column $col not found in schema " +
-            df.schema.catalogString)
+            schema.catalogString)
       }
     }
 
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
-    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
@@ -975,11 +974,21 @@ object JdbcUtils extends Logging {
    * Creates a table with a given schema.
    */
   def createTable(
-      conn: Connection,
-      df: DataFrame,
-      options: JDBCOptions): Unit = {
+                   conn: Connection,
+                   df: DataFrame,
+                   options: JDBCOptions): Unit = {
+    createTable(conn, df.schema, df.sparkSession, options)
+  }
+
+  /**
+   * Creates a table with a given schema.
+   */
+  def createTable(
+                   conn: Connection,
+                   schema: StructType, sparkSession: SparkSession,
+                   options: JDBCOptions): Unit = {
     val strSchema = schemaString(
-      df, options.url, options.createTableColumnTypes)
+      schema, sparkSession, options.url, options.createTableColumnTypes)
     val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.

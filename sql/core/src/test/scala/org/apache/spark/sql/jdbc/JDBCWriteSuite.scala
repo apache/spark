@@ -376,7 +376,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val expectedSchemaStr =
         colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
 
-      assert(JdbcUtils.schemaString(df, url1, Option(createTableColTypes)) == expectedSchemaStr)
+      assert(JdbcUtils.schemaString(df.schema, df.sparkSession, url1
+              , Option(createTableColTypes)) == expectedSchemaStr)
     }
 
     testCreateTableColDataTypes(Seq("boolean"))

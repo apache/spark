@@ -18,12 +18,13 @@ package org.apache.spark.sql.execution.streaming
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 
 
 
-class JDBCSinkLog(parameters: Map[String, String]) {
+class JDBCSinkLog(parameters: Map[String, String], sparkSession: SparkSession) {
 
   val tableName = parameters(JDBCOptions.JDBC_TABLE_NAME)
   val options = new JDBCOptions(parameters)
@@ -60,7 +61,7 @@ class JDBCSinkLog(parameters: Map[String, String]) {
                                     List(StructField(BATCH_ID, LongType, true)
                                       , StructField(STATUS, StringType, true))
                                   )
-                            , logOptions)
+                            , sparkSession, logOptions)
     }
   }
 

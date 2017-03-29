@@ -38,7 +38,7 @@ class JdbcSink(sqlContext: SQLContext,
                partitionColumns: Seq[String],
                outputMode: OutputMode) extends Sink  with Logging {
   val options = new JDBCOptions(parameters)
-  val sinkLog = new JDBCSinkLog(parameters)
+  val sinkLog = new JDBCSinkLog(parameters, sqlContext.sparkSession)
   // If user specifies a batchIdCol in the parameters, then it means that the user wants exactly
   // once semantics. This column will store the batch Id for the row when an uncommitted batch
   // is replayed, JDBC SInk will delete the rows that were added to the previous play of the
@@ -67,7 +67,7 @@ class JdbcSink(sqlContext: SQLContext,
             } else {
               // Otherwise, do not truncate the table, instead drop and recreate it
               dropTable(conn, options.table)
-              createTable(conn, schema, options)
+              createTable(conn, df, options)
               saveRows(df, isCaseSensitive, options, batchId)
             }
           } else if (outputMode == OutputMode.Append()) {
@@ -76,7 +76,7 @@ class JdbcSink(sqlContext: SQLContext,
             throw new IllegalArgumentException(s"$outputMode not supported")
           }
         } else {
-          createTable(conn, schema, options)
+          createTable(conn, df, options)
           saveRows(df, isCaseSensitive, options, batchId)
         }
         sinkLog.commitBatch(batchId, conn)
