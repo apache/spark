@@ -28,19 +28,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
- * Entry object for creating a Hive aware [[SessionState]].
- */
-private[hive] object HiveSessionState {
-  /**
-   * Create a new Hive aware [[SessionState]]. for the given session.
-   */
-  def apply(session: SparkSession): SessionState = {
-    new HiveSessionStateBuilder(session).build()
-  }
-}
-
-/**
- * Builder that produces a [[HiveSessionState]].
+ * Builder that produces a Hive aware [[SessionState]].
  */
 @Experimental
 @InterfaceStability.Unstable
