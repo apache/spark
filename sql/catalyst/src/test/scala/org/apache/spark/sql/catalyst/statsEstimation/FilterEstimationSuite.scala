@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 import java.sql.Date
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
@@ -75,6 +76,82 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrDecimal -> colStatDecimal,
     attrDouble -> colStatDouble,
     attrString -> colStatString))
+
+  test("true") {
+    validateEstimatedStats(
+      Filter(TrueLiteral, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> colStatInt),
+      expectedRowCount = 10)
+  }
+
+  test("false") {
+    validateEstimatedStats(
+      Filter(FalseLiteral, childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("null") {
+    validateEstimatedStats(
+      Filter(Literal(null, IntegerType), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("Not(null)") {
+    validateEstimatedStats(
+      Filter(Not(Literal(null, IntegerType)), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("Not(Not(null))") {
+    validateEstimatedStats(
+      Filter(Not(Not(Literal(null, IntegerType))), childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cint < 3 AND null") {
+    val condition = And(LessThan(attrInt, Literal(3)), Literal(null, IntegerType))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("cint < 3 OR null") {
+    val condition = Or(LessThan(attrInt, Literal(3)), Literal(null, IntegerType))
+    val m = Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)).stats(conf)
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> colStatInt),
+      expectedRowCount = 3)
+  }
+
+  test("Not(cint < 3 AND null)") {
+    val condition = Not(And(LessThan(attrInt, Literal(3)), Literal(null, IntegerType)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> colStatInt),
+      expectedRowCount = 8)
+  }
+
+  test("Not(cint < 3 OR null)") {
+    val condition = Not(Or(LessThan(attrInt, Literal(3)), Literal(null, IntegerType)))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
+  }
+
+  test("Not(cint < 3 AND Not(null))") {
+    val condition = Not(And(LessThan(attrInt, Literal(3)), Not(Literal(null, IntegerType))))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Seq(attrInt -> colStatInt),
+      expectedRowCount = 8)
+  }
 
   test("cint = 2") {
     validateEstimatedStats(
@@ -161,6 +238,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrInt -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4)),
       expectedRowCount = 10)
+  }
+
+  test("cint IS NOT NULL && null") {
+    // 'cint < null' will be optimized to 'cint IS NOT NULL && null'.
+    // More similar cases can be found in the Optimizer NullPropagation.
+    val condition = And(IsNotNull(attrInt), Literal(null, IntegerType))
+    validateEstimatedStats(
+      Filter(condition, childStatsTestPlan(Seq(attrInt), 10L)),
+      Nil,
+      expectedRowCount = 0)
   }
 
   test("cint > 3 AND cint <= 6") {
