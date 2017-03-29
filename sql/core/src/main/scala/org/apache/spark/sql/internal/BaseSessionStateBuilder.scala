@@ -140,7 +140,7 @@ abstract class BaseSessionStateBuilder(
    * Note 1: The user-defined functions must be deterministic.
    * Note 2: This depends on the `functionRegistry` field.
    */
-  protected def udf: UDFRegistration = new UDFRegistration(functionRegistry)
+  protected def udfRegistration: UDFRegistration = new UDFRegistration(functionRegistry)
 
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
@@ -268,7 +268,7 @@ abstract class BaseSessionStateBuilder(
       conf,
       experimentalMethods,
       functionRegistry,
-      udf,
+      udfRegistration,
       catalog,
       sqlParser,
       analyzer,

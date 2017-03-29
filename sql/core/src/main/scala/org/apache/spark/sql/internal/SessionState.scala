@@ -41,7 +41,7 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param conf SQL-specific key-value configurations.
  * @param experimentalMethods Interface to add custom planning strategies and optimizers.
  * @param functionRegistry Internal catalog for managing functions registered by the user.
- * @param udf Interface exposed to the user for registering user-defined functions.
+ * @param udfRegistration Interface exposed to the user for registering user-defined functions.
  * @param catalog Internal catalog for managing table and database states.
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
  * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
@@ -58,7 +58,7 @@ private[sql] class SessionState(
     val conf: SQLConf,
     val experimentalMethods: ExperimentalMethods,
     val functionRegistry: FunctionRegistry,
-    val udf: UDFRegistration,
+    val udfRegistration: UDFRegistration,
     val catalog: SessionCatalog,
     val sqlParser: ParserInterface,
     val analyzer: Analyzer,
@@ -101,13 +101,6 @@ private[sql] class SessionState(
 }
 
 private[sql] object SessionState {
-  /**
-   * Create a new [[SessionState]] for the given session.
-   */
-  def apply(session: SparkSession): SessionState = {
-    new SessionStateBuilder(session).build()
-  }
-
   def newHadoopConf(hadoopConf: Configuration, sqlConf: SQLConf): Configuration = {
     val newHadoopConf = new Configuration(hadoopConf)
     sqlConf.getAllConfs.foreach { case (k, v) => if (v ne null) newHadoopConf.set(k, v) }
