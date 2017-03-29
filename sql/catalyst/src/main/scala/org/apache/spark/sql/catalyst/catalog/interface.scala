@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.catalog
 import java.net.URI
 import java.util.Date
 
-import com.google.common.base.Objects
 import scala.collection.mutable
+
+import com.google.common.base.Objects
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, FunctionIdentifier, InternalRow, TableIdentifier}
