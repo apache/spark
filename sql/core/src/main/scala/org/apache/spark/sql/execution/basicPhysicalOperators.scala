@@ -565,13 +565,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         longMetric("dataSize") += dataSize
 
-        // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
-        // directly without setting an execution id. We should be tolerant to it.
-        if (executionId != null) {
-          sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
-            executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
-        }
-
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         rows
       }
     }(SubqueryExec.executionContext)
