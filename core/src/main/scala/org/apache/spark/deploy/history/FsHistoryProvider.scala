@@ -315,48 +315,43 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         (new InMemoryStore(), true)
     }
 
-    val listener = if (needReplay) {
-      val _listener = new AppStatusListener(kvstore, conf, false,
+    if (needReplay) {
+      val replayBus = new ReplayListenerBus()
+      val listener = new AppStatusListener(kvstore, conf, false,
         lastUpdateTime = Some(attempt.info.lastUpdated.getTime()))
-      replayBus.addListener(_listener)
+      replayBus.addListener(listener)
       AppStatusPlugin.loadPlugins().foreach { plugin =>
         plugin.setupListeners(conf, kvstore, l => replayBus.addListener(l), false)
       }
-      Some(_listener)
-    } else {
-      None
-    }
-
-    val loadedUI = {
-      val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
-        HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
-        attempt.info.startTime.getTime(),
-        attempt.info.appSparkVersion)
-      LoadedAppUI(ui)
-    }
-
-    try {
-      AppStatusPlugin.loadPlugins().foreach { plugin =>
-        plugin.setupUI(loadedUI.ui)
+      try {
+        val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
+        replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+        listener.flush()
+      } catch {
+        case e: Exception =>
+          try {
+            kvstore.close()
+          } catch {
+            case _e: Exception => logInfo("Error closing store.", _e)
+          }
+          uiStorePath.foreach(Utils.deleteRecursively)
+          if (e.isInstanceOf[FileNotFoundException]) {
+            return None
+          } else {
+            throw e
+          }
       }
-
-      val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
-      replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-      listener.foreach(_.flush())
-    } catch {
-      case e: Exception =>
-        try {
-          kvstore.close()
-        } catch {
-          case _e: Exception => logInfo("Error closing store.", _e)
-        }
-        uiStorePath.foreach(Utils.deleteRecursively)
-        if (e.isInstanceOf[FileNotFoundException]) {
-          return None
-        } else {
-          throw e
-        }
     }
+
+    val ui = SparkUI.create(None, new AppStatusStore(kvstore), conf, secManager, app.info.name,
+      HistoryServer.getAttemptURI(appId, attempt.info.attemptId),
+      attempt.info.startTime.getTime(),
+      attempt.info.appSparkVersion)
+    AppStatusPlugin.loadPlugins().foreach { plugin =>
+      plugin.setupUI(ui)
+    }
+
+    val loadedUI = LoadedAppUI(ui)
 
     synchronized {
       activeUIs((appId, attemptId)) = loadedUI

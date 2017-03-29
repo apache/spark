@@ -22,7 +22,6 @@ import javax.ws.rs.core.MediaType
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.jobs.UIData.JobUIData
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AllJobsResource(ui: SparkUI) {
