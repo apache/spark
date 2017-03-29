@@ -58,12 +58,11 @@ public class JavaImputerExample {
     });
     Dataset<Row> df = spark.createDataFrame(data, schema);
 
-    Imputer imputerModel = new Imputer()
-      .setStrategy("mean")
+    Imputer imputer = new Imputer()
       .setInputCols(new String[]{"a", "b"})
       .setOutputCols(new String[]{"out_a", "out_b"});
 
-    ImputerModel model = imputerModel.fit(df);
+    ImputerModel model = imputer.fit(df);
     model.transform(df).show();
     // $example off$
 

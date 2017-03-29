@@ -42,10 +42,9 @@ if __name__ == "__main__":
     ], ["a", "b"])
 
     imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
-    imputerModel = imputer.fit(df)
+    model = imputer.fit(df)
 
-    imputedData = imputerModel.transform(df)
-    imputedData.select("a", "b", "out_a", "out_b").show()
+    model.transform(df).select("a", "b", "out_a", "out_b").show()
     # $example off$
 
     spark.stop()

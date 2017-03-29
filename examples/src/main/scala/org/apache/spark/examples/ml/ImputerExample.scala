@@ -44,7 +44,6 @@ object ImputerExample {
     )).toDF("a", "b")
 
     val imputer = new Imputer()
-      .setStrategy("mean")
       .setInputCols(Array("a", "b"))
       .setOutputCols(Array("out_a", "out_b"))
 
