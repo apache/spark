@@ -46,10 +46,10 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param sqlParser Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
  * @param analyzer Logical query plan analyzer for resolving unresolved attributes and relations.
  * @param optimizer Logical query plan optimizer.
- * @param planner Planner that converts optimized logical plans to physical plans
+ * @param planner Planner that converts optimized logical plans to physical plans.
  * @param streamingQueryManager Interface to start and stop streaming queries.
- * @param listenerManager Interface to register custom [[QueryExecutionListener]]s
- * @param resourceLoader Session shared resource loader to load JARs, files, etc
+ * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ * @param resourceLoader Session shared resource loader to load JARs, files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.
  * @param createClone Function used to create clones of the session state.
  */
