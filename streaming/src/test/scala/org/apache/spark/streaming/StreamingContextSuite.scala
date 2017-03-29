@@ -823,7 +823,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         new Thread() {
           setDaemon(true)
           override def run(): Unit = {
-            ssc.stop(stopSparkContext = true, stopGracefully = false)
+            ssc.stop(stopSparkContext = false, stopGracefully = false)
             latch.countDown()
           }
         }.start()
@@ -831,10 +831,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
     ssc.start()
     ssc.awaitTerminationOrTimeout(60000)
-    // Wait until `ssc.top` returns. Otherwise, we may finish this test too fast and leak an active
-    // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
-    // is running.
-    assert(latch.await(60, TimeUnit.SECONDS))
+    ssc.sc.stop()
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
