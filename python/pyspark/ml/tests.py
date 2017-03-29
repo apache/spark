@@ -41,9 +41,7 @@ from shutil import rmtree
 import tempfile
 import array as pyarray
 import numpy as np
-from numpy import (
-    abs, all, arange, array, array_equal, dot, exp, inf, mean, ones, random, tile, zeros)
-from numpy import sum as array_sum
+from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
 
 from pyspark import keyword_only, SparkContext
@@ -54,20 +52,19 @@ from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
-from pyspark.ml.linalg import (
-    DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT,
-    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors, _convert_to_vector)
+from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
+    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
 from pyspark.ml.recommendation import ALS
-from pyspark.ml.regression import (
-    DecisionTreeRegressor, GeneralizedLinearRegression, LinearRegression)
+from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegression, \
+    LinearRegression
+from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
-from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -1739,6 +1736,22 @@ class WrapperTests(MLlibTestCase):
         java_class = self.sc._gateway.jvm.java.lang.Integer
         java_array = JavaWrapper._new_java_array([], java_class)
         self.assertEqual(_java2py(self.sc, java_array), [])
+
+
+class ChiSquareTestTests(SparkSessionTestCase):
+
+    def test_chisquaretest(self):
+        data = [[0, Vectors.dense([0, 1, 2])],
+                [1, Vectors.dense([1, 1, 1])],
+                [2, Vectors.dense([2, 1, 0])]]
+        df = self.spark.createDataFrame(data, ['label', 'feat'])
+        res = ChiSquareTest.test(df, 'feat', 'label')
+        # This line is hitting the collect bug described in #17218, commented for now.
+        # pValues = res.select("degreesOfFreedom").collect())
+        self.assertIsInstance(res, DataFrame)
+        fieldNames = set(field.name for field in res.schema.fields)
+        expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
+        self.assertTrue(all(field in fieldNames for field in expectedFields))
 
 
 if __name__ == "__main__":
