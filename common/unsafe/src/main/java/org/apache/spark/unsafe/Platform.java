@@ -52,7 +52,7 @@ public final class Platform {
         //Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231)
         try {
             Class<?> bitsClass =
-                    Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+                Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
             Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
             unalignedMethod.setAccessible(true);
             _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
