@@ -169,30 +169,72 @@ class DataTypeSuite extends SparkFunSuite {
     assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
   }
 
-  def checkDataTypeJsonRepr(dataType: DataType): Unit = {
-    test(s"JSON - $dataType") {
+  def checkDataTypeFromJson(dataType: DataType): Unit = {
+    test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
     }
   }
 
-  checkDataTypeJsonRepr(NullType)
-  checkDataTypeJsonRepr(BooleanType)
-  checkDataTypeJsonRepr(ByteType)
-  checkDataTypeJsonRepr(ShortType)
-  checkDataTypeJsonRepr(IntegerType)
-  checkDataTypeJsonRepr(LongType)
-  checkDataTypeJsonRepr(FloatType)
-  checkDataTypeJsonRepr(DoubleType)
-  checkDataTypeJsonRepr(DecimalType(10, 5))
-  checkDataTypeJsonRepr(DecimalType.SYSTEM_DEFAULT)
-  checkDataTypeJsonRepr(DateType)
-  checkDataTypeJsonRepr(TimestampType)
-  checkDataTypeJsonRepr(StringType)
-  checkDataTypeJsonRepr(BinaryType)
-  checkDataTypeJsonRepr(ArrayType(DoubleType, true))
-  checkDataTypeJsonRepr(ArrayType(StringType, false))
-  checkDataTypeJsonRepr(MapType(IntegerType, StringType, true))
-  checkDataTypeJsonRepr(MapType(IntegerType, ArrayType(DoubleType), false))
+  def checkDataTypeFromDDL(dataType: DataType): Unit = {
+    test(s"from DDL - $dataType") {
+      val parsed = StructType.fromDDL(s"a ${dataType.sql}")
+      val expected = new StructType().add("a", dataType)
+      assert(parsed.sameType(expected))
+    }
+  }
+
+  checkDataTypeFromJson(NullType)
+
+  checkDataTypeFromJson(BooleanType)
+  checkDataTypeFromDDL(BooleanType)
+
+  checkDataTypeFromJson(ByteType)
+  checkDataTypeFromDDL(ByteType)
+
+  checkDataTypeFromJson(ShortType)
+  checkDataTypeFromDDL(ShortType)
+
+  checkDataTypeFromJson(IntegerType)
+  checkDataTypeFromDDL(IntegerType)
+
+  checkDataTypeFromJson(LongType)
+  checkDataTypeFromDDL(LongType)
+
+  checkDataTypeFromJson(FloatType)
+  checkDataTypeFromDDL(FloatType)
+
+  checkDataTypeFromJson(DoubleType)
+  checkDataTypeFromDDL(DoubleType)
+
+  checkDataTypeFromJson(DecimalType(10, 5))
+  checkDataTypeFromDDL(DecimalType(10, 5))
+
+  checkDataTypeFromJson(DecimalType.SYSTEM_DEFAULT)
+  checkDataTypeFromDDL(DecimalType.SYSTEM_DEFAULT)
+
+  checkDataTypeFromJson(DateType)
+  checkDataTypeFromDDL(DateType)
+
+  checkDataTypeFromJson(TimestampType)
+  checkDataTypeFromDDL(TimestampType)
+
+  checkDataTypeFromJson(StringType)
+  checkDataTypeFromDDL(StringType)
+
+  checkDataTypeFromJson(BinaryType)
+  checkDataTypeFromDDL(BinaryType)
+
+  checkDataTypeFromJson(ArrayType(DoubleType, true))
+  checkDataTypeFromDDL(ArrayType(DoubleType, true))
+
+  checkDataTypeFromJson(ArrayType(StringType, false))
+  checkDataTypeFromDDL(ArrayType(StringType, false))
+
+  checkDataTypeFromJson(MapType(IntegerType, StringType, true))
+  checkDataTypeFromDDL(MapType(IntegerType, StringType, true))
+
+  checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
+  checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
   val metadata = new MetadataBuilder()
     .putString("name", "age")
@@ -201,7 +243,8 @@ class DataTypeSuite extends SparkFunSuite {
     StructField("a", IntegerType, nullable = true),
     StructField("b", ArrayType(DoubleType), nullable = false),
     StructField("c", DoubleType, nullable = false, metadata)))
-  checkDataTypeJsonRepr(structType)
+  checkDataTypeFromJson(structType)
+  checkDataTypeFromDDL(structType)
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
     test(s"Check the default size of $dataType") {
