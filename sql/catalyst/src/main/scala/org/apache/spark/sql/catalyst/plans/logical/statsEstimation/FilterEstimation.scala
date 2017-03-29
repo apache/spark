@@ -575,7 +575,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
    * @param op a binary comparison operator such as =, <, <=, >, >=
    * @param attrLeft the left Attribute (or a column)
    * @param attrRight the right Attribute (or a column)
-   * @param update a boolean flag to specify if we need to update ColumnStat of a given column
+   * @param update a boolean flag to specify if we need to update ColumnStat of the given columns
    *               for subsequent conditions
    * @return an optional double value to show the percentage of rows meeting a given condition
    */
@@ -619,20 +619,25 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
 
     // determine the overlapping degree between predicate range and column's range
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
+      case _: LessThan =>
+        (minLeft >= maxRight, maxLeft < minRight)
+      case _: LessThanOrEqual =>
+        (minLeft > maxRight, maxLeft <= minRight)
+      case _: GreaterThan =>
+        (maxLeft <= minRight, minLeft > maxRight)
+      case _: GreaterThanOrEqual =>
+        (maxLeft < minRight, minLeft >= maxRight)
       case _: EqualTo =>
         ((maxLeft < minRight) || (maxRight < minLeft),
           (minLeft == minRight) && (maxLeft == maxRight))
-      case _: LessThan =>
-        (minLeft >= maxRight, maxLeft <= minRight)
-      case _: LessThanOrEqual =>
-        (minLeft >= maxRight, maxLeft <= minRight)
-      case _: GreaterThan =>
-        (maxLeft <= minRight, minLeft >= maxRight)
-      case _: GreaterThanOrEqual =>
-        (maxLeft < minRight, minLeft > maxRight)
       case _: EqualNullSafe =>
-        // For null-safe equality, we set it to partial overlap
-        (false, false)
+        // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
+        // If null values exists, we set it to partial overlap.
+        (((maxLeft < minRight) || (maxRight < minLeft))
+            && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0,
+          ((minLeft == minRight) && (maxLeft == maxRight))
+            && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0
+        )
     }
 
     var percent = BigDecimal(1.0)
