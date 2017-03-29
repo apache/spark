@@ -47,9 +47,9 @@ public final class Platform {
   static {
     boolean _unaligned;
     if (arch.matches("^(ppc64le | ppc64)$")) {
+      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but ppc64 and ppc64le support it
       _unaligned = true;
     } else {
-      //Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231)
       try {
         Class<?> bitsClass =
           Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
