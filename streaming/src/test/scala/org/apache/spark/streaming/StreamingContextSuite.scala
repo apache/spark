@@ -813,7 +813,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     val conf = new SparkConf().setMaster("local-cluster[2,1,1024]").setAppName(appName)
     ssc = new StreamingContext(conf, Milliseconds(100))
     val input = ssc.receiverStream(new TestReceiver)
-    val latch = new CountDownLatch(1)
     @volatile var stopping = false
     input.count().foreachRDD { rdd =>
       // Make sure we can read from BlockRDD
@@ -824,7 +823,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
           setDaemon(true)
           override def run(): Unit = {
             ssc.stop(stopSparkContext = false, stopGracefully = false)
-            latch.countDown()
           }
         }.start()
       }
