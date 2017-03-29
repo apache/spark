@@ -639,7 +639,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
-    "spark.yarn.access.hadoopFileSystems" -> Seq(
+    "spark.security.access.hadoopFileSystems" -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2"))
   )
 

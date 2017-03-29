@@ -75,13 +75,23 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
 
+  private[spark] val SPARK_KEYTAB = ConfigBuilder("spark.keytab")
+    .doc("Location of user's keytab.")
+    .fallbackConf(KEYTAB)
+
   private[spark] val KEYTAB = ConfigBuilder("spark.yarn.keytab")
     .doc("Location of user's keytab.")
-    .stringConf.createOptional
+    .stringConf
+    .createOptional
+
+  private[spark] val SPARK_PRINCIPAL = ConfigBuilder("spark.principal")
+    .doc("Name of the Kerberos principal.")
+    .fallbackConf(PRINCIPAL)
 
   private[spark] val PRINCIPAL = ConfigBuilder("spark.yarn.principal")
     .doc("Name of the Kerberos principal.")
-    .stringConf.createOptional
+    .stringConf
+    .createOptional
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
@@ -272,4 +282,55 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+
+  /* Security configuration. */
+
+  private[spark] val CREDENTIALS_FILE_PATH = ConfigBuilder("spark.security.credentials.file")
+    .internal()
+    .stringConf
+    .createWithDefault(null)
+
+  private[spark] val CREDENTIALS_ENTITY = ConfigBuilder("spark.security.credentials.entities")
+    .internal()
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CREDENTIAL_FILE_MAX_COUNT =
+    ConfigBuilder("spark.security.credentials.file.retention.count")
+      .intConf
+      .createWithDefault(5)
+
+  private[spark] val CREDENTIALS_FILE_MAX_RETENTION =
+    ConfigBuilder("spark.security.credentials.file.retention.days")
+      .intConf
+      .createWithDefault(5)
+
+  private[spark] val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
+    .doc("Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
+      "fs.defaultFS does not need to be listed here.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val FILESYSTEMS_TO_ACCESS =
+    ConfigBuilder("spark.security.access.hadoopFileSystems")
+    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
+      "that hosts fs.defaultFS does not need to be listed here.")
+    .fallbackConf(NAMENODES_TO_ACCESS)
+
+  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.credentials.renewalTime")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(Long.MaxValue)
+
+  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.credentials.updateTime")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefault(Long.MaxValue)
+
+  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
+    .doc("Staging directory used while submitting applications.")
+    .stringConf
+    .createOptional
 }

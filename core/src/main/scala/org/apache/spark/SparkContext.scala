@@ -27,23 +27,25 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReferenc
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
+import org.apache.hadoop.io._
+import org.apache.hadoop.mapred.{Utils => _, _}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialRenewer}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -215,6 +217,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _credentialRenewer: Option[CredentialRenewer] = None
+
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -497,6 +501,13 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
+    // we need to prepare credentials for executors both in conf and hdfs before they launch.
+    // TODO: Separate credentials files by appID, and clean all files at the end of the application
+    if (_conf.contains(PRINCIPAL.key)) {
+      _credentialRenewer = createCredentialRenewer()
+      _credentialRenewer.foreach(_ => SparkHadoopUtil.get.startCredentialUpdater(_conf))
+    }
+
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -591,6 +602,37 @@ class SparkContext(config: SparkConf) extends Logging {
       } finally {
         throw e
       }
+  }
+
+  private def createCredentialRenewer(): Option[CredentialRenewer] = {
+    master match {
+      case "yarn" => None
+      case _ =>
+        val appStagingBaseDir = _conf.get(STAGING_DIR).map { new Path(_) }
+          .getOrElse(FileSystem.get(_hadoopConfiguration).getHomeDirectory())
+        val stagingDirPath =
+          appStagingBaseDir +
+            Path.SEPARATOR + ".sparkStaging" + Path.SEPARATOR + UUID.randomUUID().toString
+        val credentialsFile = "credentials-" + UUID.randomUUID().toString
+        _conf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
+        logInfo(s"Credentials file set to: $credentialsFile")
+        val credentials = new Credentials
+        val ccm = new ConfigurableCredentialManager(_conf, _hadoopConfiguration)
+        ccm.obtainCredentials(_hadoopConfiguration, credentials)
+
+        UserGroupInformation.getCurrentUser.addCredentials(credentials)
+
+        val tokenList = ArrayBuffer[String]()
+        credentials.getAllTokens.asScala.foreach { token =>
+          tokenList += (token.encodeToUrlString())
+        }
+        if (tokenList.nonEmpty) {
+          _conf.set(CREDENTIALS_ENTITY, tokenList)
+        }
+        val credentialRenewer = ccm.credentialRenewer()
+        credentialRenewer.scheduleLoginFromKeytab()
+        Some(credentialRenewer)
+    }
   }
 
   /**
@@ -1938,6 +1980,14 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       SparkEnv.set(null)
     }
+
+    Utils.tryLogNonFatalError {
+      _credentialRenewer.foreach { cr =>
+        cr.stop()
+        SparkHadoopUtil.get.stopCredentialUpdater()
+      }
+    }
+
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
@@ -2681,6 +2731,7 @@ object SparkContext extends Logging {
       case _ => 0 // driver is not used for execution
     }
   }
+
 
   /**
    * Create a task scheduler based on a given master URL.

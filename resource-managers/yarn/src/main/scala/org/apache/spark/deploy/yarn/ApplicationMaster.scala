@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
-import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.{TimeUnit, TimeoutException}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
@@ -37,8 +37,8 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialRenewer}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
@@ -115,7 +115,7 @@ private[spark] class ApplicationMaster(
   // In cluster mode, used to tell the AM when the user's SparkContext has been initialized.
   private val sparkContextPromise = Promise[SparkContext]()
 
-  private var credentialRenewer: AMCredentialRenewer = _
+  private var credentialRenewer: CredentialRenewer = _
 
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in

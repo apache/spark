@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
@@ -24,7 +24,6 @@ import org.apache.hadoop.security.token.Token
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config._
 
 class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   private var credentialManager: ConfigurableCredentialManager = null
@@ -54,7 +53,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   }
 
   test("disable hive credential provider") {
-    sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
+    sparkConf.set("spark.security.credentials.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
     credentialManager.getServiceCredentialProvider("hadoopfs") should not be (None)

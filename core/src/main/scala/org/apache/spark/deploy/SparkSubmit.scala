@@ -20,7 +20,6 @@ package org.apache.spark.deploy
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
-import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 
 import scala.annotation.tailrec
@@ -45,8 +44,9 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util._
+import org.apache.spark.util.{ChildFirstURLClassLoader, CommandLineUtils, MutableURLClassLoader, Utils}
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -152,27 +152,8 @@ object SparkSubmit extends CommandLineUtils {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
-        val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
-          UserGroupInformation.getCurrentUser())
-        try {
-          proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
-            override def run(): Unit = {
-              runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
-            }
-          })
-        } catch {
-          case e: Exception =>
-            // Hadoop's AuthorizationException suppresses the exception's stack trace, which
-            // makes the message printed to the output by the JVM not very helpful. Instead,
-            // detect exceptions with empty stack traces here, and treat them differently.
-            if (e.getStackTrace().length == 0) {
-              // scalastyle:off println
-              printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-              // scalastyle:on println
-              exitFn(1)
-            } else {
-              throw e
-            }
+        SparkHadoopUtil.get.runAsProxyUser(args.proxyUser) {
+          () => runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
         }
       } else {
         runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
@@ -547,21 +528,19 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL) {
-      if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when principal is specified")
-        if (!new File(args.keytab).exists()) {
-          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
-        } else {
-          // Add keytab and principal configurations in sysProps to make them available
-          // for later use; e.g. in spark sql, the isolated class loader used to talk
-          // to HiveMetastore will use these settings. They will be set as Java system
-          // properties and then loaded by SparkConf
-          sysProps.put("spark.yarn.keytab", args.keytab)
-          sysProps.put("spark.yarn.principal", args.principal)
+    if (args.principal != null) {
+      require(args.keytab != null, "Keytab must be specified when principal is specified")
+      if (!new File(args.keytab).exists()) {
+        throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
+      } else {
+        // Add keytab and principal configurations in sysProps to make them available
+        // for later use; e.g. in spark sql, the isolated class loader used to talk
+        // to HiveMetastore will use these settings. They will be set as Java system
+        // properties and then loaded by SparkConf
+        sysProps.put(KEYTAB.key, args.keytab)
+        sysProps.put(PRINCIPAL.key, args.principal)
 
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-        }
+        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
       }
     }
 

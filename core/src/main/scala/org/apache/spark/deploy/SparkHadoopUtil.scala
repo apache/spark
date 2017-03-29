@@ -18,6 +18,8 @@
 package org.apache.spark.deploy
 
 import java.io.IOException
+import java.lang.reflect.UndeclaredThrowableException
+import java.nio.charset.StandardCharsets.UTF_8
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
@@ -28,6 +30,7 @@ import scala.util.control.NonFatal
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -35,6 +38,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.deploy.security.{ConfigurableCredentialManager, CredentialUpdater}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -47,6 +51,8 @@ class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
+
+  private var credentialUpdater: CredentialUpdater = _
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -61,9 +67,63 @@ class SparkHadoopUtil extends Logging {
     logDebug("running as user: " + user)
     val ugi = UserGroupInformation.createRemoteUser(user)
     transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-    ugi.doAs(new PrivilegedExceptionAction[Unit] {
-      def run: Unit = func()
-    })
+    tryDoAsUserOrExit(ugi, func)
+  }
+
+  /**
+   * Create a proxy user ugi with username of the effective user and the ugi of the real user.
+   * Transfer the all credentials to the proxy user ugi. Runs the given function with the proxy
+   * user ugi.
+   * @param user
+   * @param func
+   */
+  def runAsProxyUser(user: String)(func: () => Unit) {
+    require(Some(user).nonEmpty, "running as proxy user `null` is not allowed")
+    val realUser = UserGroupInformation.getCurrentUser
+    logInfo(s"User being impersonated is: ${realUser.getShortUserName}")
+    val proxyUser = UserGroupInformation.createProxyUser(user, realUser)
+    proxyUser.addCredentials(realUser.getCredentials)
+    tryDoAsUserOrExit(proxyUser, func)
+  }
+
+  /**
+   * Run some code as the real logged in user (which may differ from the current user, for
+   * example, when using proxying).
+   */
+  private[spark] def doAsRealUser[T](fn: => T): T = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+
+    // For some reason the Scala-generated anonymous class ends up causing an
+    // UndeclaredThrowableException, even if you annotate the method with @throws.
+    try {
+      realUser.doAs(new PrivilegedExceptionAction[T]() {
+        override def run(): T = fn
+      })
+    } catch {
+      case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
+    }
+  }
+
+  private[this] def tryDoAsUserOrExit(user: UserGroupInformation, func: () => Unit) {
+    try {
+      user.doAs(new PrivilegedExceptionAction[Unit] {
+        def run: Unit = func()
+      })
+    } catch {
+      case e: Exception =>
+        // Hadoop's AuthorizationException suppresses the exception's stack trace, which
+        // makes the message printed to the output by the JVM not very helpful. Instead,
+        // detect exceptions with empty stack traces here, and treat them differently.
+        if (e.getStackTrace().length == 0) {
+          // scalastyle:off println
+          System.err.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+          // scalastyle:on println
+          System.exit(1)
+        } else {
+          throw e
+        }
+    }
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -71,7 +131,6 @@ class SparkHadoopUtil extends Logging {
       dest.addToken(token)
     }
   }
-
 
   /**
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
@@ -122,17 +181,30 @@ class SparkHadoopUtil extends Logging {
    * Add any user credentials to the job conf which are necessary for running on a secure Hadoop
    * cluster.
    */
-  def addCredentials(conf: JobConf) {}
+  def addCredentials(conf: JobConf): Unit = {
+    val jobCreds = conf.getCredentials()
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+  }
 
   def isYarnMode(): Boolean = { false }
 
-  def getCurrentUserCredentials(): Credentials = { null }
+  def getCurrentUserCredentials(): Credentials = {
+    UserGroupInformation.getCurrentUser().getCredentials()
+  }
 
-  def addCurrentUserCredentials(creds: Credentials) {}
+  def addCurrentUserCredentials(creds: Credentials): Unit = {
+    UserGroupInformation.getCurrentUser().addCredentials(creds)
+  }
 
-  def addSecretKeyToUserCredentials(key: String, secret: String) {}
+  def addSecretKeyToUserCredentials(key: String, secret: String): Unit = {
+    val creds = new Credentials()
+    creds.addSecretKey(new Text(key), secret.getBytes(UTF_8))
+    addCurrentUserCredentials(creds)
+  }
 
-  def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
+  def getSecretKeyFromUserCredentials(key: String): Array[Byte] = {
+    val credentials = getCurrentUserCredentials()
+    if (credentials != null) credentials.getSecretKey(new Text(key)) else null }
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
@@ -290,12 +362,21 @@ class SparkHadoopUtil extends Logging {
    * Start a thread to periodically update the current user's credentials with new credentials so
    * that access to secured service does not fail.
    */
-  private[spark] def startCredentialUpdater(conf: SparkConf) {}
+  private[spark] def startCredentialUpdater(sparkConf: SparkConf): Unit = {
+    credentialUpdater =
+      new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
+    credentialUpdater.start()
+  }
 
   /**
    * Stop the thread that does the credential updates.
    */
-  private[spark] def stopCredentialUpdater() {}
+  private[spark] def stopCredentialUpdater(): Unit = {
+    if (credentialUpdater != null) {
+      credentialUpdater.stop()
+      credentialUpdater = null
+    }
+  }
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.

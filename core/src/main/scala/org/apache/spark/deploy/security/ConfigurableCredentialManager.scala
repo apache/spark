@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.security
+package org.apache.spark.deploy.security
 
 import java.util.ServiceLoader
 
@@ -37,21 +37,21 @@ import org.apache.spark.util.Utils
  * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
  *
  * Also each credential provider is controlled by
- * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
+ * spark.security.credentials.{service}.enabled, it will not be loaded in if set to false.
  * For example, Hive's credential provider [[HiveCredentialProvider]] can be enabled/disabled by
- * the configuration spark.yarn.security.credentials.hive.enabled.
+ * the configuration spark.security.credentials.hive.enabled.
  */
-private[yarn] final class ConfigurableCredentialManager(
+private[spark] final class ConfigurableCredentialManager(
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
-  private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
+  private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
 
   // Maintain all the registered credential providers
   private val credentialProviders = {
     val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader).asScala
 
-    // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
+    // Filter out credentials in which spark.security.credentials.{service}.enabled is false.
     providers.filter { p =>
       sparkConf.getOption(providerEnabledConfig.format(p.serviceName))
         .orElse {
@@ -89,11 +89,11 @@ private[yarn] final class ConfigurableCredentialManager(
   }
 
   /**
-   * Create an [[AMCredentialRenewer]] instance, caller should be responsible to stop this
+   * Create an [[CredentialRenewer]] instance, caller should be responsible to stop this
    * instance when it is not used. AM will use it to renew credentials periodically.
    */
-  def credentialRenewer(): AMCredentialRenewer = {
-    new AMCredentialRenewer(sparkConf, hadoopConf, this)
+  def credentialRenewer(): CredentialRenewer = {
+    new CredentialRenewer(sparkConf, hadoopConf, this)
   }
 
   /**

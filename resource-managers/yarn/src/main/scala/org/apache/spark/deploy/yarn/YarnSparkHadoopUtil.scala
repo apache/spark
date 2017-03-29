@@ -17,16 +17,11 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.nio.charset.StandardCharsets.UTF_8
-import java.util.regex.Matcher
-import java.util.regex.Pattern
+import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
@@ -35,7 +30,6 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.security.{ConfigurableCredentialManager, CredentialUpdater}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
@@ -44,8 +38,6 @@ import org.apache.spark.util.Utils
  * Contains util methods to interact with Hadoop from spark.
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
-
-  private var credentialUpdater: CredentialUpdater = _
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -59,45 +51,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   // subsystems. Always create a new config, don't reuse yarnConf.
   override def newConfiguration(conf: SparkConf): Configuration =
     new YarnConfiguration(super.newConfiguration(conf))
-
-  // Add any user credentials to the job conf which are necessary for running on a secure Hadoop
-  // cluster
-  override def addCredentials(conf: JobConf) {
-    val jobCreds = conf.getCredentials()
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
-  }
-
-  override def getCurrentUserCredentials(): Credentials = {
-    UserGroupInformation.getCurrentUser().getCredentials()
-  }
-
-  override def addCurrentUserCredentials(creds: Credentials) {
-    UserGroupInformation.getCurrentUser().addCredentials(creds)
-  }
-
-  override def addSecretKeyToUserCredentials(key: String, secret: String) {
-    val creds = new Credentials()
-    creds.addSecretKey(new Text(key), secret.getBytes(UTF_8))
-    addCurrentUserCredentials(creds)
-  }
-
-  override def getSecretKeyFromUserCredentials(key: String): Array[Byte] = {
-    val credentials = getCurrentUserCredentials()
-    if (credentials != null) credentials.getSecretKey(new Text(key)) else null
-  }
-
-  private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    credentialUpdater =
-      new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
-    credentialUpdater.start()
-  }
-
-  private[spark] override def stopCredentialUpdater(): Unit = {
-    if (credentialUpdater != null) {
-      credentialUpdater.stop()
-      credentialUpdater = null
-    }
-  }
 
   private[spark] def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())

@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.AnalysisException
@@ -108,12 +109,12 @@ private[hive] class HiveClientImpl(
 
     // Set up kerberos credentials for UserGroupInformation.loginUser within
     // current class loader
-    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-      val principalName = sparkConf.get("spark.yarn.principal")
-      val keytabFileName = sparkConf.get("spark.yarn.keytab")
+    if (sparkConf.contains(PRINCIPAL.key) && sparkConf.contains(KEYTAB.key)) {
+      val principalName = sparkConf.get(PRINCIPAL).get
+      val keytabFileName = sparkConf.get(KEYTAB).get
       if (!new File(keytabFileName).exists()) {
         throw new SparkException(s"Keytab file: ${keytabFileName}" +
-          " specified in spark.yarn.keytab does not exist")
+          s" specified in ${KEYTAB.key} does not exist")
       } else {
         logInfo("Attempting to login to Kerberos" +
           s" using principal: ${principalName} and keytab: ${keytabFileName}")
