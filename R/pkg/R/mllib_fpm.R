@@ -99,8 +99,8 @@ setMethod("spark.fpGrowth", signature(data = "SparkDataFrame"),
 # Get frequent itemsets.
 
 #' @param object a fitted FPGrowth model.
-#' @return A \code{DataFrame} with frequent itemsets.
-#'         The \code{DataFrame} contains two columns:
+#' @return A \code{SparkDataFrame} with frequent itemsets.
+#'         The \code{SparkDataFrame} contains two columns:
 #'         \code{items} (an array of the same type as the input column)
 #'         and \code{freq} (frequency of the itemset).
 #' @rdname spark.fpGrowth
@@ -114,8 +114,8 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 
 # Get association rules.
 
-#' @return A \code{DataFrame} with association rules.
-#'         The \code{DataFrame} contains three columns:
+#' @return A \code{SparkDataFrame} with association rules.
+#'         The \code{SparkDataFrame} contains three columns:
 #'         \code{antecedent} (an array of the same type as the input column),
 #'         \code{consequent} (an array of the same type as the input column),
 #'         and \code{condfidence} (confidence).
