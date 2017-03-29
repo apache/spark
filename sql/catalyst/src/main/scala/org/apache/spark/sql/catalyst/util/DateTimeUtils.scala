@@ -243,16 +243,10 @@ object DateTimeUtils {
    * precision, so this conversion is lossy.
    */
   def toMillis(us: SQLTimestamp): Long = {
-    var millis = us / 1000L
-
     // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
-    // In millis precision the above needs to be represented as (-157700927877)
-
-    if (us < 0 && (us % MILLIS_PER_SECOND < 0)) {
-      millis = millis - 1
-    }
-    millis
+    // In millis precision the above needs to be represented as (-157700927877).
+    Math.floor(us.toDouble / MILLIS_PER_SECOND).toLong
   }
 
   /*

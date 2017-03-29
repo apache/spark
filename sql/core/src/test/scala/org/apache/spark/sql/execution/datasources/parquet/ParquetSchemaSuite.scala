@@ -973,7 +973,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     writeLegacyParquetFormat = true)
 
   testSchema(
-    "Timestmp written and read as INT64 with TIMESTAMP_MILLIS",
+    "Timestamp written and read as INT64 with TIMESTAMP_MILLIS",
     StructType(Seq(StructField("f1", TimestampType))),
     """message root {
       |  optional INT64 f1 (TIMESTAMP_MILLIS);
