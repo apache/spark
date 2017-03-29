@@ -666,13 +666,11 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         var newMinRight = colStatRight.min
 
         op match {
-          case _: EqualTo =>
-            // need to set new min to the larger min value, and
-            // set the new max to the smaller max value.
-            if (minLeft < minRight) newMinLeft = colStatRight.min
-            else newMinRight = colStatLeft.min
-            if (maxLeft < maxRight) newMaxRight = colStatLeft.max
-            else newMaxLeft = colStatRight.max
+          case _: LessThan | _: LessThanOrEqual =>
+            // the left side should be less than the right side.
+            // If not, we need to adjust it to narrow the range.
+            if (minLeft > minRight) newMinRight = colStatLeft.min
+            if (maxLeft > maxRight) newMaxLeft = colStatRight.max
 
           case _: GreaterThan | _: GreaterThanOrEqual =>
             // the left side should be greater than the right side.
@@ -680,11 +678,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             if (minLeft < minRight) newMinLeft = colStatRight.min
             if (maxLeft < maxRight) newMaxRight = colStatLeft.max
 
-          case _: LessThan | _: LessThanOrEqual =>
-            // the left side should be less than the right side.
-            // If not, we need to adjust it to narrow the range.
-            if (minLeft > minRight) newMinRight = colStatLeft.min
-            if (maxLeft > maxRight) newMaxLeft = colStatRight.max
+          case _: EqualTo | _: EqualNullSafe =>
+            // need to set new min to the larger min value, and
+            // set the new max to the smaller max value.
+            if (minLeft < minRight) newMinLeft = colStatRight.min
+            else newMinRight = colStatLeft.min
+            if (maxLeft < maxRight) newMaxRight = colStatLeft.max
+            else newMaxLeft = colStatRight.max
         }
 
         val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
@@ -700,7 +700,6 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
   }
 
 }
-
 
 class ColumnStatsMap {
   private val baseMap: mutable.Map[ExprId, (Attribute, ColumnStat)] = mutable.HashMap.empty
