@@ -16,6 +16,9 @@
 #
 
 from abc import ABCMeta, abstractmethod
+import sys
+if sys.version >= '3':
+    xrange = range
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
@@ -58,6 +61,32 @@ class JavaWrapper(object):
             java_obj = getattr(java_obj, name)
         java_args = [_py2java(sc, arg) for arg in args]
         return java_obj(*java_args)
+
+    @staticmethod
+    def _new_java_array(pylist, java_class):
+        """
+        Create a Java array of given java_class type. Useful for
+        calling a method with a Scala Array from Python with Py4J.
+
+        :param pylist:
+          Python list to convert to a Java Array.
+        :param java_class:
+          Java class to specify the type of Array. Should be in the
+          form of sc._gateway.jvm.* (sc is a valid Spark Context).
+        :return:
+          Java Array of converted pylist.
+
+        Example primitive Java classes:
+          - basestring -> sc._gateway.jvm.java.lang.String
+          - int -> sc._gateway.jvm.java.lang.Integer
+          - float -> sc._gateway.jvm.java.lang.Double
+          - bool -> sc._gateway.jvm.java.lang.Boolean
+        """
+        sc = SparkContext._active_spark_context
+        java_array = sc._gateway.new_array(java_class, len(pylist))
+        for i in xrange(len(pylist)):
+            java_array[i] = pylist[i]
+        return java_array
 
 
 @inherit_doc

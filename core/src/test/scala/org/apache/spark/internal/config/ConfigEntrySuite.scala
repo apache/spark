@@ -19,9 +19,6 @@ package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.SparkConfWithEnv
@@ -98,6 +95,21 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1L)
   }
 
+  test("conf entry: regex") {
+    val conf = new SparkConf()
+    val rConf = ConfigBuilder(testKey("regex")).regexConf.createWithDefault(".*".r)
+
+    conf.set(rConf, "[0-9a-f]{8}".r)
+    assert(conf.get(rConf).toString === "[0-9a-f]{8}")
+
+    conf.set(rConf.key, "[0-9a-f]{4}")
+    assert(conf.get(rConf).toString === "[0-9a-f]{4}")
+
+    conf.set(rConf.key, "[.")
+    val e = intercept[IllegalArgumentException](conf.get(rConf))
+    assert(e.getMessage.contains("regex should be a regex, but was"))
+  }
+
   test("conf entry: string seq") {
     val conf = new SparkConf()
     val seq = ConfigBuilder(testKey("seq")).stringConf.toSequence.createWithDefault(Seq())
@@ -126,6 +138,28 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(transformationConf) === "foo")
     conf.set(transformationConf, "BAR")
     assert(conf.get(transformationConf) === "bar")
+  }
+
+  test("conf entry: checkValue()") {
+    def createEntry(default: Int): ConfigEntry[Int] =
+      ConfigBuilder(testKey("checkValue"))
+        .intConf
+        .checkValue(value => value >= 0, "value must be non-negative")
+        .createWithDefault(default)
+
+    val conf = new SparkConf()
+
+    val entry = createEntry(10)
+    conf.set(entry, -1)
+    val e1 = intercept[IllegalArgumentException] {
+      conf.get(entry)
+    }
+    assert(e1.getMessage == "value must be non-negative")
+
+    val e2 = intercept[IllegalArgumentException] {
+      createEntry(-1)
+    }
+    assert(e2.getMessage == "value must be non-negative")
   }
 
   test("conf entry: valid values check") {
@@ -217,5 +251,4 @@ class ConfigEntrySuite extends SparkFunSuite {
       .createWithDefault(null)
     testEntryRef(nullConf, ref(nullConf))
   }
-
 }

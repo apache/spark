@@ -21,7 +21,7 @@ if sys.version > '3':
     basestring = str
 
 from pyspark import since, keyword_only, SparkContext
-from pyspark.ml import Estimator, Model, Transformer
+from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaParams
@@ -58,7 +58,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         __init__(self, stages=None)
         """
         super(Pipeline, self).__init__()
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @since("1.3.0")
@@ -85,7 +85,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         setParams(self, stages=None)
         Sets params for Pipeline.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _fit(self, dataset):

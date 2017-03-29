@@ -23,9 +23,6 @@ import java.util.List;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-// $example off$
-import org.apache.spark.api.java.function.Function;
-// $example on$
 import org.apache.spark.mllib.fpm.AssociationRules;
 import org.apache.spark.mllib.fpm.FPGrowth;
 import org.apache.spark.mllib.fpm.FPGrowthModel;
@@ -42,14 +39,7 @@ public class JavaSimpleFPGrowth {
     // $example on$
     JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
 
-    JavaRDD<List<String>> transactions = data.map(
-      new Function<String, List<String>>() {
-        public List<String> call(String line) {
-          String[] parts = line.split(" ");
-          return Arrays.asList(parts);
-        }
-      }
-    );
+    JavaRDD<List<String>> transactions = data.map(line -> Arrays.asList(line.split(" ")));
 
     FPGrowth fpg = new FPGrowth()
       .setMinSupport(0.2)

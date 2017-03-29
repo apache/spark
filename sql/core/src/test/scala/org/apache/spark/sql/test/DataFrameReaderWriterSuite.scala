@@ -370,9 +370,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[IllegalArgumentException] {
+    val message = intercept[AnalysisException] {
       testRead(spark.read.csv(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
+
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
     testRead(spark.read.csv(Seq(dir, dir): _*), data ++ data, schema)
@@ -633,6 +635,16 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       Seq(1 -> "a").toDF("x.x", "y.y").write.saveAsTable("t")
       Seq(2 -> "b").toDF("x.x", "y.y").write.mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+    }
+  }
+
+  test("SPARK-16848: table API throws an exception for user specified schema") {
+    withTable("t") {
+      val schema = StructType(StructField("a", StringType) :: Nil)
+      val e = intercept[AnalysisException] {
+        spark.read.schema(schema).table("t")
+      }.getMessage
+      assert(e.contains("User specified schema not supported with `table`"))
     }
   }
 }

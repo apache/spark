@@ -20,7 +20,8 @@ package org.apache.spark.deploy
 import scala.collection.mutable
 import scala.concurrent.duration._
 
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, verify, when}
 import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
@@ -29,10 +30,11 @@ import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMaste
 import org.apache.spark.deploy.master.ApplicationInfo
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RegisterExecutorFailed}
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
@@ -467,6 +469,52 @@ class StandaloneDynamicAllocationSuite
     }
   }
 
+  test("kill all executors on localhost") {
+    sc = new SparkContext(appConf)
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 2)
+      assert(apps.head.getExecutorLimit === Int.MaxValue)
+    }
+    val beforeList = getApplications().head.executors.keys.toSet
+    assert(killExecutorsOnHost(sc, "localhost").equals(true))
+
+    syncExecutors(sc)
+    val afterList = getApplications().head.executors.keys.toSet
+
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(beforeList.intersect(afterList).size == 0)
+    }
+  }
+
+  test("executor registration on a blacklisted host must fail") {
+    sc = new SparkContext(appConf.set(config.BLACKLIST_ENABLED.key, "true"))
+    val endpointRef = mock(classOf[RpcEndpointRef])
+    val mockAddress = mock(classOf[RpcAddress])
+    when(endpointRef.address).thenReturn(mockAddress)
+    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty)
+
+    // Get "localhost" on a blacklist.
+    val taskScheduler = mock(classOf[TaskSchedulerImpl])
+    when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
+    when(taskScheduler.sc).thenReturn(sc)
+    sc.taskScheduler = taskScheduler
+
+    // Create a fresh scheduler backend to blacklist "localhost".
+    sc.schedulerBackend.stop()
+    val backend =
+      new StandaloneSchedulerBackend(taskScheduler, sc, Array(masterRpcEnv.address.toSparkURL))
+    backend.start()
+
+    backend.driverEndpoint.ask[Boolean](message)
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      verify(endpointRef).send(RegisterExecutorFailed(any()))
+    }
+  }
+
   // ===============================
   // | Utility methods for testing |
   // ===============================
@@ -499,7 +547,7 @@ class StandaloneDynamicAllocationSuite
 
   /** Get the Master state */
   private def getMasterState: MasterStateResponse = {
-    master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+    master.self.askSync[MasterStateResponse](RequestMasterState)
   }
 
   /** Get the applications that are active from Master */
@@ -524,6 +572,16 @@ class StandaloneDynamicAllocationSuite
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(Seq(executorId), replace = false, force)
+      case _ => fail("expected coarse grained scheduler")
+    }
+  }
+
+  /** Kill the executors on a given host. */
+  private def killExecutorsOnHost(sc: SparkContext, host: String): Boolean = {
+    syncExecutors(sc)
+    sc.schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutorsOnHost(host)
       case _ => fail("expected coarse grained scheduler")
     }
   }
@@ -562,7 +620,7 @@ class StandaloneDynamicAllocationSuite
       when(endpointRef.address).thenReturn(mockAddress)
       val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-      backend.driverEndpoint.askWithRetry[Boolean](message)
+      backend.driverEndpoint.askSync[Boolean](message)
     }
   }
 

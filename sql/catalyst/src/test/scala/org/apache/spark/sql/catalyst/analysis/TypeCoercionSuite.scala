@@ -53,7 +53,8 @@ class TypeCoercionSuite extends PlanTest {
   // | NullType             | ByteType | ShortType | IntegerType | LongType | DoubleType | FloatType | Dec(10, 2) | BinaryType | BooleanType | StringType | DateType | TimestampType | ArrayType  | MapType  | StructType  | NullType | CalendarIntervalType | DecimalType(38, 18) | DoubleType  | IntegerType  |
   // | CalendarIntervalType | X        | X         | X           | X        | X          | X         | X          | X          | X           | X          | X        | X             | X          | X        | X           | X        | CalendarIntervalType | X                   | X           | X            |
   // +----------------------+----------+-----------+-------------+----------+------------+-----------+------------+------------+-------------+------------+----------+---------------+------------+----------+-------------+----------+----------------------+---------------------+-------------+--------------+
-  // Note: ArrayType*, MapType*, StructType* are castable only when the internal child types also match; otherwise, not castable
+  // Note: MapType*, StructType* are castable only when the internal child types also match; otherwise, not castable.
+  // Note: ArrayType* is castable when the element type is castable according to the table.
   // scalastyle:on line.size.limit
 
   private def shouldCast(from: DataType, to: AbstractDataType, expected: DataType): Unit = {
@@ -123,6 +124,20 @@ class TypeCoercionSuite extends PlanTest {
     nonCastableTypes.foreach { tpe =>
       shouldNotCast(checkedType, tpe)
     }
+  }
+
+  private def checkWidenType(
+      widenFunc: (DataType, DataType) => Option[DataType],
+      t1: DataType,
+      t2: DataType,
+      expected: Option[DataType]): Unit = {
+    var found = widenFunc(t1, t2)
+    assert(found == expected,
+      s"Expected $expected as wider common type for $t1 and $t2, found $found")
+    // Test both directions to make sure the widening is symmetric.
+    found = widenFunc(t2, t1)
+    assert(found == expected,
+      s"Expected $expected as wider common type for $t2 and $t1, found $found")
   }
 
   test("implicit type cast - ByteType") {
@@ -308,15 +323,8 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   test("tightest common bound for types") {
-    def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
-      var found = TypeCoercion.findTightestCommonTypeOfTwo(t1, t2)
-      assert(found == tightestCommon,
-        s"Expected $tightestCommon as tightest common type for $t1 and $t2, found $found")
-      // Test both directions to make sure the widening is symmetric.
-      found = TypeCoercion.findTightestCommonTypeOfTwo(t2, t1)
-      assert(found == tightestCommon,
-        s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
-    }
+    def widenTest(t1: DataType, t2: DataType, expected: Option[DataType]): Unit =
+      checkWidenType(TypeCoercion.findTightestCommonType, t1, t2, expected)
 
     // Null
     widenTest(NullType, NullType, Some(NullType))
@@ -355,7 +363,6 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(DecimalType(2, 1), DoubleType, None)
     widenTest(DecimalType(2, 1), IntegerType, None)
     widenTest(DoubleType, DecimalType(2, 1), None)
-    widenTest(IntegerType, DecimalType(2, 1), None)
 
     // StringType
     widenTest(NullType, StringType, Some(StringType))
@@ -377,6 +384,60 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
+  }
+
+  test("wider common type for decimal and array") {
+    def widenTestWithStringPromotion(
+        t1: DataType,
+        t2: DataType,
+        expected: Option[DataType]): Unit = {
+      checkWidenType(TypeCoercion.findWiderTypeForTwo, t1, t2, expected)
+    }
+
+    def widenTestWithoutStringPromotion(
+        t1: DataType,
+        t2: DataType,
+        expected: Option[DataType]): Unit = {
+      checkWidenType(TypeCoercion.findWiderTypeWithoutStringPromotionForTwo, t1, t2, expected)
+    }
+
+    // Decimal
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), DecimalType(3, 2), Some(DecimalType(3, 2)))
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), DoubleType, Some(DoubleType))
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), IntegerType, Some(DecimalType(11, 1)))
+    widenTestWithStringPromotion(
+      DecimalType(2, 1), LongType, Some(DecimalType(21, 1)))
+
+    // ArrayType
+    widenTestWithStringPromotion(
+      ArrayType(ShortType, containsNull = true),
+      ArrayType(DoubleType, containsNull = false),
+      Some(ArrayType(DoubleType, containsNull = true)))
+    widenTestWithStringPromotion(
+      ArrayType(TimestampType, containsNull = false),
+      ArrayType(StringType, containsNull = true),
+      Some(ArrayType(StringType, containsNull = true)))
+    widenTestWithStringPromotion(
+      ArrayType(ArrayType(IntegerType), containsNull = false),
+      ArrayType(ArrayType(LongType), containsNull = false),
+      Some(ArrayType(ArrayType(LongType), containsNull = false)))
+
+    // Without string promotion
+    widenTestWithoutStringPromotion(IntegerType, StringType, None)
+    widenTestWithoutStringPromotion(StringType, TimestampType, None)
+    widenTestWithoutStringPromotion(ArrayType(LongType), ArrayType(StringType), None)
+    widenTestWithoutStringPromotion(ArrayType(StringType), ArrayType(TimestampType), None)
+
+    // String promotion
+    widenTestWithStringPromotion(IntegerType, StringType, Some(StringType))
+    widenTestWithStringPromotion(StringType, TimestampType, Some(StringType))
+    widenTestWithStringPromotion(
+      ArrayType(LongType), ArrayType(StringType), Some(ArrayType(StringType)))
+    widenTestWithStringPromotion(
+      ArrayType(StringType), ArrayType(TimestampType), Some(ArrayType(StringType)))
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
@@ -915,6 +976,18 @@ class TypeCoercionSuite extends PlanTest {
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("binary comparison with string promotion") {
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(1)),
+      GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
+    ruleTest(PromoteStrings,
+      LessThan(Literal(true), Literal("123")),
+      LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
+    ruleTest(PromoteStrings,
+      EqualTo(Literal(Array(1, 2)), Literal("123")),
+      EqualTo(Literal(Array(1, 2)), Literal("123")))
   }
 }
 

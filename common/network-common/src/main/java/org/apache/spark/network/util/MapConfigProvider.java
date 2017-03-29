@@ -17,22 +17,20 @@
 
 package org.apache.spark.network.util;
 
-import com.google.common.collect.Maps;
-
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
 /** ConfigProvider based on a Map (copied in the constructor). */
 public class MapConfigProvider extends ConfigProvider {
 
-  public static final MapConfigProvider EMPTY = new MapConfigProvider(
-      Collections.<String, String>emptyMap());
+  public static final MapConfigProvider EMPTY = new MapConfigProvider(Collections.emptyMap());
 
   private final Map<String, String> config;
 
   public MapConfigProvider(Map<String, String> config) {
-    this.config = Maps.newHashMap(config);
+    this.config = new HashMap<>(config);
   }
 
   @Override

@@ -32,7 +32,7 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
 
 /**
  * This strategy is calculating the optimal locality preferences of YARN containers by considering
- * the node ratio of pending tasks, number of required cores/containers and and locality of current
+ * the node ratio of pending tasks, number of required cores/containers and locality of current
  * existing and pending allocated containers. The target of this algorithm is to maximize the number
  * of tasks that would run locally.
  *
@@ -129,9 +129,9 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
       val largestRatio = updatedHostToContainerCount.values.max
       // Round the ratio of preferred locality to the number of locality required container
       // number, which is used for locality preferred host calculating.
-      var preferredLocalityRatio = updatedHostToContainerCount.mapValues { ratio =>
+      var preferredLocalityRatio = updatedHostToContainerCount.map { case(k, ratio) =>
         val adjustedRatio = ratio.toDouble * requiredLocalityAwareContainerNum / largestRatio
-        adjustedRatio.ceil.toInt
+        (k, adjustedRatio.ceil.toInt)
       }
 
       for (i <- 0 until requiredLocalityAwareContainerNum) {
@@ -145,7 +145,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
 
         // Minus 1 each time when the host is used. When the current ratio is 0,
         // which means all the required ratio is satisfied, this host will not be allocated again.
-        preferredLocalityRatio = preferredLocalityRatio.mapValues(_ - 1)
+        preferredLocalityRatio = preferredLocalityRatio.map { case (k, v) => (k, v - 1) }
       }
     }
 
@@ -218,7 +218,8 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
 
     val possibleTotalContainerNum = pendingHostToContainerCount.values.sum
     val localityMatchedPendingNum = localityMatchedPendingAllocations.size.toDouble
-    pendingHostToContainerCount.mapValues(_ * localityMatchedPendingNum / possibleTotalContainerNum)
-      .toMap
+    pendingHostToContainerCount.map { case (k, v) =>
+      (k, v * localityMatchedPendingNum / possibleTotalContainerNum)
+    }.toMap
   }
 }

@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -69,13 +70,10 @@ trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach {
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    try {
-      if (_spark != null) {
-        _spark.stop()
-        _spark = null
-      }
-    } finally {
-      super.afterAll()
+    super.afterAll()
+    if (_spark != null) {
+      _spark.stop()
+      _spark = null
     }
   }
 

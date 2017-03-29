@@ -887,10 +887,8 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
-      else metrics.map(_.executorRunTime).getOrElse(1L)
-    val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
-      else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
+    val duration = taskData.taskDuration.getOrElse(1L)
+    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)

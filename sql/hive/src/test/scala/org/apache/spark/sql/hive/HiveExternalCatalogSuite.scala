@@ -41,6 +41,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     override val tableInputFormat: String = "org.apache.hadoop.mapred.SequenceFileInputFormat"
     override val tableOutputFormat: String = "org.apache.hadoop.mapred.SequenceFileOutputFormat"
     override def newEmptyCatalog(): ExternalCatalog = externalCatalog
+    override val defaultProvider: String = "hive"
   }
 
   protected override def resetState(): Unit = {
@@ -51,7 +52,7 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   test("list partitions by filter") {
     val catalog = newBasicCatalog()
-    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1))
+    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1), "GMT")
     assert(selectedPartitions.length == 1)
     assert(selectedPartitions.head.spec == part1.spec)
   }
@@ -68,6 +69,6 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     val rawTable = externalCatalog.client.getTable("db1", "hive_tbl")
     assert(!rawTable.properties.contains(HiveExternalCatalog.DATASOURCE_PROVIDER))
-    assert(externalCatalog.getTable("db1", "hive_tbl").provider == Some(DDLUtils.HIVE_PROVIDER))
+    assert(DDLUtils.isHiveTable(externalCatalog.getTable("db1", "hive_tbl")))
   }
 }

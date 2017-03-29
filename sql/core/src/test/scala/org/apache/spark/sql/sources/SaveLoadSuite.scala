@@ -28,6 +28,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+  import testImplicits._
+
   protected override lazy val sql = spark.sql _
   private var originalDefaultSource: String = null
   private var path: File = null
@@ -40,8 +42,8 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     path = Utils.createTempDir()
     path.delete()
 
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    df = spark.read.json(rdd)
+    val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}""").toDS()
+    df = spark.read.json(ds)
     df.createOrReplaceTempView("jsonTable")
   }
 

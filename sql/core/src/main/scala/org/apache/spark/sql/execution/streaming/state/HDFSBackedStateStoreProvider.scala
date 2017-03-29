@@ -73,7 +73,12 @@ private[state] class HDFSBackedStateStoreProvider(
     hadoopConf: Configuration
   ) extends StateStoreProvider with Logging {
 
-  type MapType = java.util.HashMap[UnsafeRow, UnsafeRow]
+  // ConcurrentHashMap is used because it generates fail-safe iterators on filtering
+  // - The iterator is weakly consistent with the map, i.e., iterator's data reflect the values in
+  //   the map when the iterator was created
+  // - Any updates to the map while iterating through the filtered iterator does not throw
+  //   java.util.ConcurrentModificationException
+  type MapType = java.util.concurrent.ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
   /** Implementation of [[StateStore]] API which is backed by a HDFS-compatible file system */
   class HDFSBackedStateStore(val version: Long, mapToUpdate: MapType)
@@ -97,6 +102,16 @@ private[state] class HDFSBackedStateStoreProvider(
 
     override def get(key: UnsafeRow): Option[UnsafeRow] = {
       Option(mapToUpdate.get(key))
+    }
+
+    override def filter(
+        condition: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
+      mapToUpdate
+        .entrySet
+        .asScala
+        .iterator
+        .filter { entry => condition(entry.getKey, entry.getValue) }
+        .map { entry => (entry.getKey, entry.getValue) }
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
@@ -144,6 +159,25 @@ private[state] class HDFSBackedStateStoreProvider(
           }
           writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
         }
+      }
+    }
+
+    /** Remove a single key. */
+    override def remove(key: UnsafeRow): Unit = {
+      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      if (mapToUpdate.containsKey(key)) {
+        val value = mapToUpdate.remove(key)
+        Option(allUpdates.get(key)) match {
+          case Some(ValueUpdated(_, _)) | None =>
+            // Value existed in previous version and maybe was updated, mark removed
+            allUpdates.put(key, ValueRemoved(key, value))
+          case Some(ValueAdded(_, _)) =>
+            // Value did not exist in previous version and was added, should not appear in updates
+            allUpdates.remove(key)
+          case Some(ValueRemoved(_, _)) =>
+          // Remove already in update map, no need to change
+        }
+        writeToDeltaFile(tempDeltaFileStream, ValueRemoved(key, value))
       }
     }
 
@@ -203,12 +237,12 @@ private[state] class HDFSBackedStateStoreProvider(
     /**
      * Whether all updates have been committed
      */
-    override private[state] def hasCommitted: Boolean = {
+    override private[streaming] def hasCommitted: Boolean = {
       state == COMMITTED
     }
 
     override def toString(): String = {
-      s"HDFSStateStore[id = (op=${id.operatorId}, part=${id.partitionId}), dir = $baseDir]"
+      s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
   }
 
@@ -255,7 +289,18 @@ private[state] class HDFSBackedStateStoreProvider(
   private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
     synchronized {
       val finalDeltaFile = deltaFile(newVersion)
-      if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
+
+      // scalastyle:off
+      // Renaming a file atop an existing one fails on HDFS
+      // (http://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html).
+      // Hence we should either skip the rename step or delete the target file. Because deleting the
+      // target file will break speculation, skipping the rename step is the only choice. It's still
+      // semantically correct because Structured Streaming requires rerunning a batch should
+      // generate the same output. (SPARK-19677)
+      // scalastyle:on
+      if (fs.exists(finalDeltaFile)) {
+        fs.delete(tempDeltaFile, true)
+      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
         throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
       }
       loadedMaps.put(newVersion, map)

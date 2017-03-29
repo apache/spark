@@ -17,19 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
-
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util._
 
 /**
@@ -46,7 +41,6 @@ import org.apache.spark.util._
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param metrics a `TaskMetrics` that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
@@ -95,8 +89,8 @@ private[spark] abstract class Task[T](
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
-    if (_killed) {
-      kill(interruptThread = false)
+    if (_reasonIfKilled != null) {
+      kill(interruptThread = false, _reasonIfKilled)
     }
 
     new CallerContext(
@@ -138,6 +132,8 @@ private[spark] abstract class Task[T](
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
+        // Though we unset the ThreadLocal here, the context member variable itself is still queried
+        // directly in the TaskRunner to check for FetchFailedExceptions.
         TaskContext.unset()
       }
     }
@@ -157,22 +153,22 @@ private[spark] abstract class Task[T](
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient protected var context: TaskContextImpl = _
+  @transient var context: TaskContextImpl = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
 
-  // A flag to indicate whether the task is killed. This is used in case context is not yet
-  // initialized when kill() is invoked.
-  @volatile @transient private var _killed = false
+  // If non-null, this task has been killed and the reason is as specified. This is used in case
+  // context is not yet initialized when kill() is invoked.
+  @volatile @transient private var _reasonIfKilled: String = null
 
   protected var _executorDeserializeTime: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
-   * Whether the task has been killed.
+   * If defined, this task has been killed and this option contains the reason.
    */
-  def killed: Boolean = _killed
+  def reasonIfKilled: Option[String] = Option(_reasonIfKilled)
 
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
@@ -205,99 +201,14 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean) {
-    _killed = true
+  def kill(interruptThread: Boolean, reason: String) {
+    require(reason != null)
+    _reasonIfKilled = reason
     if (context != null) {
-      context.markInterrupted()
+      context.markInterrupted(reason)
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()
     }
-  }
-}
-
-/**
- * Handles transmission of tasks and their dependencies, because this can be slightly tricky. We
- * need to send the list of JARs and files added to the SparkContext with each task to ensure that
- * worker nodes find out about it, but we can't make it part of the Task because the user's code in
- * the task might depend on one of the JARs. Thus we serialize each task as multiple objects, by
- * first writing out its dependencies.
- */
-private[spark] object Task {
-  /**
-   * Serialize a task and the current app dependencies (files and JARs added to the SparkContext)
-   */
-  def serializeWithDependencies(
-      task: Task[_],
-      currentFiles: mutable.Map[String, Long],
-      currentJars: mutable.Map[String, Long],
-      serializer: SerializerInstance)
-    : ByteBuffer = {
-
-    val out = new ByteBufferOutputStream(4096)
-    val dataOut = new DataOutputStream(out)
-
-    // Write currentFiles
-    dataOut.writeInt(currentFiles.size)
-    for ((name, timestamp) <- currentFiles) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
-
-    // Write currentJars
-    dataOut.writeInt(currentJars.size)
-    for ((name, timestamp) <- currentJars) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
-
-    // Write the task properties separately so it is available before full task deserialization.
-    val propBytes = Utils.serialize(task.localProperties)
-    dataOut.writeInt(propBytes.length)
-    dataOut.write(propBytes)
-
-    // Write the task itself and finish
-    dataOut.flush()
-    val taskBytes = serializer.serialize(task)
-    Utils.writeByteBuffer(taskBytes, out)
-    out.close()
-    out.toByteBuffer
-  }
-
-  /**
-   * Deserialize the list of dependencies in a task serialized with serializeWithDependencies,
-   * and return the task itself as a serialized ByteBuffer. The caller can then update its
-   * ClassLoaders and deserialize the task.
-   *
-   * @return (taskFiles, taskJars, taskProps, taskBytes)
-   */
-  def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
-
-    val in = new ByteBufferInputStream(serializedTask)
-    val dataIn = new DataInputStream(in)
-
-    // Read task's files
-    val taskFiles = new HashMap[String, Long]()
-    val numFiles = dataIn.readInt()
-    for (i <- 0 until numFiles) {
-      taskFiles(dataIn.readUTF()) = dataIn.readLong()
-    }
-
-    // Read task's JARs
-    val taskJars = new HashMap[String, Long]()
-    val numJars = dataIn.readInt()
-    for (i <- 0 until numJars) {
-      taskJars(dataIn.readUTF()) = dataIn.readLong()
-    }
-
-    val propLength = dataIn.readInt()
-    val propBytes = new Array[Byte](propLength)
-    dataIn.readFully(propBytes, 0, propLength)
-    val taskProps = Utils.deserialize[Properties](propBytes)
-
-    // Create a sub-buffer for the rest of the data, which is the serialized Task object
-    val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, taskProps, subBuffer)
   }
 }

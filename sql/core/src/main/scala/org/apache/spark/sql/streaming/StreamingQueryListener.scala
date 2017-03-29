@@ -52,7 +52,7 @@ abstract class StreamingQueryListener {
    * @note This method is asynchronous. The status in [[StreamingQuery]] will always be
    *       latest no matter when this method is called. Therefore, the status of [[StreamingQuery]]
    *       may be changed before/when you process the event. E.g., you may find [[StreamingQuery]]
-   *       is terminated when you are processing [[QueryProgressEvent]].
+   *       is terminated when you are processing `QueryProgressEvent`.
    * @since 2.0.0
    */
   def onQueryProgress(event: QueryProgressEvent): Unit

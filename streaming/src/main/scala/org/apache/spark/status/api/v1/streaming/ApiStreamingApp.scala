@@ -19,14 +19,14 @@ package org.apache.spark.status.api.v1.streaming
 
 import javax.ws.rs.{Path, PathParam}
 
-import org.apache.spark.status.api.v1.UIRootFromServletContext
+import org.apache.spark.status.api.v1.ApiRequestContext
 
 @Path("/v1")
-private[v1] class ApiStreamingApp extends UIRootFromServletContext {
+private[v1] class ApiStreamingApp extends ApiRequestContext {
 
   @Path("applications/{appId}/streaming")
   def getStreamingRoot(@PathParam("appId") appId: String): ApiStreamingRootResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
+    withSparkUI(appId, None) { ui =>
       new ApiStreamingRootResource(ui)
     }
   }
@@ -35,7 +35,7 @@ private[v1] class ApiStreamingApp extends UIRootFromServletContext {
   def getStreamingRoot(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ApiStreamingRootResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+    withSparkUI(appId, Some(attemptId)) { ui =>
       new ApiStreamingRootResource(ui)
     }
   }

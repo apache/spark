@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 /** Support for interacting with different versions of the HiveMetastoreClient */
 package object client {
-  private[client] abstract class HiveVersion(
+  private[hive] sealed abstract class HiveVersion(
       val fullVersion: String,
       val extraDeps: Seq[String] = Nil,
       val exclusions: Seq[String] = Nil)
@@ -62,6 +62,16 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "net.hydromatic:linq4j",
         "net.hydromatic:quidem"))
+
+    case object v2_0 extends HiveVersion("2.0.1",
+      exclusions = Seq("org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm"))
+
+    case object v2_1 extends HiveVersion("2.1.1",
+      exclusions = Seq("org.apache.curator:*",
+        "org.pentaho:pentaho-aggdesigner-algorithm"))
+
+    val allSupportedHiveVersions = Set(v12, v13, v14, v1_0, v1_1, v1_2, v2_0, v2_1)
   }
   // scalastyle:on
 

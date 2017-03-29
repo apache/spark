@@ -20,7 +20,8 @@ import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import javax.servlet._
+import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -68,11 +69,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   private var server: HistoryServer = null
   private var port: Int = -1
 
-  def init(): Unit = {
+  def init(extraConf: (String, String)*): Unit = {
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
+    conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
@@ -102,6 +104,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
     "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
+    "minEndDate app list json" -> "applications?minEndDate=2015-05-06T13:03:00.950GMT",
+    "maxEndDate app list json" -> "applications?maxEndDate=2015-05-06T13:03:00.950GMT",
+    "minEndDate and maxEndDate app list json" ->
+      "applications?minEndDate=2015-03-16&maxEndDate=2015-05-06T13:03:00.950GMT",
+    "minDate and maxEndDate app list json" ->
+      "applications?minDate=2015-03-16&maxEndDate=2015-05-06T13:03:00.950GMT",
     "limit app list json" -> "applications?limit=3",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
@@ -143,7 +151,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
+    "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
+    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
@@ -558,6 +568,39 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   }
 
+  test("ui and api authorization checks") {
+    val appId = "app-20161115172038-0000"
+    val owner = "jose"
+    val admin = "root"
+    val other = "alice"
+
+    stop()
+    init(
+      "spark.ui.filters" -> classOf[FakeAuthFilter].getName(),
+      "spark.history.ui.acls.enable" -> "true",
+      "spark.history.ui.admin.acls" -> admin)
+
+    val tests = Seq(
+      (owner, HttpServletResponse.SC_OK),
+      (admin, HttpServletResponse.SC_OK),
+      (other, HttpServletResponse.SC_FORBIDDEN),
+      // When the remote user is null, the code behaves as if auth were disabled.
+      (null, HttpServletResponse.SC_OK))
+
+    val port = server.boundPort
+    val testUrls = Seq(
+      s"http://localhost:$port/api/v1/applications/$appId/jobs",
+      s"http://localhost:$port/history/$appId/jobs/")
+
+    tests.foreach { case (user, expectedCode) =>
+      testUrls.foreach { url =>
+        val headers = if (user != null) Seq(FakeAuthFilter.FAKE_HTTP_USER -> user) else Nil
+        val sc = TestUtils.httpResponseCode(new URL(url), headers = headers)
+        assert(sc === expectedCode, s"Unexpected status code $sc for $url (user = $user)")
+      }
+    }
+  }
+
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
     HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }
@@ -639,4 +682,27 @@ object HistoryServerSuite {
         "got code: " + code + " when getting " + path + " w/ error: " + error)
     }
   }
+}
+
+/**
+ * A filter used for auth tests; sets the request's user to the value of the "HTTP_USER" header.
+ */
+class FakeAuthFilter extends Filter {
+
+  override def destroy(): Unit = { }
+
+  override def init(config: FilterConfig): Unit = { }
+
+  override def doFilter(req: ServletRequest, res: ServletResponse, chain: FilterChain): Unit = {
+    val hreq = req.asInstanceOf[HttpServletRequest]
+    val wrapped = new HttpServletRequestWrapper(hreq) {
+      override def getRemoteUser(): String = hreq.getHeader(FakeAuthFilter.FAKE_HTTP_USER)
+    }
+    chain.doFilter(wrapped, res)
+  }
+
+}
+
+object FakeAuthFilter {
+  val FAKE_HTTP_USER = "HTTP_USER"
 }

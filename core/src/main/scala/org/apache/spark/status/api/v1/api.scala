@@ -73,6 +73,7 @@ class ExecutorSummary private[spark](
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
+    val isBlacklisted: Boolean,
     val maxMemory: Long,
     val executorLogs: Map[String, String])
 
@@ -157,8 +158,10 @@ class TaskData private[spark](
     val index: Int,
     val attempt: Int,
     val launchTime: Date,
+    val duration: Option[Long] = None,
     val executorId: String,
     val host: String,
+    val status: String,
     val taskLocality: String,
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
@@ -249,3 +252,14 @@ class AccumulableInfo private[spark](
 
 class VersionInfo private[spark](
   val spark: String)
+
+class ApplicationEnvironmentInfo private[spark] (
+    val runtime: RuntimeInfo,
+    val sparkProperties: Seq[(String, String)],
+    val systemProperties: Seq[(String, String)],
+    val classpathEntries: Seq[(String, String)])
+
+class RuntimeInfo private[spark](
+    val javaVersion: String,
+    val javaHome: String,
+    val scalaVersion: String)

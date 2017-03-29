@@ -46,7 +46,9 @@ import org.apache.spark.util.Utils
  *                       is considered to have occurred.
  * @param maxIterations Maximum number of iterations allowed.
  *
- * @note For high-dimensional data (with many features), this algorithm may perform poorly.
+ * @note This algorithm is limited in its number of features since it requires storing a covariance
+ * matrix which has size quadratic in the number of features. Even when the number of features does
+ * not exceed this limit, this algorithm may perform poorly on high-dimensional data.
  * This is due to high-dimensional data (a) making it difficult to cluster at all (based
  * on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
@@ -170,6 +172,9 @@ class GaussianMixture private (
 
     // Get length of the input vectors
     val d = breezeData.first().length
+    require(d < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
+      s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
+      s" matrix is quadratic in the number of features.")
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(k, d)
 
@@ -211,8 +216,8 @@ class GaussianMixture private (
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
           updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
         }.collect().unzip
-        Array.copy(ws.toArray, 0, weights, 0, ws.length)
-        Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
+        Array.copy(ws, 0, weights, 0, ws.length)
+        Array.copy(gs, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
         while (i < k) {
@@ -272,6 +277,10 @@ class GaussianMixture private (
 }
 
 private[clustering] object GaussianMixture {
+
+  /** Limit number of features such that numFeatures^2^ < Int.MaxValue */
+  private[clustering] val MAX_NUM_FEATURES = math.sqrt(Int.MaxValue).toInt
+
   /**
    * Heuristic to distribute the computation of the `MultivariateGaussian`s, approximately when
    * d is greater than 25 except for when k is very small.

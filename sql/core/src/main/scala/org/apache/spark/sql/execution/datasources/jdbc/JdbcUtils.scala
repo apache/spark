@@ -30,7 +30,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -63,14 +64,14 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, url: String, table: String): Boolean = {
-    val dialect = JdbcDialects.get(url)
+  def tableExists(conn: Connection, options: JDBCOptions): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
-      val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
+      val statement = conn.prepareStatement(dialect.getTableExistsQuery(options.table))
       try {
         statement.executeQuery()
       } finally {
@@ -235,11 +236,11 @@ object JdbcUtils extends Logging {
   /**
    * Returns the schema if the table already exists in the JDBC database.
    */
-  def getSchemaOption(conn: Connection, url: String, table: String): Option[StructType] = {
-    val dialect = JdbcDialects.get(url)
+  def getSchemaOption(conn: Connection, options: JDBCOptions): Option[StructType] = {
+    val dialect = JdbcDialects.get(options.url)
 
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
+      val statement = conn.prepareStatement(dialect.getSchemaQuery(options.table))
       try {
         Some(getSchema(statement.executeQuery(), dialect))
       } catch {
@@ -465,9 +466,9 @@ object JdbcUtils extends Logging {
       }
 
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val array = nullSafeConvert[Object](
-          rs.getArray(pos + 1).getArray,
-          array => new GenericArrayData(elementConversion.apply(array)))
+        val array = nullSafeConvert[java.sql.Array](
+          input = rs.getArray(pos + 1),
+          array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
@@ -680,12 +681,19 @@ object JdbcUtils extends Logging {
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(schema: StructType, url: String): String = {
+  def schemaString(
+      df: DataFrame,
+      url: String,
+      createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    schema.fields foreach { field =>
+    val userSpecifiedColTypesMap = createTableColumnTypes
+      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
+      .getOrElse(Map.empty[String, String])
+    df.schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
-      val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
+      val typ = userSpecifiedColTypesMap
+        .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }
@@ -693,15 +701,60 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * Parses the user specified createTableColumnTypes option value string specified in the same
+   * format as create table ddl column types, and returns Map of field name and the data type to
+   * use in-place of the default data type.
+   */
+  private def parseUserSpecifiedCreateTableColumnTypes(
+      df: DataFrame,
+      createTableColumnTypes: String): Map[String, String] = {
+    def typeName(f: StructField): String = {
+      // char/varchar gets translated to string type. Real data type specified by the user
+      // is available in the field metadata as HIVE_TYPE_STRING
+      if (f.metadata.contains(HIVE_TYPE_STRING)) {
+        f.metadata.getString(HIVE_TYPE_STRING)
+      } else {
+        f.dataType.catalogString
+      }
+    }
+
+    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val nameEquality = df.sparkSession.sessionState.conf.resolver
+
+    // checks duplicate columns in the user specified column types.
+    userSchema.fieldNames.foreach { col =>
+      val duplicatesCols = userSchema.fieldNames.filter(nameEquality(_, col))
+      if (duplicatesCols.size >= 2) {
+        throw new AnalysisException(
+          "Found duplicate column(s) in createTableColumnTypes option value: " +
+            duplicatesCols.mkString(", "))
+      }
+    }
+
+    // checks if user specified column names exist in the DataFrame schema
+    userSchema.fieldNames.foreach { col =>
+      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+        throw new AnalysisException(
+          s"createTableColumnTypes option column $col not found in schema " +
+            df.schema.catalogString)
+      }
+    }
+
+    val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
+    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+  }
+
+  /**
    * Saves the RDD to the database in a single transaction.
    */
   def saveTable(
       df: DataFrame,
-      url: String,
-      table: String,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
       options: JDBCOptions): Unit = {
+    val url = options.url
+    val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(options)
@@ -725,12 +778,13 @@ object JdbcUtils extends Logging {
    * Creates a table with a given schema.
    */
   def createTable(
-      schema: StructType,
-      url: String,
-      table: String,
-      createTableOptions: String,
-      conn: Connection): Unit = {
-    val strSchema = schemaString(schema, url)
+      conn: Connection,
+      df: DataFrame,
+      options: JDBCOptions): Unit = {
+    val strSchema = schemaString(
+      df, options.url, options.createTableColumnTypes)
+    val table = options.table
+    val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.

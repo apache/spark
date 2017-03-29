@@ -303,6 +303,25 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
+  test("encryption requires authentication") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    conf.set(NETWORK_ENCRYPTION_ENABLED, true)
+    intercept[IllegalArgumentException] {
+      conf.validateSettings()
+    }
+
+    conf.set(NETWORK_ENCRYPTION_ENABLED, false)
+    conf.set(SASL_ENCRYPTION_ENABLED, true)
+    intercept[IllegalArgumentException] {
+      conf.validateSettings()
+    }
+
+    conf.set(NETWORK_AUTH_ENABLED, true)
+    conf.validateSettings()
+  }
+
 }
 
 class Class1 {}

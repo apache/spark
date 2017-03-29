@@ -37,3 +37,5 @@ model <- spark.kstest(df, "test", "norm")
 # Model summary
 summary(model)
 # $example off$
+
+sparkR.session.stop()

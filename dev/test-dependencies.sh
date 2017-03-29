@@ -32,9 +32,6 @@ export LC_ALL=C
 HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pyarn -Phive"
 MVN="build/mvn"
 HADOOP_PROFILES=(
-    hadoop-2.2
-    hadoop-2.3
-    hadoop-2.4
     hadoop-2.6
     hadoop-2.7
 )
@@ -49,7 +46,7 @@ OLD_VERSION=$($MVN -q \
     -Dexec.executable="echo" \
     -Dexec.args='${project.version}' \
     --non-recursive \
-    org.codehaus.mojo:exec-maven-plugin:1.3.1:exec)
+    org.codehaus.mojo:exec-maven-plugin:1.5.0:exec)
 if [ $? != 0 ]; then
     echo -e "Error while getting version string from Maven:\n$OLD_VERSION"
     exit 1

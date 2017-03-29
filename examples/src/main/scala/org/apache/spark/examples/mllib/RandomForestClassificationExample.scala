@@ -62,6 +62,8 @@ object RandomForestClassificationExample {
     model.save(sc, "target/tmp/myRandomForestClassificationModel")
     val sameModel = RandomForestModel.load(sc, "target/tmp/myRandomForestClassificationModel")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

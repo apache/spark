@@ -78,11 +78,14 @@ for python in "${PYTHON_EXECS[@]}"; do
     mkdir -p "$VIRTUALENV_PATH"
     virtualenv --python=$python "$VIRTUALENV_PATH"
     source "$VIRTUALENV_PATH"/bin/activate
-    # Upgrade pip
-    pip install --upgrade pip
+    # Upgrade pip & friends
+    pip install --upgrade pip pypandoc wheel
+    pip install numpy # Needed so we can verify mllib imports
 
     echo "Creating pip installable source dist"
     cd "$FWDIR"/python
+    # Delete the egg info file if it exists, this can cache the setup file.
+    rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
     $python setup.py sdist
 
 

@@ -187,6 +187,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   lazy val constraints: ExpressionSet = ExpressionSet(getRelevantConstraints(validConstraints))
 
   /**
+   * Returns [[constraints]] depending on the config of enabling constraint propagation. If the
+   * flag is disabled, simply returning an empty constraints.
+   */
+  private[spark] def getConstraints(constraintPropagationEnabled: Boolean): ExpressionSet =
+    if (constraintPropagationEnabled) {
+      constraints
+    } else {
+      ExpressionSet(Set.empty)
+    }
+
+  /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
    * based on the given operator's constraint propagation logic. These constraints are then
    * canonicalized and filtered automatically to contain only those attributes that appear in the
@@ -242,31 +253,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
-    var changed = false
-
-    @inline def transformExpressionDown(e: Expression): Expression = {
-      val newE = e.transformDown(rule)
-      if (newE.fastEquals(e)) {
-        e
-      } else {
-        changed = true
-        newE
-      }
-    }
-
-    def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionDown(e)
-      case Some(e: Expression) => Some(transformExpressionDown(e))
-      case m: Map[_, _] => m
-      case d: DataType => d // Avoid unpacking Structs
-      case seq: Traversable[_] => seq.map(recursiveTransform)
-      case other: AnyRef => other
-      case null => null
-    }
-
-    val newArgs = mapProductIterator(recursiveTransform)
-
-    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
+    mapExpressions(_.transformDown(rule))
   }
 
   /**
@@ -276,10 +263,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * @return
    */
   def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
+    mapExpressions(_.transformUp(rule))
+  }
+
+  /**
+   * Apply a map function to each expression present in this query operator, and return a new
+   * query operator based on the mapped expressions.
+   */
+  def mapExpressions(f: Expression => Expression): this.type = {
     var changed = false
 
-    @inline def transformExpressionUp(e: Expression): Expression = {
-      val newE = e.transformUp(rule)
+    @inline def transformExpression(e: Expression): Expression = {
+      val newE = f(e)
       if (newE.fastEquals(e)) {
         e
       } else {
@@ -289,8 +284,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionUp(e)
-      case Some(e: Expression) => Some(transformExpressionUp(e))
+      case e: Expression => transformExpression(e)
+      case Some(e: Expression) => Some(transformExpression(e))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)

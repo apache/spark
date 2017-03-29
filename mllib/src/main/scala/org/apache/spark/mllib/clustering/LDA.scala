@@ -91,7 +91,7 @@ class LDA private (
    * distributions over topics ("theta").
    *
    * This method assumes the Dirichlet distribution is symmetric and can be described by a single
-   * [[Double]] parameter. It should fail if docConcentration is asymmetric.
+   * `Double` parameter. It should fail if docConcentration is asymmetric.
    */
   @Since("1.3.0")
   def getDocConcentration: Double = {
@@ -113,7 +113,7 @@ class LDA private (
    *
    * If set to a singleton vector Vector(-1), then docConcentration is set automatically. If set to
    * singleton vector Vector(t) where t != -1, then t is replicated to a vector of length k during
-   * `LDAOptimizer.initialize()`. Otherwise, the [[docConcentration]] vector must be length k.
+   * `LDAOptimizer.initialize()`. Otherwise, the `docConcentration` vector must be length k.
    * (default = Vector(-1) = automatic)
    *
    * Optimizer-specific parameter settings:
@@ -137,7 +137,7 @@ class LDA private (
   }
 
   /**
-   * Replicates a [[Double]] docConcentration to create a symmetric prior.
+   * Replicates a `Double` docConcentration to create a symmetric prior.
    */
   @Since("1.3.0")
   def setDocConcentration(docConcentration: Double): this.type = {

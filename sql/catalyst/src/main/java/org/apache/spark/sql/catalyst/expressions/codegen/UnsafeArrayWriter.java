@@ -117,7 +117,7 @@ public class UnsafeArrayWriter {
   public void setNullInt(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putInt(holder.buffer, getElementOffset(ordinal, 4), (int)0);
+    Platform.putInt(holder.buffer, getElementOffset(ordinal, 4), 0);
   }
 
   public void setNullLong(int ordinal) {

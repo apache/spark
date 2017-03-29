@@ -20,6 +20,7 @@ package org.apache.spark.ml
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Dataset
@@ -30,24 +31,28 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import PredictorSuite._
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val df = spark.createDataFrame(Seq(
-      (0, Vectors.dense(0, 2, 3)),
-      (1, Vectors.dense(0, 3, 9)),
-      (0, Vectors.dense(0, 2, 6))
-    )).toDF("label", "features")
+      (0, 1, Vectors.dense(0, 2, 3)),
+      (1, 2, Vectors.dense(0, 3, 9)),
+      (0, 3, Vectors.dense(0, 2, 6))
+    )).toDF("label", "weight", "features")
 
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
 
-    val predictor = new MockPredictor()
+    val predictor = new MockPredictor().setWeightCol("weight")
 
     types.foreach { t =>
-      predictor.fit(df.select(col("label").cast(t), col("features")))
+      predictor.fit(df.select(col("label").cast(t), col("weight").cast(t), col("features")))
     }
 
     intercept[IllegalArgumentException] {
-      predictor.fit(df.select(col("label").cast(StringType), col("features")))
+      predictor.fit(df.select(col("label").cast(StringType), col("weight"), col("features")))
+    }
+
+    intercept[IllegalArgumentException] {
+      predictor.fit(df.select(col("label"), col("weight").cast(StringType), col("features")))
     }
   }
 }
@@ -55,12 +60,15 @@ class PredictorSuite extends SparkFunSuite with MLlibTestSparkContext {
 object PredictorSuite {
 
   class MockPredictor(override val uid: String)
-    extends Predictor[Vector, MockPredictor, MockPredictionModel] {
+    extends Predictor[Vector, MockPredictor, MockPredictionModel] with HasWeightCol {
 
     def this() = this(Identifiable.randomUID("mockpredictor"))
 
+    def setWeightCol(value: String): this.type = set(weightCol, value)
+
     override def train(dataset: Dataset[_]): MockPredictionModel = {
       require(dataset.schema("label").dataType == DoubleType)
+      require(dataset.schema("weight").dataType == DoubleType)
       new MockPredictionModel(uid)
     }
 

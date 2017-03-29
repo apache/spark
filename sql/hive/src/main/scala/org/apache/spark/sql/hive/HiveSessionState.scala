@@ -17,76 +17,107 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SessionState
-
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
- * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
+ * Entry object for creating a Hive aware [[SessionState]].
  */
-private[hive] class HiveSessionState(sparkSession: SparkSession)
-  extends SessionState(sparkSession) {
+private[hive] object HiveSessionState {
+  /**
+   * Create a new Hive aware [[SessionState]]. for the given session.
+   */
+  def apply(session: SparkSession): SessionState = {
+    new HiveSessionStateBuilder(session).build()
+  }
+}
 
-  self =>
+/**
+ * Builder that produces a [[HiveSessionState]].
+ */
+@Experimental
+@InterfaceStability.Unstable
+class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
+  extends BaseSessionStateBuilder(session, parentState) {
+
+  private def externalCatalog: HiveExternalCatalog =
+    session.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
 
   /**
-   * A Hive client used for interacting with the metastore.
+   * Create a Hive aware resource loader.
    */
-  lazy val metadataHive: HiveClient =
-    sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client.newSession()
-
-  /**
-   * Internal catalog for managing table and database states.
-   */
-  override lazy val catalog = {
-    new HiveSessionCatalog(
-      sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog],
-      sparkSession.sharedState.globalTempViewManager,
-      sparkSession,
-      functionResourceLoader,
-      functionRegistry,
-      conf,
-      newHadoopConf())
+  override protected lazy val resourceLoader: HiveSessionResourceLoader = {
+    val client: HiveClient = externalCatalog.client.newSession()
+    new HiveSessionResourceLoader(session, client)
   }
 
   /**
-   * An analyzer that uses the Hive metastore.
+   * Create a [[HiveSessionCatalog]].
    */
-  override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, conf) {
-      override val extendedResolutionRules =
-        catalog.ParquetConversions ::
-        catalog.OrcConversions ::
-        AnalyzeCreateTable(sparkSession) ::
-        PreprocessTableInsertion(conf) ::
-        DataSourceAnalysis(conf) ::
-        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
+  override protected lazy val catalog: HiveSessionCatalog = {
+    val catalog = new HiveSessionCatalog(
+      externalCatalog,
+      session.sharedState.globalTempViewManager,
+      new HiveMetastoreCatalog(session),
+      functionRegistry,
+      conf,
+      SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
+      sqlParser,
+      resourceLoader)
+    parentState.foreach(_.catalog.copyStateTo(catalog))
+    catalog
+  }
 
-      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
-    }
+  /**
+   * A logical query plan `Analyzer` with rules specific to Hive.
+   */
+  override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+    override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
+      new ResolveHiveSerdeTable(session) +:
+      new FindDataSourceTable(session) +:
+      new ResolveSQLOnFile(session) +:
+      customResolutionRules
+
+    override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
+      new DetermineTableStats(session) +:
+      catalog.ParquetConversions +:
+      catalog.OrcConversions +:
+      PreprocessTableCreation(session) +:
+      PreprocessTableInsertion(conf) +:
+      DataSourceAnalysis(conf) +:
+      HiveAnalysis +:
+      customPostHocResolutionRules
+
+    override val extendedCheckRules: Seq[LogicalPlan => Unit] =
+      PreWriteCheck +:
+      customCheckRules
   }
 
   /**
    * Planner that takes into account Hive-specific strategies.
    */
-  override def planner: SparkPlanner = {
-    new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
-      with HiveStrategies {
-      override val sparkSession: SparkSession = self.sparkSession
+  override protected def planner: SparkPlanner = {
+    new SparkPlanner(session.sparkContext, conf, experimentalMethods) with HiveStrategies {
+      override val sparkSession: SparkSession = session
+
+      override def extraPlanningStrategies: Seq[Strategy] =
+        super.extraPlanningStrategies ++ customPlanningStrategies
 
       override def strategies: Seq[Strategy] = {
-        experimentalMethods.extraStrategies ++ Seq(
+        experimentalMethods.extraStrategies ++
+          extraPlanningStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          DDLStrategy,
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
-          DataSinks,
           Scripts,
           Aggregation,
           JoinSelection,
@@ -96,49 +127,15 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
     }
   }
 
+  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
+}
 
-  // ------------------------------------------------------
-  //  Helper methods, partially leftover from pre-2.0 days
-  // ------------------------------------------------------
-
+class HiveSessionResourceLoader(
+    session: SparkSession,
+    client: HiveClient)
+  extends SessionResourceLoader(session) {
   override def addJar(path: String): Unit = {
-    metadataHive.addJar(path)
+    client.addJar(path)
     super.addJar(path)
   }
-
-  /**
-   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
-   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
-   * SerDe.
-   */
-  def convertMetastoreParquet: Boolean = {
-    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
-  }
-
-  /**
-   * When true, also tries to merge possibly different but compatible Parquet schemas in different
-   * Parquet data files.
-   *
-   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
-   */
-  def convertMetastoreParquetWithSchemaMerging: Boolean = {
-    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
-  }
-
-  /**
-   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
-   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
-   * SerDe.
-   */
-  def convertMetastoreOrc: Boolean = {
-    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
-  }
-
-  /**
-   * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
-   */
-  def hiveThriftServerAsync: Boolean = {
-    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
-  }
-
 }

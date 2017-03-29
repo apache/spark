@@ -391,17 +391,17 @@ private[spark] abstract class MockBackend(
    * scheduling.
    */
   override def reviveOffers(): Unit = {
-    val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
-    // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
-    // tests from introducing a race if they need it
-    val newTasks = taskScheduler.synchronized {
-      newTaskDescriptions.map { taskDescription =>
+    // Need a lock on the entire scheduler to protect freeCores -- otherwise, multiple threads
+    // may make offers at the same time, though they are using the same set of freeCores.
+    taskScheduler.synchronized {
+      val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
+      // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
+      // tests from introducing a race if they need it.
+      val newTasks = newTaskDescriptions.map { taskDescription =>
         val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
         val task = taskSet.tasks(taskDescription.index)
         (taskDescription, task)
       }
-    }
-    synchronized {
       newTasks.foreach { case (taskDescription, _) =>
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
@@ -410,7 +410,8 @@ private[spark] abstract class MockBackend(
     }
   }
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     // We have to implement this b/c of SPARK-15385.
     // Its OK for this to be a no-op, because even if a backend does implement killTask,
     // it really can only be "best-effort" in any case, and the scheduler should be robust to that.

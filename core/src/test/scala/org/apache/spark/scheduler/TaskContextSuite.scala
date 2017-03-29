@@ -228,6 +228,32 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(res === Array("testPropValue,testPropValue"))
   }
 
+  test("immediately call a completion listener if the context is completed") {
+    var invocations = 0
+    val context = TaskContext.empty()
+    context.markTaskCompleted()
+    context.addTaskCompletionListener(_ => invocations += 1)
+    assert(invocations == 1)
+    context.markTaskCompleted()
+    assert(invocations == 1)
+  }
+
+  test("immediately call a failure listener if the context has failed") {
+    var invocations = 0
+    var lastError: Throwable = null
+    val error = new RuntimeException
+    val context = TaskContext.empty()
+    context.markTaskFailed(error)
+    context.addTaskFailureListener { (_, e) =>
+      lastError = e
+      invocations += 1
+    }
+    assert(lastError == error)
+    assert(invocations == 1)
+    context.markTaskFailed(error)
+    assert(lastError == error)
+    assert(invocations == 1)
+  }
 }
 
 private object TaskContextSuite {

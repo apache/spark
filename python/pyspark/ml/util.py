@@ -17,6 +17,7 @@
 
 import sys
 import uuid
+import warnings
 
 if sys.version > '3':
     basestring = str

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileIndexSuite extends SharedSQLContext {
@@ -176,6 +177,47 @@ class FileIndexSuite extends SharedSQLContext {
       val catalog2 = new MockCatalog(Seq(pathWithoutSlash))
       assert(catalog1.allFiles().nonEmpty)
       assert(catalog2.allFiles().nonEmpty)
+    }
+  }
+
+  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
+    "is a nonpositive number") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+    }
+
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "-1") {
+        new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+      }
+    }.getMessage
+    assert(e.contains("The maximum number of paths allowed for listing files at " +
+      "driver side must not be negative"))
+  }
+
+  test("refresh for InMemoryFileIndex with FileStatusCache") {
+    withTempDir { dir =>
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      val dirPath = new Path(dir.getAbsolutePath)
+      val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
+      val catalog =
+        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
+          def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
+          def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
+        }
+
+      val file = new File(dir, "text.txt")
+      stringToFile(file, "text")
+      assert(catalog.leafDirPaths.isEmpty)
+      assert(catalog.leafFilePaths.isEmpty)
+
+      catalog.refresh()
+
+      assert(catalog.leafFilePaths.size == 1)
+      assert(catalog.leafFilePaths.head == fs.makeQualified(new Path(file.getAbsolutePath)))
+
+      assert(catalog.leafDirPaths.size == 1)
+      assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
     }
   }
 }

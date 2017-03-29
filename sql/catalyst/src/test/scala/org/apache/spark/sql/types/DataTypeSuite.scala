@@ -132,55 +132,6 @@ class DataTypeSuite extends SparkFunSuite {
     assert(mapped === expected)
   }
 
-  test("merge where right is empty") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(List())
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, left))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
-  test("merge where left is empty") {
-
-    val left = StructType(List())
-
-    val right = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, right))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
-  test("merge where both are non-empty") {
-    val left = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) :: Nil)
-
-    val right = StructType(
-      StructField("c", LongType) :: Nil)
-
-    val expected = StructType(
-      StructField("a", LongType) ::
-      StructField("b", FloatType) ::
-      StructField("c", LongType) :: Nil)
-
-    val merged = left.merge(right)
-
-    assert(DataType.equalsIgnoreCompatibleNullability(merged, expected))
-    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-    assert(merged("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-  }
-
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::

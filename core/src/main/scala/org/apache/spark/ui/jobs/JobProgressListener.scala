@@ -142,7 +142,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If stages is too large, remove and garbage collect old stages */
   private def trimStagesIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
-      val toRemove = (stages.size - retainedStages)
+      val toRemove = calculateNumberToRemove(stages.size, retainedStages)
       stages.take(toRemove).foreach { s =>
         stageIdToData.remove((s.stageId, s.attemptId))
         stageIdToInfo.remove(s.stageId)
@@ -154,7 +154,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If jobs is too large, remove and garbage collect old jobs */
   private def trimJobsIfNecessary(jobs: ListBuffer[JobUIData]) = synchronized {
     if (jobs.size > retainedJobs) {
-      val toRemove = (jobs.size - retainedJobs)
+      val toRemove = calculateNumberToRemove(jobs.size, retainedJobs)
       jobs.take(toRemove).foreach { job =>
         // Remove the job's UI data, if it exists
         jobIdToData.remove(job.jobId).foreach { removedJob =>
@@ -371,8 +371,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskEnd.reason match {
         case Success =>
           execSummary.succeededTasks += 1
-        case TaskKilled =>
-          execSummary.killedTasks += 1
+        case kill: TaskKilled =>
+          execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+            kill.reason, execSummary.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -385,9 +386,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             None
-          case TaskKilled =>
-            stageData.numKilledTasks += 1
-            Some(TaskKilled.toErrorString)
+          case kill: TaskKilled =>
+            stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
+              kill.reason, stageData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
+            Some(kill.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
@@ -409,7 +411,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
       // If Tasks is too large, remove and garbage collect old tasks
       if (stageData.taskData.size > retainedTasks) {
-        stageData.taskData = stageData.taskData.drop(stageData.taskData.size - retainedTasks)
+        stageData.taskData = stageData.taskData.drop(
+          calculateNumberToRemove(stageData.taskData.size, retainedTasks))
       }
 
       for (
@@ -421,13 +424,21 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         taskEnd.reason match {
           case Success =>
             jobData.numCompletedTasks += 1
-          case TaskKilled =>
-            jobData.numKilledTasks += 1
+          case kill: TaskKilled =>
+            jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
+              kill.reason, jobData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
           case _ =>
             jobData.numFailedTasks += 1
         }
       }
     }
+  }
+
+  /**
+   * Remove at least (maxRetained / 10) items to reduce friction.
+   */
+  private def calculateNumberToRemove(dataSize: Int, retainedSize: Int): Int = {
+    math.max(retainedSize / 10, dataSize - retainedSize)
   }
 
   /**

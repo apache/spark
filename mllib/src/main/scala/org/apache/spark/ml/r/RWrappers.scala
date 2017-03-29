@@ -64,6 +64,10 @@ private[r] object RWrappers extends MLReader[Object] {
         GBTRegressorWrapper.load(path)
       case "org.apache.spark.ml.r.GBTClassifierWrapper" =>
         GBTClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.BisectingKMeansWrapper" =>
+        BisectingKMeansWrapper.load(path)
+      case "org.apache.spark.ml.r.LinearSVCWrapper" =>
+        LinearSVCWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }

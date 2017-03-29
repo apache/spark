@@ -22,8 +22,6 @@ import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.yarn.api.ApplicationConstants
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
@@ -145,28 +143,6 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
         fail()
     }
 
-  }
-
-  test("test expandEnvironment result") {
-    val target = Environment.PWD
-    if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
-      YarnSparkHadoopUtil.expandEnvironment(target) should be ("{{" + target + "}}")
-    } else if (Utils.isWindows) {
-      YarnSparkHadoopUtil.expandEnvironment(target) should be ("%" + target + "%")
-    } else {
-      YarnSparkHadoopUtil.expandEnvironment(target) should be ("$" + target)
-    }
-
-  }
-
-  test("test getClassPathSeparator result") {
-    if (classOf[ApplicationConstants].getFields().exists(_.getName == "CLASS_PATH_SEPARATOR")) {
-      YarnSparkHadoopUtil.getClassPathSeparator() should be ("<CPS>")
-    } else if (Utils.isWindows) {
-      YarnSparkHadoopUtil.getClassPathSeparator() should be (";")
-    } else {
-      YarnSparkHadoopUtil.getClassPathSeparator() should be (":")
-    }
   }
 
   test("check different hadoop utils based on env variable") {
