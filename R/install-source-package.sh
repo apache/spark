@@ -31,14 +31,14 @@ set -e
 
 FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 pushd "$FWDIR" > /dev/null
-. "$FWDIR"/find-r.sh
+. "$FWDIR/find-r.sh"
 
 if [ -z "$VERSION" ]; then
-  VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
+  VERSION=`grep Version "$FWDIR/pkg/DESCRIPTION" | awk '{print $NF}'`
 fi
 
-if [ ! -f "$FWDIR"/SparkR_"$VERSION".tar.gz ]; then
-  echo -e "R source package file $FWDIR/SparkR_$VERSION.tar.gz is not found."
+if [ ! -f "$FWDIR/SparkR_$VERSION.tar.gz" ]; then
+  echo -e "R source package file '$FWDIR/SparkR_$VERSION.tar.gz' is not found."
   echo -e "Please build R source package with check-cran.sh"
   exit -1;
 fi
@@ -47,7 +47,7 @@ echo "Removing lib path and installing from source package"
 LIB_DIR="$FWDIR/lib"
 rm -rf "$LIB_DIR"
 mkdir -p "$LIB_DIR"
-"$R_SCRIPT_PATH/"R CMD INSTALL SparkR_"$VERSION".tar.gz --library="$LIB_DIR"
+"$R_SCRIPT_PATH/R" CMD INSTALL "SparkR_$VERSION.tar.gz" --library="$LIB_DIR"
 
 # Zip the SparkR package so that it can be distributed to worker nodes on YARN
 pushd "$LIB_DIR" > /dev/null

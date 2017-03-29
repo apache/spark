@@ -35,12 +35,12 @@ LIB_DIR="$FWDIR/lib"
 mkdir -p "$LIB_DIR"
 
 pushd "$FWDIR" > /dev/null
-. "$FWDIR"/find-r.sh
+. "$FWDIR/find-r.sh"
 
-. "$FWDIR"/create-rd.sh
+. "$FWDIR/create-rd.sh"
 
 # Install SparkR to $LIB_DIR
-"$R_SCRIPT_PATH/"R CMD INSTALL --library="$LIB_DIR" "$FWDIR"/pkg/
+"$R_SCRIPT_PATH/R" CMD INSTALL --library="$LIB_DIR" "$FWDIR/pkg/"
 
 # Zip the SparkR package so that it can be distributed to worker nodes on YARN
 cd "$LIB_DIR"
