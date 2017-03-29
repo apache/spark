@@ -105,11 +105,22 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         val percent2 = calculateFilterSelectivity(cond2, update = false).getOrElse(1.0)
         Some(percent1 + percent2 - (percent1 * percent2))
 
+      // Not-operator pushdown
       case Not(And(cond1, cond2)) =>
         calculateFilterSelectivity(Or(Not(cond1), Not(cond2)), update = false)
 
+      // Not-operator pushdown
       case Not(Or(cond1, cond2)) =>
         calculateFilterSelectivity(And(Not(cond1), Not(cond2)), update = false)
+
+      // Collapse two consecutive Not operators which could be generated after Not-operator pushdown
+      case Not(Not(cond)) =>
+        calculateFilterSelectivity(cond, update = false)
+
+      // The foldable Not has been processed in the ConstantFolding rule
+      // This is a top-down traversal. The Not could be pushed down by the above two cases.
+      case Not(l @ Literal(null, _)) =>
+        calculateSingleCondition(l, update = false)
 
       case Not(cond) =>
         calculateFilterSelectivity(cond, update = false) match {
