@@ -477,9 +477,11 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
 
   override def doExecute(): RDD[InternalRow] = {
     longMetric("dummy") += expectedValue
-    sc.listenerBus.post(SparkListenerDriverAccumUpdates(
-      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong,
-      metrics.values.map(m => m.id -> m.value).toSeq))
+
+    SQLMetrics.postDriverMetricUpdates(
+      sc,
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
     sc.emptyRDD
   }
 }
