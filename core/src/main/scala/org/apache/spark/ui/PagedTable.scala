@@ -152,9 +152,7 @@ private[ui] trait PagedTable[T] {
    * }}}
    */
   private[ui] def pageNavigation(page: Int, pageSize: Int, totalPages: Int): Seq[Node] = {
-    if (totalPages == 1) {
-      Nil
-    } else {
+
       // A group includes all page numbers will be shown in the page navigation.
       // The size of group is 10 means there are 10 page numbers will be shown.
       // The first group is 1 to 10, the second is 2 to 20, and so on
@@ -266,7 +264,6 @@ private[ui] trait PagedTable[T] {
         </div>
       </div>
     }
-  }
 
   /**
    * Return a link to jump to a page.
