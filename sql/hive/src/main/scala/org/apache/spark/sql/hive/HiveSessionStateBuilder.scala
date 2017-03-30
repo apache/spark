@@ -75,11 +75,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       new DetermineTableStats(session) +:
-      // These 2 rules must be run before all other DDL post-hoc resolution rules, i.e.
-      // `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and
-      // `HiveAnalysis`.
-      ParquetConversions(session) +:
-      OrcConversions(session) +:
+      RelationConversions(conf, catalog) +:
       PreprocessTableCreation(session) +:
       PreprocessTableInsertion(conf) +:
       DataSourceAnalysis(conf) +:
