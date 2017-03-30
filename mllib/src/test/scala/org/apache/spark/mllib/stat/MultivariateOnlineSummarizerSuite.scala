@@ -270,4 +270,34 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
+
+  test("mask test") {
+    import MultivariateOnlineSummarizer._
+
+    assert(new MultivariateOnlineSummarizer(meanMask)
+      .add(Vectors.dense(-1.0, 0.0, 6.0))
+      .add(Vectors.dense(3.0, -3.0, 0.0)).mean
+      ~== Vectors.dense(1.0, -1.5, 3.0) absTol 1E-5, "mean mismatch")
+
+    assert(new MultivariateOnlineSummarizer(minMask)
+      .add(Vectors.dense(-1.0, 0.0, 6.0))
+      .add(Vectors.dense(3.0, -3.0, 0.0)).min
+      ~== Vectors.dense(-1.0, -3, 0.0) absTol 1E-5, "min mismatch")
+
+    assert(new MultivariateOnlineSummarizer(maxMask)
+      .add(Vectors.dense(-1.0, 0.0, 6.0))
+      .add(Vectors.dense(3.0, -3.0, 0.0)).max
+      ~== Vectors.dense(3.0, 0.0, 6.0) absTol 1E-5, "max mismatch")
+
+    assert(new MultivariateOnlineSummarizer(numNonZerosMask)
+      .add(Vectors.dense(-1.0, 0.0, 6.0))
+      .add(Vectors.dense(3.0, -3.0, 0.0)).numNonzeros
+      ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
+
+    assert(new MultivariateOnlineSummarizer(varianceMask)
+      .add(Vectors.dense(-1.0, 0.0, 6.0))
+      .add(Vectors.dense(3.0, -3.0, 0.0)).variance
+      ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
+  }
+
 }
