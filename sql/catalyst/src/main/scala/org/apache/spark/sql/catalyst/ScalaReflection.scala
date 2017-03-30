@@ -307,7 +307,8 @@ object ScalaReflection extends ScalaReflection {
           }
         }
 
-        val cls = t.dealias.companion.decl(TermName("newBuilder")) match {
+        val companion = t.normalize.typeSymbol.companionSymbol.typeSignature
+        val cls = companion.declaration(newTermName("newBuilder")) match {
           case NoSymbol => classOf[Seq[_]]
           case _ => mirror.runtimeClass(t.typeSymbol.asClass)
         }
