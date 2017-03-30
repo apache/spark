@@ -726,6 +726,9 @@ class TypeCoercionSuite extends PlanTest {
     ruleTest(rule,
       Stack(Seq(Literal(3), Literal(null), Literal("2"), Literal("3"))),
       Stack(Seq(Literal(3), Literal.create(null, StringType), Literal("2"), Literal("3"))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))),
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))))
 
     ruleTest(rule,
       Stack(Seq(Literal(2),

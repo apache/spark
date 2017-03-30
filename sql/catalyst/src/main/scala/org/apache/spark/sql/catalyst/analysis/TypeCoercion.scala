@@ -650,7 +650,7 @@ object TypeCoercion {
   }
 
   /**
-   * Coerces NullTypes of a Stack function to the corresponding column types.
+   * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
    */
   object StackCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
