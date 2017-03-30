@@ -115,10 +115,10 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType.getOrElse(other, {
+      case other => nonDecimalNameToType.getOrElse(
+        other,
         throw new IllegalArgumentException(
-          s"Failed to convert the JSON string '$name' to a data type.")
-      })
+          s"Failed to convert the JSON string '$name' to a data type."))
     }
   }
 
@@ -168,7 +168,7 @@ object DataType {
     ("type", JString("udt"))) =>
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
-    case other: JValue =>
+    case other =>
       throw new IllegalArgumentException(
         s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
   }
@@ -186,7 +186,7 @@ object DataType {
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
-    case other: JValue =>
+    case other =>
       throw new IllegalArgumentException(
         s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
   }
