@@ -645,16 +645,17 @@ test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 1)
+  expect_equal(count(suppressWarnings(tables())), count(tables))
 
   suppressWarnings(registerTempTable(df, "table2"))
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 2)
   suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 0)
 })
 
@@ -2975,6 +2976,51 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col1), "numeric")
   expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
+})
+
+test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
+  expect_equal(currentDatabase(), "default")
+  expect_error(setCurrentDatabase("default"), NA)
+  expect_error(setCurrentDatabase("foo"),
+               "Error in setCurrentDatabase : analysis error - Database 'foo' does not exist")
+  dbs <- collect(listDatabases())
+  expect_equal(names(dbs), c("name", "description", "locationUri"))
+  expect_equal(dbs[[1]], "default")
+})
+
+test_that("catalog APIs, listTables, listColumns, listFunctions", {
+  tb <- listTables()
+  count <- count(suppressWarnings(tables()))
+  expect_equal(nrow(tb), count)
+  expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
+
+  createOrReplaceTempView(as.DataFrame(cars), "cars")
+
+  tb <- listTables()
+  expect_equal(nrow(tb), count + 1)
+  tbs <- collect(tb)
+  expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
+  expect_error(listTables("bar"),
+               "Error in listTables : no such database - Database 'bar' not found")
+
+  c <- listColumns("cars")
+  expect_equal(nrow(c), 2)
+  expect_equal(colnames(c),
+               c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
+  expect_equal(collect(c)[[1]][[1]], "speed")
+  expect_error(listColumns("foo", "default"),
+       "Error in listColumns : no such table - Table or view 'foo' not found in database 'default'")
+
+  dropTempView("cars")
+
+  f <- listFunctions()
+  expect_equal(nrow(f) >= 200) # 250
+  expect_equal(colnames(f),
+               c("name", "database", "description", "className", "isTemporary"))
+  expect_equal(take(orderBy(f, "className"), 1)$className,
+               "org.apache.spark.sql.catalyst.expressions.Abs")
+  expect_error(listFunctions("foo_db"),
+               "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
 })
 
 compare_list <- function(list1, list2) {
