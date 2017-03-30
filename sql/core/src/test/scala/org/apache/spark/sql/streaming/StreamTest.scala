@@ -490,6 +490,18 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
             try {
               // Add data and get the source where it was added, and the expected offset of the
               // added data.
+              if (currentStream != null &&
+                  currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
+                val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
+                eventually("Error while synchronizing with manual clock before adding data") {
+                  if (currentStream.isActive) {
+                    assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+                  }
+                }
+                if (!currentStream.isActive) {
+                  failTest("Query terminated while synchronizing with manual clock")
+                }
+              }
               val queryToUse = Option(currentStream).orElse(Option(lastStream))
               val (source, offset) = a.addData(queryToUse)
 
