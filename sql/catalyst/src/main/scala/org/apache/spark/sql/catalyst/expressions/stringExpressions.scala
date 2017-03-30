@@ -298,7 +298,7 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
 
 /** A base trait for functions that compare two strings, returning a boolean. */
 abstract class StringPredicate extends BinaryExpression
-  with Predicate with ImplicitCastInputTypes {
+  with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 

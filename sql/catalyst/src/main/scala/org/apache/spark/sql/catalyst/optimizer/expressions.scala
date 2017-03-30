@@ -379,11 +379,11 @@ case class NullPropagation(conf: CatalystConf) extends Rule[LogicalPlan] {
           Coalesce(newChildren)
         }
 
-      // If the value expression is NULL then transform the In expression to
-      // Literal(null)
-      case In(Literal(null, _), list) => Literal.create(null, BooleanType)
+      // If the value expression is NULL then transform the In expression to null literal.
+      case In(Literal(null, _), _) => Literal.create(null, BooleanType)
 
-      // Put exceptional cases above if any
+      // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
+      // a null literal.
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
     }
