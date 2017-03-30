@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
-import java.net.URI
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -31,8 +30,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.internal.HiveSerDe
 
 
@@ -167,6 +168,79 @@ object HiveAnalysis extends Rule[LogicalPlan] {
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
+  }
+}
+
+/**
+ * When scanning or writing to non-partitioned Metastore Parquet tables, convert them to Parquet
+ * data source relations for better performance.
+ */
+case class ParquetConversions(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def shouldConvertMetastoreParquet(relation: CatalogRelation): Boolean = {
+    relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("parquet") &&
+      sparkSession.sessionState.conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
+  }
+
+  private def convertToParquetRelation(relation: CatalogRelation): LogicalRelation = {
+    val fileFormatClass = classOf[ParquetFileFormat]
+    val mergeSchema = sparkSession.sessionState.conf.getConf(
+      HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+    val options = Map(ParquetOptions.MERGE_SCHEMA -> mergeSchema.toString)
+
+    sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+      .convertToLogicalRelation(relation, options, fileFormatClass, "parquet")
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformUp {
+      // Write path
+      case InsertIntoTable(r: CatalogRelation, partition, query, overwrite, ifNotExists)
+        // Inserting into partitioned table is not supported in Parquet data source (yet).
+        if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
+          !r.isPartitioned && shouldConvertMetastoreParquet(r) =>
+        InsertIntoTable(convertToParquetRelation(r), partition, query, overwrite, ifNotExists)
+
+      // Read path
+      case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) &&
+        shouldConvertMetastoreParquet(relation) =>
+        convertToParquetRelation(relation)
+    }
+  }
+}
+
+
+/**
+ * When scanning Metastore ORC tables, convert them to ORC data source relations
+ * for better performance.
+ */
+case class OrcConversions(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def shouldConvertMetastoreOrc(relation: CatalogRelation): Boolean = {
+    relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("orc") &&
+      sparkSession.sessionState.conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
+
+  private def convertToOrcRelation(relation: CatalogRelation): LogicalRelation = {
+    val fileFormatClass = classOf[OrcFileFormat]
+    val options = Map[String, String]()
+
+    sparkSession.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+      .convertToLogicalRelation(relation, options, fileFormatClass, "orc")
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformUp {
+      // Write path
+      case InsertIntoTable(r: CatalogRelation, partition, query, overwrite, ifNotExists)
+        // Inserting into partitioned table is not supported in Orc data source (yet).
+        if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
+          !r.isPartitioned && shouldConvertMetastoreOrc(r) =>
+        InsertIntoTable(convertToOrcRelation(r), partition, query, overwrite, ifNotExists)
+
+      // Read path
+      case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) &&
+        shouldConvertMetastoreOrc(relation) =>
+        convertToOrcRelation(relation)
+    }
   }
 }
 
