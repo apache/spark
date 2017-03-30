@@ -313,40 +313,10 @@ object SummaryBuilderImpl extends Logging {
       buffer.totalWeightSum += w
       buffer.totalCount += 1
       buffer.totalWeightSquareSum += w * w
-      // All the fields that we compute on demand:
-      // TODO: the most common case is dense vectors. In that case we should
-      // directly use BLAS instructions instead of iterating through a scala iterator.
-      v.foreachActive { (index, value) =>
-        if (value != 0.0) {
-          if (buffer.max != null && buffer.max(index) < value) {
-            buffer.max(index) = value
-          }
-          if (buffer.min != null && buffer.min(index) > value) {
-            buffer.min(index) = value
-          }
 
-          if (buffer.mean != null) {
-            assert(buffer.weightSum != null)
-            val prevMean = buffer.mean(index)
-            val diff = value - prevMean
-            buffer.mean(index) += w * diff / (buffer.weightSum(index) + w)
-            if (buffer.m2n != null) {
-              buffer.m2n(index) += w * (value - buffer.mean(index)) * diff
-            }
-          }
-          if (buffer.m2 != null) {
-            buffer.m2(index) += w * value * value
-          }
-          if (buffer.l1 != null) {
-            buffer.l1(index) += w * math.abs(value)
-          }
-          if (buffer.weightSum != null) {
-            buffer.weightSum(index) += w
-          }
-          if (buffer.nnz != null) {
-            buffer.nnz(index) += 1
-          }
-        }
+      v match {
+        case dv: DenseVector => updateInPlaceDense(buffer, dv, w)
+        case sv: SparseVector => updateInPlaceSparse(buffer, sv, w)
       }
     }
 
@@ -588,9 +558,92 @@ object SummaryBuilderImpl extends Logging {
           }
         }
       }
-
     }
 
+    private def updateInPlaceDense(buffer: Buffer, v: DenseVector, w: Double): Unit = {
+      val epsi = Double.MinPositiveValue
+      lazy val value = v.asBreeze
+      // The mask is zero for all the zero values, and one otherwise.
+      lazy val mask = numerics.ceil(la.min(numerics.abs(value), epsi))
+      lazy val maskWeight = w * mask
+
+      if (buffer.max != null) {
+        val x = b(buffer.max)
+        x := la.max(x, value)
+      }
+
+      if (buffer.min != null) {
+        val x = b(buffer.min)
+        x := la.min(x, value)
+      }
+
+      if (buffer.mean != null) {
+        assert(buffer.weightSum != null)
+        val prevMean = b(buffer.mean).copy
+        val diff = value :- prevMean
+        // Adding an epsilon to ensure that the denominator is always positive.
+        // This epsilon is not going to have impact since numerator(i) == 0 => denominator(i) == 0.
+        val denom = la.max(b(buffer.weightSum) :+ maskWeight, epsi)
+        b(buffer.mean) :+= (maskWeight :* diff) :/ denom
+        if (buffer.m2n != null) {
+          b(buffer.m2n) :+= maskWeight :* ((value :- b(buffer.mean)) :* diff)
+        }
+      }
+
+      if (buffer.m2 != null) {
+        b(buffer.m2) :+= maskWeight :* (value :* value)
+      }
+
+      if (buffer.l1 != null) {
+        b(buffer.l1) :+= maskWeight :* numerics.abs(value)
+      }
+
+
+      if (buffer.weightSum != null) {
+        b(buffer.weightSum) :+= maskWeight
+      }
+
+      if (buffer.nnz != null) {
+        bl(buffer.nnz) :+= la.convert(maskWeight, Long)
+      }
+    }
+
+
+    private def updateInPlaceSparse(buffer: Buffer, v: SparseVector, w: Double): Unit = {
+      v.foreachActive { (index, value) =>
+        if (value != 0.0) {
+          if (buffer.max != null && buffer.max(index) < value) {
+            buffer.max(index) = value
+          }
+          if (buffer.min != null && buffer.min(index) > value) {
+            buffer.min(index) = value
+          }
+
+          if (buffer.mean != null) {
+            assert(buffer.weightSum != null)
+            val prevMean = buffer.mean(index)
+            val diff = value - prevMean
+            buffer.mean(index) += w * diff / (buffer.weightSum(index) + w)
+            if (buffer.m2n != null) {
+              buffer.m2n(index) += w * (value - buffer.mean(index)) * diff
+            }
+          }
+          if (buffer.m2 != null) {
+            buffer.m2(index) += w * value * value
+          }
+          if (buffer.l1 != null) {
+            buffer.l1(index) += w * math.abs(value)
+          }
+          if (buffer.weightSum != null) {
+            buffer.weightSum(index) += w
+          }
+          if (buffer.nnz != null) {
+            buffer.nnz(index) += 1
+          }
+        }
+      }
+
+    }
 
     /**
      * Merges other into buffer.
