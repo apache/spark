@@ -28,6 +28,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
@@ -36,6 +37,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
+import org.apache.spark.util.Utils
 
 trait BlockManagerReplicationBehavior extends SparkFunSuite
   with Matchers
@@ -43,6 +45,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   with LocalSparkContext {
 
   val conf: SparkConf
+
   protected var rpcEnv: RpcEnv = null
   protected var master: BlockManagerMaster = null
   protected lazy val securityMgr = new SecurityManager(conf)
@@ -55,7 +58,6 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   protected val allStores = new ArrayBuffer[BlockManager]
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
-
   protected lazy val serializer = new KryoSerializer(conf)
 
   // Implicitly convert strings to BlockIds for test clarity.
@@ -471,7 +473,7 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
   conf.set("spark.storage.replication.proactive", "true")
   conf.set("spark.storage.exceptionOnPinLeak", "true")
 
-  (2 to 5).foreach{ i =>
+  (2 to 5).foreach { i =>
     test(s"proactive block replication - $i replicas - ${i - 1} block manager deletions") {
       testProactiveReplication(i)
     }
@@ -524,3 +526,30 @@ class BlockManagerProactiveReplicationSuite extends BlockManagerReplicationBehav
     }
   }
 }
+
+class DummyTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Logging {
+  // number of racks to test with
+  val numRacks = 3
+
+  /**
+   * Gets the topology information given the host name
+   *
+   * @param hostname Hostname
+   * @return random topology
+   */
+  override def getTopologyForHost(hostname: String): Option[String] = {
+    Some(s"/Rack-${Utils.random.nextInt(numRacks)}")
+  }
+}
+
+class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationBehavior {
+  val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
+  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(
+    "spark.storage.replication.policy",
+    classOf[BasicBlockReplicationPolicy].getName)
+  conf.set(
+    "spark.storage.replication.topologyMapper",
+    classOf[DummyTopologyMapper].getName)
+}
+
