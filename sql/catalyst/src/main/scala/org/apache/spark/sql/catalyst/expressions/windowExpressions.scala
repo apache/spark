@@ -695,7 +695,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  *
- * @param children to base the rank on; a change in the value of one the children will trigger a
+ * @param children to base the rank on; a change in the value of one of the children will trigger a
  *                 change in rank. This is an internal parameter and will be assigned by the
  *                 Analyser.
  */

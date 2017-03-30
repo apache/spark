@@ -60,8 +60,6 @@ public abstract class MemoryConsumer {
 
   /**
    * Force spill during building.
-   *
-   * For testing.
    */
   public void spill() throws IOException {
     spill(Long.MAX_VALUE, this);

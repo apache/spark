@@ -492,7 +492,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Add an [[Aggregate]] to a logical plan.
+   * Add an [[Aggregate]] or [[GroupingSets]] to a logical plan.
    */
   private def withAggregation(
       ctx: AggregationContext,
@@ -519,7 +519,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Add a Hint to a logical plan.
+   * Add a [[Hint]] to a logical plan.
    */
   private def withHints(
       ctx: HintContext,
@@ -545,7 +545,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a single relation referenced in a FROM claused. This method is used when a part of the
+   * Create a single relation referenced in a FROM clause. This method is used when a part of the
    * join condition is nested, for example:
    * {{{
    *   select * from t1 join (t2 cross join t3) on col1 = col2

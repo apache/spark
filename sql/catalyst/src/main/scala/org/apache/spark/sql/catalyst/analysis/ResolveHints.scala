@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 /**
  * Collection of rules related to hints. The only hint currently available is broadcast join hint.
  *
- * Note that this is separatedly into two rules because in the future we might introduce new hint
+ * Note that this is separately into two rules because in the future we might introduce new hint
  * rules that have different ordering requirements from broadcast.
  */
 object ResolveHints {

@@ -65,7 +65,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 
 /**
  * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
- * mering the filter functions into one conjunctive function.
+ * merging the filter functions into one conjunctive function.
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

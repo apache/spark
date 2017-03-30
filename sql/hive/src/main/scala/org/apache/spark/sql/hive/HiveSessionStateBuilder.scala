@@ -28,7 +28,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
 /**
- * Builder that produces a Hive aware [[SessionState]].
+ * Builder that produces a Hive-aware `SessionState`.
  */
 @Experimental
 @InterfaceStability.Unstable

@@ -84,8 +84,8 @@ class TypedColumn[-T, U](
   }
 
   /**
-   * Gives the TypedColumn a name (alias).
-   * If the current TypedColumn has metadata associated with it, this metadata will be propagated
+   * Gives the [[TypedColumn]] a name (alias).
+   * If the current `TypedColumn` has metadata associated with it, this metadata will be propagated
    * to the new column.
    *
    * @group expr_ops
@@ -99,16 +99,14 @@ class TypedColumn[-T, U](
 /**
  * A column that will be computed based on the data in a `DataFrame`.
  *
- * A new column is constructed based on the input columns present in a dataframe:
+ * A new column can be constructed based on the input columns present in a DataFrame:
  *
  * {{{
- *   df("columnName")            // On a specific DataFrame.
+ *   df("columnName")            // On a specific `df` DataFrame.
  *   col("columnName")           // A generic column no yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
- *   expr("a + 1")               // A column that is constructed from a parsed SQL Expression.
- *   lit("abc")                  // A column that produces a literal (constant) value.
  * }}}
  *
  * [[Column]] objects can be composed to form complex expressions:
@@ -118,7 +116,7 @@ class TypedColumn[-T, U](
  *   $"a" === $"b"
  * }}}
  *
- * @note The internal Catalyst expression can be accessed via "expr", but this method is for
+ * @note The internal Catalyst expression can be accessed via [[expr]], but this method is for
  * debugging purposes only and can change in any future Spark releases.
  *
  * @groupname java_expr_ops Java-specific expression operators
@@ -1100,7 +1098,7 @@ class Column(val expr: Expression) extends Logging {
   def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Set.empty) }
 
   /**
-   * Prints the expression to the console for debugging purpose.
+   * Prints the expression to the console for debugging purposes.
    *
    * @group df_ops
    * @since 1.3.0
@@ -1154,8 +1152,8 @@ class Column(val expr: Expression) extends Logging {
    * {{{
    *   val w = Window.partitionBy("name").orderBy("id")
    *   df.select(
-   *     sum("price").over(w.rangeBetween(Long.MinValue, 2)),
-   *     avg("price").over(w.rowsBetween(0, 4))
+   *     sum("price").over(w.rangeBetween(Window.unboundedPreceding, 2)),
+   *     avg("price").over(w.rowsBetween(Window.currentRow, 4))
    *   )
    * }}}
    *

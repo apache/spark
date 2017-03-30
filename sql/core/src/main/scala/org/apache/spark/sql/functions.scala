@@ -2968,7 +2968,7 @@ object functions {
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
-   * @param options options to control how the json is parsed. accepts the same options and the
+   * @param options options to control how the json is parsed. Accepts the same options as the
    *                json data source.
    *
    * @group collection_funcs

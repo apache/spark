@@ -60,7 +60,7 @@ import org.apache.spark.util.Utils
  * The builder can also be used to create a new session:
  *
  * {{{
- *   SparkSession.builder()
+ *   SparkSession.builder
  *     .master("local")
  *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value")

@@ -95,8 +95,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
     // Sort the output if there is a sort ordering defined.
     dep.keyOrdering match {
       case Some(keyOrd: Ordering[K]) =>
-        // Create an ExternalSorter to sort the data. Note that if spark.shuffle.spill is disabled,
-        // the ExternalSorter won't spill to disk.
+        // Create an ExternalSorter to sort the data.
         val sorter =
           new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
         sorter.insertAll(aggregatedIter)
