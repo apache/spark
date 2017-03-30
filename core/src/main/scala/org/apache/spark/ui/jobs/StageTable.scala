@@ -412,7 +412,7 @@ private[ui] class StageDataSource(
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = stages.map(stageRow).sorted(ordering(sortColumn, desc))
 
-  private var _slicedStageIds: Set[Int] = null
+  private var _slicedStageIds: Set[Int] = _
 
   override def dataSize: Int = data.size
 
