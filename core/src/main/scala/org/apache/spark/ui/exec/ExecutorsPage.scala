@@ -48,7 +48,6 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
-  private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
@@ -59,7 +58,7 @@ private[ui] class ExecutorsPage(
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
-      </div>;
+      </div>
 
     UIUtils.headerSparkPage("Executors", content, parent, useDataTables = true)
   }

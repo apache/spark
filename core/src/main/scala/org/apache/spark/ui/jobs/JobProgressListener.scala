@@ -226,7 +226,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         trimJobsIfNecessary(completedJobs)
         jobData.status = JobExecutionStatus.SUCCEEDED
         numCompletedJobs += 1
-      case JobFailed(exception) =>
+      case JobFailed(_) =>
         failedJobs += jobData
         trimJobsIfNecessary(failedJobs)
         jobData.status = JobExecutionStatus.FAILED
@@ -284,7 +284,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
-        if (!stage.submissionTime.isEmpty) {
+        if (stage.submissionTime.isDefined) {
           jobData.completedStageIndices.add(stage.stageId)
         }
       } else {

@@ -49,7 +49,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       }.map { thread =>
         val threadId = thread.threadId
         val blockedBy = thread.blockedByThreadId match {
-          case Some(blockedByThreadId) =>
+          case Some(_) =>
             <div>
               Blocked by <a href={s"#${thread.blockedByThreadId}_td_id"}>
               Thread {thread.blockedByThreadId} {thread.blockedByLock}</a>
