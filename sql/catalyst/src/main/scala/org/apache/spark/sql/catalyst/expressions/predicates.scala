@@ -144,27 +144,37 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
         }
-
-        val mismatchedColumns = valExprs.zip(sub.output).flatMap {
-          case (l, r) if l.dataType != r.dataType =>
-            s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-          case _ => None
-        }
-
-        if (mismatchedColumns.nonEmpty) {
+        if (valExprs.length != sub.output.length) {
           TypeCheckResult.TypeCheckFailure(
             s"""
-               |The data type of one or more elements in the left hand side of an IN subquery
-               |is not compatible with the data type of the output of the subquery
-               |Mismatched columns:
-               |[${mismatchedColumns.mkString(", ")}]
+               |The number of columns the left hand side of an IN subquery does not match the
+               |number of columns in the output of subquery.
                |Left side:
-               |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+               |${valExprs.length}.
                |Right side:
-               |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
-             """.stripMargin)
+               |${sub.output.length}.
+           """.stripMargin)
         } else {
-          TypeCheckResult.TypeCheckSuccess
+          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+            case (l, r) if l.dataType != r.dataType =>
+              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+            case _ => None
+          }
+          if (mismatchedColumns.nonEmpty) {
+            TypeCheckResult.TypeCheckFailure(
+              s"""
+                 |The data type of one or more elements in the left hand side of an IN subquery
+                 |is not compatible with the data type of the output of the subquery
+                 |Mismatched columns:
+                 |[${mismatchedColumns.mkString(", ")}]
+                 |Left side:
+                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |Right side:
+                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               """.stripMargin)
+          } else {
+            TypeCheckResult.TypeCheckSuccess
+          }
         }
       case _ =>
         if (list.exists(l => l.dataType != value.dataType)) {
