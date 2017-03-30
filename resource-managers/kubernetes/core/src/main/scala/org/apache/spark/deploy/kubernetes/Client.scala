@@ -64,6 +64,9 @@ private[spark] class Client(
     .map(_.split(","))
     .getOrElse(Array.empty[String])
 
+  // CPU settings
+  private val driverCpuCores = sparkConf.getOption("spark.driver.cores").getOrElse("1")
+
   // Memory settings
   private val driverMemoryMb = sparkConf.get(org.apache.spark.internal.config.DRIVER_MEMORY)
   private val driverSubmitServerMemoryMb = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_SERVER_MEMORY)
@@ -431,6 +434,9 @@ private[spark] class Client(
       .withPath("/v1/submissions/ping")
       .withNewPort(SUBMISSION_SERVER_PORT_NAME)
       .build()
+    val driverCpuQuantity = new QuantityBuilder(false)
+      .withAmount(driverCpuCores)
+      .build()
     val driverMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${driverContainerMemoryMb}M")
       .build()
@@ -478,6 +484,8 @@ private[spark] class Client(
             .endEnv()
           .addToEnv(sslConfiguration.sslPodEnvVars: _*)
           .withNewResources()
+            .addToRequests("cpu", driverCpuQuantity)
+            .addToLimits("cpu", driverCpuQuantity)
             .addToRequests("memory", driverMemoryQuantity)
             .addToLimits("memory", driverMemoryLimitQuantity)
             .endResources()
