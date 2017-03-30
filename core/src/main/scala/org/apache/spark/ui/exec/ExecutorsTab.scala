@@ -64,6 +64,8 @@ private[ui] case class ExecutorTaskSummary(
 @DeveloperApi
 class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
     extends SparkListener {
+  var masterWebUiUrl: Option[String] = None
+
   var executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
   var executorEvents = new ListBuffer[SparkListenerEvent]()
 
@@ -115,6 +117,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
         taskSummary.executorLogs = logs.toMap
       }
     }
+    masterWebUiUrl = applicationStart.masterWebUiUrl
   }
 
   override def onTaskStart(

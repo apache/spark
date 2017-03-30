@@ -153,7 +153,7 @@ private[spark] class StandaloneAppClient(
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case RegisteredApplication(appId_, masterRef) =>
+      case RegisteredApplication(appId_, masterRef, masterWebUiUrl) =>
         // FIXME How to handle the following cases?
         // 1. A master receives multiple registrations and sends back multiple
         // RegisteredApplications due to an unstable network.
@@ -163,6 +163,7 @@ private[spark] class StandaloneAppClient(
         registered.set(true)
         master = Some(masterRef)
         listener.connected(appId.get)
+        listener.masterChanged(masterWebUiUrl)
 
       case ApplicationRemoved(message) =>
         markDead("Master removed our application: %s".format(message))
@@ -185,6 +186,7 @@ private[spark] class StandaloneAppClient(
       case MasterChanged(masterRef, masterWebUiUrl) =>
         logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
         master = Some(masterRef)
+        listener.masterChanged(masterWebUiUrl)
         alreadyDisconnected = false
         masterRef.send(MasterChangeAcknowledged(appId.get))
     }

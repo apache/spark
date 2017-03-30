@@ -264,7 +264,7 @@ private[deploy] class Master(
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
         persistenceEngine.addApplication(app)
-        driver.send(RegisteredApplication(app.id, self))
+        driver.send(RegisteredApplication(app.id, self, masterWebUiUrl))
         schedule()
       }
 

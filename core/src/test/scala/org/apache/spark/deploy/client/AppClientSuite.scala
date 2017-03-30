@@ -201,6 +201,8 @@ class AppClientSuite
       deadReasonList.add(reason)
     }
 
+    def masterChanged(masterWebUiUrl: String): Unit = { }
+
     def executorAdded(
         id: String,
         workerId: String,

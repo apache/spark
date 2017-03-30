@@ -51,6 +51,10 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val masterWebUiUrl = listener.masterWebUiUrl
+    val backLink = masterWebUiUrl.map(
+      link => <p><a href={link}>Back to Master</a></p>
+    ).getOrElse(Seq.empty)
     val content =
       <div>
         {
@@ -61,7 +65,7 @@ private[ui] class ExecutorsPage(
         }
       </div>;
 
-    UIUtils.headerSparkPage("Executors", content, parent, useDataTables = true)
+    UIUtils.headerSparkPage("Executors", backLink++content, parent, useDataTables = true)
   }
 }
 

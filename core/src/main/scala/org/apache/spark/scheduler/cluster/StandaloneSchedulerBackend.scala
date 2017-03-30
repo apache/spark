@@ -160,6 +160,16 @@ private[spark] class StandaloneSchedulerBackend(
     removeExecutor(fullId.split("/")(1), reason)
   }
 
+  var masterWebUiUrl: Option[String] = None
+
+  override def masterChanged(webUiUrl: String): Unit = {
+    masterWebUiUrl = Some(webUiUrl)
+  }
+
+  override def getMasterWebUiUrl(): Option[String] = {
+    masterWebUiUrl
+  }
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }

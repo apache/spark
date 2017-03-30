@@ -110,9 +110,16 @@ object MimaExcludes {
       // [SPARK-14743] Improve delegation token handling in secure cluster
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.SparkHadoopUtil.getTimeFromNowToRenewal"),
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
-      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
+    ) ++
+    Seq(
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
       ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select"),
+      // [SPARK-16856] [WEBUI] [CORE] Link the application's executor page to the master's UI
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart$"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.apply"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.copy"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.this"),
       // [SPARK-16967] Move Mesos to Module
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkMasterRegex.MESOS_REGEX"),
       // [SPARK-16240] ML persistence backward compatibility for LDA
