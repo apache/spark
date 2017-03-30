@@ -42,7 +42,7 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
-  val allParameters = request.getParameterMap.asScala.toMap
+  val allParameters = request.getParameterMap().asScala.toMap
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
