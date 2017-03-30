@@ -116,7 +116,7 @@ private[spark] abstract class WebUI(
    * @param path Path in UI to unmount.
    */
   def removeStaticHandler(path: String): Unit = {
-    handlers.find(_.getContextPath == path).foreach(detachHandler)
+    handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
 
   /** Initialize all components of the server. */
