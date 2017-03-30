@@ -105,7 +105,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
-      builtinFunctions.get(u.functionName) match {
+      builtinFunctions.get(u.functionName.toLowerCase) match {
         case Some(tvf) =>
           val resolved = tvf.flatMap { case (argList, resolver) =>
             argList.implicitCast(u.functionArgs) match {
