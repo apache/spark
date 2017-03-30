@@ -121,6 +121,13 @@ abstract class FileCommitProtocol {
   def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
     fs.delete(path, recursive)
   }
+
+  /**
+   * Called on the driver after a task commits. This can be used to access task commit messages
+   * before the job has finished. These same task commit messages will be passed to commitJob()
+   * if the entire job succeeds.
+   */
+  def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {}
 }
 
 
