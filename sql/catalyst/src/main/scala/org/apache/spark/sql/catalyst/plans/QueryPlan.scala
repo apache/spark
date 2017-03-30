@@ -230,14 +230,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
-   * Attributes that are referenced by expressions but not provided by this nodes children.
+   * Attributes that are referenced by expressions but not provided by this node's children.
    * Subclasses should override this method if they produce attributes internally as it is used by
    * assertions designed to prevent the construction of invalid plans.
    */
   def missingInput: AttributeSet = references -- inputSet -- producedAttributes
 
   /**
-   * Runs [[transform]] with `rule` on all expressions present in this query operator.
+   * Runs [[transformExpressionsDown]] with `rule` on all expressions present
+   * in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    *

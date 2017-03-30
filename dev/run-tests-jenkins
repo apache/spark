@@ -22,7 +22,8 @@
 # Environment variables are populated by the code here:
 #+ https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
 
-FWDIR="$(cd "`dirname $0`"/..; pwd)"
+FWDIR="$( cd "$( dirname "$0" )/.." && pwd )"
 cd "$FWDIR"
 
+export PATH=/home/anaconda/bin:$PATH
 exec python -u ./dev/run-tests-jenkins.py "$@"

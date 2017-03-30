@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/dataframe.R
+
 library(SparkR)
 
 # Initialize SparkSession

@@ -1137,6 +1137,15 @@ Apart from these, the following properties are also available, and may be useful
     mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
+<tr>
+  <td><code>spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version</code></td>
+  <td>1</td>
+  <td>
+    The file output committer algorithm version, valid algorithm version number: 1 or 2.
+    Version 2 may have better performance, but version 1 may handle failures better in certain situations,
+    as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+  </td>
+</tr>
 </table>
 
 ### Networking
