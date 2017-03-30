@@ -44,7 +44,7 @@ if __name__ == "__main__":
     imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
     model = imputer.fit(df)
 
-    model.transform(df).select("a", "b", "out_a", "out_b").show()
+    model.transform(df).show()
     # $example off$
 
     spark.stop()
