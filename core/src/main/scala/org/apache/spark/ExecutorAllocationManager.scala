@@ -249,7 +249,9 @@ private[spark] class ExecutorAllocationManager(
    * yarn-client mode when AM re-registers after a failure.
    */
   def reset(): Unit = synchronized {
-    initializing = true
+    if (maxNumExecutorsNeeded() == 0) {
+      initializing = true
+    }
     numExecutorsTarget = initialNumExecutors
     numExecutorsToAdd = 1
 
