@@ -148,6 +148,17 @@ class SparkSubmitSuite
     appArgs.childArgs should be (Seq("--master", "local", "some", "--weird", "args"))
   }
 
+  test("print the right queue name") {
+    val clArgs = Seq(
+      "--name", "myApp",
+      "--class", "Foo",
+      "--conf", "spark.yarn.queue=thequeue",
+      "userjar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.queue should be ("thequeue")
+    appArgs.toString should include ("thequeue")
+  }
+
   test("specify deploy mode through configuration") {
     val clArgs = Seq(
       "--master", "yarn",
