@@ -76,6 +76,9 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("basic types") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
     val ser = new KryoSerializer(conf).newInstance()
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
@@ -337,16 +340,6 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     Seq(denseBlockSizes, sparseBlockSizes).foreach { blockSizes =>
       ser.serialize(HighlyCompressedMapStatus(BlockManagerId("exec-1", "host", 1234), blockSizes))
     }
-  }
-
-  test("registration of Array[Int]") {
-    val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
-
-    val ser = new KryoSerializer(conf).newInstance()
-
-    val t = Array(0, 1, 2)
-    assert(ser.deserialize[Array[Int]](ser.serialize(t)) === t)
   }
 
   test("serialization buffer overflow reporting") {
