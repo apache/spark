@@ -46,6 +46,7 @@ public final class Platform {
   private static final boolean unaligned;
   static {
     boolean _unaligned;
+    String arch = System.getProperty("os.arch", "");
     if (arch.matches("^(ppc64le | ppc64)$")) {
       // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but ppc64 and ppc64le support it
       _unaligned = true;
@@ -58,7 +59,6 @@ public final class Platform {
         _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
       } catch (Throwable t) {
         // We at least know x86 and x64 support unaligned access.
-        String arch = System.getProperty("os.arch", "");
         //noinspection DynamicRegexReplaceableByCompiledPattern
         _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
       }
