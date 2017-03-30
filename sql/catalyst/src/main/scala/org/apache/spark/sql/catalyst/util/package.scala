@@ -141,7 +141,7 @@ package object util {
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
     case e: GetStructField =>
-      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
+      val name = e.name
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)

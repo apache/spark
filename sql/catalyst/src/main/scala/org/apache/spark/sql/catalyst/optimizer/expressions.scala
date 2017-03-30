@@ -364,7 +364,7 @@ case class NullPropagation(conf: CatalystConf) extends Rule[LogicalPlan] {
       case e @ GetArrayItem(_, Literal(null, _)) => Literal.create(null, e.dataType)
       case e @ GetMapValue(Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ GetMapValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
-      case e @ GetStructField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
+      case e @ GetStructField(Literal(null, _), _, _, _) => Literal.create(null, e.dataType)
       case e @ GetArrayStructFields(Literal(null, _), _, _, _, _) =>
         Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)

@@ -51,7 +51,7 @@ object ExtractValue {
       case (StructType(fields), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, ordinal, Some(fieldName))
+        GetStructField(child, ordinal)
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
@@ -103,21 +103,29 @@ trait ExtractValue extends Expression
  * Note that we can pass in the field name directly to keep case preserving in `toString`.
  * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
-case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
-  extends UnaryExpression with ExtractValue {
+case class GetStructField(
+    child: Expression,
+    ordinal: Int,
+    exprId: ExprId = NamedExpression.newExprId,
+    qualifier: Option[String] = None
+) extends UnaryExpression with ExtractValue with NamedExpression {
 
-  lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema: StructType = child.dataType.asInstanceOf[StructType]
+  override val name: String = {
+    val cName = child match {
+      case c: NamedExpression => c.name
+      case _ => s"$child"
+    }
+    s"$cName.${childSchema(ordinal).name}"
+  }
 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
 
-  override def toString: String = {
-    val fieldName = if (resolved) childSchema(ordinal).name else s"_$ordinal"
-    s"$child.${name.getOrElse(fieldName)}"
-  }
+  override def toString: String = name
 
   override def sql: String =
-    child.sql + s".${quoteIdentifier(name.getOrElse(childSchema(ordinal).name))}"
+    child.sql + s".${quoteIdentifier(name)}"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
@@ -139,6 +147,10 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
       }
     })
   }
+
+  override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
+  override def newInstance(): GetStructField =
+    GetStructField(child, ordinal, exprId, qualifier)
 }
 
 /**
