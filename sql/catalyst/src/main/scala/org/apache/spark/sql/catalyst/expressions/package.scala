@@ -131,6 +131,36 @@ package object expressions  {
     def indexOf(exprId: ExprId): Int = {
       Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
     }
+
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
+    // to an array.
+    @transient private lazy val attrsArray = attrs.toArray
+
+    @transient private lazy val exprIdToOrdinal = {
+      val arr = attrsArray
+      val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
+      // Iterate over the array in reverse order so that the final map value is the first attribute
+      // with a given expression id.
+      var index = arr.length - 1
+      while (index >= 0) {
+        map.put(arr(index).exprId, index)
+        index -= 1
+      }
+      map
+    }
+
+    /**
+     * Returns the attribute at the given index.
+     */
+    def apply(ordinal: Int): Attribute = attrsArray(ordinal)
+
+    /**
+     * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
+     */
+    def indexOf(exprId: ExprId): Int = {
+      Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
+    }
   }
 
   /**
