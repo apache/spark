@@ -71,8 +71,7 @@ private[spark] object CompressionCodec {
       val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
     } catch {
-      case e: ClassNotFoundException => None
-      case e: IllegalArgumentException => None
+      case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
     codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
