@@ -122,11 +122,9 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
         serializer = new UnsafeRowSerializer(numFields = 1))
 
       // Ensure we spilled something and have to merge them later when use ON_HEAP
-      assert(sorter.numSpills === 0 ||
-        taskMemoryManager.getTungstenMemoryMode == MemoryMode.OFF_HEAP)
+      assert(sorter.numSpills === 0)
       sorter.insertAll(data)
-      assert(sorter.numSpills > 0 ||
-        taskMemoryManager.getTungstenMemoryMode == MemoryMode.OFF_HEAP)
+      assert(sorter.numSpills > 0)
 
       // Merging spilled files should not throw assertion error
       sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)

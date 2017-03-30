@@ -24,7 +24,7 @@ public class TestMemoryConsumer extends MemoryConsumer {
     super(memoryManager, 1024L, mode);
   }
   public TestMemoryConsumer(TaskMemoryManager memoryManager) {
-    this(memoryManager, memoryManager.getTungstenMemoryMode());
+    this(memoryManager, MemoryMode.ON_HEAP);
   }
 
   @Override
