@@ -386,6 +386,7 @@ private[serializer] object KryoSerializer {
     classOf[BlockManagerId],
     classOf[Array[Byte]],
     classOf[Array[Short]],
+    classOf[Array[Int]],
     classOf[Array[Long]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]

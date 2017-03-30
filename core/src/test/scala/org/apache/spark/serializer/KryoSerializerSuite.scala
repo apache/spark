@@ -339,6 +339,16 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("registration of Array[Int]") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val t = Array(0, 1, 2)
+    assert(ser.deserialize[Array[Int]](ser.serialize(t)) === t)
+  }
+
   test("serialization buffer overflow reporting") {
     import org.apache.spark.SparkException
     val kryoBufferMaxProperty = "spark.kryoserializer.buffer.max"
