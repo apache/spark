@@ -341,7 +341,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val rdd1 = sc.parallelize(1 to n).map { idx =>
       OldVectors.dense(idx.toDouble)
     }
-    val trieouts = 10
+    val trieouts = 100
     rdd1.cache()
     rdd1.count()
     val rdd2 = sc.parallelize(1 to n).map { idx =>
@@ -357,30 +357,6 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
               "normL2").summary($"features"))
     val x1 = df.select(metrics("variance").summary($"features"))
 
-    var times_df: List[Long] = Nil
-    for (_ <- 1 to trieouts) {
-      val t21 = System.nanoTime()
-      x.head()
-      val t22 = System.nanoTime()
-      times_df ::= (t22 - t21)
-    }
-
-    var times_rdd: List[Long] = Nil
-    for (_ <- 1 to trieouts) {
-      val t21 = System.nanoTime()
-      Statistics.colStats(rdd1)
-      val t22 = System.nanoTime()
-      times_rdd ::= (t22 - t21)
-    }
-
-    var times_df_variance: List[Long] = Nil
-    for (_ <- 1 to trieouts) {
-      val t21 = System.nanoTime()
-      x1.head()
-      val t22 = System.nanoTime()
-      times_df_variance ::= (t22 - t21)
-    }
-
     def print(name: String, l: List[Long]): Unit = {
       def f(z: Long) = (1e6 * n.toDouble) / z
       val min = f(l.max)
@@ -388,12 +364,43 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       val med = f(l.sorted.drop(l.size / 2).head)
 
       // scalastyle:off println
-      println(s"dataframe = [$min ~ $med ~ $max] records / milli")
+      println(s"$name = [$min ~ $med ~ $max] records / milli")
     }
 
+
+    var times_df: List[Long] = Nil
+    for (_ <- 1 to trieouts) {
+      System.gc()
+      val t21 = System.nanoTime()
+      x.head()
+      val t22 = System.nanoTime()
+      val dt = t22 - t21
+      times_df ::= dt
+      // scalastyle:off
+      print("Dataframes", times_df)
+      // scalastyle:on
+    }
+
+    var times_rdd: List[Long] = Nil
+//    for (_ <- 1 to trieouts) {
+//      val t21 = System.nanoTime()
+//      Statistics.colStats(rdd1)
+//      val t22 = System.nanoTime()
+//      times_rdd ::= (t22 - t21)
+//    }
+
+    var times_df_variance: List[Long] = Nil
+//    for (_ <- 1 to trieouts) {
+//      val t21 = System.nanoTime()
+//      x1.head()
+//      val t22 = System.nanoTime()
+//      times_df_variance ::= (t22 - t21)
+//    }
+
+
+    print("Dataframes", times_df)
     print("RDD", times_rdd)
     print("Dataframes (variance only)", times_df_variance)
-    print("Dataframes", times_df)
   }
 
 }
