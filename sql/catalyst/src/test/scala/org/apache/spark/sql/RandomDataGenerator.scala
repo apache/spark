@@ -117,11 +117,11 @@ object RandomDataGenerator {
   }
 
   /**
-   * Returns a function which generates random values for the given [[DataType]], or `None` if no
+   * Returns a function which generates random values for the given `DataType`, or `None` if no
    * random data generator is defined for that data type. The generated values will use an external
-   * representation of the data type; for example, the random generator for [[DateType]] will return
-   * instances of [[java.sql.Date]] and the generator for [[StructType]] will return a [[Row]].
-   * For a [[UserDefinedType]] for a class X, an instance of class X is returned.
+   * representation of the data type; for example, the random generator for `DateType` will return
+   * instances of [[java.sql.Date]] and the generator for `StructType` will return a [[Row]].
+   * For a `UserDefinedType` for a class X, an instance of class X is returned.
    *
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
