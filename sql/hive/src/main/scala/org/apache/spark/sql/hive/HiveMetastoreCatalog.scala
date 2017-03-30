@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
  */
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
   // these are def_s and not val/lazy val since the latter would introduce circular references
-  private def sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
+  private def sessionState = sparkSession.sessionState
   private def tableRelationCache = sparkSession.sessionState.catalog.tableRelationCache
   import HiveMetastoreCatalog._
 
@@ -281,12 +281,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   object ParquetConversions extends Rule[LogicalPlan] {
     private def shouldConvertMetastoreParquet(relation: CatalogRelation): Boolean = {
       relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("parquet") &&
-        sessionState.convertMetastoreParquet
+        sessionState.conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
     }
 
     private def convertToParquetRelation(relation: CatalogRelation): LogicalRelation = {
       val fileFormatClass = classOf[ParquetFileFormat]
-      val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
+      val mergeSchema = sessionState.conf.getConf(
+        HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
       val options = Map(ParquetOptions.MERGE_SCHEMA -> mergeSchema.toString)
 
       convertToLogicalRelation(relation, options, fileFormatClass, "parquet")
@@ -316,7 +317,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   object OrcConversions extends Rule[LogicalPlan] {
     private def shouldConvertMetastoreOrc(relation: CatalogRelation): Boolean = {
       relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("orc") &&
-        sessionState.convertMetastoreOrc
+        sessionState.conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
     }
 
     private def convertToOrcRelation(relation: CatalogRelation): LogicalRelation = {

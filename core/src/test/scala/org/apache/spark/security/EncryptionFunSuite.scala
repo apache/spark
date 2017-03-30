@@ -14,28 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.security
 
-package org.apache.spark.sql.hive
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 
-import org.scalatest.BeforeAndAfterEach
+trait EncryptionFunSuite {
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+  this: SparkFunSuite =>
 
-/**
- * Run all tests from `SessionStateSuite` with a Hive based `SessionState`.
- */
-class HiveSessionStateSuite extends SessionStateSuite
-  with TestHiveSingleton with BeforeAndAfterEach {
-
-  override def beforeAll(): Unit = {
-    // Reuse the singleton session
-    activeSession = spark
+  /**
+   * Runs a test twice, initializing a SparkConf object with encryption off, then on. It's ok
+   * for the test to modify the provided SparkConf.
+   */
+  final protected def encryptionTest(name: String)(fn: SparkConf => Unit) {
+    Seq(false, true).foreach { encrypt =>
+      test(s"$name (encryption = ${ if (encrypt) "on" else "off" })") {
+        val conf = new SparkConf().set(IO_ENCRYPTION_ENABLED, encrypt)
+        fn(conf)
+      }
+    }
   }
 
-  override def afterAll(): Unit = {
-    // Set activeSession to null to avoid stopping the singleton session
-    activeSession = null
-    super.afterAll()
-  }
 }
