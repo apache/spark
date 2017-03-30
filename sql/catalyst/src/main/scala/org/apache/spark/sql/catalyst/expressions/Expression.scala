@@ -491,7 +491,7 @@ abstract class BinaryExpression extends Expression {
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
- * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
