@@ -31,7 +31,7 @@ class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
     sparkConf.set("spark.redaction.string.regex",
-      "spark-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+      "file:/[\\w_]+")
     super.beforeAll()
   }
 
