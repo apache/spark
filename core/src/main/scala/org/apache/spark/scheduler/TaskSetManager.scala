@@ -110,7 +110,6 @@ private[spark] class TaskSetManager(
   // task set is aborted (for example, because it was killed).  TaskSetManagers remain in the zombie
   // state until all tasks have finished running; we keep TaskSetManagers that are in the zombie
   // state in order to continue to track and account for the running tasks.
-  // TODO: We should kill any running task attempts when the task set manager becomes a zombie.
   private[scheduler] var isZombie = false
 
   // Set of pending tasks for each executor. These collections are actually
@@ -768,6 +767,19 @@ private[spark] class TaskSetManager(
       s" executor ${info.executorId}): ${reason.toErrorString}"
     val failureException: Option[Throwable] = reason match {
       case fetchFailed: FetchFailed =>
+        if (!isZombie) {
+          for (i <- 0 until numTasks if i != index) {
+            // Only for the first occurance of the fetch failure, kill all running
+            // tasks in the task set
+            for (attemptInfo <- taskAttempts(i) if attemptInfo.running) {
+              sched.backend.killTask(
+                attemptInfo.taskId,
+                attemptInfo.executorId,
+                interruptThread = true,
+                reason = "another attempt succeeded")
+            }
+          }
+        }
         logWarning(failureReason)
         if (!successful(index)) {
           successful(index) = true

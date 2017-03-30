@@ -417,6 +417,53 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
   }
 
+  test("Running tasks should be killed after first fetch failure") {
+    val rescheduleDelay = 300L
+    val conf = new SparkConf().
+      set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
+      // don't wait to jump locality levels in this test
+      set("spark.locality.wait", "0")
+
+    val killedTasks = new ArrayBuffer[Long]
+    sc = new SparkContext("local", "test", conf)
+    // two executors on same host, one on different.
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+      ("exec1.1", "host1"), ("exec2", "host2"))
+    sched.initialize(new FakeSchedulerBackend() {
+      override def killTask(
+        taskId: Long,
+        executorId: String,
+        interruptThread: Boolean,
+        reason: String): Unit = {
+        killedTasks += taskId
+      }
+    })
+    // affinity to exec1 on host1 - which we will fail.
+    val taskSet = FakeTask.createTaskSet(4)
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, 4, None, clock)
+
+    val offerResult1 = manager.resourceOffer("exec1", "host1", ANY)
+    assert(offerResult1.isDefined, "Expect resource offer to return a task")
+
+    assert(offerResult1.get.index === 0)
+    assert(offerResult1.get.executorId === "exec1")
+
+    val offerResult2 = manager.resourceOffer("exec2", "host2", ANY)
+    assert(offerResult2.isDefined, "Expect resource offer to return a task")
+
+    assert(offerResult2.get.index === 1)
+    assert(offerResult2.get.executorId === "exec2")
+    // At this point, we have 2 tasks running and 2 pending. First fetch failure should
+    // abort all the pending tasks but the running tasks should not be aborted.
+    assert(killedTasks.isEmpty)
+    manager.handleFailedTask(offerResult1.get.taskId, TaskState.FINISHED,
+      FetchFailed(BlockManagerId("exec-host2", "host2", 12345), 0, 0, 0, "ignored"))
+    assert(killedTasks.size === 1)
+    assert(killedTasks(0) === offerResult2.get.taskId)
+  }
+
   test("executors should be blacklisted after task failure, in spite of locality preferences") {
     val rescheduleDelay = 300L
     val conf = new SparkConf().
@@ -1107,6 +1154,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       set(config.BLACKLIST_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    sched.initialize(new FakeSchedulerBackend() {
+      override def killTask(
+        taskId: Long,
+        executorId: String,
+        interruptThread: Boolean,
+        reason: String): Unit = {}
+    })
     val taskSet = FakeTask.createTaskSet(4)
     val tsm = new TaskSetManager(sched, taskSet, 4)
     // we need a spy so we can attach our mock blacklist
