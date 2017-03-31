@@ -56,7 +56,7 @@ object Correlation {
    *  Here is how to access the correlation coefficient:
    *  {{{
    *    val data: Dataset[Vector] = ...
-   *    val Row(coeff: Matrix) = Statistics.corr(data, "value").head
+   *    val Row(coeff: Matrix) = Correlation.corr(data, "value").head
    *    // coeff now contains the Pearson correlation matrix.
    *  }}}
    *
