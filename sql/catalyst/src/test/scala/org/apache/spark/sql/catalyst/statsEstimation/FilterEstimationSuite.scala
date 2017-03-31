@@ -499,12 +499,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   test("cint = cint3") {
     // no records qualify due to no overlap
+    val emptyColStats = Seq[(Attribute, ColumnStat)]()
     validateEstimatedStats(
       Filter(EqualTo(attrInt, attrInt3), childStatsTestPlan(Seq(attrInt, attrInt3), 10L)),
-      Seq(attrInt -> ColumnStat(distinctCount = 0, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-        attrInt3 -> ColumnStat(distinctCount = 0, min = Some(30), max = Some(39),
-          nullCount = 0, avgLen = 4, maxLen = 4)),
+      Nil, // set to empty
       expectedRowCount = 0)
   }
 
@@ -523,10 +521,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     // no records qualify due to no overlap
     validateEstimatedStats(
       Filter(GreaterThan(attrInt, attrInt3), childStatsTestPlan(Seq(attrInt, attrInt3), 10L)),
-      Seq(attrInt -> ColumnStat(distinctCount = 0, min = Some(1), max = Some(10),
-        nullCount = 0, avgLen = 4, maxLen = 4),
-        attrInt3 -> ColumnStat(distinctCount = 4, min = Some(30), max = Some(39),
-          nullCount = 0, avgLen = 4, maxLen = 4)),
+      Nil, // set to empty
       expectedRowCount = 0)
   }
 
