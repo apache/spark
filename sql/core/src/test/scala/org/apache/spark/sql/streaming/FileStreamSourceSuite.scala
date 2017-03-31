@@ -909,7 +909,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("max files per trigger - incorrect values") {
+  testQuietly("max files per trigger - incorrect values") {
     val testTable = "maxFilesPerTrigger_test"
     withTable(testTable) {
       withTempDir { case src =>
@@ -1326,7 +1326,7 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 
   import testImplicits._
 
-  test("file source stress test") {
+  testQuietly("file source stress test") {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
     val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
