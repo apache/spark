@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{Alias, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -843,5 +846,34 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         sql("select * from t1 where id in (select id as id from t2)"),
         Row(0) :: Row(1) :: Nil)
     }
+  }
+
+  test("ListQuery and Exists should work even no correlated references") {
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c AND (r.d in (select d from r) OR l.a >= 1)"),
+      Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) ::
+        Row(2, 1.0, 2, 3.0) :: Row(3.0, 3.0, 3, 2.0) :: Row(6, null, 6, null) :: Nil)
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
+      Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
+
+  test("Convert Exists without correlated references to aggregation with count") {
+    val df =
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)")
+    val joinPlan = df.queryExecution.optimizedPlan.asInstanceOf[Join]
+    val scalarSubquery = joinPlan.condition.get.collect {
+      case s: ScalarSubquery => s
+    }
+    assert(scalarSubquery.length == 1)
+    val aggPlan = scalarSubquery.head.plan.collect {
+      case a: Aggregate => a
+    }
+    assert(aggPlan.length == 1)
+    assert(aggPlan.head.aggregateExpressions.length == 1)
+    val countAggExpr = aggPlan.head.aggregateExpressions.collect {
+      case a @ Alias(AggregateExpression(_: Count, _, _, _), _) => a
+    }
+    assert(countAggExpr.length == 1)
   }
 }

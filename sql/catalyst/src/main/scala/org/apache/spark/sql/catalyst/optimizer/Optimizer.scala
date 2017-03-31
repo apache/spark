@@ -65,7 +65,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
-      OptimizeSubqueries) ::
+      OptimizeSubqueries,
+      RewriteEmptyExists) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithAntiJoin,

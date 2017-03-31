@@ -498,3 +498,31 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       }
   }
 }
+
+/**
+ * This rule rewrites a EXISTS predicate sub-queries into an Aggregate with count.
+ * So it doesn't be converted to a JOIN later.
+ */
+object RewriteEmptyExists extends Rule[LogicalPlan] with PredicateHelper {
+  private def containsAgg(plan: LogicalPlan): Boolean = {
+    plan.collect {
+      case a: Aggregate => a
+    }.nonEmpty
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Filter(condition, child) =>
+      val (withSubquery, withoutSubquery) =
+        splitConjunctivePredicates(condition).partition(SubqueryExpression.hasInOrExistsSubquery)
+      val newWithSubquery = withSubquery.map(_.transform {
+        case e @ Exists(sub, conditions, exprId) if conditions.isEmpty && !containsAgg(sub) =>
+          val countExpr = Alias(Count(Literal(1)).toAggregateExpression(), "count")()
+          val expr = Alias(GreaterThan(countExpr.toAttribute, Literal(0)), e.toString)()
+          ScalarSubquery(
+            Project(Seq(expr), Aggregate(Nil, Seq(countExpr), sub)),
+            children = Seq.empty,
+            exprId = exprId)
+      })
+      Filter((newWithSubquery ++ withoutSubquery).reduce(And), child)
+  }
+}
