@@ -432,6 +432,40 @@ class JsonProtocolSuite extends SparkFunSuite {
     testAccumValue(Some("anything"), 123, JString("123"))
   }
 
+  test("Omit internal accumulables") {
+    val accmsWithInternal = Seq(makeAccumulableInfo(0), makeAccumulableInfo(1, internal = true))
+    val accmsWithoutInternal = Seq(makeAccumulableInfo(0))
+    assertJsonStringEquals(
+      compact(render(
+        JsonProtocol.accumulablesToJson(accmsWithInternal, omitInternalAccums = true))
+      ),
+      compact(render(
+        JsonProtocol.accumulablesToJson(accmsWithoutInternal, omitInternalAccums = true))
+      ),
+      "Accumulables"
+    )
+  }
+
+  test("Omit updated block statuses") {
+    val withBlockStatuses =
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, false, false)
+    val withoutBlockStatuses =
+      makeTaskMetrics(
+        300L, 400L, 500L, 600L, 700, 800, false, false, setUpdatedBlockStatuses = false
+      )
+    assertEquals(
+      JsonProtocol.taskMetricsFromJson(
+        JsonProtocol.taskMetricsToJson(
+          withBlockStatuses, omitUpdatedBlockStatuses = true
+        )
+      ),
+      JsonProtocol.taskMetricsFromJson(
+        JsonProtocol.taskMetricsToJson(
+          withoutBlockStatuses
+        )
+      )
+    )
+  }
 }
 
 
@@ -829,7 +863,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       f: Int,
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
-      hasRecords: Boolean = true) = {
+      hasRecords: Boolean = true,
+      setUpdatedBlockStatuses: Boolean = true) = {
     val t = TaskMetrics.empty
     // Set CPU times same as wall times for testing purpose
     t.setExecutorDeserializeTime(a)
@@ -864,10 +899,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
       sw.incWriteTime(b + c + d)
       sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
-    // Make at most 6 blocks
-    t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
-    }.toSeq)
+    if (setUpdatedBlockStatuses) {
+      // Make at most 6 blocks
+      t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
+        (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
+      }.toSeq)
+    }
     t
   }
 

@@ -64,6 +64,12 @@ private[spark] class EventLoggingListener(
   private val shouldOverwrite = sparkConf.getBoolean("spark.eventLog.overwrite", false)
   private val testing = sparkConf.getBoolean("spark.eventLog.testing", false)
   private val outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+  // To reduce the size of event logs, we can omit logging all of internal accumulables for metrics.
+  private val omitInternalAccumulables =
+    sparkConf.getBoolean("spark.eventLog.omitInternalAccumulables", false)
+  // To reduce the size of event logs, we can omit logging "Updated Block Statuses" metric.
+  private val omitUpdatedBlockStatuses =
+    sparkConf.getBoolean("spark.eventLog.omitUpdatedBlockStatuses", false)
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
     if (shouldCompress) {
@@ -131,7 +137,11 @@ private[spark] class EventLoggingListener(
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
-    val eventJson = JsonProtocol.sparkEventToJson(event)
+    val eventJson = JsonProtocol.sparkEventToJson(
+      event,
+      omitInternalAccumulables,
+      omitUpdatedBlockStatuses
+    )
     // scalastyle:off println
     writer.foreach(_.println(compact(render(eventJson))))
     // scalastyle:on println
