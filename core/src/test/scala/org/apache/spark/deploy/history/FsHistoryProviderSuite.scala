@@ -27,6 +27,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
@@ -570,6 +571,34 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       securityManager.checkUIViewPermissions("user5") should be (false)
     }
  }
+
+  test("log without read permission should be filtered out before actual reading") {
+    class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
+      var mergeApplicationListingCall = 0
+      override protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
+        super.mergeApplicationListing(fileStatus)
+        mergeApplicationListingCall += 1
+      }
+    }
+
+    val provider = new TestFsHistoryProvider
+    val log = newLogFile("app1", Some("app1"), inProgress = true)
+    writeFile(log, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
+         "test", Some("attempt1")),
+      SparkListenerApplicationEnd(System.currentTimeMillis()))
+
+    // Set the read permission to false to simulate access permission not allowed scenario.
+    log.setReadable(false)
+
+    updateAndCheck(provider) { list =>
+      list.size should be (0)
+    }
+
+    // Because we already filter out logs without read permission, so it will get a empty file list
+    // and not invoke mergeApplicationListing() call.
+    provider.mergeApplicationListingCall should be (0)
+  }
 
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
