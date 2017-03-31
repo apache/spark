@@ -43,7 +43,7 @@ class AnalysisException protected[sql] (
   }
 
   override def getMessage: String = {
-    val planAnnotation = Option(plan).map(p => s";\n$p").getOrElse("")
+    val planAnnotation = Option(plan).flatten.map(p => s";\n$p").getOrElse("")
     getSimpleMessage + planAnnotation
   }
 
