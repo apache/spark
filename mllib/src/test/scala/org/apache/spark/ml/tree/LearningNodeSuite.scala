@@ -36,10 +36,30 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     print("input:\n")
     print(TreeUtils.toDebugTreeString(root))
+    assert(true === hasPairsOfSameChildren(root))
   }
 }
 
 object LearningNodeSuite {
+
+  /** check if there exists pairs of leaf nodes with same prediction of the same parent. */
+  def hasPairsOfSameChildren(node: LearningNode): Boolean =
+    if (node.isLeaf) {
+      false
+    } else {
+      val left = node.leftChild.get
+      val right = node.rightChild.get
+
+      if (left.isLeaf && right.isLeaf) {
+        val leftPredict = left.stats.impurityCalculator.predict
+        val rightPredict = right.stats.impurityCalculator.predict
+
+        leftPredict == rightPredict
+      } else {
+        // shortcut if find.
+        hasPairsOfSameChildren(left) || hasPairsOfSameChildren(right)
+      }
+    }
 
   /** helper methods for constructing tree. */
   object TreeUtils {
