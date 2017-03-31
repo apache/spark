@@ -83,7 +83,7 @@ createExternalTable <- function(x, ...) {
 cacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  invisible(callJMethod(catalog, "cacheTable", tableName))
+  invisible(handledCallJMethod(catalog, "cacheTable", tableName))
 }
 
 cacheTable <- function(x, ...) {
@@ -112,7 +112,7 @@ cacheTable <- function(x, ...) {
 uncacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
-  invisible(callJMethod(catalog, "uncacheTable", tableName))
+  invisible(handledCallJMethod(catalog, "uncacheTable", tableName))
 }
 
 uncacheTable <- function(x, ...) {
