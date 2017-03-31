@@ -227,9 +227,12 @@ class FPGrowthModel private[ml] (
 
   /**
    * The transform method first generates the association rules according to the frequent itemsets.
-   * Then for each association rule, it will examine the input items against antecedents and
-   * summarize the consequents as prediction. The prediction column has the same data type as the
-   * input column(Array[T]) and will not contain existing items in the input column. The null
+   * Then for each transaction in itemsCol, the transform method will compare its items against the
+   * antecedents of each association rule. If the record contains all the antecedents of a
+   * specific association rule, the rule will be considered as applicable and its consequents
+   * will be added to the prediction result. The transform method will summarize the consequents
+   * from all the applicable rules as prediction. The prediction column has the same data type as
+   * the input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the itemsCol columns are treated as empty sets.
    * WARNING: internally it collects association rules to the driver and uses broadcast for
    * efficiency. This may bring pressure to driver memory for large set of association rules.
