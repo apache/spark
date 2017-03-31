@@ -46,7 +46,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  */
 object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
-  var uiTab: Option[ThriftServerTab] = _
+  var uiTab: Option[ThriftServerTab] = None
   var listener: HiveThriftServer2Listener = _
 
   /**
@@ -82,9 +82,7 @@ object HiveThriftServer2 extends Logging {
 
     ShutdownHookManager.addShutdownHook { () =>
       SparkSQLEnv.stop()
-      if (uiTab != null) {
-        uiTab.foreach(_.detach())
-      }
+      uiTab.foreach(_.detach())
     }
 
     val executionHive = HiveUtils.newClientForExecution(
