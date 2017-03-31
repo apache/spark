@@ -73,7 +73,8 @@ class PagedTableSuite extends SparkFunSuite {
       override def goButtonFormPath: String = ""
     }
 
-    assert(pagedTable.pageNavigation(1, 10, 1) === Nil)
+    assert(
+      (pagedTable.pageNavigation(1, 10, 1).head \\ "li").map(_.text.trim) === Seq("1"))
     assert(
       (pagedTable.pageNavigation(1, 10, 2).head \\ "li").map(_.text.trim) === Seq("1", "2", ">"))
     assert(
