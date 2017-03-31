@@ -18,6 +18,8 @@
 package org.apache.spark.ml.tree
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.tree.impurity.GiniCalculator
+import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
@@ -25,7 +27,49 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
  */
 class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
   import LearningNodeSuite._
+
+  test("check: create a new full binary tree.") {
+    val classA = TreeUtils.makeImpurityStats(2, 0)
+    val classB = TreeUtils.makeImpurityStats(2, 1)
+
+    val root = TreeUtils.fillBinaryTree(classA)(3)
+  }
 }
 
 object LearningNodeSuite {
+
+  /** helper methods for constructing tree. */
+  object TreeUtils {
+    import LearningNode._
+
+    /** construct a full binary tree with same impurityStats. */
+    def fillBinaryTree(impurityStats: ImpurityStats)(maxHeight: Int): LearningNode = {
+      def create(id: Int, height: Int): LearningNode = {
+        if (height == 0) {
+          new LearningNode(id, None, None, None, true, impurityStats)
+
+        } else {
+          val leftNode = create(leftChildIndex(id), height - 1)
+          val rightNode = create(rightChildIndex(id), height - 1)
+          val split = new ContinuousSplit(id, id)
+
+          new LearningNode(
+            id, Some(leftNode), Some(rightNode),
+            Some(split), false, impurityStats)
+        }
+      }
+
+      create(1, maxHeight)
+    }
+
+    /** create an ImpurityStats for classification. */
+    def makeImpurityStats(numClass: Int, predictClassId: Int): ImpurityStats = {
+      val stat = Array.fill(numClass)(0.0)
+      stat(predictClassId) = 1.0
+
+      val calculator = new GiniCalculator(stat)
+
+      new ImpurityStats(0.0, 0.0, calculator, null, null)
+    }
+  }
 }
