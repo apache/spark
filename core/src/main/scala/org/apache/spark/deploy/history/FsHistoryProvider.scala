@@ -334,6 +334,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               // every poll.
               logDebug(s"No permission to read $entry, ignoring.")
               false
+
+            case e: Exception =>
+              logDebug(s"Fail to get status of $entry", e)
+              false
           }
         }
         .flatMap { entry => Some(entry) }
