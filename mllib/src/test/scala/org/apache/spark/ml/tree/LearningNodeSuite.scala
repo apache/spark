@@ -33,9 +33,24 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val classB = TreeUtils.makeImpurityStats(2, 1)
 
     val root = TreeUtils.fillBinaryTree(classA)(3)
-
-    print("input:\n")
-    print(TreeUtils.toDebugTreeString(root))
+    NodeUtils.setAsLeaf(root, Array(5))
+    NodeUtils.setPredictValue(root, Array(6, 7, 12, 13, 14), classB)
+    /**
+       input:
+                8(0.0)
+             4--|
+                9(0.0)
+          2--|
+             5(0.0)
+       1--|
+                12(1.0)
+             6--|
+                13(1.0)
+          3--|
+                14(1.0)
+             7--|
+                15(0.0)
+      */
     assert(true === hasPairsOfSameChildren(root))
   }
 }
@@ -113,6 +128,43 @@ object LearningNodeSuite {
         prefix + id + "--|\n" +
         right
       }
+    }
+  }
+
+  /** helper methods used to operate nodes. */
+  object NodeUtils {
+    import LearningNode.getNode
+
+    /** assign the ImpurityStats to all nodes required in nodeIds. */
+    def setPredictValue(root: LearningNode,
+                        nodeIds: Array[Int],
+                        impurityStats: ImpurityStats): Unit =
+      nodeIds.foreach { id =>
+        val node = getNode(id, root)
+
+        node.stats = impurityStats
+      }
+
+    /** set internal nodes as leaf. */
+    def setAsLeaf(root: LearningNode, nodeIds: Array[Int]): Unit =
+      nodeIds.foreach { id =>
+        val node = getNode(id, root)
+
+        if (! node.isLeaf) {
+          removeChildren(node)
+          node.isLeaf = true
+        }
+      }
+
+    def removeChildren(learningNode: LearningNode): Unit = {
+      val left = learningNode.leftChild
+      val right = learningNode.rightChild
+
+      learningNode.leftChild = None
+      learningNode.rightChild = None
+
+      left.foreach(removeChildren)
+      right.foreach(removeChildren)
     }
   }
 }
