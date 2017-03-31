@@ -487,7 +487,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("StreamingQuery should be Serializable but cannot be used in executors") {
+  testQuietly("StreamingQuery should be Serializable but cannot be used in executors") {
     def startQuery(ds: Dataset[Int], queryName: String): StreamingQuery = {
       ds.writeStream
         .queryName(queryName)

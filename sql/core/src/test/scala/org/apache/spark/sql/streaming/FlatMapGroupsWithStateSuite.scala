@@ -21,6 +21,8 @@ import java.sql.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
@@ -574,11 +576,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       assertNumStateRows(total = 1, updated = 2),
 
       StopStream,
-      StartStream(ProcessingTime("1 second"), triggerClock = clock),
-      AdvanceManualClock(10 * 1000),
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
 
       AddData(inputData, "c"),
-      AdvanceManualClock(1 * 1000),
+      AdvanceManualClock(11 * 1000),
       CheckLastBatch(("b", "-1"), ("c", "1")),
       assertNumStateRows(total = 1, updated = 2),
 

@@ -426,7 +426,7 @@ class StreamSuite extends StreamTest {
       CheckAnswer((1, 2), (2, 2), (3, 2)))
   }
 
-  test("recover from a Spark v2.1 checkpoint") {
+  testQuietly("recover from a Spark v2.1 checkpoint") {
     var inputData: MemoryStream[Int] = null
     var query: DataStreamWriter[Row] = null
 
