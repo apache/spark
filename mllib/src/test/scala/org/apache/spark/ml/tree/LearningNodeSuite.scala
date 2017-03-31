@@ -52,6 +52,19 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
                 15(0.0)
       */
     assert(true === hasPairsOfSameChildren(root))
+
+    LearningNode.mergeChildrenWithSamePrediction(root)
+    /**
+       res:
+          2(0.0)
+       1--|
+             6(1.0)
+          3--|
+                14(1.0)
+             7--|
+                15(0.0)
+      */
+    assert(false === hasPairsOfSameChildren(root))
   }
 }
 
@@ -133,7 +146,7 @@ object LearningNodeSuite {
 
   /** helper methods used to operate nodes. */
   object NodeUtils {
-    import LearningNode.getNode
+    import LearningNode._
 
     /** assign the ImpurityStats to all nodes required in nodeIds. */
     def setPredictValue(root: LearningNode,
@@ -155,16 +168,5 @@ object LearningNodeSuite {
           node.isLeaf = true
         }
       }
-
-    def removeChildren(learningNode: LearningNode): Unit = {
-      val left = learningNode.leftChild
-      val right = learningNode.rightChild
-
-      learningNode.leftChild = None
-      learningNode.rightChild = None
-
-      left.foreach(removeChildren)
-      right.foreach(removeChildren)
-    }
   }
 }

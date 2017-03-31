@@ -342,6 +342,42 @@ private[tree] object LearningNode {
     new LearningNode(nodeIndex, None, None, None, false, null)
   }
 
+  /** merge the pair of leave of same parent recursively if their prediction is same.  */
+  def mergeChildrenWithSamePrediction(node: LearningNode): Unit = {
+    def checkAndMerge(node: LearningNode): Option[Double] = {
+      if (node.isLeaf) {
+        Some(node.stats.impurityCalculator.predict)
+      } else {
+        val left = checkAndMerge(node.leftChild.get)
+        val right = checkAndMerge(node.rightChild.get)
+
+        if (left.isDefined && right.isDefined && left == right) {
+          removeChildren(node)
+          node.isLeaf = true
+
+          Some(node.stats.impurityCalculator.predict)
+
+        } else {
+          None
+        }
+      }
+    }
+
+    checkAndMerge(node)
+  }
+
+  /** delete all children of one node. */
+  def removeChildren(learningNode: LearningNode): Unit = {
+    val left = learningNode.leftChild
+    val right = learningNode.rightChild
+
+    learningNode.leftChild = None
+    learningNode.rightChild = None
+
+    left.foreach(removeChildren)
+    right.foreach(removeChildren)
+  }
+
   // The below indexing methods were copied from spark.mllib.tree.model.Node
 
   /**
