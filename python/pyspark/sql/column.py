@@ -258,7 +258,7 @@ class Column(object):
                  """
     _like_doc = """ Return a Boolean :class:`Column` based on a SQL LIKE match.\n
                     :param other: a SQL LIKE pattern\n
-                    See :func:`pyspark.sql.Column.rlike` for a regex version
+                    See :func:`rlike` for a regex version
 
                     >>> df.filter( df.name.like('Al%') ).collect()
                     [Row(name=u'Alice', age=1)]
@@ -333,8 +333,25 @@ class Column(object):
     desc = _unary_op("desc", "Returns a sort expression based on the"
                              " descending order of the given column name.")
 
-    isNull = _unary_op("isNull", "True if the current expression is null.")
-    isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
+    _isNull_doc = ''' True if the current expression is null. Often combined with 
+                      :func:`DataFrame.filter` to select rows with null values.
+
+                      >>> df2.collect()
+                      [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
+                      >>> df2.filter( df2.height.isNull ).collect()
+                      [Row(name=u'Alice', height=None)]
+                  '''
+    _isNotNull_doc = ''' True if the current expression is null. Often combined with 
+                         :func:`DataFrame.filter` to select rows with non-null values.
+
+                         >>> df2.collect()
+                         [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
+                         >>> df2.filter( df2.height.isNotNull ).collect()
+                         [Row(name=u'Tom', height=80)]
+                     '''
+
+    isNull = _unary_op("isNull", _isNull_doc ) 
+    isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
     @since(1.3)
     def alias(self, *alias, **kwargs):
