@@ -21,7 +21,6 @@ import java.io.Closeable
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -39,11 +38,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{BaseSessionStateBuilder, CatalogImpl, SessionState, SessionStateBuilder, SharedState}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
@@ -61,21 +60,28 @@ import org.apache.spark.util.Utils
  * The builder can also be used to create a new session:
  *
  * {{{
- *   SparkSession.builder()
+ *   SparkSession.builder
  *     .master("local")
  *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value")
  *     .getOrCreate()
  * }}}
+ *
+ * @param sparkContext The Spark context associated with this Spark session.
+ * @param existingSharedState If supplied, use the existing shared state
+ *                            instead of creating a new one.
+ * @param parentSessionState If supplied, inherit all session state (i.e. temporary
+ *                            views, SQL config, UDFs etc) from parent.
  */
 @InterfaceStability.Stable
 class SparkSession private(
     @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState])
+    @transient private val existingSharedState: Option[SharedState],
+    @transient private val parentSessionState: Option[SessionState])
   extends Serializable with Closeable with Logging { self =>
 
   private[sql] def this(sc: SparkContext) {
-    this(sc, None)
+    this(sc, None, None)
   }
 
   sparkContext.assertNotStopped()
@@ -108,6 +114,7 @@ class SparkSession private(
   /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
+   * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
    *
    * This is internal to Spark and there is no guarantee on interface stability.
    *
@@ -116,9 +123,13 @@ class SparkSession private(
   @InterfaceStability.Unstable
   @transient
   lazy val sessionState: SessionState = {
-    SparkSession.reflect[SessionState, SparkSession](
-      SparkSession.sessionStateClassName(sparkContext.conf),
-      self)
+    parentSessionState
+      .map(_.clone(this))
+      .getOrElse {
+        SparkSession.instantiateSessionState(
+          SparkSession.sessionStateClassName(sparkContext.conf),
+          self)
+      }
   }
 
   /**
@@ -183,7 +194,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def udf: UDFRegistration = sessionState.udf
+  def udf: UDFRegistration = sessionState.udfRegistration
 
   /**
    * :: Experimental ::
@@ -208,7 +219,25 @@ class SparkSession private(
    * @since 2.0.0
    */
   def newSession(): SparkSession = {
-    new SparkSession(sparkContext, Some(sharedState))
+    new SparkSession(sparkContext, Some(sharedState), parentSessionState = None)
+  }
+
+  /**
+   * Create an identical copy of this `SparkSession`, sharing the underlying `SparkContext`
+   * and shared state. All the state of this session (i.e. SQL configurations, temporary tables,
+   * registered functions) is copied over, and the cloned session is set up with the same shared
+   * state as this session. The cloned session is independent of this session, that is, any
+   * non-global change in either session is not reflected in the other.
+   *
+   * @note Other than the `SparkContext`, all shared state is initialized lazily.
+   * This method will force the initialization of the shared state to ensure that parent
+   * and child sessions are set up with the same shared state. If the underlying catalog
+   * implementation is Hive, this will initialize the metastore, which may take some time.
+   */
+  private[sql] def cloneSession(): SparkSession = {
+    val result = new SparkSession(sparkContext, Some(sharedState), Some(sessionState))
+    result.sessionState // force copy of SessionState
+    result
   }
 
 
@@ -961,26 +990,28 @@ object SparkSession {
   /** Reference to the root SparkSession. */
   private val defaultSession = new AtomicReference[SparkSession]
 
-  private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
+  private val HIVE_SESSION_STATE_BUILDER_CLASS_NAME =
+    "org.apache.spark.sql.hive.HiveSessionStateBuilder"
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => HIVE_SESSION_STATE_CLASS_NAME
-      case "in-memory" => classOf[SessionState].getCanonicalName
+      case "hive" => HIVE_SESSION_STATE_BUILDER_CLASS_NAME
+      case "in-memory" => classOf[SessionStateBuilder].getCanonicalName
     }
   }
 
   /**
-   * Helper method to create an instance of [[T]] using a single-arg constructor that
-   * accepts an [[Arg]].
+   * Helper method to create an instance of `SessionState` based on `className` from conf.
+   * The result is either `SessionState` or a Hive based `SessionState`.
    */
-  private def reflect[T, Arg <: AnyRef](
+  private def instantiateSessionState(
       className: String,
-      ctorArg: Arg)(implicit ctorArgTag: ClassTag[Arg]): T = {
+      sparkSession: SparkSession): SessionState = {
     try {
+      // invoke `new [Hive]SessionStateBuilder(SparkSession, Option[SessionState])`
       val clazz = Utils.classForName(className)
-      val ctor = clazz.getDeclaredConstructor(ctorArgTag.runtimeClass)
-      ctor.newInstance(ctorArg).asInstanceOf[T]
+      val ctor = clazz.getConstructors.head
+      ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
@@ -992,7 +1023,7 @@ object SparkSession {
    */
   private[spark] def hiveClassesArePresent: Boolean = {
     try {
-      Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
+      Utils.classForName(HIVE_SESSION_STATE_BUILDER_CLASS_NAME)
       Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
       true
     } catch {

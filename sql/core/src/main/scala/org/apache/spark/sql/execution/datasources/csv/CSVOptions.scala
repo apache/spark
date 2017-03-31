@@ -24,9 +24,9 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs, ParseModes}
+import org.apache.spark.sql.catalyst.util._
 
-private[csv] class CSVOptions(
+class CSVOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
@@ -82,7 +82,8 @@ private[csv] class CSVOptions(
 
   val delimiter = CSVUtils.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val parseMode: ParseMode =
+    parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val charset = parameters.getOrElse("encoding",
     parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
@@ -92,17 +93,13 @@ private[csv] class CSVOptions(
 
   val headerFlag = getBool("header")
   val inferSchemaFlag = getBool("inferSchema")
-  val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
-  val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
+  val ignoreLeadingWhiteSpaceInRead = getBool("ignoreLeadingWhiteSpace", default = false)
+  val ignoreTrailingWhiteSpaceInRead = getBool("ignoreTrailingWhiteSpace", default = false)
 
-  // Parse mode flags
-  if (!ParseModes.isValidMode(parseMode)) {
-    logWarning(s"$parseMode is not a valid parse mode. Using ${ParseModes.DEFAULT}.")
-  }
-
-  val failFast = ParseModes.isFailFastMode(parseMode)
-  val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
-  val permissive = ParseModes.isPermissiveMode(parseMode)
+  // For write, both options were `true` by default. We leave it as `true` for
+  // backwards compatibility.
+  val ignoreLeadingWhiteSpaceFlagInWrite = getBool("ignoreLeadingWhiteSpace", default = true)
+  val ignoreTrailingWhiteSpaceFlagInWrite = getBool("ignoreTrailingWhiteSpace", default = true)
 
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
@@ -120,7 +117,8 @@ private[csv] class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = TimeZone.getTimeZone(parameters.getOrElse("timeZone", defaultTimeZoneId))
+  val timeZone: TimeZone = TimeZone.getTimeZone(
+    parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
   val dateFormat: FastDateFormat =
@@ -138,8 +136,6 @@ private[csv] class CSVOptions(
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
-  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
-
   val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
@@ -153,6 +149,8 @@ private[csv] class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
+    writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
+    writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
     writerSettings.setEmptyValue(nullValue)
     writerSettings.setSkipEmptyLines(true)
@@ -168,8 +166,8 @@ private[csv] class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
-    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlag)
-    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlag)
+    settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
+    settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
     settings.setInputBufferSize(inputBufferSize)
     settings.setMaxColumns(maxColumns)

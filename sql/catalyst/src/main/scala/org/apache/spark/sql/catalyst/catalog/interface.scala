@@ -113,9 +113,15 @@ case class CatalogTablePartition(
    */
   def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
     val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
-    val timeZoneId = caseInsensitiveProperties.getOrElse("timeZone", defaultTimeZondId)
+    val timeZoneId = caseInsensitiveProperties.getOrElse(
+      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
     InternalRow.fromSeq(partitionSchema.map { field =>
-      Cast(Literal(spec(field.name)), field.dataType, Option(timeZoneId)).eval()
+      val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+        null
+      } else {
+        spec(field.name)
+      }
+      Cast(Literal(partValue), field.dataType, Option(timeZoneId)).eval()
     })
   }
 }
@@ -163,6 +169,11 @@ case class BucketSpec(
  * @param tracksPartitionsInCatalog whether this table's partition metadata is stored in the
  *                                  catalog. If false, it is inferred automatically based on file
  *                                  structure.
+ * @param schemaPreservesCase Whether or not the schema resolved for this table is case-sensitive.
+ *                           When using a Hive Metastore, this flag is set to false if a case-
+ *                           sensitive schema was unable to be read from the table properties.
+ *                           Used to trigger case-sensitive schema inference at query time, when
+ *                           configured.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -180,7 +191,8 @@ case class CatalogTable(
     viewText: Option[String] = None,
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty,
-    tracksPartitionsInCatalog: Boolean = false) {
+    tracksPartitionsInCatalog: Boolean = false,
+    schemaPreservesCase: Boolean = true) {
 
   import CatalogTable._
 

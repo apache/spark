@@ -32,6 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.functions._
@@ -708,10 +709,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     withTempPath { dir =>
-      df.write.option("timeZone", "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option("timeZone", "GMT").load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -749,10 +751,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     withTempPath { dir =>
-      df.write.option("timeZone", "GMT")
+      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option("timeZone", "GMT").load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 

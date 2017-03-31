@@ -175,11 +175,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
     val environment = Environment.newBuilder()
-    val extraClassPath = conf.getOption("spark.executor.extraClassPath")
-    extraClassPath.foreach { cp =>
-      environment.addVariables(
-        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
-    }
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     // Set the environment variable through a command prefix
@@ -408,7 +403,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
-            .setName("Task " + taskId)
+            .setName(s"${sc.appName} $taskId")
+
           taskBuilder.addAllResources(resourcesToUse.asJava)
           taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 

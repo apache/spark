@@ -387,8 +387,8 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // How many values should be generated in the next batch.
     val nextBatchTodo = ctx.freshName("nextBatchTodo")
 
-    // The default size of a batch.
-    val batchSize = 1000L
+    // The default size of a batch, which must be positive integer
+    val batchSize = 1000
 
     ctx.addNewFunction("initRange",
       s"""
@@ -434,6 +434,15 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val input = ctx.freshName("input")
     // Right now, Range is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+
+    val localIdx = ctx.freshName("localIdx")
+    val localEnd = ctx.freshName("localEnd")
+    val range = ctx.freshName("range")
+    val shouldStop = if (isShouldStopRequired) {
+      s"if (shouldStop()) { $number = $value + ${step}L; return; }"
+    } else {
+      "// shouldStop check is eliminated"
+    }
     s"""
       | // initialize Range
       | if (!$initTerm) {
@@ -442,11 +451,15 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | }
       |
       | while (true) {
-      |   while ($number != $batchEnd) {
-      |     long $value = $number;
-      |     $number += ${step}L;
-      |     ${consume(ctx, Seq(ev))}
-      |     if (shouldStop()) return;
+      |   long $range = $batchEnd - $number;
+      |   if ($range != 0L) {
+      |     int $localEnd = (int)($range / ${step}L);
+      |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
+      |       long $value = ((long)$localIdx * ${step}L) + $number;
+      |       ${consume(ctx, Seq(ev))}
+      |       $shouldStop
+      |     }
+      |     $number = $batchEnd;
       |   }
       |
       |   if ($taskContext.isInterrupted()) {
@@ -615,13 +628,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         longMetric("dataSize") += dataSize
 
-        // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
-        // directly without setting an execution id. We should be tolerant to it.
-        if (executionId != null) {
-          sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
-            executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
-        }
-
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         rows
       }
     }(SubqueryExec.executionContext)

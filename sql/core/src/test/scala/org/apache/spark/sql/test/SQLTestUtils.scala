@@ -18,13 +18,14 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.net.URI
+import java.nio.file.Files
 import java.util.UUID
 
 import scala.language.implicitConversions
-import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -120,6 +121,21 @@ private[sql] trait SQLTestUtils
     val path = Utils.createTempDir()
     path.delete()
     try f(path) finally Utils.deleteRecursively(path)
+  }
+
+  /**
+   * Copy file in jar's resource to a temp file, then pass it to `f`.
+   * This function is used to make `f` can use the path of temp file(e.g. file:/), instead of
+   * path of jar's resource which starts with 'jar:file:/'
+   */
+  protected def withResourceTempPath(resourcePath: String)(f: File => Unit): Unit = {
+    val inputStream =
+      Thread.currentThread().getContextClassLoader.getResourceAsStream(resourcePath)
+    withTempDir { dir =>
+      val tmpFile = new File(dir, "tmp")
+      Files.copy(inputStream, tmpFile.toPath)
+      f(tmpFile)
+    }
   }
 
   /**
@@ -293,6 +309,17 @@ private[sql] trait SQLTestUtils
     } else {
       test(name) { runOnThread() }
     }
+  }
+
+  /**
+   * This method is used to make the given path qualified, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  def makeQualifiedPath(path: String): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+    fs.makeQualified(hadoopPath).toUri
   }
 }
 

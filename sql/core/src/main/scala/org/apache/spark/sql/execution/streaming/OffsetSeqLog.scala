@@ -55,10 +55,8 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines.next()
-    if (version != OffsetSeqLog.VERSION) {
-      throw new IllegalStateException(s"Unknown log version: ${version}")
-    }
+
+    val version = parseVersion(lines.next(), OffsetSeqLog.VERSION)
 
     // read metadata
     val metadata = lines.next().trim match {
@@ -70,7 +68,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
 
   override protected def serialize(offsetSeq: OffsetSeq, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(OffsetSeqLog.VERSION.getBytes(UTF_8))
+    out.write(("v" + OffsetSeqLog.VERSION).getBytes(UTF_8))
 
     // write metadata
     out.write('\n')
@@ -88,6 +86,6 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
 }
 
 object OffsetSeqLog {
-  private val VERSION = "v1"
+  private[streaming] val VERSION = 1
   private val SERIALIZED_VOID_OFFSET = "-"
 }

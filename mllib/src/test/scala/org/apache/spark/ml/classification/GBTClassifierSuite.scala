@@ -374,7 +374,8 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
 
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
   }
 }
 

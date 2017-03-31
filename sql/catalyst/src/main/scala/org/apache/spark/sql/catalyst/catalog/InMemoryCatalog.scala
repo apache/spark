@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -126,7 +127,7 @@ class InMemoryCatalog(
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
         if (catalog(db).tables.nonEmpty) {
-          throw new AnalysisException(s"Database '$db' is not empty. One or more tables exist.")
+          throw new AnalysisException(s"Database $db is not empty. One or more tables exist.")
         }
         if (catalog(db).functions.nonEmpty) {
           throw new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
@@ -295,6 +296,15 @@ class InMemoryCatalog(
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
+  }
+
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      schema: StructType): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+    catalog(db).tables(table).table = origTable.copy(schema = schema)
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {

@@ -236,19 +236,25 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
 
 /** Helper methods for storage-related objects. */
 private[spark] object StorageUtils extends Logging {
-
   /**
-   * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that
-   * might cause errors if one attempts to read from the unmapped buffer, but it's better than
-   * waiting for the GC to find it because that could lead to huge numbers of open files. There's
-   * unfortunately no standard API to do this.
+   * Attempt to clean up a ByteBuffer if it is direct or memory-mapped. This uses an *unsafe* Sun
+   * API that will cause errors if one attempts to read from the disposed buffer. However, neither
+   * the bytes allocated to direct buffers nor file descriptors opened for memory-mapped buffers put
+   * pressure on the garbage collector. Waiting for garbage collection may lead to the depletion of
+   * off-heap memory or huge numbers of open files. There's unfortunately no standard API to
+   * manually dispose of these kinds of buffers.
    */
   def dispose(buffer: ByteBuffer): Unit = {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
-      logTrace(s"Unmapping $buffer")
-      if (buffer.asInstanceOf[DirectBuffer].cleaner() != null) {
-        buffer.asInstanceOf[DirectBuffer].cleaner().clean()
-      }
+      logTrace(s"Disposing of $buffer")
+      cleanDirectBuffer(buffer.asInstanceOf[DirectBuffer])
+    }
+  }
+
+  private def cleanDirectBuffer(buffer: DirectBuffer) = {
+    val cleaner = buffer.cleaner()
+    if (cleaner != null) {
+      cleaner.clean()
     }
   }
 

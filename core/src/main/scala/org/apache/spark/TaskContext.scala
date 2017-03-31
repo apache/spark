@@ -105,7 +105,9 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Adds a (Java friendly) listener to be executed on task completion.
-   * This will be called in all situation - success, failure, or cancellation.
+   * This will be called in all situations - success, failure, or cancellation. Adding a listener
+   * to an already completed task will result in that listener being called immediately.
+   *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    *
    * Exceptions thrown by the listener will result in failure of the task.
@@ -114,7 +116,9 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Adds a listener in the form of a Scala closure to be executed on task completion.
-   * This will be called in all situations - success, failure, or cancellation.
+   * This will be called in all situations - success, failure, or cancellation. Adding a listener
+   * to an already completed task will result in that listener being called immediately.
+   *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    *
    * Exceptions thrown by the listener will result in failure of the task.
@@ -126,14 +130,14 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
-   * Adds a listener to be executed on task failure.
-   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   * Adds a listener to be executed on task failure. Adding a listener to an already failed task
+   * will result in that listener being called immediately.
    */
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /**
-   * Adds a listener to be executed on task failure.
-   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task
+   * will result in that listener being called immediately.
    */
   def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
     addTaskFailureListener(new TaskFailureListener {
@@ -179,6 +183,16 @@ abstract class TaskContext extends Serializable {
    */
   @DeveloperApi
   def getMetricsSources(sourceName: String): Seq[Source]
+
+  /**
+   * If the task is interrupted, throws TaskKilledException with the reason for the interrupt.
+   */
+  private[spark] def killTaskIfInterrupted(): Unit
+
+  /**
+   * If the task is interrupted, the reason this task was killed, otherwise None.
+   */
+  private[spark] def getKillReason(): Option[String]
 
   /**
    * Returns the manager for this task's managed memory.

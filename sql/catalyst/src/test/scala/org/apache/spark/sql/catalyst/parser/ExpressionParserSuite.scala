@@ -26,7 +26,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ * Test basic expression parsing.
+ * If the type of an expression is supported it should be tested here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
@@ -209,6 +210,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    assertEqual("foo(a as x, b as e)", 'foo.function('a as 'x, 'b as 'e))
   }
 
   test("window function expressions") {
@@ -278,6 +280,7 @@ class ExpressionParserSuite extends PlanTest {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
     assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
   }
 
   test("scalar sub-query") {
