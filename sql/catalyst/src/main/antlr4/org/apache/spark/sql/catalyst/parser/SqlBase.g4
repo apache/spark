@@ -88,11 +88,11 @@ statement
     | ALTER TABLE tableIdentifier
         ADD COLUMNS '(' columns=colTypeList ')'                        #addTableColumns
     | ALTER (TABLE | VIEW) from=tableIdentifier
-        RENAME TO to=tableIdentifier                                   #renameTable
+        RENAME TO to=tableIdentifier                                   #renameTableOrView
     | ALTER (TABLE | VIEW) tableIdentifier
-        SET TBLPROPERTIES tablePropertyList                            #setTableProperties
+        SET TBLPROPERTIES tablePropertyList                            #setTableOrViewProperties
     | ALTER (TABLE | VIEW) tableIdentifier
-        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableProperties
+        UNSET TBLPROPERTIES (IF EXISTS)? tablePropertyList             #unsetTableOrViewProperties
     | ALTER TABLE tableIdentifier partitionSpec?
         CHANGE COLUMN? identifier colType colPosition?                 #changeColumn
     | ALTER TABLE tableIdentifier (partitionSpec)?
@@ -102,17 +102,17 @@ statement
     | ALTER TABLE tableIdentifier ADD (IF NOT EXISTS)?
         partitionSpecLocation+                                         #addTablePartition
     | ALTER VIEW tableIdentifier ADD (IF NOT EXISTS)?
-        partitionSpec+                                                 #addTablePartition
+        partitionSpec+                                                 #addViewPartition
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
     | ALTER VIEW tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
+        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropViewPartitions
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
-    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
+    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
         VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
