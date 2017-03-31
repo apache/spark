@@ -488,8 +488,14 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
           case a: AddData =>
             try {
-              // Add data and get the source where it was added, and the expected offset of the
-              // added data.
+
+              // If the query is running with manual clock, then wait for the stream execution
+              // thread to start waiting for the clock to increment. This is needed so that we
+              // are adding data when there is no trigger that is active. This would ensure that
+              // the data gets deterministically added to the next batch triggered after the manual
+              // clock is incremented in following AdvanceManualClock. This avoid race conditions
+              // between the test thread and the stream execution thread in tests using manual
+              // clock.
               if (currentStream != null &&
                   currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
                 val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
@@ -502,6 +508,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                   failTest("Query terminated while synchronizing with manual clock")
                 }
               }
+              // Add data
               val queryToUse = Option(currentStream).orElse(Option(lastStream))
               val (source, offset) = a.addData(queryToUse)
 

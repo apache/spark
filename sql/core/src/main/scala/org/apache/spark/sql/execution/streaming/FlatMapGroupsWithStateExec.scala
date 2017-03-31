@@ -68,7 +68,7 @@ case class FlatMapGroupsWithStateExec(
     val encSchemaAttribs = stateEncoder.schema.toAttributes
     if (isTimeoutEnabled) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
   }
-  // Converter for translating state Java objects to rows
+  // Get the serializer for the state, taking into account whether we need to save timestamps
   private val stateSerializer = {
     val encoderSerializer = stateEncoder.namedExpressions
     if (isTimeoutEnabled) {
@@ -77,6 +77,9 @@ case class FlatMapGroupsWithStateExec(
       encoderSerializer
     }
   }
+  // Get the deserializer for the state. Note that this must be done in the driver, as
+  // resolving and binding of deserializer expressions to the encoded type can be safely done
+  // only in the driver.
   private val stateDeserializer = stateEncoder.resolveAndBind().deserializer
 
 
