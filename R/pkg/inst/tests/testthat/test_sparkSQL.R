@@ -687,6 +687,9 @@ test_that("test cache, uncache and clearCache", {
   uncacheTable("table1")
   clearCache()
   expect_true(dropTempView("table1"))
+
+  expect_error(uncacheTable("foo"),
+       "Error in uncacheTable : no such table - Table or view 'foo' not found in database 'default'")
 })
 
 test_that("insertInto() on a registered table", {
@@ -3009,12 +3012,12 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
   expect_equal(collect(c)[[1]][[1]], "speed")
   expect_error(listColumns("foo", "default"),
-       "Error in listColumns : no such table - Table or view 'foo' not found in database 'default'")
+       "Error in listColumns : analysis error - Table 'foo' does not exist in database 'default'")
 
   dropTempView("cars")
 
   f <- listFunctions()
-  expect_equal(nrow(f) >= 200) # 250
+  expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
                c("name", "database", "description", "className", "isTemporary"))
   expect_equal(take(orderBy(f, "className"), 1)$className,

@@ -49,7 +49,7 @@ createExternalTable.default <- function(tableName, path = NULL, source = NULL, s
     options[["path"]] <- path
   }
   catalog <- callJMethod(sparkSession, "catalog")
-  if (!is.null(schema)) {
+  if (is.null(schema)) {
     sdf <- callJMethod(catalog, "createExternalTable", tableName, source, options)
   } else {
     sdf <- callJMethod(catalog, "createExternalTable", tableName, source, schema$jobj, options)
