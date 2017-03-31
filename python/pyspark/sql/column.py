@@ -251,32 +251,34 @@ class Column(object):
 
     # string methods
     _rlike_doc = """ Return a Boolean :class:`Column` based on a regex match.\n
-                :param other: an extended regex expression\n
+                     :param other: an extended regex expression
 
-                >>> df.filter( df.name.rlike('ice$') ).collect()
-                [Row(name=u'Alice', age=1)]
-                """
-    _like_doc = """ Return a Boolean :class:`Column` based on a SQL LIKE match.\n
-               :param other: a SQL LIKE pattern\n
-               See :func:`pyspark.sql.Column.rlike` for a regex version\n
-
-               >>> df.filter( df.name.like('Al%') ).collect()
-               [Row(name=u'Alice', age=1)]
-                """
-    _startswith_doc = ''' Return a Boolean :class:`Column` based on a string match.\n
-                     :param other: string at end of line (do not use a regex `^`)\n
-                     >>> df.filter(df.name.startswith('Al')).collect()
+                     >>> df.filter( df.name.rlike('ice$') ).collect()
                      [Row(name=u'Alice', age=1)]
-                     >>> df.filter(df.name.startswith('^Al')).collect()
-                     []
-                     '''
-    _endswith_doc = ''' Return a Boolean :class:`Column` based on matching end of string.\n
-                   :param other: string at end of line (do not use a regex `$`)\n
-                   >>> df.filter(df.name.endswith('ice')).collect()
-                   [Row(name=u'Alice', age=1)]
-                   >>> df.filter(df.name.endswith('ice$')).collect()
-                   []
-                   '''
+                 """
+    _like_doc = """ Return a Boolean :class:`Column` based on a SQL LIKE match.\n
+                    :param other: a SQL LIKE pattern\n
+                    See :func:`pyspark.sql.Column.rlike` for a regex version
+
+                    >>> df.filter( df.name.like('Al%') ).collect()
+                    [Row(name=u'Alice', age=1)]
+                """
+    _startswith_doc = """ Return a Boolean :class:`Column` based on a string match.\n
+                          :param other: string at end of line (do not use a regex `^`)
+
+                          >>> df.filter(df.name.startswith('Al')).collect()
+                          [Row(name=u'Alice', age=1)]
+                          >>> df.filter(df.name.startswith('^Al')).collect()
+                          []
+                     """
+    _endswith_doc = """ Return a Boolean :class:`Column` based on matching end of string.\n
+                        :param other: string at end of line (do not use a regex `$`)
+
+                        >>> df.filter(df.name.endswith('ice')).collect()
+                        [Row(name=u'Alice', age=1)]
+                        >>> df.filter(df.name.endswith('ice$')).collect()
+                        []
+                    """
 
     contains = _bin_op("contains")
     rlike = _bin_op("rlike", _rlike_doc)
