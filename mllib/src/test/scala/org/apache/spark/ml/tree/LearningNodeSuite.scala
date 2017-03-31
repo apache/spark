@@ -33,6 +33,9 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
     val classB = TreeUtils.makeImpurityStats(2, 1)
 
     val root = TreeUtils.fillBinaryTree(classA)(3)
+
+    print("input:\n")
+    print(TreeUtils.toDebugTreeString(root))
   }
 }
 
@@ -70,6 +73,26 @@ object LearningNodeSuite {
       val calculator = new GiniCalculator(stat)
 
       new ImpurityStats(0.0, 0.0, calculator, null, null)
+    }
+
+    /** Full description of model */
+    def toDebugTreeString(node: LearningNode, indent: Int = 0): String = {
+      val prefix: String = "   " * indent
+      val id = node.id
+
+      if (node.isLeaf) {
+        val predict = node.stats.impurityCalculator.predict
+
+        prefix + id + "(" + predict + ")" + "\n"
+
+      } else {
+        val left = toDebugTreeString(node.leftChild.get, indent + 1)
+        val right = toDebugTreeString(node.rightChild.get, indent + 1)
+
+        left +
+        prefix + id + "--|\n" +
+        right
+      }
     }
   }
 }
