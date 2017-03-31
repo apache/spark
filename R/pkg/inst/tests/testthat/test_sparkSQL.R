@@ -2825,7 +2825,7 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 
   # more tests for SPARK-16538
   createOrReplaceTempView(df, "table")
-  SparkR::tables()
+  SparkR::listTables()
   SparkR::sql("SELECT 1")
   suppressWarnings(SparkR::sql(sqlContext, "SELECT * FROM table"))
   suppressWarnings(SparkR::dropTempTable(sqlContext, "table"))
