@@ -29,6 +29,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -44,6 +45,7 @@ import org.apache.spark.util.random.RandomSampler
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import ParserUtils._
+  val sqlConf = SimpleCatalystConf(caseSensitiveAnalysis = false)
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -674,11 +676,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
   /**
    * Create a table-valued function call with arguments, e.g. range(1000)
-   */
+  */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    UnresolvedTableValuedFunction(ctx.identifier.getText, ctx.expression.asScala.map(expression))
+    UnresolvedTableValuedFunction(sqlConf,
+      ctx.identifier.getText,
+      ctx.expression.asScala.map(expression))
   }
+
 
   /**
    * Create an inline table (a virtual table in Hive parlance).

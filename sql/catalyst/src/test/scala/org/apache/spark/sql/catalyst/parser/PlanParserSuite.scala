@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedGenerator, UnresolvedInlineTable, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -33,6 +34,8 @@ class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
+  override val conf = SimpleCatalystConf(caseSensitiveAnalysis = false)
+
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     comparePlans(parsePlan(sqlCommand), plan)
@@ -50,6 +53,14 @@ class PlanParserSuite extends PlanTest {
     assertEqual("sELEct * FroM a", plan)
     assertEqual("select * fRoM a", plan)
     assertEqual("SELECT * FROM a", plan)
+  }
+
+
+  test("case insensitive range queries") {
+    val plan = UnresolvedTableValuedFunction(conf, "range", Literal(2) :: Nil).select(star())
+    assertEqual("select * from rAngE(2)", plan)
+    assertEqual("select * from RaNgE(2)", plan)
+    assertEqual("select * from RANGE(2)", plan)
   }
 
   test("explain") {
@@ -468,22 +479,9 @@ class PlanParserSuite extends PlanTest {
   test("table valued function") {
     assertEqual(
       "select * from range(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
+      UnresolvedTableValuedFunction(conf, "range", Literal(2) :: Nil).select(star()))
   }
 
-  test("table valued function case insensitive") {
-    assertEqual(
-      "select * from RangE(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-
-    assertEqual(
-      "select * from rAnGe(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-
-    assertEqual(
-      "select * from RANGE(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-  }
 
   test("inline table") {
     assertEqual("values 1, 2, 3, 4",
