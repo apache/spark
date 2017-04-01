@@ -620,40 +620,45 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       // Left < Right or Left <= Right
       // - no overlap:
       //      minRight           maxRight     minLeft       maxLeft
-      // 0 ------+------------------+------------+-------------+------->
-      // - complete overlap:
+      // --------+------------------+------------+-------------+------->
+      // - complete overlap: (If null values exists, we set it to partial overlap.)
       //      minLeft            maxLeft      minRight      maxRight
-      // 0 ------+------------------+------------+-------------+------->
+      // --------+------------------+------------+-------------+------->
       case _: LessThan =>
-        (minLeft >= maxRight, maxLeft < minRight)
+        (minLeft >= maxRight,
+          maxLeft < minRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
       case _: LessThanOrEqual =>
-        (minLeft > maxRight, maxLeft <= minRight)
+        (minLeft > maxRight,
+          maxLeft <= minRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
 
       // Left > Right or Left >= Right
       // - no overlap:
       //      minLeft            maxLeft      minRight      maxRight
-      // 0 ------+------------------+------------+-------------+------->
-      // - complete overlap:
+      // --------+------------------+------------+-------------+------->
+      // - complete overlap: (If null values exists, we set it to partial overlap.)
       //      minRight           maxRight     minLeft       maxLeft
-      // 0 ------+------------------+------------+-------------+------->
+      // --------+------------------+------------+-------------+------->
       case _: GreaterThan =>
-        (maxLeft <= minRight, minLeft > maxRight)
+        (maxLeft <= minRight,
+          minLeft > maxRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
       case _: GreaterThanOrEqual =>
-        (maxLeft < minRight, minLeft >= maxRight)
+        (maxLeft < minRight,
+          minLeft >= maxRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
 
       // Left = Right or Left <=> Right
       // - no overlap:
       //      minLeft            maxLeft      minRight      maxRight
-      // 0 ------+------------------+------------+-------------+------->
+      // --------+------------------+------------+-------------+------->
       //      minRight           maxRight     minLeft       maxLeft
-      // 0 ------+------------------+------------+-------------+------->
+      // --------+------------------+------------+-------------+------->
       // - complete overlap:
       //      minLeft            maxLeft
       //      minRight           maxRight
-      // 0 ------+------------------+------->
+      // --------+------------------+------->
       case _: EqualTo =>
         ((maxLeft < minRight) || (maxRight < minLeft),
-          (minLeft == minRight) && (maxLeft == maxRight))
+          (minLeft == minRight) && (maxLeft == maxRight) && colStatLeft.nullCount == 0
+            && colStatRight.nullCount == 0)
       case _: EqualNullSafe =>
         // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
         // If null values exists, we set it to partial overlap.
@@ -695,13 +700,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             // If not, we need to adjust it to narrow the range.
             // Left < Right or Left <= Right
             //      minRight     <     minLeft
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //              filtered      ^
             //                            |
             //                        newMinRight
             //
             //      maxRight     <     maxLeft
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //         ^    filtered
             //         |
             //     newMaxLeft
@@ -713,13 +718,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             // If not, we need to adjust it to narrow the range.
             // Left > Right or Left >= Right
             //      minLeft     <      minRight
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //              filtered      ^
             //                            |
             //                        newMinLeft
             //
             //      maxLeft     <      maxRight
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //         ^    filtered
             //         |
             //     newMaxRight
@@ -731,25 +736,25 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             // set the new max to the smaller max value.
             // Left = Right or Left <=> Right
             //      minLeft     <      minRight
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //              filtered      ^
             //                            |
             //                        newMinLeft
             //
             //      minRight    <=     minLeft
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //              filtered      ^
             //                            |
             //                        newMinRight
             //
             //      maxLeft     <      maxRight
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //         ^    filtered
             //         |
             //     newMaxRight
             //
             //      maxRight    <=     maxLeft
-            // 0 ------+******************+------->
+            // --------+******************+------->
             //         ^    filtered
             //         |
             //     newMaxLeft
