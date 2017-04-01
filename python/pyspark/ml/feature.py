@@ -2835,16 +2835,16 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("findSynonyms", word, num)
 
     @since("2.2.0")
-    def findSynonymsArray(self, wordVector, num):
+    def findSynonymsArray(self, word, num):
         """
         Find "num" number of words closest in similarity to "word".
         word can be a string or vector representation.
-        Returns a dataframe with two fields word and similarity (which
+        Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        # if not isinstance(wordVector, basestring):
-        #     word = _convert_to_vector(word)
-        return self._call_java("findSynonymsArray", wordVector, num)
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        return self._call_java("findSynonymsArray", word, num)
 
 
 @inherit_doc

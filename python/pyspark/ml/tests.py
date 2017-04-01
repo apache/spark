@@ -388,21 +388,6 @@ class ParamTests(PySparkTestCase):
         # Check windowSize is set properly
         self.assertEqual(model.getWindowSize(), 6)
 
-    def test_findSynonyms(self):
-        sent = ("a b " * 100 + "a c " * 10).split(" ")
-        doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
-        word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
-        model = word2Vec.fit(doc)
-        model.getVectors().show()
-
-        from pyspark.sql.functions import format_number as fmt
-        from pyspark.ml.linalg import Vector
-        from pyspark.ml.linalg import Vectors
-        model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
-
-        # model.findSynonymsArray(["a"], 2).select("word", fmt("similarity", 5).alias("similarity")).show()
-        model.findSynonymsArray(Vectors.dense("a"), 2).select("word", fmt("similarity", 5).alias("similarity")).show()
-
     def test_copy_param_extras(self):
         tp = TestParams(seed=42)
         extra = {tp.getParam(TestParams.inputCol.name): "copy_input"}
@@ -540,6 +525,18 @@ class FeatureTests(SparkSessionTestCase):
         model2 = rf2.fit(df)
         transformedDF2 = model2.transform(df)
         self.assertEqual(transformedDF2.head().label, 0.0)
+
+    def test_findSynonyms(self):
+        sent = ("a b " * 100 + "a c " * 10).split(" ")
+        df = self.spark.createDataFrame([(sent,), (sent,)], ["sentence"])
+        word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
+        model = word2Vec.fit(df)
+
+        similarityFindSynonyms = model.findSynonyms("a", 2)
+        self.assertEqual(similarityFindSynonyms.count(), 2)
+
+        similarityFindSynonymsArray = model.findSynonymsArray("a", 2)
+        self.assertEqual(len(similarityFindSynonymsArray), 2)
 
 
 class HasInducedError(Params):
