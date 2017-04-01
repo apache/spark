@@ -204,7 +204,7 @@ dropTempView <- function(viewName) {
 #'
 #' Returns a SparkDataFrame containing names of tables in the given database.
 #'
-#' @param databaseName name of the database
+#' @param databaseName (optional) name of the database
 #' @return a SparkDataFrame
 #' @rdname tables
 #' @export
@@ -217,10 +217,8 @@ dropTempView <- function(viewName) {
 #' @method tables default
 #' @note tables since 1.4.0
 tables.default <- function(databaseName = NULL) {
-  .Deprecated("listTables", old = "tables")
-  sparkSession <- getSparkSession()
-  jdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getTables", sparkSession, databaseName)
-  dataFrame(jdf)
+  # rename column to match previous output schema
+  withColumnRenamed(listTables(databaseName), "name", "tableName")
 }
 
 tables <- function(x, ...) {
@@ -231,7 +229,7 @@ tables <- function(x, ...) {
 #'
 #' Returns the names of tables in the given database as an array.
 #'
-#' @param databaseName name of the database
+#' @param databaseName (optional) name of the database
 #' @return a list of table names
 #' @rdname tableNames
 #' @export
@@ -245,10 +243,10 @@ tables <- function(x, ...) {
 #' @note tableNames since 1.4.0
 tableNames.default <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-              "getTableNames",
-              sparkSession,
-              databaseName)
+  handledCallJMethod("org.apache.spark.sql.api.r.SQLUtils",
+                     "getTableNames",
+                     sparkSession,
+                     databaseName)
 }
 
 tableNames <- function(x, ...) {

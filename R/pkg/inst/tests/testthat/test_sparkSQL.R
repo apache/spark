@@ -645,9 +645,12 @@ test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
+  expect_equal(length(tableNames("default")), 1)
   tables <- listTables()
   expect_equal(count(tables), 1)
-  expect_equal(count(suppressWarnings(tables())), count(tables))
+  expect_equal(count(tables()), count(tables))
+  expect_true("tableName" %in% colnames(tables()))
+  expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
@@ -2993,7 +2996,7 @@ test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
 
 test_that("catalog APIs, listTables, listColumns, listFunctions", {
   tb <- listTables()
-  count <- count(suppressWarnings(tables()))
+  count <- count(tables())
   expect_equal(nrow(tb), count)
   expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
 
@@ -3014,8 +3017,6 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(listColumns("foo", "default"),
        "Error in listColumns : analysis error - Table 'foo' does not exist in database 'default'")
 
-  dropTempView("cars")
-
   f <- listFunctions()
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
@@ -3024,6 +3025,12 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("foo_db"),
                "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
+
+  expect_error(recoverPartitions("cars"), NA)
+  expect_error(refreshTable("cars"), NA)
+  expect_error(refreshByPath("/"), NA)
+
+  dropTempView("cars")
 })
 
 compare_list <- function(list1, list2) {
