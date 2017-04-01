@@ -35,6 +35,23 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
 
+  test("BroadcastHint estimation") {
+    val filter = Filter(Literal(true), plan)
+    val filterStatsCboOn = Statistics(sizeInBytes = 10 * (8 +4), isBroadcastable = false,
+      rowCount = Some(10), attributeStats = AttributeMap(Seq(attribute -> colStat)))
+    val filterStatsCboOff = Statistics(sizeInBytes = 10 * (8 +4), isBroadcastable = false)
+    checkStats(
+      filter,
+      expectedStatsCboOn = filterStatsCboOn,
+      expectedStatsCboOff = filterStatsCboOff)
+
+    val broadcastHint = BroadcastHint(filter)
+    checkStats(
+      broadcastHint,
+      expectedStatsCboOn = filterStatsCboOn.copy(isBroadcastable = true),
+      expectedStatsCboOff = filterStatsCboOff.copy(isBroadcastable = true))
+  }
+
   test("limit estimation: limit < child's rowCount") {
     val localLimit = LocalLimit(Literal(2), plan)
     val globalLimit = GlobalLimit(Literal(2), plan)
@@ -97,8 +114,10 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       plan: LogicalPlan,
       expectedStatsCboOn: Statistics,
       expectedStatsCboOff: Statistics): Unit = {
-    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedStatsCboOn)
     // Invalidate statistics
+    plan.invalidateStatsCache()
+    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedStatsCboOn)
+
     plan.invalidateStatsCache()
     assert(plan.stats(conf.copy(cboEnabled = false)) == expectedStatsCboOff)
   }

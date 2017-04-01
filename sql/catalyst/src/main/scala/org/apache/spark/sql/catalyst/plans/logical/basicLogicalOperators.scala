@@ -383,7 +383,7 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 
   // set isBroadcastable to true so the child will be broadcasted
   override def computeStats(conf: CatalystConf): Statistics =
-    super.computeStats(conf).copy(isBroadcastable = true)
+    child.stats(conf).copy(isBroadcastable = true)
 }
 
 /**
