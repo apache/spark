@@ -83,6 +83,13 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatInt3 = ColumnStat(distinctCount = 10, min = Some(30), max = Some(39),
     nullCount = 0, avgLen = 4, maxLen = 4)
 
+  // column cint4 has values in the range from 1 to 10
+  // distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
+  // This column is created to test complete overlap
+  val attrInt4 = AttributeReference("cint4", IntegerType)()
+  val colStatInt4 = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+    nullCount = 0, avgLen = 4, maxLen = 4)
+
   val attributeMap = AttributeMap(Seq(
     attrInt -> colStatInt,
     attrBool -> colStatBool,
@@ -91,7 +98,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrDouble -> colStatDouble,
     attrString -> colStatString,
     attrInt2 -> colStatInt2,
-    attrInt3 -> colStatInt3
+    attrInt3 -> colStatInt3,
+    attrInt4 -> colStatInt4
   ))
 
   test("true") {
@@ -468,6 +476,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint = cint2") {
+    // partial overlap case
     validateEstimatedStats(
       Filter(EqualTo(attrInt, attrInt2), childStatsTestPlan(Seq(attrInt, attrInt2), 10L)),
       Seq(attrInt -> ColumnStat(distinctCount = 3, min = Some(7), max = Some(10),
@@ -478,6 +487,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint > cint2") {
+    // partial overlap case
     validateEstimatedStats(
       Filter(GreaterThan(attrInt, attrInt2), childStatsTestPlan(Seq(attrInt, attrInt2), 10L)),
       Seq(attrInt -> ColumnStat(distinctCount = 3, min = Some(7), max = Some(10),
@@ -488,11 +498,34 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("cint < cint2") {
+    // partial overlap case
     validateEstimatedStats(
       Filter(LessThan(attrInt, attrInt2), childStatsTestPlan(Seq(attrInt, attrInt2), 10L)),
       Seq(attrInt -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(10),
         nullCount = 0, avgLen = 4, maxLen = 4),
         attrInt2 -> ColumnStat(distinctCount = 3, min = Some(7), max = Some(16),
+          nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 4)
+  }
+
+  test("cint = cint4") {
+    // complete overlap case
+    validateEstimatedStats(
+      Filter(EqualTo(attrInt, attrInt4), childStatsTestPlan(Seq(attrInt, attrInt4), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+        attrInt4 -> ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
+          nullCount = 0, avgLen = 4, maxLen = 4)),
+      expectedRowCount = 10)
+  }
+
+  test("cint < cint4") {
+    // partial overlap case
+    validateEstimatedStats(
+      Filter(LessThan(attrInt, attrInt4), childStatsTestPlan(Seq(attrInt, attrInt4), 10L)),
+      Seq(attrInt -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(10),
+        nullCount = 0, avgLen = 4, maxLen = 4),
+        attrInt4 -> ColumnStat(distinctCount = 3, min = Some(1), max = Some(10),
           nullCount = 0, avgLen = 4, maxLen = 4)),
       expectedRowCount = 4)
   }
