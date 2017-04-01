@@ -207,6 +207,7 @@ dropTempView <- function(viewName) {
 #' @param databaseName (optional) name of the database
 #' @return a SparkDataFrame
 #' @rdname tables
+#' @seealso \link{listTables}
 #' @export
 #' @examples
 #'\dontrun{
@@ -325,6 +326,7 @@ listDatabases <- function() {
 #' @return a SparkDataFrame of the list of tables.
 #' @rdname listTables
 #' @name listTables
+#' @seealso \link{tables}
 #' @export
 #' @examples
 #' \dontrun{
