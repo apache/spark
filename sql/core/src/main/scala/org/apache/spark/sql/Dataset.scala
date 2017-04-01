@@ -1133,7 +1133,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = withPlan {
+  def select(col: Column, cols: Column*): DataFrame = select((col +: cols): _*)
+
+  @scala.annotation.varargs
+  private[spark] def select(cols: Column*): DataFrame = withPlan {
     Project(cols.map(_.named), logicalPlan)
   }
 
