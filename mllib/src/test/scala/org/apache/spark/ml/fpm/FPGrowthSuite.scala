@@ -17,7 +17,7 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
@@ -103,16 +103,16 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("FPGrowthModel setMinConfidence should affect rules generation and transform") {
     val model = new FPGrowth().setMinSupport(0.1).setMinConfidence(0.1).fit(dataset)
     val oldRulesNum = model.associationRules.count()
-    assert(oldRulesNum == model.associationRules.count())
     val oldPredict = model.transform(dataset)
-
-    model.setMinConfidence(0.1)
-    assert(oldRulesNum === model.associationRules.count())
-    assert(model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
 
     model.setMinConfidence(0.8765)
     assert(oldRulesNum > model.associationRules.count())
     assert(!model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
+
+    // association rules should stay the same for same minConfidence
+    model.setMinConfidence(0.1)
+    assert(oldRulesNum === model.associationRules.count())
+    assert(model.transform(dataset).collect().toSet.equals(oldPredict.collect().toSet))
   }
 
   test("FPGrowth parameter check") {
@@ -121,6 +121,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setMinConfidence(0.5678)
     assert(fpGrowth.getMinSupport === 0.4567)
     assert(model.getMinConfidence === 0.5678)
+    MLTestingUtils.checkCopy(model)
   }
 
   test("read/write") {
