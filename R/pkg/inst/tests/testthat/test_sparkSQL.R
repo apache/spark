@@ -3026,7 +3026,9 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_error(listFunctions("foo_db"),
                "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
 
-  expect_error(recoverPartitions("cars"), NA)
+  # recoverPartitions does not work with tempory view
+  expect_error(recoverPartitions("cars"),
+               "no such table - Table or view 'cars' not found in database 'default'")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 

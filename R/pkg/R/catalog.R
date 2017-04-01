@@ -243,10 +243,10 @@ tables <- function(x, ...) {
 #' @note tableNames since 1.4.0
 tableNames.default <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
-  handledCallJMethod("org.apache.spark.sql.api.r.SQLUtils",
-                     "getTableNames",
-                     sparkSession,
-                     databaseName)
+  callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+              "getTableNames",
+              sparkSession,
+              databaseName)
 }
 
 tableNames <- function(x, ...) {
@@ -409,7 +409,8 @@ listFunctions <- function(databaseName = NULL) {
 
 #' Recover all the partitions in the directory of a table and update the catalog
 #'
-#' Recover all the partitions in the directory of a table and update the catalog.
+#' Recover all the partitions in the directory of a table and update the catalog. The name should
+#' reference a partitioned table, and not a temporary view.
 #'
 #' @param tableName a name of the table.
 #' @rdname recoverPartitions
