@@ -344,13 +344,18 @@ private[tree] object LearningNode {
 
   /** merge the pair of leave of same parent recursively if their prediction is same.  */
   def mergeChildrenWithSamePrediction(node: LearningNode): Int = {
-    def checkAndMerge(node: LearningNode): (Option[Double], Int) = {
-      if (node.isLeaf) {
-        (Some(node.stats.impurityCalculator.predict), 0)
-      } else {
-        val (leftNode, leftMergeCounts) = checkAndMerge(node.leftChild.get)
-        val (rightNode, rightMergeCounts) = checkAndMerge(node.rightChild.get)
 
+    /** find the mergeable leave and merge them. */
+    def checkAndMerge(node: LearningNode): (Option[Double], Int) = {
+      if (node == null) {
+        (None, 0)
+
+      } else if (node.isLeaf) {
+        (Some(node.stats.impurityCalculator.predict), 0)
+
+      } else {
+        val (leftNode, leftMergeCounts) = checkAndMerge(node.leftChild.orNull)
+        val (rightNode, rightMergeCounts) = checkAndMerge(node.rightChild.orNull)
         val mergeCounts = leftMergeCounts + rightMergeCounts
 
         if (leftNode.isDefined && rightNode.isDefined && leftNode == rightNode) {
