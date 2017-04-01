@@ -39,7 +39,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
+import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -103,6 +103,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
       .set("spark.ui.killEnabled", killEnabled.toString)
+      .set("spark.memory.offHeap.size", "64m")
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -151,6 +152,31 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val updatedRddJson = getJson(ui, "storage/rdd/0")
       (updatedRddJson  \ "storageLevel").extract[String] should be (
         StorageLevels.MEMORY_ONLY.description)
+
+      val dataDistributions0 =
+        (updatedRddJson \ "dataDistribution").extract[Seq[RDDDataDistribution]]
+      dataDistributions0.length should be (1)
+      val distribution0 = dataDistributions0.head
+      distribution0.memoryUsed should be (distribution0.onHeapMemoryUsed)
+      distribution0.memoryRemaining should be (
+        distribution0.onHeapMemoryRemaining + distribution0.offHeapMemoryRemaining)
+      distribution0.onHeapMemoryUsed should not be (0L)
+      distribution0.offHeapMemoryUsed should be (0L)
+
+      rdd.unpersist()
+      rdd.persist(StorageLevels.OFF_HEAP).count()
+      val updatedStorageJson1 = getJson(ui, "storage/rdd")
+      updatedStorageJson1.children.length should be (1)
+      val updatedRddJson1 = getJson(ui, "storage/rdd/0")
+      val dataDistributions1 =
+        (updatedRddJson1 \ "dataDistribution").extract[Seq[RDDDataDistribution]]
+      dataDistributions1.length should be (1)
+      val distribution1 = dataDistributions1.head
+      distribution1.memoryUsed should be (distribution1.offHeapMemoryUsed)
+      distribution1.memoryRemaining should be (
+        distribution1.onHeapMemoryRemaining + distribution1.offHeapMemoryRemaining)
+      distribution1.onHeapMemoryUsed should be (0L)
+      distribution1.offHeapMemoryUsed should not be (0L)
     }
   }
 

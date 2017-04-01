@@ -18,9 +18,5 @@
   "totalShuffleWrite" : 13180,
   "isBlacklisted" : false,
   "maxMemory" : 278302556,
-  "executorLogs" : { },
-  "onHeapMemoryUsed": 0,
-  "offHeapMemoryUsed": 0,
-  "maxOnHeapMemory": 278302556,
-  "maxOffHeapMemory": 0
+  "executorLogs" : { }
 } ]

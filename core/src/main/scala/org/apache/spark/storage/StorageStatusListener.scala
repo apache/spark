@@ -41,7 +41,7 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
   }
 
   def deadStorageStatusList: Seq[StorageStatus] = synchronized {
-    deadExecutorStorageStatus.toSeq
+    deadExecutorStorageStatus
   }
 
   /** Update storage status list to reflect updated block statuses */
@@ -74,11 +74,8 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
     synchronized {
       val blockManagerId = blockManagerAdded.blockManagerId
       val executorId = blockManagerId.executorId
-      // This two fields are compatible with old event logs, in which there only has max on heap
-      // memory in the event log. So maxOnHeapMem will use maxMem, maxOffHeapMem will set to 0.
-      val maxOnHeapMem = blockManagerAdded.maxOnHeapMem.getOrElse(blockManagerAdded.maxMem)
-      val maxOffHeapMem = blockManagerAdded.maxOffHeapMem.getOrElse(0L)
-      val storageStatus = new StorageStatus(blockManagerId, maxOnHeapMem, maxOffHeapMem)
+      val storageStatus = new StorageStatus(blockManagerId, blockManagerAdded.maxMem,
+        blockManagerAdded.maxOnHeapMem, blockManagerAdded.maxOffHeapMem)
       executorIdToStorageStatus(executorId) = storageStatus
 
       // Try to remove the dead storage status if same executor register the block manager twice.

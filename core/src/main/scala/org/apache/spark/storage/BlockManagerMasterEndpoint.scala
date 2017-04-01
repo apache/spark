@@ -276,7 +276,8 @@ class BlockManagerMasterEndpoint(
 
   private def storageStatus: Array[StorageStatus] = {
     blockManagerInfo.map { case (blockManagerId, info) =>
-      new StorageStatus(blockManagerId, info.maxOnHeapMem, info.maxOffHeapMem, info.blocks.asScala)
+      new StorageStatus(blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
+        Some(info.maxOffHeapMem), info.blocks.asScala)
     }.toArray
   }
 

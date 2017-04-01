@@ -75,8 +75,10 @@ private[spark] object AllRDDResource {
             if (!rddInfo.storageLevel.useOffHeap) status.memUsedByRdd(rddId) else 0L,
           offHeapMemoryUsed =
             if (rddInfo.storageLevel.useOffHeap) status.memUsedByRdd(rddId) else 0L,
-          onHeapMemoryRemaining = status.onHeapMemRemaining,
-          offHeapMemoryRemaining = status.offHeapMemRemaining
+          // Get RDDStorageInfo REST API will return RDD information only in the Live UI, so
+          // we assume this two fields always exist.
+          onHeapMemoryRemaining = status.onHeapMemRemaining.get,
+          offHeapMemoryRemaining = status.offHeapMemRemaining.get
         ) } )
     } else {
       None

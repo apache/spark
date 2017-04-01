@@ -37,8 +37,11 @@ import org.apache.spark.internal.Logging
 @DeveloperApi
 class StorageStatus(
     val blockManagerId: BlockManagerId,
-    val maxOnHeapMem: Long,
-    val maxOffHeapMem: Long) {
+    // Explicitly adding this maxMemory field to handle maxOnHeapMem and maxOffHeapMem not
+    // existing issue, this happened when trying to replay old event log.
+    val maxMemory: Long,
+    val maxOnHeapMem: Option[Long],
+    val maxOffHeapMem: Option[Long]) {
 
   /**
    * Internal representation of the blocks stored in this block manager.
@@ -59,10 +62,11 @@ class StorageStatus(
   /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
   def this(
       bmid: BlockManagerId,
-      maxOnHeapMem: Long,
-      maxOffHeapMem: Long,
+      maxMemory: Long,
+      maxOnHeapMem: Option[Long],
+      maxOffHeapMem: Option[Long],
       initialBlocks: Map[BlockId, BlockStatus]) {
-    this(bmid, maxOnHeapMem, maxOffHeapMem)
+    this(bmid, maxMemory, maxOnHeapMem, maxOffHeapMem)
     initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
   }
 
@@ -175,10 +179,10 @@ class StorageStatus(
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
 
   /** Return the max memory can be used by this block manager. */
-  def maxMem: Long = maxOnHeapMem + maxOffHeapMem
+  def maxMem: Long = maxMemory
 
   /** Return the memory remaining in this block manager. */
-  def memRemaining: Long = onHeapMemRemaining + offHeapMemRemaining
+  def memRemaining: Long = maxMem - memUsed
 
   /** Return the memory used by caching RDDs */
   def cacheSize: Long = onHeapCacheSize + offHeapCacheSize
@@ -187,10 +191,10 @@ class StorageStatus(
   def memUsed: Long = onHeapMemUsed + offHeapMemUsed
 
   /** Return the on-heap memory remaining in this block manager. */
-  def onHeapMemRemaining: Long = maxOnHeapMem - onHeapMemUsed
+  def onHeapMemRemaining: Option[Long] = maxOnHeapMem.map(_ - onHeapMemUsed)
 
   /** Return the off-heap memory remaining in this block manager. */
-  def offHeapMemRemaining: Long = maxOffHeapMem - offHeapMemUsed
+  def offHeapMemRemaining: Option[Long] = maxOffHeapMem.map(_ - offHeapMemUsed)
 
   /** Return the on-heap memory used by this block manager. */
   def onHeapMemUsed: Long = _nonRddStorageInfo.onHeapUsage + onHeapCacheSize
