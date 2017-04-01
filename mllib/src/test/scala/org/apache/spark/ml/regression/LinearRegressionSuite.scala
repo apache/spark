@@ -842,7 +842,8 @@ class LinearRegressionSuite
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
-        datasetWithStrongNoise.as[LabeledPoint], estimator, numClasses, modelEquals)
+        datasetWithStrongNoise.as[LabeledPoint], estimator, numClasses, modelEquals,
+        outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals, seed)
     }
