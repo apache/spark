@@ -118,20 +118,21 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query 12 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
-show_t3	true	Table: `show_t3`
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+show_t3	true	Table: show_t3
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type: VIEW
 Schema: root
  |-- e: integer (nullable = true)
 
 
-showdb	show_t1	false	Table: `showdb`.`show_t1`
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+showdb	show_t1	false	Database: showdb
+Table: show_t1
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type: MANAGED
 Provider: parquet
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t1
+Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1
 Partition Provider: Catalog
 Partition Columns: [`c`, `d`]
 Schema: root
@@ -141,12 +142,13 @@ Schema: root
  |-- d: string (nullable = true)
 
 
-showdb	show_t2	false	Table: `showdb`.`show_t2`
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+showdb	show_t2	false	Database: showdb
+Table: show_t2
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type: MANAGED
 Provider: parquet
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t2
+Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t2
 Schema: root
  |-- b: string (nullable = true)
  |-- d: integer (nullable = true)
@@ -172,7 +174,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 14 output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
+Location [not included in comparison]sql/core/spark-warehouse/showdb.db/show_t1/c=Us/d=1
 
 
 -- !query 15

@@ -536,6 +536,8 @@ case class DescribeTableCommand(
       describePartitionInfo(metadata, result)
 
       if (partitionSpec.nonEmpty) {
+        // Outputs the partition-specific info for the DDL command:
+        // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
         describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
       } else if (isExtended) {
         describeFormattedTableInfo(metadata, result)
@@ -548,15 +550,21 @@ case class DescribeTableCommand(
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (table.partitionColumnNames.nonEmpty) {
       append(buffer, "# Partition Information", "", "")
-      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
       describeSchema(table.partitionSchema, buffer)
     }
   }
 
   private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    // The following information has been already shown in the previous outputs
+    val excludedTableInfo = Seq(
+      "Partition Columns",
+      "Schema"
+    )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    table.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+    table.toLinkedHashMap.filterKeys(!excludedTableInfo.contains(_)).foreach {
+      s => append(buffer, s._1, s._2, "")
+    }
   }
 
   private def describeDetailedPartitionInfo(
@@ -594,6 +602,7 @@ case class DescribeTableCommand(
   }
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
     schema.foreach { column =>
       append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
     }

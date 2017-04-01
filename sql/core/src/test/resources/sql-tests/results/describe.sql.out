@@ -41,6 +41,7 @@ DESCRIBE t
 -- !query 4 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 4 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -56,6 +57,7 @@ DESC t
 -- !query 5 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 5 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -71,6 +73,7 @@ DESC TABLE t
 -- !query 6 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 6 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -86,6 +89,7 @@ DESC FORMATTED t
 -- !query 7 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 7 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -96,23 +100,18 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Table               	`default`.`t`       	                    
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+Database            	default             	                    
+Table               	t                   	                    
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t	                    
-Partition Provider  	Catalog             	                    
-Partition Columns   	[`c`, `d`]          	                    
-Schema              	root
- |-- a: string (nullable = true)
- |-- b: integer (nullable = true)
- |-- c: string (nullable = true)
- |-- d: string (nullable = true)
+Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Partition Provider  	Catalog
 
 
 -- !query 8
@@ -120,6 +119,7 @@ DESC EXTENDED t
 -- !query 8 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 8 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -130,23 +130,18 @@ c                   	string
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Table               	`default`.`t`       	                    
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+Database            	default             	                    
+Table               	t                   	                    
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t	                    
-Partition Provider  	Catalog             	                    
-Partition Columns   	[`c`, `d`]          	                    
-Schema              	root
- |-- a: string (nullable = true)
- |-- b: integer (nullable = true)
- |-- c: string (nullable = true)
- |-- d: string (nullable = true)
+Location [not included in comparison]sql/core/spark-warehouse/t	                    
+Partition Provider  	Catalog
 
 
 -- !query 9
@@ -154,6 +149,7 @@ DESC t PARTITION (c='Us', d=1)
 -- !query 9 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 9 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -169,6 +165,7 @@ DESC EXTENDED t PARTITION (c='Us', d=1)
 -- !query 10 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 10 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -182,13 +179,13 @@ d                   	string
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
                     	                    	                    
 # Table Storage Information	                    	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t
+Location [not included in comparison]sql/core/spark-warehouse/t
 
 
 -- !query 11
@@ -196,6 +193,7 @@ DESC FORMATTED t PARTITION (c='Us', d=1)
 -- !query 11 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 11 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -209,13 +207,13 @@ d                   	string
 Database            	default             	                    
 Table               	t                   	                    
 Partition Values    	[c=Us, d=1]         	                    
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t/c=Us/d=1	                    
+Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
                     	                    	                    
 # Table Storage Information	                    	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
-Location[removed by SQLQueryTestSuite]sql/core/spark-warehouse/t
+Location [not included in comparison]sql/core/spark-warehouse/t
 
 
 -- !query 12
@@ -257,6 +255,7 @@ DESC temp_v
 -- !query 15 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 15 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -268,6 +267,7 @@ DESC TABLE temp_v
 -- !query 16 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 16 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -279,6 +279,7 @@ DESC FORMATTED temp_v
 -- !query 17 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 17 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -290,6 +291,7 @@ DESC EXTENDED temp_v
 -- !query 18 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 18 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -310,6 +312,7 @@ DESC v
 -- !query 20 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 20 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -321,6 +324,7 @@ DESC TABLE v
 -- !query 21 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 21 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
@@ -332,25 +336,22 @@ DESC FORMATTED v
 -- !query 22 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 22 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Table               	`default`.`v`       	                    
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+Database            	default             	                    
+Table               	v                   	                    
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]	                    
-Schema              	root
- |-- a: string (nullable = true)
- |-- b: integer (nullable = true)
- |-- c: string (nullable = true)
- |-- d: string (nullable = true)
+Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
 
 
 -- !query 23
@@ -358,25 +359,22 @@ DESC EXTENDED v
 -- !query 23 schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query 23 output
+# col_name          	data_type           	comment             
 a                   	string              	                    
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string              	                    
                     	                    	                    
 # Detailed Table Information	                    	                    
-Table               	`default`.`v`       	                    
-Created[removed by SQLQueryTestSuite]
-Last Access[removed by SQLQueryTestSuite]
+Database            	default             	                    
+Table               	v                   	                    
+Created [not included in comparison]
+Last Access [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]	                    
-Schema              	root
- |-- a: string (nullable = true)
- |-- b: integer (nullable = true)
- |-- c: string (nullable = true)
- |-- d: string (nullable = true)
+Properties          	[view.query.out.col.3=d, view.query.out.col.0=a, view.query.out.numCols=4, view.default.database=default, view.query.out.col.1=b, view.query.out.col.2=c]
 
 
 -- !query 24
