@@ -347,35 +347,30 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * Null value propagation from bottom to top of the expression tree.
  */
 case class NullPropagation(conf: CatalystConf) extends Rule[LogicalPlan] {
-  private def nonNullLiteral(e: Expression): Boolean = e match {
-    case Literal(null, _) => false
-    case _ => true
+  private def isNullLiteral(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
-      case e @ AggregateExpression(Count(exprs), _, _, _) if !exprs.exists(nonNullLiteral) =>
+      case e @ AggregateExpression(Count(exprs), _, _, _) if exprs.forall(isNullLiteral) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
-      case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
-      case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
-      case e @ GetArrayItem(Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ GetArrayItem(_, Literal(null, _)) => Literal.create(null, e.dataType)
-      case e @ GetMapValue(Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ GetMapValue(_, Literal(null, _)) => Literal.create(null, e.dataType)
-      case e @ GetStructField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
-      case e @ GetArrayStructFields(Literal(null, _), _, _, _, _) =>
-        Literal.create(null, e.dataType)
-      case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
-      case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
       case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
 
+      case IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
+      case IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
+
+      case EqualNullSafe(Literal(null, _), r) => IsNull(r)
+      case EqualNullSafe(l, Literal(null, _)) => IsNull(l)
+
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
-        val newChildren = children.filter(nonNullLiteral)
+        val newChildren = children.filterNot(isNullLiteral)
         if (newChildren.isEmpty) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
@@ -384,33 +379,13 @@ case class NullPropagation(conf: CatalystConf) extends Rule[LogicalPlan] {
           Coalesce(newChildren)
         }
 
-      case e @ Substring(Literal(null, _), _, _) => Literal.create(null, e.dataType)
-      case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
+      // If the value expression is NULL then transform the In expression to null literal.
+      case In(Literal(null, _), _) => Literal.create(null, BooleanType)
 
-      // Put exceptional cases above if any
-      case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ BinaryArithmetic(_, Literal(null, _)) => Literal.create(null, e.dataType)
-
-      case e @ BinaryComparison(Literal(null, _), _) => Literal.create(null, e.dataType)
-      case e @ BinaryComparison(_, Literal(null, _)) => Literal.create(null, e.dataType)
-
-      case e: StringRegexExpression => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
-        case _ => e
-      }
-
-      case e: StringPredicate => e.children match {
-        case Literal(null, _) :: right :: Nil => Literal.create(null, e.dataType)
-        case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
-        case _ => e
-      }
-
-      // If the value expression is NULL then transform the In expression to
-      // Literal(null)
-      case In(Literal(null, _), list) => Literal.create(null, BooleanType)
-
+      // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
+      // a null literal.
+      case e: NullIntolerant if e.children.exists(isNullLiteral) =>
+        Literal.create(null, e.dataType)
     }
   }
 }

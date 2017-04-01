@@ -423,15 +423,17 @@ pyspark_ml = Module(
         "python/pyspark/ml/"
     ],
     python_test_goals=[
-        "pyspark.ml.feature",
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
+        "pyspark.ml.evaluation",
+        "pyspark.ml.feature",
+        "pyspark.ml.fpm",
         "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
+        "pyspark.ml.stat",
         "pyspark.ml.tuning",
         "pyspark.ml.tests",
-        "pyspark.ml.evaluation",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there

@@ -138,8 +138,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   /**
    * Attempt to clean up any ByteBuffer in this ChunkedByteBuffer which is direct or memory-mapped.
    * See [[StorageUtils.dispose]] for more information.
-   *
-   * See also [[unmap]]
    */
   def dispose(): Unit = {
     if (!disposed) {
@@ -148,18 +146,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     }
   }
 
-  /**
-   * Attempt to unmap any ByteBuffer in this ChunkedByteBuffer if it is memory-mapped. See
-   * [[StorageUtils.unmap]] for more information.
-   *
-   * See also [[dispose]]
-   */
-  def unmap(): Unit = {
-    if (!disposed) {
-      chunks.foreach(StorageUtils.unmap)
-      disposed = true
-    }
-  }
 }
 
 /**

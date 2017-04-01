@@ -80,6 +80,9 @@ object FileFormatWriter extends Logging {
        """.stripMargin)
   }
 
+  /** The result of a successful write task. */
+  private case class WriteTaskResult(commitMsg: TaskCommitMessage, updatedPartitions: Set[String])
+
   /**
    * Basic work flow of this command is:
    * 1. Driver side setup, including output committer initialization and data source specific
@@ -172,8 +175,9 @@ object FileFormatWriter extends Logging {
             global = false,
             child = queryExecution.executedPlan).execute()
         }
-
-        val ret = sparkSession.sparkContext.runJob(rdd,
+        val ret = new Array[WriteTaskResult](rdd.partitions.length)
+        sparkSession.sparkContext.runJob(
+          rdd,
           (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
             executeTask(
               description = description,
@@ -182,10 +186,16 @@ object FileFormatWriter extends Logging {
               sparkAttemptNumber = taskContext.attemptNumber(),
               committer,
               iterator = iter)
+          },
+          0 until rdd.partitions.length,
+          (index, res: WriteTaskResult) => {
+            committer.onTaskCommit(res.commitMsg)
+            ret(index) = res
           })
 
-        val commitMsgs = ret.map(_._1)
-        val updatedPartitions = ret.flatMap(_._2).distinct.map(PartitioningUtils.parsePathFragment)
+        val commitMsgs = ret.map(_.commitMsg)
+        val updatedPartitions = ret.flatMap(_.updatedPartitions)
+          .distinct.map(PartitioningUtils.parsePathFragment)
 
         committer.commitJob(job, commitMsgs)
         logInfo(s"Job ${job.getJobID} committed.")
@@ -205,7 +215,7 @@ object FileFormatWriter extends Logging {
       sparkPartitionId: Int,
       sparkAttemptNumber: Int,
       committer: FileCommitProtocol,
-      iterator: Iterator[InternalRow]): (TaskCommitMessage, Set[String]) = {
+      iterator: Iterator[InternalRow]): WriteTaskResult = {
 
     val jobId = SparkHadoopWriterUtils.createJobID(new Date, sparkStageId)
     val taskId = new TaskID(jobId, TaskType.MAP, sparkPartitionId)
@@ -238,7 +248,7 @@ object FileFormatWriter extends Logging {
         // Execute the task to write rows out and commit the task.
         val outputPartitions = writeTask.execute(iterator)
         writeTask.releaseResources()
-        (committer.commitTask(taskAttemptContext), outputPartitions)
+        WriteTaskResult(committer.commitTask(taskAttemptContext), outputPartitions)
       })(catchBlock = {
         // If there is an error, release resource and then abort the task
         try {

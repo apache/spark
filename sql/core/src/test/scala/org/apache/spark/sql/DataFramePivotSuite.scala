@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext{
+class DataFramePivotSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("pivot courses") {
@@ -229,5 +229,21 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         .withColumn("b", expr("array(a, 7)"))
         .groupBy($"a").pivot("a").agg(min($"b")),
       Row(null, Seq(null, 7), null) :: Row(1, null, Seq(1, 7)) :: Nil)
+  }
+
+  test("pivot with timestamp and count should not print internal representation") {
+    val ts = "2012-12-31 16:00:10.011"
+    val tsWithZone = "2013-01-01 00:00:10.011"
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "GMT") {
+      val df = Seq(java.sql.Timestamp.valueOf(ts)).toDF("a").groupBy("a").pivot("a").count()
+      val expected = StructType(
+        StructField("a", TimestampType) ::
+        StructField(tsWithZone, LongType) :: Nil)
+      assert(df.schema == expected)
+      // String representation of timestamp with timezone should take the time difference
+      // into account.
+      checkAnswer(df.select($"a".cast(StringType)), Row(tsWithZone))
+    }
   }
 }
