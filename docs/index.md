@@ -111,6 +111,7 @@ options for deployment:
 * [Submitting Applications](submitting-applications.html): packaging and deploying applications
 * Deployment modes:
   * [Amazon EC2](https://github.com/amplab/spark-ec2): scripts that let you launch a cluster on EC2 in about 5 minutes
+  * [Openstack](https://github.com/ispras/spark-openstack): scripts that let you launch a cluster with any version since 1.0 in about 10 minutes (and optional additional tools)
   * [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
