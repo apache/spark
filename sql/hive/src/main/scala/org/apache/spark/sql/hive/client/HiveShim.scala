@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
 import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
@@ -120,6 +120,15 @@ private[client] sealed abstract class Shim {
       replace: Boolean,
       numDP: Int,
       listBucketingEnabled: Boolean): Unit
+
+  def moveFile(
+      hive: Hive,
+      conf: HiveConf,
+      srcf: Path,
+      destf: Path,
+      fs: FileSystem,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit
 
   def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit
 
@@ -240,6 +249,16 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       classOf[JMap[String, String]],
       JBoolean.TYPE,
       JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val moveFileMethod =
+    findMethod(
+      classOf[Hive],
+      "moveFile",
+      classOf[HiveConf],
+      classOf[Path],
+      classOf[Path],
+      classOf[FileSystem],
       JBoolean.TYPE,
       JBoolean.TYPE)
   private lazy val dropIndexMethod =
@@ -376,6 +395,17 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       listBucketingEnabled: Boolean): Unit = {
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean)
+  }
+
+  override def moveFile(
+      hive: Hive,
+      conf: HiveConf,
+      srcf: Path,
+      destf: Path,
+      fs: FileSystem,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    moveFileMethod.invoke(hive, conf, srcf, destf, fs, replace: JBoolean, isSrcLocal: JBoolean)
   }
 
   override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
