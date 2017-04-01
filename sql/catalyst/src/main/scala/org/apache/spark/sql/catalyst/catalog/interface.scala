@@ -115,6 +115,7 @@ case class CatalogTablePartition(
     }.mkString("CatalogPartition(\n\t", "\n\t", ")")
   }
 
+  /** Readable string representation for the CatalogTablePartition. */
   def simpleString: String = {
     toLinkedHashMap.map { case ((key, value)) =>
       if (value.isEmpty) key else s"$key: $value"
@@ -326,6 +327,7 @@ case class CatalogTable(
     }.mkString("CatalogTable(\n", "\n", ")")
   }
 
+  /** Readable string representation for the CatalogTable. */
   def simpleString: String = {
     toLinkedHashMap.map { case ((key, value)) =>
       if (value.isEmpty) key else s"$key: $value"

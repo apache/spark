@@ -500,7 +500,7 @@ case class TruncateTableCommand(
 case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
-    isFormatted: Boolean)
+    isExtended: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -537,7 +537,7 @@ case class DescribeTableCommand(
 
       if (partitionSpec.nonEmpty) {
         describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
-      } else if (isFormatted) {
+      } else if (isExtended) {
         describeFormattedTableInfo(metadata, result)
       }
     }
@@ -570,7 +570,7 @@ case class DescribeTableCommand(
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val partition = catalog.getPartition(table, partitionSpec)
-    if (isFormatted) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
+    if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
   }
 
   private def describeFormattedDetailedPartitionInfo(
