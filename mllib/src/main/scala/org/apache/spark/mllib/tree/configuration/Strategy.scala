@@ -61,6 +61,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  * @param subsamplingRate Fraction of the training data used for learning decision tree.
  * @param useNodeIdCache If this is true, instead of passing trees to executors, the algorithm will
  *                       maintain a separate RDD of node Id cache for each row.
+ * @param canMergeChildren Merge pairs of leaf nodes of the same parent which
+ *                         output the same prediction.
  * @param checkpointInterval How often to checkpoint when the node Id cache gets updated.
  *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
  *                           the checkpoint directory is not set in
@@ -80,6 +82,7 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
+    @Since("2.2.0") @BeanProperty var canMergeChildren: Boolean = false,
     @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
   /**
@@ -172,7 +175,7 @@ class Strategy @Since("1.3.0") (
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval)
+      maxMemoryInMB, subsamplingRate, useNodeIdCache, canMergeChildren, checkpointInterval)
   }
 }
 
