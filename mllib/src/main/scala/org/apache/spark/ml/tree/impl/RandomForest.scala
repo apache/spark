@@ -217,6 +217,12 @@ private[spark] object RandomForest extends Logging {
       }
     }
 
+    // prune tree.
+    if (strategy.canMergeChildren) {
+      logInfo("Merge children with same prediction.")
+      topNodes.foreach(LearningNode.mergeChildrenWithSamePrediction)
+    }
+
     val numFeatures = metadata.numFeatures
 
     parentUID match {
