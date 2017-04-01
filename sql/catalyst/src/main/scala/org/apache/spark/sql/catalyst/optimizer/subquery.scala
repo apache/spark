@@ -519,7 +519,8 @@ object RewriteEmptyExists extends Rule[LogicalPlan] with PredicateHelper {
           val countExpr = Alias(Count(Literal(1)).toAggregateExpression(), "count")()
           val expr = Alias(GreaterThan(countExpr.toAttribute, Literal(0)), e.toString)()
           ScalarSubquery(
-            Project(Seq(expr), Aggregate(Nil, Seq(countExpr), sub)),
+            Project(Seq(expr),
+              Aggregate(Nil, Seq(countExpr), LocalLimit(Literal(1), sub))),
             children = Seq.empty,
             exprId = exprId)
       })
