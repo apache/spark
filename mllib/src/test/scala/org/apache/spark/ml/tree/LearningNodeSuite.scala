@@ -36,7 +36,8 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
     NodeUtils.setAsLeaf(root, Array(5))
     NodeUtils.setPredictValue(root, Array(6, 7, 12, 13, 14), classB)
     /**
-       input:
+     * use TreeUtils.toDebugTreeString(root).
+     * input:
                 8(0.0)
              4--|
                 9(0.0)
@@ -55,7 +56,8 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val mergeCounts = LearningNode.mergeChildrenWithSamePrediction(root)
     /**
-       res:
+     * use TreeUtils.toDebugTreeString(root).
+     * result:
           2(0.0)
        1--|
              6(1.0)
@@ -75,6 +77,7 @@ object LearningNodeSuite {
   def hasPairsOfSameChildren(node: LearningNode): Boolean =
     if (node.isLeaf) {
       false
+
     } else {
       val left = node.leftChild.get
       val right = node.rightChild.get
@@ -84,6 +87,7 @@ object LearningNodeSuite {
         val rightPredict = right.stats.impurityCalculator.predict
 
         leftPredict == rightPredict
+
       } else {
         // shortcut if find.
         hasPairsOfSameChildren(left) || hasPairsOfSameChildren(right)
@@ -103,6 +107,7 @@ object LearningNodeSuite {
         } else {
           val leftNode = create(leftChildIndex(id), height - 1)
           val rightNode = create(rightChildIndex(id), height - 1)
+          // use id to help locate node when debug.
           val split = new ContinuousSplit(id, id)
 
           new LearningNode(
