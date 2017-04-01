@@ -219,8 +219,20 @@ private[spark] object RandomForest extends Logging {
 
     // prune tree.
     if (strategy.canMergeChildren) {
-      logInfo("Merge children with same prediction.")
-      topNodes.foreach(LearningNode.mergeChildrenWithSamePrediction)
+      logInfo("Merge children with same prediction:")
+
+      // merge the pair of leaves if possible.
+      val mergeCounts = topNodes
+        .map(LearningNode.mergeChildrenWithSamePrediction)
+
+      val mergeCountsOfTreesInfo: String = mergeCounts
+        .zipWithIndex
+        .map(_.swap)
+        .filter(_._2 > 0)
+        .map{ case (id, count) => s"tree: $id, num of nodes merged: $count" }
+        .mkString("", "\n", "\n")
+
+      logInfo("Merge info: \n" + mergeCountsOfTreesInfo)
     }
 
     val numFeatures = metadata.numFeatures

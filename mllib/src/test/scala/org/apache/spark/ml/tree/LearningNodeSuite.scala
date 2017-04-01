@@ -53,7 +53,7 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
       */
     assert(true === hasPairsOfSameChildren(root))
 
-    LearningNode.mergeChildrenWithSamePrediction(root)
+    val mergeCounts = LearningNode.mergeChildrenWithSamePrediction(root)
     /**
        res:
           2(0.0)
@@ -65,6 +65,7 @@ class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
                 15(0.0)
       */
     assert(false === hasPairsOfSameChildren(root))
+    assert(mergeCounts === 3)
   }
 }
 
