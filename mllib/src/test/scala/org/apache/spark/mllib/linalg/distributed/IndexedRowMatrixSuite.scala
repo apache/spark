@@ -114,22 +114,22 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     val idxRowMat = new IndexedRowMatrix(indexedRows)
 
     // Tests when n % colsPerBlock != 0
-    val blockMat = idxRowMat.toBlockMatrix(2, 2)
+    val blockMat = idxRowMat.toBlockMatrixDense(2, 2)
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
     assert(blockMat.toBreeze() === idxRowMat.toBreeze())
 
     // Tests when m % rowsPerBlock != 0
-    val blockMat2 = idxRowMat.toBlockMatrix(3, 1)
+    val blockMat2 = idxRowMat.toBlockMatrixDense(3, 1)
     assert(blockMat2.numRows() === m)
     assert(blockMat2.numCols() === n)
     assert(blockMat2.toBreeze() === idxRowMat.toBreeze())
 
     intercept[IllegalArgumentException] {
-      idxRowMat.toBlockMatrix(-1, 2)
+      idxRowMat.toBlockMatrixDense(-1, 2)
     }
     intercept[IllegalArgumentException] {
-      idxRowMat.toBlockMatrix(2, 0)
+      idxRowMat.toBlockMatrixDense(2, 0)
     }
   }
 
