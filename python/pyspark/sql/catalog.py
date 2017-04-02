@@ -161,14 +161,15 @@ class Catalog(object):
     def createTable(self, tableName, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
 
-        It returns the DataFrame associated with the external table.
+        It returns the DataFrame associated with the table.
 
         The data source is specified by the ``source`` and a set of ``options``.
         If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
+        ``spark.sql.sources.default`` will be used. When ``path`` is specified, an external table is
+        created from the data at the given path. Otherwise a managed table is created.
 
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
-        created external table.
+        created table.
 
         :return: :class:`DataFrame`
         """
@@ -281,8 +282,18 @@ class Catalog(object):
 
     @since('2.1.1')
     def recoverPartitions(self, tableName):
-        """Recover all the partitions of the given table and update the catalog."""
+        """Recover all the partitions of the given table and update the catalog.
+
+        Only works with a partitioned table, and not a temporary view.
+        """
         self._jcatalog.recoverPartitions(tableName)
+
+    @since('2.2.0')
+    def refreshByPath(self, path):
+        """Invalidate and refresh all the cached data (and the associated metadata) for any
+        DataFrame that contains the given data source path.
+        """
+        self._jcatalog.refreshByPath(path)
 
     def _reset(self):
         """(Internal use only) Drop all existing databases (except "default"), tables,

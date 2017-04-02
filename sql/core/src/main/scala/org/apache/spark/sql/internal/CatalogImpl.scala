@@ -273,7 +273,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * :: Experimental ::
-   * Creates a table from the given path based on a data source and returns the corresponding
+   * Creates a table from the given path and returns the corresponding
    * DataFrame.
    *
    * @group ddl_ops
@@ -287,7 +287,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates a table from the given path based on a data source and a set of options.
+   * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
@@ -304,7 +304,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates a table from the given path based on a data source, a schema and a set of options.
+   * Creates a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
@@ -367,6 +367,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Recovers all the partitions in the directory of a table and update the catalog.
+   * Only works with a partitioned table, and not a temporary view.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in the
@@ -434,6 +435,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Refreshes the cache entry for a table or view, if any. For Hive metastore table, the metadata
    * is refreshed. For data source tables, the schema will not be inferred and refreshed.
    *
+   * If this table is cached as an InMemoryRelation, drop the original cached version and make the
+   * new version cached lazily.
+   *
    * @group cachemgmt
    * @since 2.0.0
    */
@@ -456,7 +460,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Refreshes the cache entry and the associated metadata for all Dataset (if any), that contain
-   * the given data source path.
+   * the given data source path. Path matching is by prefix, i.e. "/" would invalidate
+   * everything that is cached.
    *
    * @group cachemgmt
    * @since 2.0.0
