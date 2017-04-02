@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
