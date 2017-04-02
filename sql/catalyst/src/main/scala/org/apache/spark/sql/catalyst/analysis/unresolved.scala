@@ -69,9 +69,10 @@ case class UnresolvedInlineTable(
  *   select * from range(10);
  * }}}
  */
-case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq[Expression])
+case class UnresolvedTableValuedFunction(var functionName: String, functionArgs: Seq[Expression])
   extends LeafNode {
 
+  functionName = functionName.toLowerCase()
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
