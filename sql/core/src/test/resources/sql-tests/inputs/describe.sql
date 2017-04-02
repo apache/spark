@@ -4,13 +4,20 @@ CREATE TABLE t (a STRING, b INT, c STRING, d STRING) USING parquet
 
 CREATE TEMPORARY VIEW temp_v AS SELECT * FROM t;
 
+CREATE TEMPORARY VIEW temp_Data_Source_View
+  USING org.apache.spark.sql.sources.DDLScanSource
+  OPTIONS (
+    From '1',
+    To '10',
+    Table 'test1');
+
 CREATE VIEW v AS SELECT * FROM t;
 
 ALTER TABLE t ADD PARTITION (c='Us', d=1);
 
 DESCRIBE t;
 
-DESC t;
+DESC default.t;
 
 DESC TABLE t;
 
@@ -43,6 +50,8 @@ DESC FORMATTED temp_v;
 
 DESC EXTENDED temp_v;
 
+DESC temp_Data_Source_View;
+
 -- AnalysisException DESC PARTITION is not allowed on a temporary view
 DESC temp_v PARTITION (c='Us', d=1);
 
@@ -63,5 +72,7 @@ DESC v PARTITION (c='Us', d=1);
 DROP TABLE t;
 
 DROP VIEW temp_v;
+
+DROP VIEW temp_Data_Source_View;
 
 DROP VIEW v;
