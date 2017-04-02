@@ -471,15 +471,13 @@ class PlanParserSuite extends PlanTest {
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
   }
 
-  test("table valued function case insensitive") {
+  test("case insensitive range queries.") {
     assertEqual(
       "select * from RangE(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-
     assertEqual(
       "select * from rAnGe(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-
     assertEqual(
       "select * from RANGE(2)",
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
