@@ -50,13 +50,6 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   import utils._
 
-  test("list partitions by filter") {
-    val catalog = newBasicCatalog()
-    val selectedPartitions = catalog.listPartitionsByFilter("db2", "tbl2", Seq('a.int === 1), "GMT")
-    assert(selectedPartitions.length == 1)
-    assert(selectedPartitions.head.spec == part1.spec)
-  }
-
   test("SPARK-18647: do not put provider in table properties for Hive serde table") {
     val catalog = newBasicCatalog()
     val hiveTable = CatalogTable(

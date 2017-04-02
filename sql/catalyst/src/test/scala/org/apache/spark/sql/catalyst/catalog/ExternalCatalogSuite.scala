@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.TimeZone
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -28,6 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -434,6 +436,37 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // if no partition is matched for the given partition spec, an empty list should be returned.
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+  }
+
+  test("list partitions by filter") {
+    val tz = TimeZone.getDefault().getID()
+    val catalog = newBasicCatalog()
+
+    def checkAnswer(table: CatalogTable, filters: Seq[Expression],
+        expected: Set[CatalogTablePartition]): Unit = {
+      assertResult(expected.map(_.spec)) {
+        catalog.listPartitionsByFilter(table.database, table.identifier.identifier, filters, tz)
+          .map(_.spec).toSet
+      }
+    }
+
+    def pcol(table: CatalogTable, name: String): Expression = {
+      val col = table.partitionSchema(name)
+      AttributeReference(col.name, col.dataType, col.nullable)()
+    }
+    val tbl2 = catalog.getTable("db2", "tbl2")
+
+    checkAnswer(tbl2, Seq.empty, Set(part1, part2))
+    checkAnswer(tbl2, Seq(EqualTo(pcol(tbl2, "a"), Literal(1))), Set(part1))
+    checkAnswer(tbl2, Seq(EqualTo(pcol(tbl2, "a"), Literal(2))), Set.empty)
+    checkAnswer(tbl2, Seq(In(pcol(tbl2, "a"), Seq(Literal(3)))), Set(part2))
+    checkAnswer(tbl2, Seq(Not(In(pcol(tbl2, "a"), Seq(Literal(4))))), Set(part1, part2))
+    checkAnswer(tbl2, Seq(
+      EqualTo(pcol(tbl2, "a"), Literal(1)),
+      EqualTo(pcol(tbl2, "b"), Literal("2"))), Set(part1))
+    checkAnswer(tbl2, Seq(
+      EqualTo(pcol(tbl2, "a"), Literal(1)),
+      EqualTo(pcol(tbl2, "b"), Literal("x"))), Set.empty)
   }
 
   test("drop partitions") {
