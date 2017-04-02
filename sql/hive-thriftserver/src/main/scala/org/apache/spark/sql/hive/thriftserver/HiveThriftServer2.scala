@@ -46,7 +46,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  */
 object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
-  var uiTab: Option[ThriftServerTab] = _
+  var uiTab: Option[ThriftServerTab] = None
   var listener: HiveThriftServer2Listener = _
 
   /**
