@@ -98,7 +98,6 @@ class IndexedRowMatrix @Since("1.0.0") (
     toBlockMatrix(1024, 1024)
   }
 
-
   /**
    * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
@@ -153,7 +152,7 @@ class IndexedRowMatrix @Since("1.0.0") (
         .map({ case (values, blockColumn) =>
           ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values))
         })
-    }).groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rowsPerBlock, colsPerBlock)).map({
+    }).groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map({
       case ((blockRow, blockColumn), itr) =>
         val actualNumRows: Int =
           if (blockRow == lastRowBlockIndex) lastRowBlockSize else rowsPerBlock
