@@ -69,7 +69,7 @@ createExternalTable <- function(x, ...) {
 #' @param ... additional named parameters as options for the data source.
 #' @return A SparkDataFrame.
 #' @rdname createTable
-#' @seealso \link{createExternalTable-deprecated}
+#' @seealso \link{createExternalTable}
 #' @export
 #' @examples
 #'\dontrun{
@@ -80,7 +80,6 @@ createExternalTable <- function(x, ...) {
 #' insertInto(df, "people")
 #' }
 #' @name createTable
-#' @method createTable
 #' @note createTable since 2.2.0
 createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
   sparkSession <- getSparkSession()
