@@ -616,6 +616,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
     val minRight = BigDecimal(statsRangeRight.min)
 
     // determine the overlapping degree between predicate range and column's range
+    val allNotNull = (colStatLeft.nullCount == 0) && (colStatRight.nullCount == 0)
     val (noOverlap: Boolean, completeOverlap: Boolean) = op match {
       // Left < Right or Left <= Right
       // - no overlap:
@@ -625,11 +626,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       //      minLeft            maxLeft      minRight      maxRight
       // --------+------------------+------------+-------------+------->
       case _: LessThan =>
-        (minLeft >= maxRight,
-          maxLeft < minRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
+        (minLeft >= maxRight, (maxLeft < minRight) && allNotNull)
       case _: LessThanOrEqual =>
-        (minLeft > maxRight,
-          maxLeft <= minRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
+        (minLeft > maxRight, (maxLeft <= minRight) && allNotNull)
 
       // Left > Right or Left >= Right
       // - no overlap:
@@ -639,11 +638,9 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       //      minRight           maxRight     minLeft       maxLeft
       // --------+------------------+------------+-------------+------->
       case _: GreaterThan =>
-        (maxLeft <= minRight,
-          minLeft > maxRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
+        (maxLeft <= minRight, (minLeft > maxRight) && allNotNull)
       case _: GreaterThanOrEqual =>
-        (maxLeft < minRight,
-          minLeft >= maxRight && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0)
+        (maxLeft < minRight, (minLeft >= maxRight) && allNotNull)
 
       // Left = Right or Left <=> Right
       // - no overlap:
@@ -657,15 +654,13 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       // --------+------------------+------->
       case _: EqualTo =>
         ((maxLeft < minRight) || (maxRight < minLeft),
-          (minLeft == minRight) && (maxLeft == maxRight) && colStatLeft.nullCount == 0
-            && colStatRight.nullCount == 0)
+          (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
+        )
       case _: EqualNullSafe =>
         // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
         // If null values exists, we set it to partial overlap.
-        (((maxLeft < minRight) || (maxRight < minLeft))
-            && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0,
-          ((minLeft == minRight) && (maxLeft == maxRight))
-            && colStatLeft.nullCount == 0 && colStatRight.nullCount == 0
+        (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
+          (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
         )
     }
 
