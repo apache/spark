@@ -206,35 +206,31 @@ private[sql] object JsonInferSchema {
 
   private def withCorruptField(
       struct: StructType,
-      columnNameOfCorruptRecords: String): StructType = {
-    if (!struct.fieldNames.contains(columnNameOfCorruptRecords)) {
-      // If this given struct does not have a column used for corrupt records,
-      // add this field.
-      val newFields: Array[StructField] =
-        StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
-      // Note: other code relies on this sorting for correctness, so don't remove it!
-      java.util.Arrays.sort(newFields, structFieldComparator)
-      StructType(newFields)
-    } else {
-      // Otherwise, just return this struct.
-      struct
-    }
-  }
-
-  private def withParseMode(
-      struct: StructType,
       other: DataType,
       columnNameOfCorruptRecords: String,
       parseMode: ParseMode) = parseMode match {
-    // If we see any other data type at the root level, we get records that cannot be
-    // parsed. So, we use the struct as the data type and add the corrupt field to the schema.
-    case PermissiveMode => withCorruptField(struct, columnNameOfCorruptRecords)
+    case PermissiveMode =>
+      // If we see any other data type at the root level, we get records that cannot be
+      // parsed. So, we use the struct as the data type and add the corrupt field to the schema.
+      if (!struct.fieldNames.contains(columnNameOfCorruptRecords)) {
+        // If this given struct does not have a column used for corrupt records,
+        // add this field.
+        val newFields: Array[StructField] =
+          StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
+        // Note: other code relies on this sorting for correctness, so don't remove it!
+        java.util.Arrays.sort(newFields, structFieldComparator)
+        StructType(newFields)
+      } else {
+        // Otherwise, just return this struct.
+        struct
+      }
 
-    // If corrupt record handling is disabled we retain the valid schema and discard the other.
-    case DropMalformedMode => struct
+    case DropMalformedMode =>
+      // If corrupt record handling is disabled we retain the valid schema and discard the other.
+      struct
 
-    // If `other` is not struct type, consider it as malformed one and throws an exception.
     case FailFastMode =>
+      // If `other` is not struct type, consider it as malformed one and throws an exception.
       throw new RuntimeException("Failed to infer a common schema. Struct types are expected" +
         s" but ${other.catalogString} was found.")
   }
@@ -255,9 +251,9 @@ private[sql] object JsonInferSchema {
     case (struct: StructType, NullType) => struct
     case (NullType, struct: StructType) => struct
     case (struct: StructType, o) if !o.isInstanceOf[StructType] =>
-      withParseMode(struct, o, columnNameOfCorruptRecords, parseMode)
+      withCorruptField(struct, o, columnNameOfCorruptRecords, parseMode)
     case (o, struct: StructType) if !o.isInstanceOf[StructType] =>
-      withParseMode(struct, o, columnNameOfCorruptRecords, parseMode)
+      withCorruptField(struct, o, columnNameOfCorruptRecords, parseMode)
     // If we get anything else, we call compatibleType.
     // Usually, when we reach here, ty1 and ty2 are two StructTypes.
     case (ty1, ty2) => compatibleType(ty1, ty2)
