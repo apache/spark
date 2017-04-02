@@ -142,7 +142,8 @@ object ExternalCatalogUtils {
         _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
       }
       if (nonPartitionPruningPredicates.nonEmpty) {
-        sys.error("Expected only partition pruning predicates: " + nonPartitionPruningPredicates)
+        throw new AnalysisException("Expected only partition pruning predicates: " +
+          nonPartitionPruningPredicates)
       }
 
       val boundPredicate =
