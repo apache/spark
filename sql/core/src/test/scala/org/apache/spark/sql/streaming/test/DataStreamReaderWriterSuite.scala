@@ -404,23 +404,6 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-
-  test("check foreach() does not support partitioning") {
-    val df = spark.readStream
-      .format("org.apache.spark.sql.streaming.test")
-      .load()
-    val foreachWriter = new ForeachWriter[Row] {
-      override def open(partitionId: Long, version: Long): Boolean = false
-      override def process(value: Row): Unit = {}
-      override def close(errorOrNull: Throwable): Unit = {}
-    }
-    var w = df.writeStream.partitionBy("value")
-    var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
-    Seq("foreach", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-  }
-
   test("ConsoleSink can be correctly loaded") {
     LastOptions.clear()
     val df = spark.readStream

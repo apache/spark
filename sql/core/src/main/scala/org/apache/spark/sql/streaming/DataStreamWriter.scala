@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -35,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, Memory
  */
 @Experimental
 @InterfaceStability.Evolving
-final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
+final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends Logging {
 
   private val df = ds.toDF()
 
@@ -236,7 +237,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     if (source == "memory") {
-      assertNotPartitioned("memory")
+      checkNotPartitioned("memory")
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
@@ -256,7 +257,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       resultDf.createOrReplaceTempView(query.name)
       query
     } else if (source == "foreach") {
-      assertNotPartitioned("foreach")
+      checkNotPartitioned("foreach")
       val sink = new ForeachSink[T](foreachWriter)(ds.exprEnc)
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
@@ -269,6 +270,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
         if (source == "console") {
+          checkNotPartitioned("console")
           (true, false)
         } else {
           (false, true)
@@ -363,9 +365,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
 
-  private def assertNotPartitioned(operation: String): Unit = {
+  private def checkNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException(s"'$operation' does not support partitioning")
+      logWarning(s"'$operation' does not support partitioning")
     }
   }
 
