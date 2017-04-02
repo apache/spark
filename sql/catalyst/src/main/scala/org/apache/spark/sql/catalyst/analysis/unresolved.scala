@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, Codege
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 
 /**
@@ -70,14 +69,8 @@ case class UnresolvedInlineTable(
  *   select * from range(10);
  * }}}
  */
-case class UnresolvedTableValuedFunction(conf: SQLConf,
-  var functionName: String,
-  functionArgs: Seq[Expression])
+case class UnresolvedTableValuedFunction(functionName: String, functionArgs: Seq[Expression])
   extends LeafNode {
-
-  if (!conf.caseSensitiveAnalysis) {
-    functionName = functionName.toLowerCase
-  }
 
   override def output: Seq[Attribute] = Nil
 
