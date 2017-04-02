@@ -22,12 +22,19 @@ library(SparkR)
 options("warn" = 2)
 
 # Setup global test environment
-sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
+# Ensure Spark is installed before referencing SPARK_HOME
+install.spark()
+
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
+
+sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
 invisible(lapply(sparkRWhitelistSQLDirs,
                  function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
+sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
-install.spark()
+sparkRDirWd <- getwd()
+invisible(lapply(sparkRWhitelistSQLDirs,
+                 function(x) { unlink(file.path(sparkRDirWd, x), recursive = TRUE, force = TRUE)}))
+sparkRFilesBeforeWd <- list.files(path = sparkRDirWd, all.files = TRUE)
 
 test_package("SparkR")
