@@ -17,7 +17,7 @@
 
 # catalog.R: SparkSession catalog functions
 
-#' Create an external table
+#' (Deprecated) Create an external table
 #'
 #' Creates an external table based on the dataset in a data source,
 #' Returns a SparkDataFrame associated with the external table.
@@ -29,10 +29,11 @@
 #' @param tableName a name of the table.
 #' @param path the path of files to load.
 #' @param source the name of external data source.
-#' @param schema the schema of the data for certain data source.
+#' @param schema the schema of the data required for some data sources.
 #' @param ... additional argument(s) passed to the method.
 #' @return A SparkDataFrame.
-#' @rdname createExternalTable
+#' @rdname createExternalTable-deprecated
+#' @seealso \link{createTable}
 #' @export
 #' @examples
 #'\dontrun{
@@ -43,22 +44,62 @@
 #' @method createExternalTable default
 #' @note createExternalTable since 1.4.0
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
+  .Deprecated("createTable", old = "createExternalTable")
+  createTable(tableName, path, source, schema, ...)
+}
+
+createExternalTable <- function(x, ...) {
+  dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
+}
+
+#' Creates a table based on the dataset in a data source
+#'
+#' Creates a table based on the dataset in a data source. Returns a SparkDataFrame associated with
+#' the table.
+#'
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used. When a \code{path} is specified, an external table is
+#' created from the data at the given path. Otherwise a managed table is created.
+#'
+#' @param tableName a name of the table.
+#' @param path (optional) the path of files to load.
+#' @param source (optional) the name of the data source.
+#' @param schema (optional) the schema of the data required for some data sources.
+#' @param ... additional named parameters as options for the data source.
+#' @return A SparkDataFrame.
+#' @rdname createTable
+#' @seealso \link{createExternalTable-deprecated}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- createTable("myjson", path="path/to/json", source="json", schema)
+#'
+#' createTable("people", source = "json", schema = schema)
+#' insertInto(df, "people")
+#' }
+#' @name createTable
+#' @method createTable
+#' @note createTable since 2.2.0
+createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToStrEnv(...)
   if (!is.null(path)) {
     options[["path"]] <- path
   }
+  if (is.null(source)) {
+    source <- getDefaultSqlSource()
+  }
   catalog <- callJMethod(sparkSession, "catalog")
   if (is.null(schema)) {
-    sdf <- callJMethod(catalog, "createExternalTable", tableName, source, options)
+    sdf <- callJMethod(catalog, "createTable", tableName, source, options)
+  } else if (class(schema) == "structType") {
+    sdf <- callJMethod(catalog, "createTable", tableName, source, schema$jobj, options)
   } else {
-    sdf <- callJMethod(catalog, "createExternalTable", tableName, source, schema$jobj, options)
+    stop("schema must be a structType.")
   }
   dataFrame(sdf)
-}
-
-createExternalTable <- function(x, ...) {
-  dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
 }
 
 #' Cache Table
@@ -162,6 +203,7 @@ clearCache <- function() {
 #' @method dropTempTable default
 #' @note dropTempTable since 1.4.0
 dropTempTable.default <- function(tableName) {
+  .Deprecated("dropTempView", old = "dropTempTable")
   if (class(tableName) != "character") {
     stop("tableName must be a string.")
   }
@@ -169,7 +211,6 @@ dropTempTable.default <- function(tableName) {
 }
 
 dropTempTable <- function(x, ...) {
-  .Deprecated("dropTempView")
   dispatchFunc("dropTempView(viewName)", x, ...)
 }
 
@@ -430,11 +471,11 @@ recoverPartitions <- function(tableName) {
   invisible(handledCallJMethod(catalog, "recoverPartitions", tableName))
 }
 
-#' Invalidate and refresh all the cached metadata of the given table
+#' Invalidate and refresh all the cached data and metadata of the given table
 #'
-#' Invalidate and refresh all the cached metadata of the given table. For performance reasons,
-#' Spark SQL or the external data source library it uses might cache certain metadata about a
-#' table, such as the location of blocks. When those change outside of Spark SQL, users should
+#' Invalidate and refresh all the cached data and metadata of the given table. For performance
+#' reasons, Spark SQL or the external data source library it uses might cache certain metadata about
+#' a table, such as the location of blocks. When those change outside of Spark SQL, users should
 #' call this function to invalidate the cache.
 #'
 #' If this table is cached as an InMemoryRelation, drop the original cached version and make the
