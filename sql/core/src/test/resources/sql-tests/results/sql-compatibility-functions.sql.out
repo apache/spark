@@ -75,7 +75,7 @@ struct<plan:string>
 -- !query 8 output
 == Parsed Logical Plan ==
 'Project [unresolvedalias('ifnull('id, x), None), unresolvedalias('nullif('id, x), None), unresolvedalias('nvl('id, x), None), unresolvedalias('nvl2('id, x, y), None)]
-+- 'UnresolvedTableValuedFunction range, [2]
++- 'UnresolvedTableValuedFunction SimpleCatalystConf(false,true,true,100,10,20,1000,true,false,false,false,12,false,/user/hive/warehouse,America/Los_Angeles,100,true), range, [2]
 
 == Analyzed Logical Plan ==
 ifnull(`id`, 'x'): string, nullif(`id`, 'x'): bigint, nvl(`id`, 'x'): string, nvl2(`id`, 'x', 'y'): string
