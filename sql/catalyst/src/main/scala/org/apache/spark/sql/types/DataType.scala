@@ -115,7 +115,10 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType(other)
+      case other => nonDecimalNameToType.getOrElse(
+        other,
+        throw new IllegalArgumentException(
+          s"Failed to convert the JSON string '$name' to a data type."))
     }
   }
 
@@ -164,6 +167,10 @@ object DataType {
     ("sqlType", v: JValue),
     ("type", JString("udt"))) =>
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
+
+    case other =>
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -179,6 +186,9 @@ object DataType {
     ("nullable", JBool(nullable)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
+    case other =>
+      throw new IllegalArgumentException(
+        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
   }
 
   protected[types] def buildFormattedString(
