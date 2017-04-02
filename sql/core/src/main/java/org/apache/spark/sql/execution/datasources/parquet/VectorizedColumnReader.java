@@ -29,6 +29,8 @@ import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.types.ArrayType;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -67,6 +69,11 @@ public class VectorizedColumnReader {
   private final int maxDefLevel;
 
   /**
+   * Maximum repetition level for this column.
+   */
+  private final int maxRepLevel;
+
+  /**
    * Repetition/Definition/Value readers.
    */
   private SpecificParquetRecordReaderBase.IntIterator repetitionLevelColumn;
@@ -76,6 +83,9 @@ public class VectorizedColumnReader {
   // Only set if vectorized decoding is true. This is used instead of the row by row decoding
   // with `definitionLevelColumn`.
   private VectorizedRleValuesReader defColumn;
+
+  // Only set when reading complex column.
+  private VectorizedRleValuesReader defColumnCopy;
 
   /**
    * Total number of values in this column (in this row group).
@@ -95,6 +105,7 @@ public class VectorizedColumnReader {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
+    this.maxRepLevel = descriptor.getMaxRepetitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
@@ -113,29 +124,37 @@ public class VectorizedColumnReader {
       throw new IOException("totalValueCount == 0");
     }
   }
+  /**
+   * Whether this column is the element of a complex column.
+   */
+  boolean asComplexColElement;
 
   /**
-   * Advances to the next value. Returns true if the value is non-null.
+   * The flag used in constructing nested records. When it is true, the previous status
+   * will be reset.
    */
-  private boolean next() throws IOException {
-    if (valuesRead >= endOfPageValueCount) {
-      if (valuesRead >= totalValueCount) {
-        // How do we get here? Throw end of stream exception?
-        return false;
-      }
-      readPage();
-    }
-    ++valuesRead;
-    // TODO: Don't read for flat schemas
-    //repetitionLevel = repetitionLevelColumn.nextInt();
-    return definitionLevelColumn.nextInt() == maxDefLevel;
-  }
+  boolean resetNestedRecord = true;
 
   /**
    * Reads `total` values from this columnReader into column.
    */
-  void readBatch(int total, ColumnVector column) throws IOException {
+  public void readBatch(int total, ColumnVector column) throws IOException {
+    asComplexColElement = column.getParentColumn() != null;
+    boolean isRepeatedColumn = maxRepLevel > 0;
     int rowId = 0;
+    int repeatedRowId = 0;
+    int remaining = total;
+
+    // The number of values to read.
+    int num = 0;
+
+    // Stores row ids and offsets during constructing nested records.
+    int[] rowIds = new int[maxRepLevel + 2];
+    int[] offsets = new int[maxRepLevel + 2];
+
+    // Keeps repetition levels and corresponding repetition counts.
+    int[] repetitions = new int[maxRepLevel + 2];
+
     ColumnVector dictionaryIds = null;
     if (dictionary != null) {
       // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
@@ -143,18 +162,60 @@ public class VectorizedColumnReader {
       // page.
       dictionaryIds = column.reserveDictionaryIds(total);
     }
-    while (total > 0) {
+
+    while (true) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
+
+      // Stop condition:
+      // If we are going to read data in repeated column, the stop condition is that we
+      // read `total` repeated columns. Eg., if we want to read 5 records of an array of int column.
+      // we can't just read 5 integers. Instead, we have to read the integers until 5 arrays are put
+      // into this array column.
+      if (isRepeatedColumn) {
+        if (repeatedRowId == total) break;
+      } else {
+        if (remaining == 0) break;
+      }
+
+      // Reaching the end of current page.
       if (leftInPage == 0) {
-        readPage();
+        boolean pageExists = readPage();
+        if (!pageExists) {
+          if (!resetNestedRecord) {
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
+            resetNestedRecord = true;
+            repeatedRowId = rowIds[1];
+            if (repeatedRowId == total) break;
+          }
+          // Should not reach here.
+          throw new IOException("Failed to read page. No page exists anymore!");
+        }
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
-      int num = Math.min(total, leftInPage);
+
+      // Determine the number of values to read for this column in the current page.
+      if (asComplexColElement) {
+        // Using repetition and definition level encodings to construct nested/repeated records.
+        // When constructing nested/repeated records, we returns the number of values to read in
+        // this page for this column.
+        num = constructComplexRecords(column, repetitions, rowIds, offsets, leftInPage, total);
+        repeatedRowId = rowIds[1];
+      } else {
+        // If this column is not a repeated/nested column, just read minimum of remaining values
+        // and all values left in the current page.
+        num = Math.min(remaining, leftInPage);
+      }
+
       if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
+        if (asComplexColElement) {
+          int dictionaryCapacity = Math.max(remaining, rowId + num);
+          dictionaryIds = column.reserveDictionaryIds(dictionaryCapacity);
+        }
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
@@ -171,10 +232,13 @@ public class VectorizedColumnReader {
       } else {
         if (column.hasDictionary() && rowId != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
-          // does not support a mix of dictionary and not so we will decode the dictionary.
+          // does not support a mix of dictionary and not, so we will decode the dictionary.
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);
+        if (asComplexColElement) {
+          column.reserve(Math.max(remaining, rowId + num));
+        }
         switch (descriptor.getType()) {
           case BOOLEAN:
             readBooleanBatch(rowId, num, column);
@@ -204,10 +268,9 @@ public class VectorizedColumnReader {
             throw new IOException("Unsupported type: " + descriptor.getType());
         }
       }
-
       valuesRead += num;
       rowId += num;
-      total -= num;
+      remaining -= num;
     }
   }
 
@@ -447,30 +510,35 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readPage() throws IOException {
+  private boolean readPage() throws IOException {
     DataPage page = pageReader.readPage();
-    // TODO: Why is this a visitor?
-    page.accept(new DataPage.Visitor<Void>() {
-      @Override
-      public Void visit(DataPageV1 dataPageV1) {
-        try {
-          readPageV1(dataPageV1);
-          return null;
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+    if (page == null) {
+      return false;
+    } else {
+      // TODO: Why is this a visitor?
+      page.accept(new DataPage.Visitor<Void>() {
+        @Override
+        public Void visit(DataPageV1 dataPageV1) {
+          try {
+            readPageV1(dataPageV1);
+            return null;
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
         }
-      }
 
-      @Override
-      public Void visit(DataPageV2 dataPageV2) {
-        try {
-          readPageV2(dataPageV2);
-          return null;
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+        @Override
+        public Void visit(DataPageV2 dataPageV2) {
+          try {
+            readPageV2(dataPageV2);
+            return null;
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
         }
-      }
-    });
+      });
+      return true;
+    }
   }
 
   private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset) throws IOException {
@@ -504,6 +572,292 @@ public class VectorizedColumnReader {
     }
   }
 
+  /**
+   * Inserts records into parent columns of a column. These parent columns are repeated columns. As
+   * the real data are read into the column, we only need to insert array into its repeated columns.
+   * @param column The ColumnVector which the data in the page are read into.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param offsets The beginning offsets in columns which we use to construct nested records.
+   * @param repetitions Mapping between repetition levels and their corresponding counts.
+   * @param total The total number of rows to construct.
+   * @param repLevel The current repetition level.
+   */
+  private void insertRepeatedArray(
+      ColumnVector column,
+      int[] rowIds,
+      int[] offsets,
+      int[] repetitions,
+      int total,
+      int repLevel) throws IOException {
+    ColumnVector parentRepeatedColumn = column;
+    int curRepLevel = maxRepLevel;
+    while (true) {
+      parentRepeatedColumn = parentRepeatedColumn.getNearestParentArrayColumn();
+      if (parentRepeatedColumn != null) {
+        int parentColRepLevel = parentRepeatedColumn.getRepLevel();
+        // The current repetition level means the beginning level of the current value. Thus,
+        // we only need to insert array into the parent columns whose repetition levels are
+        // equal to or more than the given repetition level.
+        if (parentColRepLevel >= repLevel) {
+          parentRepeatedColumn.reserve(rowIds[curRepLevel] + 1);
+          parentRepeatedColumn.putArray(rowIds[curRepLevel],
+            offsets[curRepLevel], repetitions[curRepLevel]);
+
+          offsets[curRepLevel] += repetitions[curRepLevel];
+          repetitions[curRepLevel] = 0;
+          rowIds[curRepLevel]++;
+
+          // Increase the repetition count for parent repetition level as we add a new record.
+          if (curRepLevel > 1) {
+            repetitions[curRepLevel - 1]++;
+          }
+
+          // In vectorization, the most outside repeated element is at the repetition 1.
+          if (curRepLevel == 1 && rowIds[curRepLevel] == total) {
+            return;
+          }
+          curRepLevel--;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Finds the outside element of an inner element which is defined as Catalyst DataType,
+   * with the specified definition level.
+   * @param column The column as the beginning level for looking up the inner element.
+   * @param defLevel The specified definition level.
+   * @return the column which is the outside group element of the inner element.
+   */
+  private ColumnVector findInnerElementWithDefLevel(ColumnVector column, int defLevel) {
+    while (true) {
+      if (column == null) {
+        return null;
+      }
+      ColumnVector parent = column.getParentColumn();
+      if (parent != null && parent.getDefLevel() == defLevel) {
+        ColumnVector outside = parent.getParentColumn();
+        if (outside == null || outside.getDefLevel() < defLevel) {
+          return column;
+        }
+      }
+      column = parent;
+    }
+  }
+
+  /**
+   * Finds the outside element of the inner element which is not defined as Catalyst DataType,
+   * with the specified definition level.
+   * @param column The column as the beginning level for looking up the inner element.
+   * @param defLevel The specified definition level.
+   * @return the column which is the outside group element of the inner element.
+   */
+  private ColumnVector findHiddenInnerElementWithDefLevel(ColumnVector column, int defLevel) {
+    while (true) {
+      if (column == null) {
+        return null;
+      }
+      ColumnVector parent = column.getParentColumn();
+      if (parent != null && parent.getDefLevel() <= defLevel) {
+        ColumnVector outside = parent.getParentColumn();
+        if (outside == null || outside.getDefLevel() < defLevel) {
+          return column;
+        }
+      }
+      column = parent;
+    }
+  }
+
+  /**
+   * Checks if the given column is a legacy array in Parquet schema.
+   * @param column The column we want to check if it is legacy array.
+   * @return whether the given column is a legacy array in Parquet schema.
+   */
+  private boolean isLegacyArray(ColumnVector column) {
+    ColumnVector parent = column.getNearestParentArrayColumn();
+    if (parent == null) {
+      return false;
+    } else if (parent.getRepLevel() <= maxRepLevel && parent.getDefLevel() < maxDefLevel) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Inserts a null record at specified column.
+   * @param column The ColumnVector which the data in the page are read into.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param repetitions Mapping between repetition levels and their corresponding counts.
+   */
+  private void insertNullRecord(
+      ColumnVector column,
+      int[] rowIds,
+      int[] repetitions) {
+    int repLevel = column.getRepLevel();
+
+    if (repLevel == 0) {
+      repLevel = 1;
+    }
+
+    rowIds[repLevel] += repetitions[repLevel];
+    repetitions[repLevel] = 0;
+
+    column.reserve(rowIds[repLevel] + 1);
+    column.putNull(rowIds[repLevel]);
+    rowIds[repLevel]++;
+  }
+
+  /**
+   * Returns the array of repetition level values.
+   */
+  private int[] getRepetitionLevels() throws IOException {
+    int[] repetitions = new int[this.pageValueCount];
+    for (int i = 0; i < this.pageValueCount; i++) {
+      repetitions[i] = this.repetitionLevelColumn.nextInt();
+    }
+    return repetitions;
+  }
+
+  /**
+   * Iterates the values of definition and repetition levels for the values read in the page,
+   * and constructs complex records accordingly.
+   * @param column The ColumnVector which the data in the page are read into.
+   @ @param repetitions Mapping between repetition levels and their counts.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param offsets The beginning offsets in columns which we use to construct nested records.
+   * @param leftInPage The number of values can be read in the current page.
+   * @param total The total number of rows to construct.
+   * @return the number of values needed to read in the current page.
+   */
+  private int constructComplexRecords(
+      ColumnVector column,
+      int[] repetitions,
+      int[] rowIds,
+      int[] offsets,
+      int leftInPage,
+      int total) throws IOException {
+    for (int i = 0; i < leftInPage; i++) {
+      int repLevel = repetitionLevelColumn.nextInt();
+      int defLevel = definitionLevelColumn.nextInt();
+
+      // If there are previous values and counts needed to be consider.
+      if (!resetNestedRecord) {
+        // When a new record begins at lower repetition level,
+        // we insert array into repeated column.
+        if (repLevel < maxRepLevel) {
+          insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
+        }
+      }
+      resetNestedRecord = false;
+
+      // When definition level is less than max definition level,
+      // there is a null value.
+      if (defLevel < maxDefLevel) {
+        int offset = offsets[maxRepLevel];
+
+        // The null value is defined at the root level.
+        // Insert a null record.
+        if (repLevel == 0 && defLevel == 0) {
+          ColumnVector parent = column.getParentColumn();
+          if (parent != null && parent.getDefLevel() == maxDefLevel
+            && parent.getRepLevel() == maxRepLevel) {
+            // A repeated element at root level.
+            // E.g., The repeatedPrimitive at the following schema.
+            // Going to insert an empty record.
+            // messageType: message spark_schema {
+            //   optional int32 optionalPrimitive;
+            //   required int32 requiredPrimitive;
+            //
+            //   repeated int32 repeatedPrimitive;
+            //
+            //   optional group optionalMessage {
+            //     optional int32 someId;
+            //   }
+            //   required group requiredMessage {
+            //     optional int32 someId;
+            //   }
+            //   repeated group repeatedMessage {
+            //     optional int32 someId;
+            //   }
+            // }
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
+          } else {
+            // Obtain most outside column.
+            ColumnVector topColumn = column.getParentColumn();
+            while (topColumn.getParentColumn() != null) {
+              topColumn = topColumn.getParentColumn();
+            }
+
+            insertNullRecord(topColumn, rowIds, repetitions);
+          }
+          // Move to next offset in max repetition level as we processed the current value.
+          offsets[maxRepLevel]++;
+          resetNestedRecord = true;
+        } else if (isLegacyArray(column) &&
+          column.getNearestParentArrayColumn().getDefLevel() == defLevel) {
+          // For a legacy array, if a null is defined at the repeated group column, it actually
+          // means an element with null value.
+
+          repetitions[maxRepLevel]++;
+        } else if (!column.getParentColumn().isArray() &&
+          column.getParentColumn().getDefLevel() == defLevel) {
+          // A null element defined in the wrapping non-repeated group.
+          rowIds[1]++;
+        } else {
+          // An empty element defined in outside group.
+          // E.g., the element in the following schema.
+          // messageType: message spark_schema {
+          //   required int32 index;
+          //   optional group col {
+          //     optional float f1;
+          //     optional group f2 (LIST) {
+          //       repeated group list {
+          //         optional boolean element;
+          //       }
+          //     }
+          //   }
+          // }
+          ColumnVector parent = findInnerElementWithDefLevel(column, defLevel);
+          if (parent != null) {
+            // Found the group with the same definition level.
+            // Insert a null record at definition level.
+            // E.g, R=0, D=1 for above schema.
+            insertNullRecord(parent, rowIds, repetitions);
+            offsets[maxRepLevel]++;
+            resetNestedRecord = true;
+          } else {
+            // Found the group with lower definition level.
+            // Insert an empty record.
+            // E.g, R=0, D=2 for above schema.
+            parent = findHiddenInnerElementWithDefLevel(column, defLevel);
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
+            offsets[maxRepLevel]++;
+            resetNestedRecord = true;
+          }
+        }
+      } else {
+        // Determine the repetition level of non-null values.
+        // A new record begins with non-null value.
+        if (maxRepLevel == 0) {
+          // A required record at root level.
+          repetitions[1]++;
+          insertRepeatedArray(column, rowIds, offsets, repetitions, total, maxRepLevel - 1);
+        } else {
+          // Repeated values. We increase repetition count.
+          repetitions[maxRepLevel]++;
+        }
+      }
+      // If we have constructed `total` records, return the number of values to read.
+      if (rowIds[1] == total) return i + 1;
+    }
+    // All `leftInPage` values in the current page are needed to read.
+    return leftInPage;
+  }
+
   private void readPageV1(DataPageV1 page) throws IOException {
     this.pageValueCount = page.getValueCount();
     ValuesReader rlReader = page.getRlEncoding().getValuesReader(descriptor, REPETITION_LEVEL);
@@ -517,12 +871,20 @@ public class VectorizedColumnReader {
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
     dlReader = this.defColumn;
     this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(dlReader);
     try {
       byte[] bytes = page.getBytes().toByteArray();
       rlReader.initFromPage(pageValueCount, bytes, 0);
       int next = rlReader.getNextOffset();
       dlReader.initFromPage(pageValueCount, bytes, next);
+
+      if (asComplexColElement) {
+        ValuesReader dlReaderCopy;
+        this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+        dlReaderCopy = this.defColumnCopy;
+        this.definitionLevelColumn = new ValuesReaderIntIterator(dlReaderCopy);
+        dlReaderCopy.initFromPage(pageValueCount, bytes, next);
+      }
+
       next = dlReader.getNextOffset();
       initDataReader(page.getValueEncoding(), bytes, next);
     } catch (IOException e) {
@@ -537,9 +899,16 @@ public class VectorizedColumnReader {
 
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
     this.defColumn.initFromBuffer(
         this.pageValueCount, page.getDefinitionLevels().toByteArray());
+
+    if (asComplexColElement) {
+      this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+      this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumnCopy);
+      this.defColumnCopy.initFromBuffer(
+        this.pageValueCount, page.getDefinitionLevels().toByteArray());
+    }
+
     try {
       initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);
     } catch (IOException e) {

@@ -31,6 +31,7 @@ import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
+import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
@@ -178,7 +179,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     }
 
+    // Allocate ColumnVectors in ColumnarBatch
     columnarBatch = ColumnarBatch.allocate(batchSchema, memMode);
+    columnarBatch.setParquetSchema(this.parquetSchema);
+    columnarBatch.initColumnVectors();
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
       for (int i = 0; i < partitionColumns.fields().length; i++) {
@@ -188,12 +192,30 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
 
     // Initialize missing columns with nulls.
-    for (int i = 0; i < missingColumns.length; i++) {
-      if (missingColumns[i]) {
-        columnarBatch.column(i).putNulls(0, columnarBatch.capacity());
-        columnarBatch.column(i).setIsConstant();
+    int missingColumnIdx = 0;
+    int partitionIdxBase = missingColumns.length;
+    if (partitionColumns != null) {
+      partitionIdxBase = sparkSchema.fields().length;
+    }
+    for (int i = 0; i < columnarBatch.numFields(); i++) {
+      if (i < partitionIdxBase) {
+        missingColumnIdx = initColumnWithNulls(columnarBatch.column(i), missingColumnIdx);
       }
     }
+  }
+
+  private int initColumnWithNulls(ColumnVector column, int missingColumnIdx) {
+    if (column.isComplex()) {
+      for (int j = 0; j < column.getChildColumnNums(); j++) {
+        missingColumnIdx = initColumnWithNulls(column.getChildColumn(j), missingColumnIdx);
+      }
+    } else {
+      if (missingColumns[missingColumnIdx++]) {
+        column.putNulls(0, columnarBatch.capacity());
+        column.setIsConstant();
+      }
+    }
+    return missingColumnIdx;
   }
 
   public void initBatch() {
@@ -225,10 +247,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     checkEndOfRowGroup();
 
     int num = (int) Math.min((long) columnarBatch.capacity(), totalCountLoadedSoFar - rowsReturned);
-    for (int i = 0; i < columnReaders.length; ++i) {
-      if (columnReaders[i] == null) continue;
-      columnReaders[i].readBatch(num, columnarBatch.column(i));
+    for (int i = 0; i < columnarBatch.numFields(); i++) {
+      readBatchOnColumnVector(columnarBatch.column(i), num);
     }
+
     rowsReturned += num;
     columnarBatch.setNumRows(num);
     numBatched = num;
@@ -236,17 +258,23 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return true;
   }
 
+  private void readBatchOnColumnVector(ColumnVector column, int num) throws IOException {
+    if (column.hasColumnReader()) {
+      column.readBatch(num);
+    } else {
+      for (int j = 0; j < column.getChildColumnNums(); j++) {
+        readBatchOnColumnVector(column.getChildColumn(j), num);
+      }
+    }
+  }
+
   private void initializeInternal() throws IOException, UnsupportedOperationException {
     /**
      * Check that the requested schema is supported.
      */
-    missingColumns = new boolean[requestedSchema.getFieldCount()];
-    for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
-      Type t = requestedSchema.getFields().get(i);
-      if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
-        throw new UnsupportedOperationException("Complex types not supported.");
-      }
-
+    missingColumns = new boolean[requestedSchema.getColumns().size()];
+    // For loop on each physical columns.
+    for (int i = 0; i < requestedSchema.getColumns().size(); ++i) {
       String[] colPath = requestedSchema.getPaths().get(i);
       if (fileSchema.containsPath(colPath)) {
         ColumnDescriptor fd = fileSchema.getColumnDescription(colPath);
@@ -265,6 +293,25 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
   }
 
+  private int setupColumnReader(
+      ColumnVector column,
+      VectorizedColumnReader[] columnReaders,
+      int readerIdx) {
+    if (column.isComplex()) {
+      column.setColumnReader(null);
+      for (int j = 0; j < column.getChildColumnNums(); j++) {
+        readerIdx = setupColumnReader(column.getChildColumn(j), columnReaders, readerIdx);
+      }
+    } else {
+      if (!missingColumns[readerIdx]) {
+        column.setColumnReader(columnReaders[readerIdx++]);
+      } else {
+        readerIdx++;
+      }
+    }
+    return readerIdx;
+  }
+
   private void checkEndOfRowGroup() throws IOException {
     if (rowsReturned != totalCountLoadedSoFar) return;
     PageReadStore pages = reader.readNextRowGroup();
@@ -272,12 +319,24 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       throw new IOException("expecting more rows but reached last block. Read "
           + rowsReturned + " out of " + totalRowCount);
     }
+    // Return physical columns stored in Parquet file. Not logical fields.
+    // For example, a nested StructType field in requestedSchema might have many columns.
+    // A column is always a primitive type column.
     List<ColumnDescriptor> columns = requestedSchema.getColumns();
     columnReaders = new VectorizedColumnReader[columns.size()];
+
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
       columnReaders[i] = new VectorizedColumnReader(columns.get(i),
           pages.getPageReader(columns.get(i)));
+    }
+
+    // Associate ColumnReaders to ColumnVectors in ColumnarBatch.
+    int readerIdx = 0;
+    int partitionIdx = sparkSchema.fields().length;
+    for (int i = 0; i < columnarBatch.numFields(); i++) {
+      if (i >= partitionIdx) break;
+      readerIdx = setupColumnReader(columnarBatch.column(i), columnReaders, readerIdx);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

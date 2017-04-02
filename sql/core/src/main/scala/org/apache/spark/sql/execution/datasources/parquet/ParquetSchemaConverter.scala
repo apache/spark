@@ -95,6 +95,86 @@ private[parquet] class ParquetSchemaConverter(
   }
 
   /**
+   * Obtains schema structure and metadata (repetition and definition information) for
+   * Parquet [[MessageType]] `parquetSchema`.
+   */
+  def getParquetStruct(parquetSchema: MessageType): ParquetStruct = {
+    getParquetStruct(parquetSchema.asGroupType(), parquetSchema, Seq.empty[String])
+  }
+
+  private def getParquetStruct(
+      parquetSchema: GroupType,
+      messageType: MessageType,
+      path: Seq[String]): ParquetStruct = {
+    val fields = parquetSchema.getFields.asScala.map { field =>
+      field.getRepetition match {
+        case OPTIONAL =>
+          getParquetField(field, messageType, path)
+
+        case REQUIRED =>
+          getParquetField(field, messageType, path)
+
+        case REPEATED =>
+          val curPath = path ++ Seq(field.getName)
+          val defLevel = messageType.getMaxDefinitionLevel(curPath: _*)
+          val repLevel = messageType.getMaxRepetitionLevel(curPath: _*)
+
+          val inner = getParquetField(field, messageType, path)
+          ParquetArray(inner, RepetitionDefinitionInfo(repLevel, defLevel))
+      }
+    }
+
+    if (path.isEmpty) {
+      ParquetStruct(fields.toArray, RepetitionDefinitionInfo(0, 0))
+    } else {
+      val defLevel = messageType.getMaxDefinitionLevel(path: _*)
+      val repLevel = messageType.getMaxRepetitionLevel(path: _*)
+      ParquetStruct(fields.toArray, RepetitionDefinitionInfo(repLevel, defLevel))
+    }
+  }
+
+  private def getParquetField(
+      parquetType: Type,
+      messageType: MessageType,
+      path: Seq[String]): ParquetField = parquetType match {
+    case t: PrimitiveType => new ParquetField()
+    case t: GroupType =>
+      val curPath = path ++ Seq(t.getName())
+      getParquetGroupField(t.asGroupType(), messageType, curPath)
+  }
+
+  private def getParquetGroupField(
+      field: GroupType,
+      messageType: MessageType,
+      path: Seq[String]): ParquetField = {
+    Option(field.getOriginalType).fold(getParquetStruct(field, messageType, path): ParquetField) {
+      case LIST =>
+        ParquetSchemaConverter.checkConversionRequirement(
+          field.getFieldCount == 1, s"Invalid list type $field")
+
+        val repeatedType = field.getType(0)
+        ParquetSchemaConverter.checkConversionRequirement(
+          repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
+        if (isElementType(repeatedType, field.getName)) {
+          val defLevel = messageType.getMaxDefinitionLevel(path: _*)
+          val repLevel = messageType.getMaxRepetitionLevel(path: _*)
+          val inner = getParquetField(repeatedType, messageType, path)
+          ParquetArray(inner, RepetitionDefinitionInfo(repLevel, defLevel))
+        } else {
+          val elementType = repeatedType.asGroupType().getType(0)
+          val curPath = path ++ Seq(repeatedType.getName)
+          val defLevel = messageType.getMaxDefinitionLevel(curPath: _*)
+          val repLevel = messageType.getMaxRepetitionLevel(path: _*)
+          val inner = getParquetField(elementType, messageType, curPath)
+          ParquetArray(inner, RepetitionDefinitionInfo(repLevel, defLevel))
+        }
+
+      case _ =>
+        throw new AnalysisException(s"Unrecognized Parquet type: $field")
+    }
+  }
+
+  /**
    * Converts a Parquet [[Type]] to a Spark SQL [[DataType]].
    */
   def convertField(parquetType: Type): DataType = parquetType match {

@@ -456,8 +456,13 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
-    this.nulls = Platform.reallocateMemory(nulls, elementsAppended, newCapacity);
-    Platform.setMemory(nulls + elementsAppended, (byte)0, newCapacity - elementsAppended);
+    reserveNulls(newCapacity);
     capacity = newCapacity;
+  }
+
+  @Override
+  protected void reserveNulls(int capacity) {
+    this.nulls = Platform.reallocateMemory(nulls, elementsAppended, capacity);
+    Platform.setMemory(nulls + elementsAppended, (byte)0, capacity - elementsAppended);
   }
 }

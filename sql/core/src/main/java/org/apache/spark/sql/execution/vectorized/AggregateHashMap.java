@@ -63,6 +63,7 @@ public class AggregateHashMap {
     this.maxSteps = maxSteps;
     numBuckets = (int) (capacity / loadFactor);
     batch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, capacity);
+    batch.initColumnVectors();
     buckets = new int[numBuckets];
     Arrays.fill(buckets, -1);
   }

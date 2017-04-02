@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.execution.datasources.parquet.ParquetField;
+import org.apache.spark.sql.execution.datasources.parquet.ParquetStruct;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -51,6 +53,10 @@ public final class ColumnarBatch {
   private final int capacity;
   private int numRows;
   private final ColumnVector[] columns;
+  private MemoryMode memMode;
+
+  // This captures Parquet schema structure and metadata such as definition and repetition levels.
+  private ParquetStruct parquetStruct;
 
   // True if the row is filtered.
   private final boolean[] filteredRows;
@@ -75,6 +81,10 @@ public final class ColumnarBatch {
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
     return new ColumnarBatch(schema, maxRows, memMode);
   }
+
+  public int numFields() { return columns.length; }
+
+  public void setParquetSchema(ParquetStruct struct) { this.parquetStruct = struct; }
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
@@ -466,18 +476,27 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
+  public void initColumnVectors() {
+    for (int i = 0; i < this.schema.fields().length; ++i) {
+      StructField field = this.schema.fields()[i];
+      this.columns[i] = ColumnVector.allocate(this.capacity, field.dataType(), this.memMode);
+      if (this.parquetStruct != null) {
+        if (i < this.parquetStruct.fields().length) {
+          ParquetField parquetField = this.parquetStruct.fields()[i];
+          this.columns[i].setParquetField(parquetField);
+          this.columns[i].initRepetitionAndDefinitionLevels();
+        }
+      }
+    }
+  }
+
   private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
+    this.memMode = memMode;
     this.columns = new ColumnVector[schema.size()];
     this.nullFilteredColumns = new HashSet<>();
     this.filteredRows = new boolean[maxRows];
-
-    for (int i = 0; i < schema.fields().length; ++i) {
-      StructField field = schema.fields()[i];
-      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
-    }
-
     this.row = new Row(this);
   }
 }

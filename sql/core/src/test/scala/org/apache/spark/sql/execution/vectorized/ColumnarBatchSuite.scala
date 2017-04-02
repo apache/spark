@@ -540,6 +540,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         .add("string", BinaryType)
 
       val batch = ColumnarBatch.allocate(schema, memMode)
+      batch.initColumnVectors();
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 0)
       assert(batch.numValidRows() == 0)

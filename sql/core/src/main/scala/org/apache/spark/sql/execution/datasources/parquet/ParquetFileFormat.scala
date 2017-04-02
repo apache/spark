@@ -265,7 +265,7 @@ class ParquetFileFormat
     val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(_.dataType.isInstanceOf[AtomicType])
+      !schema.existsRecursively(f => f.isInstanceOf[MapType] || f.isInstanceOf[UserDefinedType[_]])
   }
 
   override def isSplitable(
@@ -323,7 +323,9 @@ class ParquetFileFormat
     val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
     val enableVectorizedReader: Boolean =
       sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
-      resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+        !resultSchema.existsRecursively(f => f.isInstanceOf[MapType] ||
+          f.isInstanceOf[UserDefinedType[_]])
+
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
 

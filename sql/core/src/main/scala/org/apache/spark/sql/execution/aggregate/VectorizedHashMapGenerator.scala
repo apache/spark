@@ -91,9 +91,11 @@ class VectorizedHashMapGenerator(
        |  public $generatedClassName() {
        |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
        |      org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
+       |    batch.initColumnVectors();
        |    // TODO: Possibly generate this projection in HashAggregate directly
        |    aggregateBufferBatch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(
        |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
+       |    aggregateBufferBatch.initColumnVectors();
        |    for (int i = 0 ; i < aggregateBufferBatch.numCols(); i++) {
        |       aggregateBufferBatch.setColumn(i, batch.column(i+${groupingKeys.length}));
        |    }

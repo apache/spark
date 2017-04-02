@@ -199,6 +199,7 @@ public class ColumnVectorUtils {
   public static ColumnarBatch toBatch(
       StructType schema, MemoryMode memMode, Iterator<Row> row) {
     ColumnarBatch batch = ColumnarBatch.allocate(schema, memMode);
+    batch.initColumnVectors();
     int n = 0;
     while (row.hasNext()) {
       Row r = row.next();
