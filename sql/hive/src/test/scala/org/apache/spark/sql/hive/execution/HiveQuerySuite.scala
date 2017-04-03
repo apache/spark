@@ -1236,6 +1236,12 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       }
     }
   }
+
+  test("SPARK-19490 case sensitivity when filtering hive partition columns") {
+    sql("CREATE TABLE partition_test (key Int) partitioned by (date string)")
+    sql("INSERT INTO TABLE partition_test partition(date='20170101') select 1 from src limit 1")
+    sql("SELECT * FROM partition_test where DATE = '20170101'")
+  }
 }
 
 // for SPARK-2180 test

@@ -1039,9 +1039,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+    val partitionColumnNames = catalogTable.partitionColumnNames.map(_.toLowerCase).toSet
     val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      _.references.map(_.name.toLowerCase).toSet.subsetOf(partitionColumnNames)
     }
 
     if (nonPartitionPruningPredicates.nonEmpty) {
@@ -1059,7 +1059,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val boundPredicate =
         InterpretedPredicate.create(predicates.reduce(And).transform {
           case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
+            val index = partitionSchema.indexWhere(_.name.toLowerCase == att.name.toLowerCase)
             BoundReference(index, partitionSchema(index).dataType, nullable = true)
         })
       clientPrunedPartitions.filter { p =>
