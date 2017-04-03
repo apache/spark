@@ -1620,10 +1620,13 @@ class DataFrame(object):
         1    5    Bob
         """
         if useArrow:
-            from pyarrow.table import concat_tables
-            tables = self._collectAsArrow()
-            table = concat_tables(tables)
-            return table.to_pandas()
+            try:
+                import pyarrow
+                tables = self._collectAsArrow()
+                table = pyarrow.table.concat_tables(tables)
+                return table.to_pandas()
+            except ImportError as e:
+                raise ImportError("%s\n%s" % (e.message, self.toPandas.__doc__))
         else:
             import pandas as pd
             return pd.DataFrame.from_records(self.collect(), columns=self.columns)
