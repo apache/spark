@@ -264,8 +264,7 @@ private[spark] object JsonProtocol {
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
-    ("Accumulables" -> JArray(
-      stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
+    ("Accumulables" -> accumulablesToJson(stageInfo.accumulables.values))
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
@@ -281,7 +280,15 @@ private[spark] object JsonProtocol {
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
     ("Killed" -> taskInfo.killed) ~
-    ("Accumulables" -> JArray(taskInfo.accumulables.toList.map(accumulableInfoToJson)))
+    ("Accumulables" -> accumulablesToJson(taskInfo.accumulables))
+  }
+
+  private lazy val accumulableBlacklist = Set("internal.metrics.updatedBlockStatuses")
+
+  def accumulablesToJson(accumulables: Traversable[AccumulableInfo]): JArray = {
+    JArray(accumulables
+        .filterNot(_.name.exists(accumulableBlacklist.contains))
+        .toList.map(accumulableInfoToJson))
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
@@ -376,7 +383,7 @@ private[spark] object JsonProtocol {
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
-        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumulableInfoToJson).toList)
+        val accumUpdates = accumulablesToJson(exceptionFailure.accumUpdates)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
@@ -390,6 +397,8 @@ private[spark] object JsonProtocol {
         ("Executor ID" -> executorId) ~
         ("Exit Caused By App" -> exitCausedByApp) ~
         ("Loss Reason" -> reason.map(_.toString))
+      case taskKilled: TaskKilled =>
+        ("Kill Reason" -> taskKilled.reason)
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -877,7 +886,10 @@ private[spark] object JsonProtocol {
           }))
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
-      case `taskKilled` => TaskKilled
+      case `taskKilled` =>
+        val killReason = Utils.jsonOption(json \ "Kill Reason")
+          .map(_.extract[String]).getOrElse("unknown reason")
+        TaskKilled(killReason)
       case `taskCommitDenied` =>
         // Unfortunately, the `TaskCommitDenied` message was introduced in 1.3.0 but the JSON
         // de/serialization logic was not added until 1.5.1. To provide backward compatibility

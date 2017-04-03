@@ -15,27 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.streaming;
 
-object ParseModes {
-  val PERMISSIVE_MODE = "PERMISSIVE"
-  val DROP_MALFORMED_MODE = "DROPMALFORMED"
-  val FAIL_FAST_MODE = "FAILFAST"
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeTimeout$;
+import org.apache.spark.sql.catalyst.plans.logical.NoTimeout$;
+import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
+import org.junit.Test;
 
-  val DEFAULT = PERMISSIVE_MODE
+public class JavaGroupStateTimeoutSuite {
 
-  def isValidMode(mode: String): Boolean = {
-    mode.toUpperCase match {
-      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
-      case _ => false
-    }
-  }
-
-  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
-  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
-  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
-    mode.toUpperCase == PERMISSIVE_MODE
-  } else {
-    true // We default to permissive is the mode string is not valid
+  @Test
+  public void testTimeouts() {
+    assert (GroupStateTimeout.ProcessingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
+    assert (GroupStateTimeout.EventTimeTimeout() == EventTimeTimeout$.MODULE$);
+    assert (GroupStateTimeout.NoTimeout() == NoTimeout$.MODULE$);
   }
 }

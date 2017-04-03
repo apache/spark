@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Literal}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
@@ -40,20 +40,17 @@ class IncrementalExecution(
     offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
-  // TODO: make this always part of planning.
-  val streamingExtraStrategies =
-    sparkSession.sessionState.planner.StatefulAggregationStrategy +:
-    sparkSession.sessionState.planner.FlatMapGroupsWithStateStrategy +:
-    sparkSession.sessionState.planner.StreamingRelationStrategy +:
-    sparkSession.sessionState.planner.StreamingDeduplicationStrategy +:
-    sparkSession.sessionState.experimentalMethods.extraStrategies
-
   // Modified planner with stateful operations.
-  override def planner: SparkPlanner =
-    new SparkPlanner(
+  override val planner: SparkPlanner = new SparkPlanner(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
-      streamingExtraStrategies)
+      sparkSession.sessionState.experimentalMethods) {
+    override def extraPlanningStrategies: Seq[Strategy] =
+      StatefulAggregationStrategy ::
+      FlatMapGroupsWithStateStrategy ::
+      StreamingRelationStrategy ::
+      StreamingDeduplicationStrategy :: Nil
+  }
 
   /**
    * See [SPARK-18339]
@@ -108,7 +105,10 @@ class IncrementalExecution(
       case m: FlatMapGroupsWithStateExec =>
         val stateId =
           OperatorStateId(checkpointLocation, operatorId.getAndIncrement(), currentBatchId)
-        m.copy(stateId = Some(stateId), batchTimestampMs = offsetSeqMetadata.batchTimestampMs)
+        m.copy(
+          stateId = Some(stateId),
+          batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
     }
   }
 
