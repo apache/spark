@@ -852,13 +852,14 @@ class FilterPushdownSuite extends PlanTest {
         ("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr)))))
       .analyze
 
-    val expectedPlan = x
+    val answer = x
       .join(z, Inner, Some("x.b".attr === "z.b".attr))
       .where("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr))))
       .analyze
 
     val optimized = Optimize.execute(queryPlan)
-    comparePlans(optimized, expectedPlan)
+    val expected = Optimize.execute(answer)
+    comparePlans(optimized, expected)
   }
 
   test("Window: predicate push down -- basic") {

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.types._
 
 /**
  * Provides helper methods for comparing plans.
@@ -71,7 +72,11 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
         val newCondition =
           splitConjunctivePredicates(condition.get).map(rewriteEqual(_)).sortBy(_.hashCode())
             .reduce(And)
-        Join(left, right, joinType, Some(newCondition))
+        val maskedJoinType = if (joinType.isInstanceOf[ExistenceJoin]) {
+          val exists = AttributeReference("exists", BooleanType, false)(exprId = ExprId(0))
+          ExistenceJoin(exists)
+        } else joinType
+        Join(left, right, maskedJoinType, Some(newCondition))
     }
   }
 
