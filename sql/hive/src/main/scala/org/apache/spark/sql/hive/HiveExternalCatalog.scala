@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
-import java.net.URI
+import java.lang.reflect.InvocationTargetException
 import java.util
 
 import scala.collection.mutable
@@ -35,10 +35,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
@@ -61,14 +61,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   /**
    * A Hive client used to interact with the metastore.
    */
-  val client: HiveClient = {
+  lazy val client: HiveClient = {
     HiveUtils.newClientForMetadata(conf, hadoopConf)
   }
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
     classOf[HiveException].getCanonicalName,
-    classOf[TException].getCanonicalName)
+    classOf[TException].getCanonicalName,
+    classOf[InvocationTargetException].getCanonicalName)
 
   /**
    * Whether this is an exception thrown by the hive client that should be wrapped.
@@ -94,7 +95,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     try {
       body
     } catch {
-      case NonFatal(e) if isClientException(e) =>
+      case NonFatal(exception) if isClientException(exception) =>
+        val e = exception match {
+          // Since we are using shim, the exceptions thrown by the underlying method of
+          // Method.invoke() are wrapped by InvocationTargetException
+          case i: InvocationTargetException => i.getCause
+          case o => o
+        }
         throw new AnalysisException(
           e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
     }
@@ -1004,8 +1011,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable).mapValues(escapePathName)
     val clientPartitionNames =
       client.getPartitionNames(catalogTable, partialSpec.map(lowerCasePartitionSpec))
-    clientPartitionNames.map { partName =>
-      val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partName)
+    clientPartitionNames.map { partitionPath =>
+      val partSpec = PartitioningUtils.parsePathFragmentAsSeq(partitionPath)
       partSpec.map { case (partName, partValue) =>
         partColNameMap(partName.toLowerCase) + "=" + escapePathName(partValue)
       }.mkString("/")
@@ -1032,37 +1039,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-    val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
 
-    if (nonPartitionPruningPredicates.nonEmpty) {
-        sys.error("Expected only partition pruning predicates: " +
-          predicates.reduceLeft(And))
-    }
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
 
-    val partitionSchema = catalogTable.partitionSchema
-    val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-
-    if (predicates.nonEmpty) {
-      val clientPrunedPartitions = client.getPartitionsByFilter(rawTable, predicates).map { part =>
+    val clientPrunedPartitions =
+      client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
-      val boundPredicate =
-        InterpretedPredicate.create(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
-      clientPrunedPartitions.filter { p =>
-        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
-      }
-    } else {
-      client.getPartitions(catalogTable).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
-      }
-    }
+    prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
   }
 
   // --------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 private[security] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
 
@@ -36,7 +37,7 @@ private[security] class HBaseCredentialProvider extends ServiceCredentialProvide
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
-      val mirror = universe.runtimeMirror(getClass.getClassLoader)
+      val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
       val obtainToken = mirror.classLoader.
         loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
         getMethod("obtainToken", classOf[Configuration])
@@ -60,7 +61,7 @@ private[security] class HBaseCredentialProvider extends ServiceCredentialProvide
 
   private def hbaseConf(conf: Configuration): Configuration = {
     try {
-      val mirror = universe.runtimeMirror(getClass.getClassLoader)
+      val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
       val confCreate = mirror.classLoader.
         loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
         getMethod("create", classOf[Configuration])

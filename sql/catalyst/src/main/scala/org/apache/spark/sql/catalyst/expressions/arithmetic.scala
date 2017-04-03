@@ -113,7 +113,7 @@ case class Abs(child: Expression)
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator {
+abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
@@ -146,7 +146,7 @@ object BinaryArithmetic {
       > SELECT 1 _FUNC_ 2;
        3
   """)
-case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
+case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -182,8 +182,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
       > SELECT 2 _FUNC_ 1;
        1
   """)
-case class Subtract(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -219,8 +218,7 @@ case class Subtract(left: Expression, right: Expression)
       > SELECT 2 _FUNC_ 3;
        6
   """)
-case class Multiply(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -243,8 +241,7 @@ case class Multiply(left: Expression, right: Expression)
        1.0
   """)
 // scalastyle:on line.size.limit
-case class Divide(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -324,8 +321,7 @@ case class Divide(left: Expression, right: Expression)
       > SELECT 2 _FUNC_ 1.8;
        0.2
   """)
-case class Remainder(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -412,7 +408,7 @@ case class Remainder(left: Expression, right: Expression)
       > SELECT _FUNC_(-10, 3);
        2
   """)
-case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
+case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def toString: String = s"pmod($left, $right)"
 

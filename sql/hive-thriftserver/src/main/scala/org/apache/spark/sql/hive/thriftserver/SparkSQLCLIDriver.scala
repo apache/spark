@@ -34,11 +34,12 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -274,6 +275,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val LOG = LogFactory.getLog("CliDriver")
 
   private val console = new SessionState.LogHelper(LOG)
+
+  if (sessionState.getIsSilent) {
+    Logger.getRootLogger.setLevel(Level.WARN)
+  }
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)

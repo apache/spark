@@ -41,31 +41,30 @@ from shutil import rmtree
 import tempfile
 import array as pyarray
 import numpy as np
-from numpy import (
-    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
-from numpy import sum as array_sum
+from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
 
 from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
+from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
-from pyspark.ml.linalg import Vector, SparseVector, DenseVector, VectorUDT,\
-    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT, _convert_to_vector
+from pyspark.ml.fpm import FPGrowth, FPGrowthModel
+from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
+    SparseMatrix, SparseVector, Vector, VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
 from pyspark.ml.recommendation import ALS
-from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
-    GeneralizedLinearRegression
+from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegression, \
+    LinearRegression
+from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
-from pyspark.ml.common import _java2py, _py2java
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
-from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -1243,6 +1242,43 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
 
 
+class FPGrowthTests(SparkSessionTestCase):
+    def setUp(self):
+        super(FPGrowthTests, self).setUp()
+        self.data = self.spark.createDataFrame(
+            [([1, 2], ), ([1, 2], ), ([1, 2, 3], ), ([1, 3], )],
+            ["items"])
+
+    def test_association_rules(self):
+        fp = FPGrowth()
+        fpm = fp.fit(self.data)
+
+        expected_association_rules = self.spark.createDataFrame(
+            [([3], [1], 1.0), ([2], [1], 1.0)],
+            ["antecedent", "consequent", "confidence"]
+        )
+        actual_association_rules = fpm.associationRules
+
+        self.assertEqual(actual_association_rules.subtract(expected_association_rules).count(), 0)
+        self.assertEqual(expected_association_rules.subtract(actual_association_rules).count(), 0)
+
+    def test_freq_itemsets(self):
+        fp = FPGrowth()
+        fpm = fp.fit(self.data)
+
+        expected_freq_itemsets = self.spark.createDataFrame(
+            [([1], 4), ([2], 3), ([2, 1], 3), ([3], 2), ([3, 1], 2)],
+            ["items", "freq"]
+        )
+        actual_freq_itemsets = fpm.freqItemsets
+
+        self.assertEqual(actual_freq_itemsets.subtract(expected_freq_itemsets).count(), 0)
+        self.assertEqual(expected_freq_itemsets.subtract(actual_freq_itemsets).count(), 0)
+
+    def tearDown(self):
+        del self.data
+
+
 class ALSTest(SparkSessionTestCase):
 
     def test_storage_levels(self):
@@ -1273,6 +1309,7 @@ class DefaultValuesTests(PySparkTestCase):
     """
 
     def check_params(self, py_stage):
+        import pyspark.ml.feature
         if not hasattr(py_stage, "_to_java"):
             return
         java_stage = py_stage._to_java()
@@ -1292,6 +1329,15 @@ class DefaultValuesTests(PySparkTestCase):
                     _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
                 py_stage._clear(p)
                 py_default = py_stage.getOrDefault(p)
+                if isinstance(py_stage, pyspark.ml.feature.Imputer) and p.name == "missingValue":
+                    # SPARK-15040 - default value for Imputer param 'missingValue' is NaN,
+                    # and NaN != NaN, so handle it specially here
+                    import math
+                    self.assertTrue(math.isnan(java_default) and math.isnan(py_default),
+                                    "Java default %s and python default %s are not both NaN for "
+                                    "param %s for Params %s"
+                                    % (str(java_default), str(py_default), p.name, str(py_stage)))
+                    return
                 self.assertEqual(java_default, py_default,
                                  "Java default %s != python default %s of param %s for Params %s"
                                  % (str(java_default), str(py_default), p.name, str(py_stage)))
@@ -1690,6 +1736,22 @@ class WrapperTests(MLlibTestCase):
         java_class = self.sc._gateway.jvm.java.lang.Integer
         java_array = JavaWrapper._new_java_array([], java_class)
         self.assertEqual(_java2py(self.sc, java_array), [])
+
+
+class ChiSquareTestTests(SparkSessionTestCase):
+
+    def test_chisquaretest(self):
+        data = [[0, Vectors.dense([0, 1, 2])],
+                [1, Vectors.dense([1, 1, 1])],
+                [2, Vectors.dense([2, 1, 0])]]
+        df = self.spark.createDataFrame(data, ['label', 'feat'])
+        res = ChiSquareTest.test(df, 'feat', 'label')
+        # This line is hitting the collect bug described in #17218, commented for now.
+        # pValues = res.select("degreesOfFreedom").collect())
+        self.assertIsInstance(res, DataFrame)
+        fieldNames = set(field.name for field in res.schema.fields)
+        expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
+        self.assertTrue(all(field in fieldNames for field in expectedFields))
 
 
 if __name__ == "__main__":

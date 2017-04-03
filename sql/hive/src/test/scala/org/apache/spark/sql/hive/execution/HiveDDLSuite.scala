@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
@@ -36,7 +35,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.types._
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
 class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
@@ -113,6 +112,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
+  val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
 
   override def afterEach(): Unit = {
     try {
@@ -128,11 +128,11 @@ class HiveDDLSuite
       dbPath: Option[String] = None): Boolean = {
     val expectedTablePath =
       if (dbPath.isEmpty) {
-        hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
+        hiveContext.sessionState.catalog.defaultTablePath(tableIdentifier)
       } else {
-        new Path(new Path(dbPath.get), tableIdentifier.table).toString
+        new Path(new Path(dbPath.get), tableIdentifier.table)
       }
-    val filesystemPath = new Path(expectedTablePath)
+    val filesystemPath = new Path(expectedTablePath.toString)
     val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
@@ -1799,9 +1799,9 @@ class HiveDDLSuite
             assert(loc.listFiles().length >= 1)
             checkAnswer(spark.table("t"), Row("1") :: Nil)
           } else {
-            val e = intercept[InvocationTargetException] {
+            val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
           }
         }
@@ -1836,14 +1836,14 @@ class HiveDDLSuite
             checkAnswer(spark.table("t1"),
               Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
           } else {
-            val e = intercept[InvocationTargetException] {
+            val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
 
-            val e1 = intercept[InvocationTargetException] {
+            val e1 = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
-            }.getTargetException.getMessage
+            }.getMessage
             assert(e1.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
           }
         }
@@ -1858,6 +1858,103 @@ class HiveDDLSuite
         sql("CREATE TABLE spark_19905 STORED AS RCFILE AS SELECT * FROM spark_19905_view")
         assert(spark.table("spark_19905").inputFiles.nonEmpty)
         assert(sql("SELECT input_file_name() FROM spark_19905").count() > 0)
+      }
+    }
+  }
+
+  hiveFormats.foreach { tableType =>
+    test(s"alter hive serde table add columns -- partitioned - $tableType") {
+      withTable("tab") {
+        sql(
+          s"""
+             |CREATE TABLE tab (c1 int, c2 int)
+             |PARTITIONED BY (c3 int) STORED AS $tableType
+          """.stripMargin)
+
+        sql("INSERT INTO tab PARTITION (c3=1) VALUES (1, 2)")
+        sql("ALTER TABLE tab ADD COLUMNS (c4 int)")
+
+        checkAnswer(
+          sql("SELECT * FROM tab WHERE c3 = 1"),
+          Seq(Row(1, 2, null, 1))
+        )
+        assert(spark.table("tab").schema
+          .contains(StructField("c4", IntegerType)))
+        sql("INSERT INTO tab PARTITION (c3=2) VALUES (2, 3, 4)")
+        checkAnswer(
+          spark.table("tab"),
+          Seq(Row(1, 2, null, 1), Row(2, 3, 4, 2))
+        )
+        checkAnswer(
+          sql("SELECT * FROM tab WHERE c3 = 2 AND c4 IS NOT NULL"),
+          Seq(Row(2, 3, 4, 2))
+        )
+
+        sql("ALTER TABLE tab ADD COLUMNS (c5 char(10))")
+        assert(spark.table("tab").schema.find(_.name == "c5")
+          .get.metadata.getString("HIVE_TYPE_STRING") == "char(10)")
+      }
+    }
+  }
+
+  hiveFormats.foreach { tableType =>
+    test(s"alter hive serde table add columns -- with predicate - $tableType ") {
+      withTable("tab") {
+        sql(s"CREATE TABLE tab (c1 int, c2 int) STORED AS $tableType")
+        sql("INSERT INTO tab VALUES (1, 2)")
+        sql("ALTER TABLE tab ADD COLUMNS (c4 int)")
+        checkAnswer(
+          sql("SELECT * FROM tab WHERE c4 IS NULL"),
+          Seq(Row(1, 2, null))
+        )
+        assert(spark.table("tab").schema
+          .contains(StructField("c4", IntegerType)))
+        sql("INSERT INTO tab VALUES (2, 3, 4)")
+        checkAnswer(
+          sql("SELECT * FROM tab WHERE c4 = 4 "),
+          Seq(Row(2, 3, 4))
+        )
+        checkAnswer(
+          spark.table("tab"),
+          Seq(Row(1, 2, null), Row(2, 3, 4))
+        )
+      }
+    }
+  }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"alter add columns with existing column name - caseSensitive $caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
+        withTable("tab") {
+          sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
+          if (!caseSensitive) {
+            // duplicating partitioning column name
+            val e1 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
+            }.getMessage
+            assert(e1.contains("Found duplicate column(s)"))
+
+            // duplicating data column name
+            val e2 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e2.contains("Found duplicate column(s)"))
+          } else {
+            // hive catalog will still complains that c1 is duplicate column name because hive
+            // identifiers are case insensitive.
+            val e1 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
+            }.getMessage
+            assert(e1.contains("HiveException"))
+
+            // hive catalog will still complains that c1 is duplicate column name because hive
+            // identifiers are case insensitive.
+            val e2 = intercept[AnalysisException] {
+              sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
+            }.getMessage
+            assert(e2.contains("HiveException"))
+          }
+        }
       }
     }
   }

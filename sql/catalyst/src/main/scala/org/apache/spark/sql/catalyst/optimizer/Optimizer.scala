@@ -17,20 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.annotation.tailrec
-import scala.collection.immutable.HashSet
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -68,6 +62,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    Batch("Pullup Correlated Expressions", Once,
+      PullupCorrelatedPredicates) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
@@ -77,16 +73,16 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) ::
-    Batch("Operator Optimizations", fixedPoint,
+    Batch("Operator Optimizations", fixedPoint, Seq(
       // Operator push down
       PushProjectionThroughUnion,
-      ReorderJoin,
-      EliminateOuterJoin,
+      ReorderJoin(conf),
+      EliminateOuterJoin(conf),
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown(conf),
       ColumnPruning,
-      InferFiltersFromConstraints,
+      InferFiltersFromConstraints(conf),
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -105,7 +101,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyConditionals,
       RemoveDispensableExpressions,
       SimplifyBinaryComparison,
-      PruneFilters,
+      PruneFilters(conf),
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -115,7 +111,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRedundantProject,
       SimplifyCreateStructOps,
       SimplifyCreateArrayOps,
-      SimplifyCreateMapOps) ::
+      SimplifyCreateMapOps) ++
+      extendedOperatorOptimizationRules: _*) ::
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts(conf)) ::
     Batch("Join Reorder", Once,
@@ -140,9 +137,15 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.plan))
+        val Subquery(newPlan) = Optimizer.this.execute(Subquery(s.plan))
+        s.withNewPlan(newPlan)
     }
   }
+
+  /**
+   * Override to provide additional rules for the operator optimization batch.
+   */
+  def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 }
 
 /**
@@ -185,7 +188,10 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if a.metadata == Metadata.empty && name == attr.name && !blacklist.contains(attr) =>
+      if a.metadata == Metadata.empty &&
+        name == attr.name &&
+        !blacklist.contains(attr) &&
+        !blacklist.contains(a) =>
       attr
     case a => a
   }
@@ -193,10 +199,15 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
   /**
    * Remove redundant alias expression from a LogicalPlan and its subtree. A blacklist is used to
    * prevent the removal of seemingly redundant aliases used to deduplicate the input for a (self)
-   * join.
+   * join or to prevent the removal of top-level subquery attributes.
    */
   private def removeRedundantAliases(plan: LogicalPlan, blacklist: AttributeSet): LogicalPlan = {
     plan match {
+      // We want to keep the same output attributes for subqueries. This means we cannot remove
+      // the aliases that produce these attributes
+      case Subquery(child) =>
+        Subquery(removeRedundantAliases(child, blacklist ++ child.outputSet))
+
       // A join has to be treated differently, because the left and the right side of the join are
       // not allowed to use the same attributes. We use a blacklist to prevent us from creating a
       // situation in which this happens; the rule will only remove an alias if its child
@@ -586,12 +597,14 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 
 /**
  * Collapse Adjacent Window Expression.
- * - If the partition specs and order specs are the same, collapse into the parent.
+ * - If the partition specs and order specs are the same and the window expression are
+ *   independent, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case w @ Window(we1, ps1, os1, Window(we2, ps2, os2, grandChild)) if ps1 == ps2 && os1 == os2 =>
-      w.copy(windowExpressions = we2 ++ we1, child = grandChild)
+    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
+        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty =>
+      w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
   }
 }
 
@@ -604,8 +617,16 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+case class InferFiltersFromConstraints(conf: CatalystConf)
+    extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = if (conf.constraintPropagationEnabled) {
+    inferFilters(plan)
+  } else {
+    plan
+  }
+
+
+  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition))
@@ -694,7 +715,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
  * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
  * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
-object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
+case class PruneFilters(conf: CatalystConf) extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
@@ -707,7 +728,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
-          cond.deterministic && p.constraints.contains(cond)
+          cond.deterministic && p.getConstraints(conf.constraintPropagationEnabled).contains(cond)
         }
       if (prunedPredicates.isEmpty) {
         f
@@ -885,7 +906,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
   private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
     val matched = condition.find {
-      case PredicateSubquery(p, _, _, _) => p.outputSet.intersect(attributes).nonEmpty
+      case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
     matched.isEmpty

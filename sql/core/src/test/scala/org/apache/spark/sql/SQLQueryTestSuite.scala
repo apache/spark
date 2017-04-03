@@ -222,7 +222,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val df = session.sql(sql)
       val schema = df.schema
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x"))
+      val answer = df.queryExecution.hiveResultString().map(_.replaceAll("#\\d+", "#x")
+        .replaceAll("Location:.*/sql/core/", "Location: sql/core/")
+        .replaceAll("Created: .*", "Created: ")
+        .replaceAll("Last Access: .*", "Last Access: "))
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
