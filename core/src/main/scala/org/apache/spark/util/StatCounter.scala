@@ -22,8 +22,8 @@ import org.apache.spark.annotation.Since
 /**
  * A class for tracking the statistics of a set of numbers (count, mean and variance) in a
  * numerically robust way. Includes support for merging two StatCounters. Based on Welford
- * and Chan's [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance algorithms]]
- * for running variance.
+ * and Chan's <a href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
+ * algorithms</a> for running variance.
  *
  * @constructor Initialize the StatCounter with the given values.
  */

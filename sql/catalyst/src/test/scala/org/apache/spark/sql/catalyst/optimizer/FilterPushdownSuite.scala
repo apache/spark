@@ -34,7 +34,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        PushProjectThroughSample,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
@@ -110,6 +109,12 @@ class FilterPushdownSuite extends PlanTest {
 
     // We can not use comparePlans here because it normalized the plan.
     assert(optimized == correctAnswer)
+  }
+
+  test("SPARK-16994: filter should not be pushed through limit") {
+    val originalQuery = testRelation.limit(10).where('a === 1).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, originalQuery)
   }
 
   test("can't push without rewrite") {
@@ -509,6 +514,56 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
+  test("joins: push down where clause into left anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .where("x.a".attr > 10)
+        .analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.where("x.a".attr > 10)
+        .join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
+        .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+  test("joins: only push down join conditions to the right of a left anti join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val originalQuery =
+      x.join(y,
+        LeftAnti,
+        Some("x.b".attr === "y.b".attr && "y.a".attr > 10 && "x.a".attr > 10)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.join(
+        y.where("y.a".attr > 10),
+        LeftAnti,
+        Some("x.b".attr === "y.b".attr && "x.a".attr > 10))
+        .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+  test("joins: only push down join conditions to the right of an existence join") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val fillerVal = 'val.boolean
+    val originalQuery =
+      x.join(y,
+        ExistenceJoin(fillerVal),
+        Some("x.a".attr > 1 && "y.b".attr > 2)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer =
+      x.join(
+        y.where("y.b".attr > 2),
+        ExistenceJoin(fillerVal),
+        Some("x.a".attr > 1))
+      .analyze
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
 
   test("generate: predicate referenced no generated column") {
@@ -583,22 +638,6 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
-  }
-
-  test("push project and filter down into sample") {
-    val x = testRelation.subquery('x)
-    val originalQuery =
-      Sample(0.0, 0.6, false, 11L, x)().select('a)
-
-    val originalQueryAnalyzed =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
-
-    val optimized = Optimize.execute(originalQueryAnalyzed)
-
-    val correctAnswer =
-      Sample(0.0, 0.6, false, 11L, x.select('a))()
-
-    comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("aggregate: push down filter when filter on group by expression") {
@@ -698,6 +737,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-17712: aggregate: don't push down filters that are data-independent") {
+    val originalQuery = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b)
+      .groupBy('a)(count('a))
+      .where(false)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("broadcast hint") {
     val originalQuery = BroadcastHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
@@ -778,6 +834,26 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(Optimize.execute(query))
     comparePlans(optimized, answer)
+  }
+
+  test("SPARK-20094: don't push predicate with IN subquery into join condition") {
+    val x = testRelation.subquery('x)
+    val z = testRelation.subquery('z)
+    val w = testRelation1.subquery('w)
+
+    val queryPlan = x
+      .join(z)
+      .where(("x.b".attr === "z.b".attr) &&
+        ("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr)))))
+      .analyze
+
+    val expectedPlan = x
+      .join(z, Inner, Some("x.b".attr === "z.b".attr))
+      .where("x.a".attr > 1 || "z.c".attr.in(ListQuery(w.select("w.d".attr))))
+      .analyze
+
+    val optimized = Optimize.execute(queryPlan)
+    comparePlans(optimized, expectedPlan)
   }
 
   test("Window: predicate push down -- basic") {
@@ -997,5 +1073,19 @@ class FilterPushdownSuite extends PlanTest {
       .where('a - 'b > 1).select('a, 'b, 'c, 'window).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("join condition pushdown: deterministic and non-deterministic") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
+      "x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
+        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }

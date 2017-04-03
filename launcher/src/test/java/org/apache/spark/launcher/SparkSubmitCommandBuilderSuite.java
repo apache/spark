@@ -173,6 +173,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testSparkRShell() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.SPARKR_SHELL,
+      "--master=foo",
+      "--deploy-mode=bar",
+      "--conf", "spark.r.shell.command=/usr/bin/R");
+
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    assertEquals("/usr/bin/R", cmd.get(cmd.size() - 1));
+    assertEquals(
+      String.format(
+        "\"%s\" \"foo\" \"%s\" \"bar\" \"--conf\" \"spark.r.shell.command=/usr/bin/R\" \"%s\"",
+        parser.MASTER, parser.DEPLOY_MODE, SparkSubmitCommandBuilder.SPARKR_SHELL_RESOURCE),
+      env.get("SPARKR_SUBMIT_ARGS"));
+  }
+
+  @Test
   public void testExamplesRunner() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       SparkSubmitCommandBuilder.RUN_EXAMPLE,
@@ -199,7 +217,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     String deployMode = isDriver ? "client" : "cluster";
 
     SparkSubmitCommandBuilder launcher =
-      newCommandBuilder(Collections.<String>emptyList());
+      newCommandBuilder(Collections.emptyList());
     launcher.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME,
       System.getProperty("spark.test.home"));
     launcher.master = "yarn";
@@ -215,7 +233,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
       launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     } else {
       launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
@@ -238,12 +256,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
         }
       }
       assertFalse("Memory arguments should not be set.", found);
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        assertEquals("-XX:MaxPermSize=256m", arg);
-      }
     }
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));

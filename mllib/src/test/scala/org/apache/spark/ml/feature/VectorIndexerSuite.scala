@@ -32,6 +32,7 @@ import org.apache.spark.sql.DataFrame
 class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest with Logging {
 
+  import testImplicits._
   import VectorIndexerSuite.FeatureData
 
   // identical, of length 3
@@ -85,11 +86,11 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     checkPair(densePoints1Seq, sparsePoints1Seq)
     checkPair(densePoints2Seq, sparsePoints2Seq)
 
-    densePoints1 = spark.createDataFrame(sc.parallelize(densePoints1Seq, 2).map(FeatureData))
-    sparsePoints1 = spark.createDataFrame(sc.parallelize(sparsePoints1Seq, 2).map(FeatureData))
-    densePoints2 = spark.createDataFrame(sc.parallelize(densePoints2Seq, 2).map(FeatureData))
-    sparsePoints2 = spark.createDataFrame(sc.parallelize(sparsePoints2Seq, 2).map(FeatureData))
-    badPoints = spark.createDataFrame(sc.parallelize(badPointsSeq, 2).map(FeatureData))
+    densePoints1 = densePoints1Seq.map(FeatureData).toDF()
+    sparsePoints1 = sparsePoints1Seq.map(FeatureData).toDF()
+    densePoints2 = densePoints2Seq.map(FeatureData).toDF()
+    sparsePoints2 = sparsePoints2Seq.map(FeatureData).toDF()
+    badPoints = badPointsSeq.map(FeatureData).toDF()
   }
 
   private def getIndexer: VectorIndexer =
@@ -102,7 +103,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("Cannot fit an empty DataFrame") {
-    val rdd = spark.createDataFrame(sc.parallelize(Array.empty[Vector], 2).map(FeatureData))
+    val rdd = Array.empty[Vector].map(FeatureData).toSeq.toDF()
     val vectorIndexer = getIndexer
     intercept[IllegalArgumentException] {
       vectorIndexer.fit(rdd)
@@ -118,8 +119,15 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
 
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work
-    intercept[SparkException] {
+    // If the data is local Dataset, it throws AssertionError directly.
+    intercept[AssertionError] {
       model.transform(densePoints2).collect()
+      logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
+    }
+    // If the data is distributed Dataset, it throws SparkException
+    // which is the wrapper of AssertionError.
+    intercept[SparkException] {
+      model.transform(densePoints2.repartition(2)).collect()
       logInfo("Did not throw error when fit, transform were called on vectors of different lengths")
     }
     intercept[SparkException] {

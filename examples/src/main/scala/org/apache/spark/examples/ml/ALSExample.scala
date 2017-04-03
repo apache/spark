@@ -65,6 +65,8 @@ object ALSExample {
     val model = als.fit(training)
 
     // Evaluate the model by computing the RMSE on the test data
+    // Note we set cold start strategy to 'drop' to ensure we don't get NaN evaluation metrics
+    model.setColdStartStrategy("drop")
     val predictions = model.transform(test)
 
     val evaluator = new RegressionEvaluator()

@@ -18,10 +18,8 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,8 +29,6 @@ import java.util.logging.Logger;
 class ChildProcAppHandle implements SparkAppHandle {
 
   private static final Logger LOG = Logger.getLogger(ChildProcAppHandle.class.getName());
-  private static final ThreadFactory REDIRECTOR_FACTORY =
-    new NamedThreadFactory("launcher-proc-%d");
 
   private final String secret;
   private final LauncherServer server;
@@ -106,14 +102,7 @@ class ChildProcAppHandle implements SparkAppHandle {
       try {
         childProc.exitValue();
       } catch (IllegalThreadStateException e) {
-        // Child is still alive. Try to use Java 8's "destroyForcibly()" if available,
-        // fall back to the old API if it's not there.
-        try {
-          Method destroy = childProc.getClass().getMethod("destroyForcibly");
-          destroy.invoke(childProc);
-        } catch (Exception inner) {
-          childProc.destroy();
-        }
+        childProc.destroyForcibly();
       } finally {
         childProc = null;
       }
@@ -127,7 +116,7 @@ class ChildProcAppHandle implements SparkAppHandle {
   void setChildProc(Process childProc, String loggerName) {
     this.childProc = childProc;
     this.redirector = new OutputRedirector(childProc.getInputStream(), loggerName,
-      REDIRECTOR_FACTORY);
+      SparkLauncher.REDIRECTOR_FACTORY);
   }
 
   void setConnection(LauncherConnection connection) {

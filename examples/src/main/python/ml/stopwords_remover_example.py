@@ -32,7 +32,7 @@ if __name__ == "__main__":
     sentenceData = spark.createDataFrame([
         (0, ["I", "saw", "the", "red", "balloon"]),
         (1, ["Mary", "had", "a", "little", "lamb"])
-    ], ["label", "raw"])
+    ], ["id", "raw"])
 
     remover = StopWordsRemover(inputCol="raw", outputCol="filtered")
     remover.transform(sentenceData).show(truncate=False)

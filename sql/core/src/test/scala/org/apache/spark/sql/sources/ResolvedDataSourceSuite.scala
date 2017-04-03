@@ -19,11 +19,16 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
   private def getProvidingClass(name: String): Class[_] =
-    DataSource(sparkSession = null, className = name).providingClass
+    DataSource(
+      sparkSession = null,
+      className = name,
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> DateTimeUtils.defaultTimeZone().getID)
+    ).providingClass
 
   test("jdbc") {
     assert(
@@ -74,16 +79,16 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
     val error1 = intercept[AnalysisException] {
       getProvidingClass("avro")
     }
-    assert(error1.getMessage.contains("spark-packages"))
+    assert(error1.getMessage.contains("Failed to find data source: avro."))
 
     val error2 = intercept[AnalysisException] {
       getProvidingClass("com.databricks.spark.avro")
     }
-    assert(error2.getMessage.contains("spark-packages"))
+    assert(error2.getMessage.contains("Failed to find data source: com.databricks.spark.avro."))
 
     val error3 = intercept[ClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error3.getMessage.contains("spark-packages"))
+    assert(error3.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
 }

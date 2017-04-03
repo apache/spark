@@ -127,4 +127,14 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KB") {
+    val sortOrder = Literal("abc").asc
+
+    // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
+    GenerateOrdering.generate(Array.fill(40)(sortOrder))
+
+    // verify that we can support up to 5000 ordering comparisons, which should be sufficient
+    GenerateOrdering.generate(Array.fill(5000)(sortOrder))
+  }
 }

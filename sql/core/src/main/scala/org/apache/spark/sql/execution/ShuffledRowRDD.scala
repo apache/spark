@@ -33,10 +33,6 @@ private final class ShuffledRowRDDPartition(
     val startPreShufflePartitionIndex: Int,
     val endPreShufflePartitionIndex: Int) extends Partition {
   override val index: Int = postShufflePartitionIndex
-
-  override def hashCode(): Int = postShufflePartitionIndex
-
-  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**

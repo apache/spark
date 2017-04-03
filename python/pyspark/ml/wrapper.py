@@ -16,6 +16,9 @@
 #
 
 from abc import ABCMeta, abstractmethod
+import sys
+if sys.version >= '3':
+    xrange = range
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
@@ -59,6 +62,32 @@ class JavaWrapper(object):
         java_args = [_py2java(sc, arg) for arg in args]
         return java_obj(*java_args)
 
+    @staticmethod
+    def _new_java_array(pylist, java_class):
+        """
+        Create a Java array of given java_class type. Useful for
+        calling a method with a Scala Array from Python with Py4J.
+
+        :param pylist:
+          Python list to convert to a Java Array.
+        :param java_class:
+          Java class to specify the type of Array. Should be in the
+          form of sc._gateway.jvm.* (sc is a valid Spark Context).
+        :return:
+          Java Array of converted pylist.
+
+        Example primitive Java classes:
+          - basestring -> sc._gateway.jvm.java.lang.String
+          - int -> sc._gateway.jvm.java.lang.Integer
+          - float -> sc._gateway.jvm.java.lang.Double
+          - bool -> sc._gateway.jvm.java.lang.Boolean
+        """
+        sc = SparkContext._active_spark_context
+        java_array = sc._gateway.new_array(java_class, len(pylist))
+        for i in xrange(len(pylist)):
+            java_array[i] = pylist[i]
+        return java_array
+
 
 @inherit_doc
 class JavaParams(JavaWrapper, Params):
@@ -70,6 +99,10 @@ class JavaParams(JavaWrapper, Params):
     #: synced with the Python wrapper in fit/transform/evaluate/copy.
 
     __metaclass__ = ABCMeta
+
+    def __del__(self):
+        if SparkContext._active_spark_context:
+            SparkContext._active_spark_context._gateway.detach(self._java_obj)
 
     def _make_java_param_pair(self, param, value):
         """
@@ -180,6 +213,25 @@ class JavaParams(JavaWrapper, Params):
                                       % stage_name)
         return py_stage
 
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with the same uid and some
+        extra params. This implementation first calls Params.copy and
+        then make a copy of the companion Java pipeline component with
+        extra params. So both the Python wrapper and the Java pipeline
+        component get copied.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        that = super(JavaParams, self).copy(extra)
+        if self._java_obj is not None:
+            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+            that._transfer_params_to_java()
+        return that
+
 
 @inherit_doc
 class JavaEstimator(JavaParams, Estimator):
@@ -256,21 +308,3 @@ class JavaModel(JavaTransformer, Model):
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
             self._resetUid(java_model.uid())
-
-    def copy(self, extra=None):
-        """
-        Creates a copy of this instance with the same uid and some
-        extra params. This implementation first calls Params.copy and
-        then make a copy of the companion Java model with extra params.
-        So both the Python wrapper and the Java model get copied.
-
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
-        """
-        if extra is None:
-            extra = dict()
-        that = super(JavaModel, self).copy(extra)
-        if self._java_obj is not None:
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
-        return that

@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.annotation.DeveloperApi
@@ -54,7 +52,13 @@ class TaskInfo(
    * accumulable to be updated multiple times in a single task or for two accumulables with the
    * same name but different IDs to exist in a task.
    */
-  val accumulables = ListBuffer[AccumulableInfo]()
+  def accumulables: Seq[AccumulableInfo] = _accumulables
+
+  private[this] var _accumulables: Seq[AccumulableInfo] = Nil
+
+  private[spark] def setAccumulables(newAccumulables: Seq[AccumulableInfo]): Unit = {
+    _accumulables = newAccumulables
+  }
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch
@@ -66,11 +70,13 @@ class TaskInfo(
 
   var killed = false
 
-  private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
+  private[spark] def markGettingResult(time: Long) {
     gettingResultTime = time
   }
 
-  private[spark] def markFinished(state: TaskState, time: Long = System.currentTimeMillis) {
+  private[spark] def markFinished(state: TaskState, time: Long) {
+    // finishTime should be set larger than 0, otherwise "finished" below will return false.
+    assert(time > 0)
     finishTime = time
     if (state == TaskState.FAILED) {
       failed = true

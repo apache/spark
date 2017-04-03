@@ -100,6 +100,7 @@ object UnaryTransformerExample {
     val data = spark.range(0, 5).toDF("input")
       .select(col("input").cast("double").as("input"))
     val result = myTransformer.transform(data)
+    println("Transformed by adding constant value")
     result.show()
 
     // Save and load the Transformer.
@@ -109,6 +110,7 @@ object UnaryTransformerExample {
     val sameTransformer = MyTransformer.load(dirName)
 
     // Transform the data to show the results are identical.
+    println("Same transform applied from loaded model")
     val sameResult = sameTransformer.transform(data)
     sameResult.show()
 

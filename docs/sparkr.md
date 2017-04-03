@@ -40,7 +40,9 @@ sparkR.session()
 You can also start SparkR from RStudio. You can connect your R program to a Spark cluster from
 RStudio, R shell, Rscript or other R IDEs. To start, make sure SPARK_HOME is set in environment
 (you can check [Sys.getenv](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Sys.getenv.html)),
-load the SparkR package, and call `sparkR.session` as below. In addition to calling `sparkR.session`,
+load the SparkR package, and call `sparkR.session` as below. It will check for the Spark installation, and, if not found, it will be downloaded and cached automatically. Alternatively, you can also run `install.spark` manually.
+
+In addition to calling `sparkR.session`,
  you could also specify certain Spark driver properties. Normally these
 [Application properties](configuration.html#application-properties) and
 [Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
@@ -54,7 +56,7 @@ if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
   Sys.setenv(SPARK_HOME = "/home/spark")
 }
 library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
-sc <- sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory="2g"))
+sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g"))
 {% endhighlight %}
 </div>
 
@@ -62,6 +64,21 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 
 <table class="table">
   <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
+  <tr>
+    <td><code>spark.master</code></td>
+    <td>Application Properties</td>
+    <td><code>--master</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.keytab</code></td>
+    <td>Application Properties</td>
+    <td><code>--keytab</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.yarn.principal</code></td>
+    <td>Application Properties</td>
+    <td><code>--principal</code></td>
+  </tr>
   <tr>
     <td><code>spark.driver.memory</code></td>
     <td>Application Properties</td>
@@ -110,16 +127,17 @@ head(df)
 
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
+The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically.
+SparkR supports reading JSON, CSV and Parquet files natively, and through packages available from sources like [Third Party Projects](http://spark.apache.org/third-party-projects.html), you can find data source connectors for popular file formats like Avro. These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
 {% endhighlight %}
 </div>
 
-We can see how to use data sources using an example JSON input file. Note that the file that is used here is _not_ a typical JSON file. Each line in the file must contain a separate, self-contained valid JSON object. As a consequence, a regular multi-line JSON file will most often fail.
+We can see how to use data sources using an example JSON input file. Note that the file that is used here is _not_ a typical JSON file. Each line in the file must contain a separate, self-contained valid JSON object. For more information, please see [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/). As a consequence, a regular multi-line JSON file will most often fail.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -272,11 +290,11 @@ In SparkR, we support several kinds of User-Defined Functions:
 
 ##### dapply
 Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
-and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function
-should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match the R function's output.
+and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match to [data types](#data-type-mapping-between-r-and-spark) of returned value.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
+
 # Convert waiting time from hours to seconds.
 # Note that we can apply UDF to DataFrame.
 schema <- structType(structField("eruptions", "double"), structField("waiting", "double"),
@@ -295,8 +313,8 @@ head(collect(df1))
 
 ##### dapplyCollect
 Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function
-should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` only can be used if the
-output of UDF run on all the partitions can fit in driver memory.
+should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -312,6 +330,66 @@ head(ldf, 3)
 ##1     3.600      79         4740
 ##2     1.800      54         3240
 ##3     3.333      74         4440
+
+{% endhighlight %}
+</div>
+
+#### Run a given function on a large dataset grouping by input column(s) and using `gapply` or `gapplyCollect`
+
+##### gapply
+Apply a function to each group of a `SparkDataFrame`. The function is to be applied to each group of the `SparkDataFrame` and should have only two parameters: grouping key and R `data.frame` corresponding to
+that key. The groups are chosen from `SparkDataFrame`s column(s).
+The output of function should be a `data.frame`. Schema specifies the row format of the resulting
+`SparkDataFrame`. It must represent R function's output schema on the basis of Spark [data types](#data-type-mapping-between-r-and-spark). The column names of the returned `data.frame` are set by user.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Determine six waiting times with the largest eruption time in minutes.
+schema <- structType(structField("waiting", "double"), structField("max_eruption", "double"))
+result <- gapply(
+    df,
+    "waiting",
+    function(key, x) {
+        y <- data.frame(key, max(x$eruptions))
+    },
+    schema)
+head(collect(arrange(result, "max_eruption", decreasing = TRUE)))
+
+##    waiting   max_eruption
+##1      64       5.100
+##2      69       5.067
+##3      71       5.033
+##4      87       5.000
+##5      63       4.933
+##6      89       4.900
+{% endhighlight %}
+</div>
+
+##### gapplyCollect
+Like `gapply`, applies a function to each partition of a `SparkDataFrame` and collect the result back to R data.frame. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Determine six waiting times with the largest eruption time in minutes.
+result <- gapplyCollect(
+    df,
+    "waiting",
+    function(key, x) {
+        y <- data.frame(key, max(x$eruptions))
+        colnames(y) <- c("waiting", "max_eruption")
+        y
+    })
+head(result[order(result$max_eruption, decreasing = TRUE), ])
+
+##    waiting   max_eruption
+##1      64       5.100
+##2      69       5.067
+##3      71       5.033
+##4      87       5.000
+##5      63       4.933
+##6      89       4.900
 
 {% endhighlight %}
 </div>
@@ -365,39 +443,119 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR supports the following machine learning algorithms currently: `Generalized Linear Model`, `Accelerated Failure Time (AFT) Survival Regression Model`, `Naive Bayes Model` and `KMeans Model`.
-Under the hood, SparkR uses MLlib to train the model.
+## Algorithms
+
+SparkR supports the following machine learning algorithms currently:
+
+#### Classification
+
+* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
+* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
+* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
+
+#### Regression
+
+* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
+* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
+* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+
+#### Tree
+
+* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
+* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
+
+#### Clustering
+
+* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
+* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
+* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
+
+#### Collaborative Filtering
+
+* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
+
+#### Statistics
+
+* [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
+
+Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.
 Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
 SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
 
-## Algorithms
-
-### Generalized Linear Model
-
-[spark.glm()](api/R/spark.glm.html) or [glm()](api/R/glm.html) fits generalized linear model against a Spark DataFrame.
-Currently "gaussian", "binomial", "poisson" and "gamma" families are supported.
-{% include_example glm r/ml.R %}
-
-### Accelerated Failure Time (AFT) Survival Regression Model
-
-[spark.survreg()](api/R/spark.survreg.html) fits an accelerated failure time (AFT) survival regression model on a SparkDataFrame.
-Note that the formula of [spark.survreg()](api/R/spark.survreg.html) does not support operator '.' currently.
-{% include_example survreg r/ml.R %}
-
-### Naive Bayes Model
-
-[spark.naiveBayes()](api/R/spark.naiveBayes.html) fits a Bernoulli naive Bayes model against a SparkDataFrame. Only categorical data is supported.
-{% include_example naiveBayes r/ml.R %}
-
-### KMeans Model
-
-[spark.kmeans()](api/R/spark.kmeans.html) fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
-{% include_example kmeans r/ml.R %}
 
 ## Model persistence
 
 The following example shows how to save/load a MLlib model by SparkR.
-{% include_example read_write r/ml.R %}
+{% include_example read_write r/ml/ml.R %}
+
+# Data type mapping between R and Spark
+<table class="table">
+<tr><th>R</th><th>Spark</th></tr>
+<tr>
+  <td>byte</td>
+  <td>byte</td>
+</tr>
+<tr>
+  <td>integer</td>
+  <td>integer</td>
+</tr>
+<tr>
+  <td>float</td>
+  <td>float</td>
+</tr>
+<tr>
+  <td>double</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>numeric</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>character</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>string</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>binary</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>raw</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>logical</td>
+  <td>boolean</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXct</a></td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXlt</a></td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html">Date</a></td>
+  <td>date</td>
+</tr>
+<tr>
+  <td>array</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>list</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>env</td>
+  <td>map</td>
+</tr>
+</table>
 
 # R Function Name Conflicts
 
@@ -446,3 +604,7 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - The method `registerTempTable` has been deprecated to be replaced by `createOrReplaceTempView`.
  - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
  - The `sc` SparkContext parameter is no longer required for these functions: `setJobGroup`, `clearJobGroup`, `cancelJobGroup`
+
+## Upgrading to SparkR 2.1.0
+
+ - `join` no longer performs Cartesian Product by default, use `crossJoin` instead.

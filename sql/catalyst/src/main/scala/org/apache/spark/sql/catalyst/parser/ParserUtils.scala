@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.collection.mutable.StringBuilder
 
-import org.antlr.v4.runtime.{CharStream, ParserRuleContext, Token}
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.TerminalNode
 
@@ -31,11 +31,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 object ParserUtils {
   /** Get the command which created the token. */
   def command(ctx: ParserRuleContext): String = {
-    command(ctx.getStart.getInputStream)
-  }
-
-  /** Get the command which created the token. */
-  def command(stream: CharStream): String = {
+    val stream = ctx.getStart.getInputStream
     stream.getText(Interval.of(0, stream.size()))
   }
 
@@ -74,11 +70,12 @@ object ParserUtils {
 
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
-    Origin(Option(token.getLine), Option(token.getCharPositionInLine))
+    val opt = Option(token)
+    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
   }
 
-  /** Assert if a condition holds. If it doesn't throw a parse exception. */
-  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
+  /** Validate the condition. If it doesn't throw a parse exception. */
+  def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
       throw new ParseException(message, ctx)
     }
@@ -192,9 +189,7 @@ object ParserUtils {
      * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
      * passed function. The original plan is returned when the context does not exist.
      */
-    def optionalMap[C <: ParserRuleContext](
-        ctx: C)(
-        f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
+    def optionalMap[C](ctx: C)(f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {
       if (ctx != null) {
         f(ctx, plan)
       } else {

@@ -23,6 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
+import scala.collection.mutable.WrappedArray;
+
 import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.Dataset;
@@ -32,6 +34,10 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
+// col("...") is preferable to df.col("...")
+import static org.apache.spark.sql.functions.callUDF;
+import static org.apache.spark.sql.functions.col;
 // $example off$
 
 public class JavaTokenizerExample {
@@ -49,7 +55,7 @@ public class JavaTokenizerExample {
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.IntegerType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 
@@ -62,20 +68,20 @@ public class JavaTokenizerExample {
         .setOutputCol("words")
         .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
 
+    spark.udf().register(
+      "countTokens", (WrappedArray<?> words) -> words.size(), DataTypes.IntegerType);
+
     Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
-    for (Row r : tokenized.select("words", "label").takeAsList(3)) {
-      java.util.List<String> words = r.getList(0);
-      for (String word : words) System.out.print(word + " ");
-      System.out.println();
-    }
+    tokenized.select("sentence", "words")
+        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .show(false);
 
     Dataset<Row> regexTokenized = regexTokenizer.transform(sentenceDataFrame);
-    for (Row r : regexTokenized.select("words", "label").takeAsList(3)) {
-      java.util.List<String> words = r.getList(0);
-      for (String word : words) System.out.print(word + " ");
-      System.out.println();
-    }
+    regexTokenized.select("sentence", "words")
+        .withColumn("tokens", callUDF("countTokens", col("words")))
+        .show(false);
     // $example off$
+
     spark.stop();
   }
 }

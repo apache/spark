@@ -153,8 +153,8 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       val (actualScannedColumns, actualPartValues) = plan.collect {
         case p @ HiveTableScanExec(columns, relation, _) =>
           val columnNames = columns.map(_.name)
-          val partValues = if (relation.catalogTable.partitionColumnNames.nonEmpty) {
-            p.prunePartitions(relation.getHiveQlPartitions()).map(_.getValues)
+          val partValues = if (relation.isPartitioned) {
+            p.prunePartitions(p.rawPartitions).map(_.getValues)
           } else {
             Seq.empty
           }

@@ -29,6 +29,10 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     val listener = new TestJavaStreamingListener()
     val listenerWrapper = new JavaStreamingListenerWrapper(listener)
 
+    val streamingStarted = StreamingListenerStreamingStarted(1000L)
+    listenerWrapper.onStreamingStarted(streamingStarted)
+    assert(listener.streamingStarted.time === streamingStarted.time)
+
     val receiverStarted = StreamingListenerReceiverStarted(ReceiverInfo(
       streamId = 2,
       name = "test",
@@ -249,6 +253,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
 
 class TestJavaStreamingListener extends JavaStreamingListener {
 
+  var streamingStarted: JavaStreamingListenerStreamingStarted = null
   var receiverStarted: JavaStreamingListenerReceiverStarted = null
   var receiverError: JavaStreamingListenerReceiverError = null
   var receiverStopped: JavaStreamingListenerReceiverStopped = null
@@ -257,6 +262,10 @@ class TestJavaStreamingListener extends JavaStreamingListener {
   var batchCompleted: JavaStreamingListenerBatchCompleted = null
   var outputOperationStarted: JavaStreamingListenerOutputOperationStarted = null
   var outputOperationCompleted: JavaStreamingListenerOutputOperationCompleted = null
+
+  override def onStreamingStarted(streamingStarted: JavaStreamingListenerStreamingStarted): Unit = {
+    this.streamingStarted = streamingStarted
+  }
 
   override def onReceiverStarted(receiverStarted: JavaStreamingListenerReceiverStarted): Unit = {
     this.receiverStarted = receiverStarted

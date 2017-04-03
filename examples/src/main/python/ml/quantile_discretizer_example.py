@@ -29,7 +29,7 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # $example on$
-    data = [(0, 18.0,), (1, 19.0,), (2, 8.0,), (3, 5.0,), (4, 2.2,)]
+    data = [(0, 18.0), (1, 19.0), (2, 8.0), (3, 5.0), (4, 2.2)]
     df = spark.createDataFrame(data, ["id", "hour"])
     # $example off$
 

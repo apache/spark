@@ -46,6 +46,8 @@ private[spark] class MapOutputTrackerMasterEndpoint(
     override val rpcEnv: RpcEnv, tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends RpcEndpoint with Logging {
 
+  logDebug("init") // force eager creation of logger
+
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
@@ -97,7 +99,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   protected def askTracker[T: ClassTag](message: Any): T = {
     try {
-      trackerEndpoint.askWithRetry[T](message)
+      trackerEndpoint.askSync[T](message)
     } catch {
       case e: Exception =>
         logError("Error communicating with MapOutputTracker", e)
@@ -315,12 +317,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     pool
   }
 
-  // Make sure that that we aren't going to exceed the max RPC message size by making sure
+  // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
     val msg = s"spark.shuffle.mapOutput.minSizeForBroadcast ($minSizeForBroadcast bytes) must " +
       s"be <= spark.rpc.message.maxSize ($maxRpcMessageSize bytes) to prevent sending an rpc " +
-      "message that is to large."
+      "message that is too large."
     logError(msg)
     throw new IllegalArgumentException(msg)
   }
@@ -381,7 +383,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
 
   /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
-    mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
+    mapStatuses.put(shuffleId, statuses.clone())
     if (changeEpoch) {
       incrementEpoch()
     }
@@ -533,7 +535,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
             true
           case None =>
             logDebug("cached status not found for : " + shuffleId)
-            statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
+            statuses = mapStatuses.getOrElse(shuffleId, Array.empty[MapStatus])
             epochGotten = epoch
             false
         }

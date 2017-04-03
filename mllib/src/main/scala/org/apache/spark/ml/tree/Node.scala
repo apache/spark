@@ -145,8 +145,8 @@ class LeafNode private[ml] (
  * Internal Decision Tree node.
  * @param prediction  Prediction this node would make if it were a leaf node
  * @param impurity  Impurity measure at this node (for training data)
- * @param gain Information gain value.
- *             Values < 0 indicate missing values; this quirk will be removed with future updates.
+ * @param gain Information gain value. Values less than 0 indicate missing values;
+ *             this quirk will be removed with future updates.
  * @param leftChild  Left-hand child node
  * @param rightChild  Right-hand child node
  * @param split  Information about the test used to split to the left or right child.

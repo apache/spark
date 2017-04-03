@@ -104,6 +104,21 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .collect().toSeq)
   }
 
+  test("join - cross join") {
+    val df1 = Seq((1, "1"), (3, "3")).toDF("int", "str")
+    val df2 = Seq((2, "2"), (4, "4")).toDF("int", "str")
+
+    checkAnswer(
+      df1.crossJoin(df2),
+      Row(1, "1", 2, "2") :: Row(1, "1", 4, "4") ::
+        Row(3, "3", 2, "2") :: Row(3, "3", 4, "4") :: Nil)
+
+    checkAnswer(
+      df2.crossJoin(df1),
+      Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
+        Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
+  }
+
   test("join - using aliases after self join") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
     checkAnswer(
@@ -145,7 +160,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
     // no join key -- should not be a broadcast join
-    val plan2 = df1.join(broadcast(df2)).queryExecution.sparkPlan
+    val plan2 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
     assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
     // planner should not crash without a join
@@ -155,7 +170,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     withTempPath { path =>
       df1.write.parquet(path.getCanonicalPath)
       val pf1 = spark.read.parquet(path.getCanonicalPath)
-      assert(df1.join(broadcast(pf1)).count() === 4)
+      assert(df1.crossJoin(broadcast(pf1)).count() === 4)
     }
   }
 
@@ -224,5 +239,13 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         .select(coalesce(df3("a"), df3("b")), coalesce(df4("a"), df4("b"))),
       Row(1, null) :: Row(null, 2) :: Nil
     )
+  }
+
+  test("SPARK-16991: Full outer join followed by inner join produces wrong results") {
+    val a = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val b = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val c = Seq((3, 1)).toDF("a", "d")
+    val ab = a.join(b, Seq("a"), "fullouter")
+    checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
   }
 }

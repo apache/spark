@@ -156,6 +156,30 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
+  test("input row metrics") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val provider = new TextSocketSourceProvider
+    val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString)
+    source = provider.createSource(sqlContext, "", None, "", parameters)
+
+    failAfter(streamingTimeout) {
+      serverThread.enqueue("hello")
+      while (source.getOffset.isEmpty) {
+        Thread.sleep(10)
+      }
+      val batch = source.getBatch(None, source.getOffset.get).as[String]
+      batch.collect()
+      val numRowsMetric =
+        batch.queryExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
+      assert(numRowsMetric.nonEmpty)
+      assert(numRowsMetric.get.value === 1)
+      source.stop()
+      source = null
+    }
+  }
+
   private class ServerThread extends Thread with Logging {
     private val serverSocket = new ServerSocket(0)
     private val messageQueue = new LinkedBlockingQueue[String]()

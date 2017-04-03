@@ -94,15 +94,14 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
     val plan = sql(stmt).queryExecution.sparkPlan
     val numPartitions = plan.collectFirst {
-      case p: HiveTableScanExec =>
-        p.relation.getHiveQlPartitions(p.partitionPruningPred).length
+      case p: HiveTableScanExec => p.rawPartitions.length
     }.getOrElse(0)
     assert(numPartitions == expectedNumParts)
   }
 
   test("Verify SQLConf HIVE_METASTORE_PARTITION_PRUNING") {
     val view = "src"
-    withTempTable(view) {
+    withTempView(view) {
       spark.range(1, 5).createOrReplaceTempView(view)
       val table = "table_with_partition"
       withTable(table) {
@@ -140,6 +139,40 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
               stmt = s"SELECT id, p2 FROM $table WHERE id <= 3", expectedNumParts = 2)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-16926: number of table and partition columns match for new partitioned table") {
+    val view = "src"
+    withTempView(view) {
+      spark.range(1, 5).createOrReplaceTempView(view)
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(id string)
+             |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+           """.stripMargin)
+        sql(
+          s"""
+             |FROM $view v
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+             |SELECT v.id
+             |INSERT INTO TABLE $table
+             |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
+             |SELECT v.id
+           """.stripMargin)
+        val plan = sql(
+          s"""
+             |SELECT * FROM $table
+           """.stripMargin).queryExecution.sparkPlan
+        val scan = plan.collectFirst {
+          case p: HiveTableScanExec => p
+        }.get
+        val numDataCols = scan.relation.dataCols.length
+        scan.rawPartitions.foreach(p => assert(p.getCols.size == numDataCols))
       }
     }
   }

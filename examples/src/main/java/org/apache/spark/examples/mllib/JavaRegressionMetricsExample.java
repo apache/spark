@@ -21,7 +21,6 @@ package org.apache.spark.examples.mllib;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.regression.LinearRegressionModel;
@@ -38,34 +37,24 @@ public class JavaRegressionMetricsExample {
     // Load and parse the data
     String path = "data/mllib/sample_linear_regression_data.txt";
     JavaRDD<String> data = sc.textFile(path);
-    JavaRDD<LabeledPoint> parsedData = data.map(
-      new Function<String, LabeledPoint>() {
-        public LabeledPoint call(String line) {
-          String[] parts = line.split(" ");
-          double[] v = new double[parts.length - 1];
-          for (int i = 1; i < parts.length - 1; i++) {
-            v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
-          }
-          return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
-        }
+    JavaRDD<LabeledPoint> parsedData = data.map(line -> {
+      String[] parts = line.split(" ");
+      double[] v = new double[parts.length - 1];
+      for (int i = 1; i < parts.length - 1; i++) {
+        v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
       }
-    );
+      return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
+    });
     parsedData.cache();
 
     // Building the model
     int numIterations = 100;
-    final LinearRegressionModel model = LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData),
+    LinearRegressionModel model = LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData),
       numIterations);
 
     // Evaluate model on training examples and compute training error
-    JavaRDD<Tuple2<Object, Object>> valuesAndPreds = parsedData.map(
-      new Function<LabeledPoint, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(LabeledPoint point) {
-          double prediction = model.predict(point.features());
-          return new Tuple2<Object, Object>(prediction, point.label());
-        }
-      }
-    );
+    JavaPairRDD<Object, Object> valuesAndPreds = parsedData.mapToPair(point ->
+      new Tuple2<>(model.predict(point.features()), point.label()));
 
     // Instantiate metrics object
     RegressionMetrics metrics = new RegressionMetrics(valuesAndPreds.rdd());

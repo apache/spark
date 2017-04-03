@@ -19,6 +19,7 @@ package org.apache.spark.status.api.v1;
 
 import org.apache.spark.util.EnumUtil;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -30,9 +31,7 @@ public enum TaskSorting {
   private final Set<String> alternateNames;
   TaskSorting(String... names) {
     alternateNames = new HashSet<>();
-    for (String n: names) {
-      alternateNames.add(n);
-    }
+    Collections.addAll(alternateNames, names);
   }
 
   public static TaskSorting fromString(String str) {

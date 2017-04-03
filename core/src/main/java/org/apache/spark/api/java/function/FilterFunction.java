@@ -24,6 +24,7 @@ import java.io.Serializable;
  *
  * If the function returns true, the element is included in the returned Dataset.
  */
+@FunctionalInterface
 public interface FilterFunction<T> extends Serializable {
   boolean call(T value) throws Exception;
 }

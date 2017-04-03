@@ -22,9 +22,9 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import org.eclipse.jetty.server.{Server, ServerConnector}
+import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
-import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
@@ -83,7 +83,15 @@ private[spark] abstract class RestSubmissionServer(
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
 
-    val connector = new ServerConnector(server)
+    val connector = new ServerConnector(
+      server,
+      null,
+      // Call this full constructor to set this, which forces daemon threads:
+      new ScheduledExecutorScheduler("RestSubmissionServer-JettyScheduler", true),
+      null,
+      -1,
+      -1,
+      new HttpConnectionFactory())
     connector.setHost(host)
     connector.setPort(startPort)
     server.addConnector(connector)

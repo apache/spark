@@ -53,7 +53,7 @@ abstract class Evaluator extends Params {
   def evaluate(dataset: Dataset[_]): Double
 
   /**
-   * Indicates whether the metric returned by [[evaluate()]] should be maximized (true, default)
+   * Indicates whether the metric returned by `evaluate` should be maximized (true, default)
    * or minimized (false).
    * A given evaluator may support multiple metrics which may be maximized or minimized.
    */

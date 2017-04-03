@@ -142,7 +142,7 @@ private[deploy] object IvyTestUtils {
         |}
       """.stripMargin
     val sourceFile =
-      new JavaSourceFromString(new File(dir, className).getAbsolutePath, contents)
+      new JavaSourceFromString(new File(dir, className).toURI.getPath, contents)
     createCompiledClass(className, dir, sourceFile, Seq.empty)
   }
 
@@ -305,7 +305,7 @@ private[deploy] object IvyTestUtils {
       val allFiles = ArrayBuffer[(String, File)](javaFile)
       if (withPython) {
         val pythonFile = createPythonFile(root)
-        allFiles.append((pythonFile.getName, pythonFile))
+        allFiles += Tuple2(pythonFile.getName, pythonFile)
       }
       if (withR) {
         val rFiles = createRFiles(root, className, artifact.groupId)

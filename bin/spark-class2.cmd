@@ -50,7 +50,16 @@ if not "x%SPARK_PREPEND_CLASSES%"=="x" (
 
 rem Figure out where java is.
 set RUNNER=java
-if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
+if not "x%JAVA_HOME%"=="x" (
+  set RUNNER="%JAVA_HOME%\bin\java"
+) else (
+  where /q "%RUNNER%"
+  if ERRORLEVEL 1 (
+    echo Java not found and JAVA_HOME environment variable is not set.
+    echo Install Java and set JAVA_HOME to point to the Java installation directory.
+    exit /b 1
+  )
+)
 
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.

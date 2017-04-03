@@ -22,14 +22,15 @@ import java.io.File
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
 object Main extends Logging {
 
   initializeLogIfNecessary(true)
+  Signaling.cancelOnInterrupt()
 
   val conf = new SparkConf()
   val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
@@ -108,7 +109,6 @@ object Main extends Logging {
       logInfo("Created Spark session")
     }
     sparkContext = sparkSession.sparkContext
-    Signaling.cancelOnInterrupt(sparkContext)
     sparkSession
   }
 

@@ -1027,7 +1027,6 @@ class SparkILoop(
       builder.getOrCreate()
     }
     sparkContext = sparkSession.sparkContext
-    Signaling.cancelOnInterrupt(sparkContext)
     sparkSession
   }
 
@@ -1059,7 +1058,8 @@ class SparkILoop(
   @deprecated("Use `process` instead", "2.9.0")
   private def main(settings: Settings): Unit = process(settings)
 
-  private[repl] def getAddedJars(): Array[String] = {
+  @DeveloperApi
+  def getAddedJars(): Array[String] = {
     val conf = new SparkConf().setMaster(getMaster())
     val envJars = sys.env.get("ADD_JARS")
     if (envJars.isDefined) {

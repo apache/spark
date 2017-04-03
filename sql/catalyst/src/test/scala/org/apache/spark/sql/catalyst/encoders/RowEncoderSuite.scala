@@ -191,6 +191,32 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("RowEncoder should support primitive arrays") {
+    val schema = new StructType()
+      .add("booleanPrimitiveArray", ArrayType(BooleanType, false))
+      .add("bytePrimitiveArray", ArrayType(ByteType, false))
+      .add("shortPrimitiveArray", ArrayType(ShortType, false))
+      .add("intPrimitiveArray", ArrayType(IntegerType, false))
+      .add("longPrimitiveArray", ArrayType(LongType, false))
+      .add("floatPrimitiveArray", ArrayType(FloatType, false))
+      .add("doublePrimitiveArray", ArrayType(DoubleType, false))
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val input = Seq(
+      Array(true, false),
+      Array(1.toByte, 64.toByte, Byte.MaxValue),
+      Array(1.toShort, 255.toShort, Short.MaxValue),
+      Array(1, 10000, Int.MaxValue),
+      Array(1.toLong, 1000000.toLong, Long.MaxValue),
+      Array(1.1.toFloat, 123.456.toFloat, Float.MaxValue),
+      Array(11.1111, 123456.7890123, Double.MaxValue)
+    )
+    val row = encoder.toRow(Row.fromSeq(input))
+    val convertedBack = encoder.fromRow(row)
+    input.zipWithIndex.map { case (array, index) =>
+      assert(convertedBack.getSeq(index) === array)
+    }
+  }
+
   test("RowEncoder should support array as the external type for ArrayType") {
     val schema = new StructType()
       .add("array", ArrayType(IntegerType))

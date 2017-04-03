@@ -91,7 +91,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (f: => Unit): Unit = {
     withParquetDataFrame(data, testVectorized) { df =>
       df.createOrReplaceTempView(tableName)
-      withTempTable(tableName)(f)
+      withTempView(tableName)(f)
     }
   }
 

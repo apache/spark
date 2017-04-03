@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -57,6 +57,20 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
           ('a + 'b * 2 + 'c + 4).as("((((a + 1) + (b * 2)) + c) + 3)"),
           Rand(0) * 1 * 2 * 3 * 4)
         .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("nested expression with aggregate operator") {
+    val originalQuery =
+      testRelation.as("t1")
+        .join(testRelation.as("t2"), Inner, Some("t1.a".attr === "t2.a".attr))
+        .groupBy("t1.a".attr + 1, "t2.a".attr + 1)(
+          (("t1.a".attr + 1) + ("t2.a".attr + 1)).as("col"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = originalQuery.analyze
 
     comparePlans(optimized, correctAnswer)
   }

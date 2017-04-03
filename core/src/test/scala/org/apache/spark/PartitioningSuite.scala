@@ -71,9 +71,9 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     val partitionSizes = List(1, 2, 10, 100, 500, 1000, 1500)
     val partitioners = partitionSizes.map(p => (p, new RangePartitioner(p, rdd)))
     val decoratedRangeBounds = PrivateMethod[Array[Int]]('rangeBounds)
-    partitioners.map { case (numPartitions, partitioner) =>
+    partitioners.foreach { case (numPartitions, partitioner) =>
       val rangeBounds = partitioner.invokePrivate(decoratedRangeBounds())
-      1.to(1000).map { element => {
+      for (element <- 1 to 1000) {
         val partition = partitioner.getPartition(element)
         if (numPartitions > 1) {
           if (partition < rangeBounds.size) {
@@ -85,7 +85,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
         } else {
           assert(partition === 0)
         }
-      }}
+      }
     }
   }
 

@@ -41,7 +41,10 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  *   The RDD takes care of closing the connection.
  * @param sql the text of the query.
  *   The query must contain two ? placeholders for parameters used to partition the results.
- *   E.g. "select title, author from books where ? <= id and id <= ?"
+ *   For example,
+ *   {{{
+ *   select title, author from books where ? <= id and id <= ?
+ *   }}}
  * @param lowerBound the minimum value of the first placeholder
  * @param upperBound the maximum value of the second placeholder
  *   The lower and upper bounds are inclusive.
@@ -79,13 +82,19 @@ class JdbcRDD[T: ClassTag](
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
-    // setFetchSize(Integer.MIN_VALUE) is a mysql driver specific way to force streaming results,
-    // rather than pulling entire resultset into memory.
-    // see http://dev.mysql.com/doc/refman/5.0/en/connector-j-reference-implementation-notes.html
-    if (conn.getMetaData.getURL.matches("jdbc:mysql:.*")) {
+    val url = conn.getMetaData.getURL
+    if (url.startsWith("jdbc:mysql:")) {
+      // setFetchSize(Integer.MIN_VALUE) is a mysql driver specific way to force
+      // streaming results, rather than pulling entire resultset into memory.
+      // See the below URL
+      // dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-implementation-notes.html
+
       stmt.setFetchSize(Integer.MIN_VALUE)
-      logInfo("statement fetch size set to: " + stmt.getFetchSize + " to force MySQL streaming ")
+    } else {
+      stmt.setFetchSize(100)
     }
+
+    logInfo(s"statement fetch size set to: ${stmt.getFetchSize}")
 
     stmt.setLong(1, part.lower)
     stmt.setLong(2, part.upper)
@@ -145,7 +154,10 @@ object JdbcRDD {
    *   The RDD takes care of closing the connection.
    * @param sql the text of the query.
    *   The query must contain two ? placeholders for parameters used to partition the results.
-   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   *   For example,
+   *   {{{
+   *   select title, author from books where ? <= id and id <= ?
+   *   }}}
    * @param lowerBound the minimum value of the first placeholder
    * @param upperBound the maximum value of the second placeholder
    *   The lower and upper bounds are inclusive.
@@ -185,7 +197,10 @@ object JdbcRDD {
    *   The RDD takes care of closing the connection.
    * @param sql the text of the query.
    *   The query must contain two ? placeholders for parameters used to partition the results.
-   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   *   For example,
+   *   {{{
+   *   select title, author from books where ? <= id and id <= ?
+   *   }}}
    * @param lowerBound the minimum value of the first placeholder
    * @param upperBound the maximum value of the second placeholder
    *   The lower and upper bounds are inclusive.
