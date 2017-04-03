@@ -384,9 +384,16 @@ private[serializer] object KryoSerializer {
     classOf[HighlyCompressedMapStatus],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
+    classOf[Array[Boolean]],
     classOf[Array[Byte]],
     classOf[Array[Short]],
+    classOf[Array[Int]],
     classOf[Array[Long]],
+    classOf[Array[Float]],
+    classOf[Array[Double]],
+    classOf[Array[Char]],
+    classOf[Array[String]],
+    classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]
   )
