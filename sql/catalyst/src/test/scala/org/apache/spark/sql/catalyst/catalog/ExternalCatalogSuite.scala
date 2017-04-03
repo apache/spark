@@ -443,8 +443,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val tz = TimeZone.getDefault.getID
     val catalog = newBasicCatalog()
 
-    def checkAnswer(table: CatalogTable, filters: Seq[Expression],
-        expected: Set[CatalogTablePartition]): Unit = {
+    def checkAnswer(
+        table: CatalogTable, filters: Seq[Expression], expected: Set[CatalogTablePartition])
+      : Unit = {
+
       assertResult(expected.map(_.spec)) {
         catalog.listPartitionsByFilter(table.database, table.identifier.identifier, filters, tz)
           .map(_.spec).toSet
@@ -468,9 +470,9 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         checkAnswer(tbl2, Seq('a.int > 0 && 'col1.int > 0), Set.empty)
       } catch {
         // HiveExternalCatalog may be the first one to notice and throw an exception, which will
-        // then be caught and converted into a RuntimeException with a descriptive message.
+        // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
-          throw new AnalysisException("")
+          throw new AnalysisException(ex.getMessage)
       }
     }
   }
