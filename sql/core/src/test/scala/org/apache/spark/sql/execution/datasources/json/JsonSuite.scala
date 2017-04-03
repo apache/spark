@@ -1041,7 +1041,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       spark.read
         .option("mode", "FAILFAST")
         .json(corruptRecords)
-        .collect()
     }
     assert(exceptionOne.getMessage.contains("JsonParseException"))
 
@@ -1080,6 +1079,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       jsonDFTwo,
       Row("str_a_4") :: Nil)
     assert(jsonDFTwo.schema === schemaTwo)
+  }
+
+  test("SPARK-19641: Additional corrupt records: DROPMALFORMED mode") {
+    val schema = new StructType().add("dummy", StringType)
+    // `DROPMALFORMED` mode should skip corrupt records
+    val jsonDF = spark.read
+      .option("mode", "DROPMALFORMED")
+      .json(additionalCorruptRecords)
+    checkAnswer(
+      jsonDF,
+      Row("test"))
+    assert(jsonDF.schema === schema)
   }
 
   test("Corrupt records: PERMISSIVE mode, without designated column for malformed records") {
@@ -1882,6 +1893,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("SPARK-19641: Handle multi-line corrupt documents (DROPMALFORMED)") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val corruptRecordCount = additionalCorruptRecords.count().toInt
+      assert(corruptRecordCount === 5)
+
+      additionalCorruptRecords
+        .toDF("value")
+        // this is the minimum partition count that avoids hash collisions
+        .repartition(corruptRecordCount * 4, F.hash($"value"))
+        .write
+        .text(path)
+
+      val jsonDF = spark.read.option("wholeFile", true).option("mode", "DROPMALFORMED").json(path)
+      checkAnswer(jsonDF, Seq(Row("test")))
+    }
+  }
+
   test("SPARK-18352: Handle multi-line corrupt documents (FAILFAST)") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -1903,9 +1932,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .option("wholeFile", true)
           .option("mode", "FAILFAST")
           .json(path)
-          .collect()
       }
-      assert(exceptionOne.getMessage.contains("Failed to parse a value"))
+      assert(exceptionOne.getMessage.contains("Failed to infer a common schema"))
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
