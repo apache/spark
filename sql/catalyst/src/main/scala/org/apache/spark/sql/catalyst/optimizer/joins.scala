@@ -478,18 +478,24 @@ case class EliminateOuterJoin(conf: CatalystConf) extends Rule[LogicalPlan] with
     }
   }
 
-  private def buildNewJoinType(joinCond: Expression, join: Join, subqueryOutPut: AttributeSet):
+  private def buildNewJoinType(upperJoin: Join, lowerJoin: Join, otherTableOutput: AttributeSet):
     JoinType = {
-    val conditions = splitConjunctivePredicates(joinCond)
+    val conditions = upperJoin.constraints
+    // Find the predicates reference only on the other table.
+    val localConditions = conditions.filter(_.references.subsetOf(otherTableOutput))
+    // Find the predicates reference either the left table or the join predicates
+    // between the left table and the other table.
     val leftConditions = conditions.filter(_.references.
-      subsetOf(join.left.outputSet ++ subqueryOutPut))
+      subsetOf(lowerJoin.left.outputSet ++ otherTableOutput)).diff(localConditions)
+    // Find the predicates reference either the right table or the join predicates
+    // between the right table and the other table.
     val rightConditions = conditions.filter(_.references.
-      subsetOf(join.right.outputSet ++ subqueryOutPut))
+      subsetOf(lowerJoin.right.outputSet ++ otherTableOutput)).diff(localConditions)
 
     val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
     val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
 
-    join.joinType match {
+    lowerJoin.joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner
       case LeftOuter if rightHasNonNullPredicate => Inner
       case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
@@ -505,9 +511,9 @@ case class EliminateOuterJoin(conf: CatalystConf) extends Rule[LogicalPlan] with
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
     case j @ Join(child @ Join(_, _, RightOuter | LeftOuter | FullOuter, _),
       subquery, LeftSemiOrAnti(joinType), joinCond) =>
-      if (joinCond.isDefined) {
-        val newJoinType = buildNewJoinType(joinCond.get, child, subquery.outputSet)
+      val newJoinType = buildNewJoinType(j, child, subquery.outputSet)
+      if (newJoinType == child.joinType) j else {
         Join(child.copy(joinType = newJoinType), subquery, joinType, joinCond)
-      } else j
+      }
   }
 }
