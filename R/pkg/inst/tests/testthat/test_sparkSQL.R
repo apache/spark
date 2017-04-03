@@ -2851,6 +2851,8 @@ compare_list <- function(list1, list2) {
 
 # This should always be the **very last test** in this test file.
 test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  skip_on_cran()
+
   # Check that it is not creating any extra file.
   # Does not check the tempdir which would be cleaned up after.
   filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
