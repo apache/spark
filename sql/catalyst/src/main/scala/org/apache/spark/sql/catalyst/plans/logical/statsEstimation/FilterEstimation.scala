@@ -655,6 +655,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
       case _: EqualTo =>
         ((maxLeft < minRight) || (maxRight < minLeft),
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
+          && (colStatLeft.distinctCount == colStatRight.distinctCount)
         )
       case _: EqualNullSafe =>
         // For null-safe equality, we use a very restrictive condition to evaluate its overlap.
@@ -680,7 +681,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         val ndvLeft = BigDecimal(colStatLeft.distinctCount)
         var newNdvLeft = (ndvLeft * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
         if (newNdvLeft < 1) newNdvLeft = 1
-        val ndvRight = BigDecimal(colStatLeft.distinctCount)
+        val ndvRight = BigDecimal(colStatRight.distinctCount)
         var newNdvRight = (ndvRight * percent).setScale(0, RoundingMode.HALF_UP).toBigInt()
         if (newNdvRight < 1) newNdvRight = 1
 
