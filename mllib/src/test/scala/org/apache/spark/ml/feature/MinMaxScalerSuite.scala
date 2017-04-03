@@ -53,7 +53,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
         assert(vector1.equals(vector2), "Transformed vector is different with expected.")
     }
 
-    MLTestingUtils.uidChecks(scaler, model)
+    MLTestingUtils.checkCopyAndUids(scaler, model)
   }
 
   test("MinMaxScaler arguments max must be larger than min") {

@@ -148,7 +148,7 @@ class LinearRegressionSuite
     assert(lir.getSolver == "auto")
     val model = lir.fit(datasetWithDenseFeature)
 
-    MLTestingUtils.uidChecks(lir, model)
+    MLTestingUtils.checkCopyAndUids(lir, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)

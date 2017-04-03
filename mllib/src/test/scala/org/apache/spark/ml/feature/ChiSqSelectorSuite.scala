@@ -120,7 +120,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
     val selector = new ChiSqSelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
     val model = ChiSqSelectorSuite.testSelector(selector, dataset)
-    MLTestingUtils.uidChecks(selector, model)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test Chi-Square selector: percentile") {

@@ -50,7 +50,7 @@ class MaxAbsScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       assert(vector1.equals(vector2), s"MaxAbsScaler ut error: $vector2 should be $vector1")
     }
 
-    MLTestingUtils.uidChecks(scaler, model)
+    MLTestingUtils.checkCopyAndUids(scaler, model)
   }
 
   test("MaxAbsScaler read/write") {

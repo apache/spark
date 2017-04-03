@@ -61,7 +61,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
     val pcaModel = pca.fit(df)
 
-    MLTestingUtils.uidChecks(pca, pcaModel)
+    MLTestingUtils.checkCopyAndUids(pca, pcaModel)
 
     pcaModel.transform(df).select("pca_features", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>

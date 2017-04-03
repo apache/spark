@@ -93,7 +93,7 @@ class IsotonicRegressionSuite
 
     val model = ir.fit(dataset)
 
-    MLTestingUtils.uidChecks(ir, model)
+    MLTestingUtils.checkCopyAndUids(ir, model)
 
     model.transform(dataset)
       .select("label", "features", "prediction", "weight")

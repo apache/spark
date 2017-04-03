@@ -124,7 +124,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model.hasParent)
     assert(model.numFeatures === 2)
 
-    MLTestingUtils.uidChecks(lsvc, model)
+    MLTestingUtils.checkCopyAndUids(lsvc, model)
   }
 
   test("linear svc doesn't fit intercept when fitIntercept is off") {

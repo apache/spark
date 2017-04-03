@@ -197,7 +197,7 @@ class GeneralizedLinearRegressionSuite
     val model = glr.setFamily("gaussian").setLink("identity")
       .fit(datasetGaussianIdentity)
 
-    MLTestingUtils.uidChecks(glr, model)
+    MLTestingUtils.checkCopyAndUids(glr, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)

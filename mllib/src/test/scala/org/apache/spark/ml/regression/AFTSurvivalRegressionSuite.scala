@@ -83,7 +83,7 @@ class AFTSurvivalRegressionSuite
       .setQuantilesCol("quantiles")
       .fit(datasetUnivariate)
 
-    MLTestingUtils.uidChecks(aftr, model)
+    MLTestingUtils.checkCopyAndUids(aftr, model)
 
     model.transform(datasetUnivariate)
       .select("label", "prediction", "quantiles")

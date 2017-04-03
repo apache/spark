@@ -58,7 +58,7 @@ private[ml] object LSHTest {
     val outputCol = model.getOutputCol
     val transformedData = model.transform(dataset)
 
-    MLTestingUtils.uidChecks(lsh, model)
+    MLTestingUtils.checkCopyAndUids(lsh, model)
 
     // Check output column type
     SchemaUtils.checkColumnType(

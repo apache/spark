@@ -69,7 +69,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("words")
       .setOutputCol("features")
     val cvm = cv.fit(df)
-    MLTestingUtils.uidChecks(cv, cvm)
+    MLTestingUtils.checkCopyAndUids(cv, cvm)
     assert(cvm.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
 
     cvm.transform(df).select("features", "expected").collect().foreach {

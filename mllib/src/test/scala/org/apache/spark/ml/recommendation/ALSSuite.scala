@@ -409,7 +409,7 @@ class ALSSuite
     logInfo(s"Test RMSE is $rmse.")
     assert(rmse < targetRMSE)
 
-    MLTestingUtils.uidChecks(als, model)
+    MLTestingUtils.checkCopyAndUids(als, model)
   }
 
   test("exact rank-1 matrix") {

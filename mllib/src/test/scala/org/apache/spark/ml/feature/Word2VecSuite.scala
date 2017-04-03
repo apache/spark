@@ -64,7 +64,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
     val model = w2v.fit(docDF)
 
-    MLTestingUtils.uidChecks(w2v, model)
+    MLTestingUtils.checkCopyAndUids(w2v, model)
 
     // These expectations are just magic values, characterizing the current
     // behavior.  The test needs to be updated to be more general, see SPARK-11502

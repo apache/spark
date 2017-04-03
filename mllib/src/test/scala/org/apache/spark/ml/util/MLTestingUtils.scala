@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
 
 object MLTestingUtils extends SparkFunSuite {
 
-  def uidChecks[T <: Estimator[_]](estimator: T, model: Model[_]): Unit = {
+  def checkCopyAndUids[T <: Estimator[_]](estimator: T, model: Model[_]): Unit = {
     assert(estimator.uid === model.uid, "Model uid does not match parent estimator")
 
     // copied model must have the same parent

@@ -70,7 +70,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       .setOutputCol("idfValue")
     val idfModel = idfEst.fit(df)
 
-    MLTestingUtils.uidChecks(idfEst, idfModel)
+    MLTestingUtils.checkCopyAndUids(idfEst, idfModel)
 
     idfModel.transform(df).select("idfValue", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>

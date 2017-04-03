@@ -52,7 +52,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getTol === 1e-4)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
-    MLTestingUtils.uidChecks(kmeans, model)
+    MLTestingUtils.checkCopyAndUids(kmeans, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)

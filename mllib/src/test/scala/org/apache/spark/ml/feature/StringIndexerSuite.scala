@@ -47,7 +47,7 @@ class StringIndexerSuite
       .setOutputCol("labelIndex")
     val indexerModel = indexer.fit(df)
 
-    MLTestingUtils.uidChecks(indexer, indexerModel)
+    MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
 
     val transformed = indexerModel.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))

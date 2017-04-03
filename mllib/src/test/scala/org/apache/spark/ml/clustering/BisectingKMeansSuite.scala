@@ -47,7 +47,7 @@ class BisectingKMeansSuite
     assert(bkm.getMinDivisibleClusterSize === 1.0)
     val model = bkm.setMaxIter(1).fit(dataset)
 
-    MLTestingUtils.uidChecks(bkm, model)
+    MLTestingUtils.checkCopyAndUids(bkm, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)

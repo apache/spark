@@ -81,7 +81,7 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("features")
       .setOutputCol("standardized_features")
     val standardScaler0 = standardScalerEst0.fit(df0)
-    MLTestingUtils.uidChecks(standardScalerEst0, standardScaler0)
+    MLTestingUtils.checkCopyAndUids(standardScalerEst0, standardScaler0)
 
     assertResult(standardScaler0.transform(df0))
   }

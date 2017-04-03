@@ -58,7 +58,7 @@ class CrossValidatorSuite
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
 
-    MLTestingUtils.uidChecks(cv, cvModel)
+    MLTestingUtils.checkCopyAndUids(cv, cvModel)
 
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)

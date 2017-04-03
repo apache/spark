@@ -141,7 +141,7 @@ class RandomForestClassifierSuite
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
 
-    MLTestingUtils.uidChecks(rf, model)
+    MLTestingUtils.checkCopyAndUids(rf, model)
 
     val predictions = model.transform(df)
       .select(rf.getPredictionCol, rf.getRawPredictionCol, rf.getProbabilityCol)

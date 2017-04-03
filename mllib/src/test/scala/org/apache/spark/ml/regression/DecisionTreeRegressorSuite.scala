@@ -74,7 +74,7 @@ class DecisionTreeRegressorSuite
       .setMaxDepth(2)
       .setMaxBins(8)
     val model = dtr.fit(df)
-    MLTestingUtils.uidChecks(dtr, model)
+    MLTestingUtils.checkCopyAndUids(dtr, model)
   }
 
   test("predictVariance") {

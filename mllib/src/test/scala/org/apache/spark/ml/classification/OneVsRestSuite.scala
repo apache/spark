@@ -76,7 +76,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
 
-    MLTestingUtils.uidChecks(ova, ovaModel)
+    MLTestingUtils.checkCopyAndUids(ova, ovaModel)
 
     assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)

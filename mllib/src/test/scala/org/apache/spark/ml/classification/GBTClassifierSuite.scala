@@ -97,7 +97,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.getProbabilityCol === "probability")
     assert(model.hasParent)
 
-    MLTestingUtils.uidChecks(gbt, model)
+    MLTestingUtils.checkCopyAndUids(gbt, model)
   }
 
   test("setThreshold, getThreshold") {
@@ -260,7 +260,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       .setSeed(123)
     val model = gbt.fit(df)
 
-    MLTestingUtils.uidChecks(gbt, model)
+    MLTestingUtils.checkCopyAndUids(gbt, model)
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)

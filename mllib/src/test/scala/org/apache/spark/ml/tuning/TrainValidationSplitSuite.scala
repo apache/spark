@@ -79,7 +79,7 @@ class TrainValidationSplitSuite
       .setSeed(42L)
     val tvsModel = tvs.fit(dataset)
 
-    MLTestingUtils.uidChecks(tvs, tvsModel)
+    MLTestingUtils.checkCopyAndUids(tvs, tvsModel)
 
     val parent = tvsModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
