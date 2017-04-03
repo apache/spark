@@ -35,7 +35,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -1039,37 +1039,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       defaultTimeZoneId: String): Seq[CatalogTablePartition] = withClient {
     val rawTable = getRawTable(db, table)
     val catalogTable = restoreTableMetadata(rawTable)
-    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-    val nonPartitionPruningPredicates = predicates.filterNot {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
 
-    if (nonPartitionPruningPredicates.nonEmpty) {
-        sys.error("Expected only partition pruning predicates: " +
-          predicates.reduceLeft(And))
-    }
+    val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
 
-    val partitionSchema = catalogTable.partitionSchema
-    val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-
-    if (predicates.nonEmpty) {
-      val clientPrunedPartitions = client.getPartitionsByFilter(rawTable, predicates).map { part =>
+    val clientPrunedPartitions =
+      client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
-      val boundPredicate =
-        InterpretedPredicate.create(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
-      clientPrunedPartitions.filter { p =>
-        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
-      }
-    } else {
-      client.getPartitions(catalogTable).map { part =>
-        part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
-      }
-    }
+    prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
   }
 
   // --------------------------------------------------------------------------

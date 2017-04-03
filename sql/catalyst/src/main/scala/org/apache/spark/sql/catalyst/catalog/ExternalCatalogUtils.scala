@@ -25,6 +25,7 @@ import org.apache.hadoop.util.Shell
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, InterpretedPredicate}
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -124,6 +125,38 @@ object ExternalCatalogUtils {
       escapePathName(value)
     }
     escapePathName(col) + "=" + partitionString
+  }
+
+  def prunePartitionsByFilter(
+      catalogTable: CatalogTable,
+      inputPartitions: Seq[CatalogTablePartition],
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
+    if (predicates.isEmpty) {
+      inputPartitions
+    } else {
+      val partitionSchema = catalogTable.partitionSchema
+      val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+      val nonPartitionPruningPredicates = predicates.filterNot {
+        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      }
+      if (nonPartitionPruningPredicates.nonEmpty) {
+        throw new AnalysisException("Expected only partition pruning predicates: " +
+          nonPartitionPruningPredicates)
+      }
+
+      val boundPredicate =
+        InterpretedPredicate.create(predicates.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+
+      inputPartitions.filter { p =>
+        boundPredicate(p.toRow(partitionSchema, defaultTimeZoneId))
+      }
+    }
   }
 }
 
