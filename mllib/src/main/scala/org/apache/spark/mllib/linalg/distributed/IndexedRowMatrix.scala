@@ -113,20 +113,22 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-    * Converts to BlockMatrix. Creates blocks of `DenseMatrix` with size 1024 x 1024.
-    */
+   * Converts to BlockMatrix. Creates blocks of `DenseMatrix` with size 1024 x 1024.
+   */
+  @Since("2.2.0")
   def toBlockMatrixDense(): BlockMatrix = {
     toBlockMatrixDense(1024, 1024)
   }
 
   /**
-    * Converts to BlockMatrix. Creates blocks of `DenseMatrix`.
-    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
-    *                     a smaller value. Must be an integer value greater than 0.
-    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
-    *                     a smaller value. Must be an integer value greater than 0.
-    * @return a [[BlockMatrix]]
-    */
+   * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
+   * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @return a [[BlockMatrix]]
+   */
+  @Since("2.2.0")
   def toBlockMatrixDense(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
     require(rowsPerBlock > 0,
       s"rowsPerBlock needs to be greater than 0. rowsPerBlock: $rowsPerBlock")
@@ -142,34 +144,34 @@ class IndexedRowMatrix @Since("1.0.0") (
     val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
     val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
 
-    val blocks: RDD[((Int, Int), Matrix)] = rows.flatMap({ ir =>
+    val blocks: RDD[((Int, Int), Matrix)] = rows.flatMap{ ir =>
       val blockRow = ir.index / rowsPerBlock
       val rowInBlock = ir.index % rowsPerBlock
 
       ir.vector.toArray
         .grouped(colsPerBlock)
         .zipWithIndex
-        .map({ case (values, blockColumn) =>
+        .map{ case (values, blockColumn) =>
           ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values))
-        })
-    }).groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map({
+        }
+    }.groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map{
       case ((blockRow, blockColumn), itr) =>
-        val actualNumRows: Int =
+        val actualNumRows =
           if (blockRow == lastRowBlockIndex) lastRowBlockSize else rowsPerBlock
         val actualNumColumns: Int =
           if (blockColumn == lastColBlockIndex) lastColBlockSize else colsPerBlock
 
         val arraySize = actualNumRows * actualNumColumns
         val matrixAsArray = new Array[Double](arraySize)
-        itr.foreach({ case (rowWithinBlock, values) =>
+        itr.foreach{ case (rowWithinBlock, values) =>
           var i = 0
           while (i < values.length) {
             matrixAsArray.update(i * actualNumRows + rowWithinBlock, values(i))
             i += 1
           }
-        })
+        }
         ((blockRow, blockColumn), new DenseMatrix(actualNumRows, actualNumColumns, matrixAsArray))
-    })
+    }
     new BlockMatrix(blocks, rowsPerBlock, colsPerBlock)
   }
 
