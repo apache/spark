@@ -103,11 +103,18 @@ private[sql] class ArrowConverters {
 
   private[sql] def allocator: RootAllocator = _allocator
 
+  /**
+   * Iterate over the rows and convert to an ArrowPayload, using RootAllocator from this class
+   */
   def interalRowIterToPayload(rowIter: Iterator[InternalRow], schema: StructType): ArrowPayload = {
-    val batch = ArrowConverters.internalRowIterToArrowBatch(rowIter, schema, allocator)
+    val batch = ArrowConverters.internalRowIterToArrowBatch(rowIter, schema, _allocator)
     new ArrowStaticPayload(batch)
   }
 
+  /**
+   * Read an Array of Arrow Record batches as byte Arrays into an ArrowPayload, using
+   * RootAllocator from this class
+   */
   def readPayloadByteArrays(payloadByteArrays: Array[Array[Byte]]): ArrowPayload = {
     val batches = scala.collection.mutable.ArrayBuffer.empty[ArrowRecordBatch]
     var i = 0
@@ -123,6 +130,10 @@ private[sql] class ArrowConverters {
     new ArrowStaticPayload(batches: _*)
   }
 
+  /**
+   * Call when done using this converter, will close RootAllocator so any ArrowBuffers should be
+   * closed first
+   */
   def close(): Unit = {
     _allocator.close()
   }
@@ -152,7 +163,7 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Iterate over InternalRows and write to an ArrowRecordBatch.
+   * Iterate over InternalRows and convert to an ArrowRecordBatch.
    */
   private def internalRowIterToArrowBatch(
       rowIter: Iterator[InternalRow],
