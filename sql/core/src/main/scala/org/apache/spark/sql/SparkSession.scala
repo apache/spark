@@ -593,7 +593,7 @@ class SparkSession private(
   /**
    * Returns the specified table/view as a `DataFrame`.
    *
-   * @param tableName is either a qualified or unqualified name that designates a table.
+   * @param tableName is either a qualified or unqualified name that designates a table or view.
    *                  If a database is specified, it identifies the table/view from the database.
    *                  Otherwise, it first attempts to find a temporary view with the given name
    *                  and then match the table/view from the current database.
