@@ -23,7 +23,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
-import org.apache.spark.sql.streaming.KeyedStateTimeout;
+import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
 import scala.Tuple3;
@@ -210,7 +210,7 @@ public class JavaDatasetSuite implements Serializable {
       OutputMode.Append(),
       Encoders.LONG(),
       Encoders.STRING(),
-      KeyedStateTimeout.NoTimeout());
+      GroupStateTimeout.NoTimeout());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
@@ -1379,5 +1379,24 @@ public class JavaDatasetSuite implements Serializable {
   public void testCircularReferenceBean3() {
     CircularReference4Bean bean = new CircularReference4Bean();
     spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+  }
+
+  @Test(expected = RuntimeException.class)
+  public void testNullInTopLevelBean() {
+    NestedSmallBean bean = new NestedSmallBean();
+    // We cannot set null in top-level bean
+    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+  }
+
+  @Test
+  public void testSerializeNull() {
+    NestedSmallBean bean = new NestedSmallBean();
+    Encoder<NestedSmallBean> encoder = Encoders.bean(NestedSmallBean.class);
+    List<NestedSmallBean> beans = Arrays.asList(bean);
+    Dataset<NestedSmallBean> ds1 = spark.createDataset(beans, encoder);
+    Assert.assertEquals(beans, ds1.collectAsList());
+    Dataset<NestedSmallBean> ds2 =
+      ds1.map((MapFunction<NestedSmallBean, NestedSmallBean>) b -> b, encoder);
+    Assert.assertEquals(beans, ds2.collectAsList());
   }
 }

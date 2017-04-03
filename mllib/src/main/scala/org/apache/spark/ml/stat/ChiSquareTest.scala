@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions.col
  */
 @Experimental
 @Since("2.2.0")
-object ChiSquare {
+object ChiSquareTest {
 
   /** Used to construct output schema of tests */
   private case class ChiSquareResult(
@@ -46,9 +46,9 @@ object ChiSquare {
       statistics: Vector)
 
   /**
-   * Conduct Pearson's independence test for every feature against the label across the input RDD.
-   * For each feature, the (feature, label) pairs are converted into a contingency matrix for which
-   * the Chi-squared statistic is computed. All label and feature values must be categorical.
+   * Conduct Pearson's independence test for every feature against the label. For each feature, the
+   * (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
+   * statistic is computed. All label and feature values must be categorical.
    *
    * The null hypothesis is that the occurrence of the outcomes is statistically independent.
    *

@@ -41,8 +41,32 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
   val metastoreTableIdentifier: Option[TableIdentifier]
 
+  protected val nodeNamePrefix: String = ""
+
   override val nodeName: String = {
     s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
+  }
+
+  override def simpleString: String = {
+    val metadataEntries = metadata.toSeq.sorted.map {
+      case (key, value) =>
+        key + ": " + StringUtils.abbreviate(redact(value), 100)
+    }
+    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
+    s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
+  }
+
+  override def verboseString: String = redact(super.verboseString)
+
+  override def treeString(verbose: Boolean, addSuffix: Boolean): String = {
+    redact(super.treeString(verbose, addSuffix))
+  }
+
+  /**
+   * Shorthand for calling redactString() without specifying redacting rules
+   */
+  private def redact(text: String): String = {
+    Utils.redact(SparkSession.getActiveSession.get.sparkContext.conf, text)
   }
 }
 
@@ -83,15 +107,6 @@ case class RowDataSourceScanExec(
       numOutputRows += 1
       r
     }
-  }
-
-  override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
-      key + ": " + StringUtils.abbreviate(value, 100)
-    }
-
-    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
-      s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -156,8 +171,21 @@ case class FileSourceScanExec(
     false
   }
 
-  @transient private lazy val selectedPartitions =
-    relation.location.listFiles(partitionFilters, dataFilters)
+  @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
+    val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
+    val startTime = System.nanoTime()
+    val ret = relation.location.listFiles(partitionFilters, dataFilters)
+    val timeTakenMs = ((System.nanoTime() - startTime) + optimizerMetadataTimeNs) / 1000 / 1000
+
+    metrics("numFiles").add(ret.map(_.files.size.toLong).sum)
+    metrics("metadataTime").add(timeTakenMs)
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      metrics("numFiles") :: metrics("metadataTime") :: Nil)
+
+    ret
+  }
 
   override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
@@ -278,6 +306,8 @@ case class FileSourceScanExec(
 
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files"),
+      "metadataTime" -> SQLMetrics.createMetric(sparkContext, "metadata time (ms)"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -307,13 +337,7 @@ case class FileSourceScanExec(
     }
   }
 
-  override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
-      key + ": " + StringUtils.abbreviate(value, 100)
-    }
-    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
-    s"File$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
-  }
+  override val nodeNamePrefix: String = "File"
 
   override protected def doProduce(ctx: CodegenContext): String = {
     if (supportsBatch) {

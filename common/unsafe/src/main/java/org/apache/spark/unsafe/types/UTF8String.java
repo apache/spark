@@ -863,7 +863,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * This is done solely for better performance and is not expected to be used by end users.
    *
    * {@link LongWrapper} could have been used here but using `int` directly save the extra cost of
-   * conversion from `long` -> `int`
+   * conversion from `long` to `int`
    */
   public static class IntWrapper {
     public int value = 0;
