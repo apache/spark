@@ -256,6 +256,7 @@ The following example shows the basic use of ChiSqSelector. The data set used ha
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+
 Refer to the [`ChiSqSelector` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector)
 for details on the API.
 
@@ -263,17 +264,11 @@ for details on the API.
 </div>
 
 <div data-lang="java" markdown="1">
+
 Refer to the [`ChiSqSelector` Java docs](api/java/org/apache/spark/mllib/feature/ChiSqSelector.html)
 for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaChiSqSelectorExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`ChiSqSelector` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.ChiSqSelector)
-for details on the API.
-
-{% include_example python/mllib/chisq_selector_example.py %}
 </div>
 </div>
 
