@@ -471,18 +471,6 @@ class PlanParserSuite extends PlanTest {
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
   }
 
-  test("case insensitive range queries.") {
-    assertEqual(
-      "select * from RangE(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-    assertEqual(
-      "select * from rAnGe(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-    assertEqual(
-      "select * from RANGE(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
-  }
-
   test("inline table") {
     assertEqual("values 1, 2, 3, 4",
       UnresolvedInlineTable(Seq("col1"), Seq(1, 2, 3, 4).map(x => Seq(Literal(x)))))
