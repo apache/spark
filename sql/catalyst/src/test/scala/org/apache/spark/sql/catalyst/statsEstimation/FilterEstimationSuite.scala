@@ -609,6 +609,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       if (rowCountValue != 0) {
         // Need to check attributeStats one by one because we may have multiple output columns.
         // Due to update operation, the output columns may be in different order.
+        assert(expectedColStats.size == filterStats.attributeStats.size)
         expectedColStats.foreach { kv =>
           val filterColumnStat = filterStats.attributeStats.get(kv._1).get
           assert(filterColumnStat == kv._2)

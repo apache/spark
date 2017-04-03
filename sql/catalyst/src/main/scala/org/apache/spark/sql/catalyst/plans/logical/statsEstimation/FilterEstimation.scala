@@ -662,6 +662,7 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
         // If null values exists, we set it to partial overlap.
         (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull,
           (minLeft == minRight) && (maxLeft == maxRight) && allNotNull
+            && (colStatLeft.distinctCount == colStatRight.distinctCount)
         )
     }
 
@@ -754,18 +755,16 @@ case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Lo
             //         ^    filtered
             //         |
             //     newMaxLeft
-
-
           if (minLeft < minRight) {
-              newMinLeft = colStatRight.min
-            } else {
-              newMinRight = colStatLeft.min
-            }
-            if (maxLeft < maxRight) {
-              newMaxRight = colStatLeft.max
-            } else {
-              newMaxLeft = colStatRight.max
-            }
+            newMinLeft = colStatRight.min
+          } else {
+            newMinRight = colStatLeft.min
+          }
+          if (maxLeft < maxRight) {
+            newMaxRight = colStatLeft.max
+          } else {
+            newMaxLeft = colStatRight.max
+          }
         }
 
         val newStatsLeft = colStatLeft.copy(distinctCount = newNdvLeft, min = newMinLeft,
