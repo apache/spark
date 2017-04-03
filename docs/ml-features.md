@@ -1284,6 +1284,72 @@ for more details on the API.
 
 </div>
 
+
+## Imputer
+
+The `Imputer` transformer completes missing values in a dataset, either using the mean or the 
+median of the columns in which the missing values are located. The input columns should be of
+`DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
+creates incorrect values for columns containing categorical features.
+
+**Note** all `null` values in the input columns are treated as missing, and so are also imputed.
+
+**Examples**
+
+Suppose that we have a DataFrame with the columns `a` and `b`:
+
+~~~
+      a     |      b      
+------------|-----------
+     1.0    | Double.NaN
+     2.0    | Double.NaN
+ Double.NaN |     3.0   
+     4.0    |     4.0   
+     5.0    |     5.0   
+~~~
+
+In this example, Imputer will replace all occurrences of `Double.NaN` (the default for the missing value)
+with the mean (the default imputation strategy) computed from the other values in the corresponding columns.
+In this example, the surrogate values for columns `a` and `b` are 3.0 and 4.0 respectively. After
+transformation, the missing values in the output columns will be replaced by the surrogate value for
+the relevant column.
+
+~~~
+      a     |      b     | out_a | out_b   
+------------|------------|-------|-------
+     1.0    | Double.NaN |  1.0  |  4.0 
+     2.0    | Double.NaN |  2.0  |  4.0 
+ Double.NaN |     3.0    |  3.0  |  3.0 
+     4.0    |     4.0    |  4.0  |  4.0
+     5.0    |     5.0    |  5.0  |  5.0 
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Imputer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ImputerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Imputer Java docs](api/java/org/apache/spark/ml/feature/Imputer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaImputerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Imputer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example python/ml/imputer_example.py %}
+</div>
+</div>
+
 # Feature Selectors
 
 ## VectorSlicer
