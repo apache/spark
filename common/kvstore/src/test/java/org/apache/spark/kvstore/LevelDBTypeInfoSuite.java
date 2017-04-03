@@ -26,8 +26,8 @@ public class LevelDBTypeInfoSuite {
 
   @Test
   public void testIndexAnnotation() throws Exception {
-    LevelDBTypeInfo<?> ti = newTypeInfo(CustomType1.class);
-    assertEquals(4, ti.indices().size());
+    KVTypeInfo ti = new KVTypeInfo(CustomType1.class);
+    assertEquals(4, ti.indices().count());
 
     CustomType1 t1 = new CustomType1();
     t1.key = "key";
@@ -35,10 +35,10 @@ public class LevelDBTypeInfoSuite {
     t1.name = "name";
     t1.num = 42;
 
-    assertEquals(t1.key, ti.naturalIndex().accessor.get(t1));
-    assertEquals(t1.id, ti.index("id").accessor.get(t1));
-    assertEquals(t1.name, ti.index("name").accessor.get(t1));
-    assertEquals(t1.num, ti.index("int").accessor.get(t1));
+    assertEquals(t1.key, ti.getIndexValue(KVIndex.NATURAL_INDEX_NAME, t1));
+    assertEquals(t1.id, ti.getIndexValue("id", t1));
+    assertEquals(t1.name, ti.getIndexValue("name", t1));
+    assertEquals(t1.num, ti.getIndexValue("int", t1));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -68,7 +68,7 @@ public class LevelDBTypeInfoSuite {
 
   @Test
   public void testKeyClashes() throws Exception {
-    LevelDBTypeInfo<?> ti = newTypeInfo(CustomType1.class);
+    LevelDBTypeInfo ti = newTypeInfo(CustomType1.class);
 
     CustomType1 t1 = new CustomType1();
     t1.key = "key1";
@@ -90,7 +90,7 @@ public class LevelDBTypeInfoSuite {
 
   @Test
   public void testNumEncoding() throws Exception {
-    LevelDBTypeInfo<?>.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
+    LevelDBTypeInfo.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
 
     assertBefore(idx.toKey(1), idx.toKey(2));
     assertBefore(idx.toKey(-1), idx.toKey(2));
@@ -125,7 +125,7 @@ public class LevelDBTypeInfoSuite {
 
   @Test
   public void testArrayIndices() throws Exception {
-    LevelDBTypeInfo<?>.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
+    LevelDBTypeInfo.Index idx = newTypeInfo(CustomType1.class).indices().iterator().next();
 
     assertBefore(idx.toKey(new String[] { "str1" }), idx.toKey(new String[] { "str2" }));
     assertBefore(idx.toKey(new String[] { "str1", "str2" }),
@@ -135,8 +135,8 @@ public class LevelDBTypeInfoSuite {
     assertBefore(idx.toKey(new int[] { 1, 2 }), idx.toKey(new int[] { 1, 3 }));
   }
 
-  private LevelDBTypeInfo<?> newTypeInfo(Class<?> type) throws Exception {
-    return new LevelDBTypeInfo<>(null, type, type.getName().getBytes(UTF_8));
+  private LevelDBTypeInfo newTypeInfo(Class<?> type) throws Exception {
+    return new LevelDBTypeInfo(null, type, type.getName().getBytes(UTF_8));
   }
 
   private void assertBefore(byte[] key1, byte[] key2) {

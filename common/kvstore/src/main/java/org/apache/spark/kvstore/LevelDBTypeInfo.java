@@ -35,7 +35,7 @@ import com.google.common.base.Throwables;
  * Holds metadata about app-specific types stored in LevelDB. Serves as a cache for data collected
  * via reflection, to make it cheaper to access it multiple times.
  */
-class LevelDBTypeInfo<T> {
+class LevelDBTypeInfo {
 
   static final String ENTRY_PREFIX = "+";
   static final String END_MARKER = "-";
@@ -58,33 +58,19 @@ class LevelDBTypeInfo<T> {
   static final int SHORT_ENCODED_LEN = String.valueOf(Short.MAX_VALUE).length() + 1;
 
   private final LevelDB db;
-  private final Class<T> type;
+  private final Class<?> type;
   private final Map<String, Index> indices;
   private final byte[] typePrefix;
 
-  LevelDBTypeInfo(LevelDB db, Class<T> type, byte[] alias) throws Exception {
+  LevelDBTypeInfo(LevelDB db, Class<?> type, byte[] alias) throws Exception {
     this.db = db;
     this.type = type;
     this.indices = new HashMap<>();
 
-    for (Field f : type.getFields()) {
-      KVIndex idx = f.getAnnotation(KVIndex.class);
-      if (idx != null) {
-        register(idx, new FieldAccessor(f));
-      }
-    }
-
-    for (Method m : type.getMethods()) {
-      KVIndex idx = m.getAnnotation(KVIndex.class);
-      if (idx != null) {
-        Preconditions.checkArgument(m.getParameterTypes().length == 0,
-          "Annotated method %s::%s should not have any parameters.", type.getName(), m.getName());
-        register(idx, new MethodAccessor(m));
-      }
-    }
-
-    Preconditions.checkArgument(indices.get(KVIndex.NATURAL_INDEX_NAME) != null,
-        "No natural index defined for type %s.", type.getName());
+    KVTypeInfo ti = new KVTypeInfo(type);
+    ti.indices().forEach(idx -> {
+      indices.put(idx.value(), new Index(idx.value(), idx.copy(), ti.getAccessor(idx.value())));
+    });
 
     ByteArrayOutputStream typePrefix = new ByteArrayOutputStream();
     typePrefix.write(utf8(ENTRY_PREFIX));
@@ -92,18 +78,7 @@ class LevelDBTypeInfo<T> {
     this.typePrefix = typePrefix.toByteArray();
   }
 
-  private void register(KVIndex idx, Accessor accessor) {
-    Preconditions.checkArgument(idx.value() != null && !idx.value().isEmpty(),
-      "No name provided for index in type %s.", type.getName());
-    Preconditions.checkArgument(
-      !idx.value().startsWith("_") || idx.value().equals(KVIndex.NATURAL_INDEX_NAME),
-      "Index name %s (in type %s) is not allowed.", idx.value(), type.getName());
-    Preconditions.checkArgument(indices.get(idx.value()) == null,
-      "Duplicate index %s for type %s.", idx.value(), type.getName());
-    indices.put(idx.value(), new Index(idx.value(), idx.copy(), accessor));
-  }
-
-  Class<T> type() {
+  Class<?> type() {
     return type;
   }
 
@@ -164,11 +139,9 @@ class LevelDBTypeInfo<T> {
     private final boolean copy;
     private final boolean isNatural;
     private final String name;
+    private final KVTypeInfo.Accessor accessor;
 
-    @VisibleForTesting
-    final Accessor accessor;
-
-    private Index(String name, boolean copy, Accessor accessor) {
+    private Index(String name, boolean copy, KVTypeInfo.Accessor accessor) {
       this.name = name;
       this.isNatural = name.equals(KVIndex.NATURAL_INDEX_NAME);
       this.copy = isNatural || copy;
@@ -316,46 +289,6 @@ class LevelDBTypeInfo<T> {
       }
 
       return sb.toString();
-    }
-
-  }
-
-  /**
-   * Abstracts the difference between invoking a Field and a Method.
-   */
-  @VisibleForTesting
-  interface Accessor {
-
-    Object get(Object instance) throws Exception;
-
-  }
-
-  private class FieldAccessor implements Accessor {
-
-    private final Field field;
-
-    FieldAccessor(Field field) {
-      this.field = field;
-    }
-
-    @Override
-    public Object get(Object instance) throws Exception {
-      return field.get(instance);
-    }
-
-  }
-
-  private class MethodAccessor implements Accessor {
-
-    private final Method method;
-
-    MethodAccessor(Method method) {
-      this.method = method;
-    }
-
-    @Override
-    public Object get(Object instance) throws Exception {
-      return method.invoke(instance);
     }
 
   }

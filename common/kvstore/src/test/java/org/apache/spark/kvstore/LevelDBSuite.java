@@ -221,7 +221,7 @@ public class LevelDBSuite {
   }
 
   private long countIndexEntries(Class<?> type, String index, Object value) throws Exception {
-    LevelDBTypeInfo<?>.Index idx = db.getTypeInfo(type).index(index);
+    LevelDBTypeInfo.Index idx = db.getTypeInfo(type).index(index);
     return idx.getCount(idx.end());
   }
 

@@ -34,8 +34,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private final boolean ascending;
   private final DBIterator it;
   private final Class<T> type;
-  private final LevelDBTypeInfo<T> ti;
-  private final LevelDBTypeInfo<T>.Index index;
+  private final LevelDBTypeInfo ti;
+  private final LevelDBTypeInfo.Index index;
   private final byte[] indexKeyPrefix;
   private final byte[] end;
 

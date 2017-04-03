@@ -148,7 +148,7 @@ public class LevelDB implements KVStore {
 
   public void write(Object value, boolean sync) throws Exception {
     Preconditions.checkArgument(value != null, "Null values are not allowed.");
-    LevelDBTypeInfo<?> ti = getTypeInfo(value.getClass());
+    LevelDBTypeInfo ti = getTypeInfo(value.getClass());
 
     LevelDBWriteBatch batch = new LevelDBWriteBatch(this);
     try {
@@ -160,7 +160,7 @@ public class LevelDB implements KVStore {
         } catch (NoSuchElementException e) {
           // Ignore. No previous value.
         }
-        for (LevelDBTypeInfo<?>.Index idx : ti.indices()) {
+        for (LevelDBTypeInfo.Index idx : ti.indices()) {
           idx.add(batch, value, data);
         }
         batch.write(sync);
@@ -179,7 +179,7 @@ public class LevelDB implements KVStore {
     Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
     LevelDBWriteBatch batch = new LevelDBWriteBatch(this);
     try {
-      LevelDBTypeInfo<?> ti = getTypeInfo(type);
+      LevelDBTypeInfo ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(naturalKey);
       byte[] data = db().get(key);
       if (data != null) {
@@ -210,7 +210,7 @@ public class LevelDB implements KVStore {
 
   @Override
   public long count(Class<?> type) throws Exception {
-    LevelDBTypeInfo<?>.Index idx = getTypeInfo(type).naturalIndex();
+    LevelDBTypeInfo.Index idx = getTypeInfo(type).naturalIndex();
     return idx.getCount(idx.end());
   }
 
@@ -231,10 +231,10 @@ public class LevelDB implements KVStore {
   }
 
   /** Returns metadata about indices for the given type. */
-  <T> LevelDBTypeInfo<T> getTypeInfo(Class<T> type) throws Exception {
-    LevelDBTypeInfo<T> ti = types.get(type);
+  LevelDBTypeInfo getTypeInfo(Class<?> type) throws Exception {
+    LevelDBTypeInfo ti = types.get(type);
     if (ti == null) {
-      LevelDBTypeInfo<T> tmp = new LevelDBTypeInfo<>(this, type, getTypeAlias(type));
+      LevelDBTypeInfo tmp = new LevelDBTypeInfo(this, type, getTypeAlias(type));
       ti = types.putIfAbsent(type, tmp);
       if (ti == null) {
         ti = tmp;
@@ -256,9 +256,9 @@ public class LevelDB implements KVStore {
     return _db;
   }
 
-  private void removeInstance(LevelDBTypeInfo<?> ti, LevelDBWriteBatch batch, Object instance)
+  private void removeInstance(LevelDBTypeInfo ti, LevelDBWriteBatch batch, Object instance)
       throws Exception {
-    for (LevelDBTypeInfo<?>.Index idx : ti.indices()) {
+    for (LevelDBTypeInfo.Index idx : ti.indices()) {
       idx.remove(batch, instance);
     }
   }
