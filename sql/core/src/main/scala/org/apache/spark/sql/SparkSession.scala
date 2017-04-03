@@ -595,8 +595,8 @@ class SparkSession private(
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first try to match a temporary view with the given name and then
-   *                  match the table/view from the current database.
+   *                  Otherwise, it first attempts to find a temporary view with the given name
+   *                  and then match the table/view from the current database.
    *                  Note that, the global temporary view database is also valid here.
    * @since 2.0.0
    */
