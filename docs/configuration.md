@@ -1004,7 +1004,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.replication.proactive<code></td>
+  <td><code>spark.storage.replication.proactive</code></td>
   <td>false</td>
   <td>
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
@@ -1013,8 +1013,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.replication.policy<code></td>
-  <td><code>org.apache.spark.storage.RandomBlockReplicationPolicy</code></td>
+  <td><code>spark.storage.replication.policy</code></td>
+  <td>
+    org.apache.spark.storage.<br />RandomBlockReplicationPolicy
+  </td>
   <td>
     The policy to use for choosing peers when replicating blocks. The default policy would randomly
     choose the peers to replicate to. A more resilient replication policy is provided by
@@ -1026,8 +1028,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.replication.topologyMapper<code></td>
-  <td><code>org.apache.spark.storage.DefaultTopologyMapper</code></td>
+  <td><code>spark.storage.replication.topologyMapper</code></td>
+  <td>
+    org.apache.spark.storage.<br />DefaultTopologyMapper
+  </td>
   <td>
     The topology information of a host is determined by a topology mapping service defined by the
     abstract class <code>org.apache.spark.storage.TopologyMapper</code>, which can be configured by
