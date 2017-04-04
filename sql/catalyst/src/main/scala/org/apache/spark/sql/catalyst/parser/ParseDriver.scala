@@ -22,7 +22,7 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -47,6 +47,11 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
     astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
+  }
+
+  /** Creates FunctionIdentifier for a given SQL string. */
+  def parseFunctionIdentifier(sqlText: String): FunctionIdentifier = parse(sqlText) { parser =>
+    astBuilder.visitSingleFunctionIdentifier(parser.singleFunctionIdentifier())
   }
 
   /**

@@ -75,6 +75,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     visitTableIdentifier(ctx.tableIdentifier)
   }
 
+  override def visitSingleFunctionIdentifier(
+      ctx: SingleFunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
+    visitFunctionIdentifier(ctx.functionIdentifier)
+  }
+
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
     visitSparkDataType(ctx.dataType)
   }
@@ -757,6 +762,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
     TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
+  }
+
+  /**
+   * Create a [[FunctionIdentifier]] from a 'functionName' or 'databaseName'.'functionName' pattern.
+   */
+  override def visitFunctionIdentifier(
+      ctx: FunctionIdentifierContext): FunctionIdentifier = withOrigin(ctx) {
+    FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
   }
 
   /* ********************************************************************************************

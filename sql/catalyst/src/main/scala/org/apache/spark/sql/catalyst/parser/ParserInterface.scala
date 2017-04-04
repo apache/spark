@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StructType
@@ -34,6 +34,9 @@ trait ParserInterface {
 
   /** Creates TableIdentifier for a given SQL string. */
   def parseTableIdentifier(sqlText: String): TableIdentifier
+
+  /** Creates FunctionIdentifier for a given SQL string. */
+  def parseFunctionIdentifier(sqlText: String): FunctionIdentifier
 
   /**
    * Creates StructType for a given SQL string, which is a comma separated list of field

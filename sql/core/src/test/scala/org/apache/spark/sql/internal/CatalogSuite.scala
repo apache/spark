@@ -102,6 +102,11 @@ class CatalogSuite
       assert(col.isPartition == tableMetadata.partitionColumnNames.contains(col.name))
       assert(col.isBucket == bucketColumnNames.contains(col.name))
     }
+
+    dbName.foreach { db =>
+      val expected = columns.collect().map(_.name).toSet
+      assert(spark.catalog.listColumns(s"$db.$tableName").collect().map(_.name).toSet == expected)
+    }
   }
 
   override def afterEach(): Unit = {
@@ -345,6 +350,7 @@ class CatalogSuite
 
         // Find a qualified table
         assert(spark.catalog.getTable(db, "tbl_y").name === "tbl_y")
+        assert(spark.catalog.getTable(s"$db.tbl_y").name === "tbl_y")
 
         // Find an unqualified table using the current database
         intercept[AnalysisException](spark.catalog.getTable("tbl_y"))
@@ -378,6 +384,11 @@ class CatalogSuite
         assert(fn2.database === db)
         assert(!fn2.isTemporary)
 
+        val fn2WithQualifiedName = spark.catalog.getFunction(s"$db.fn2")
+        assert(fn2WithQualifiedName.name === "fn2")
+        assert(fn2WithQualifiedName.database === db)
+        assert(!fn2WithQualifiedName.isTemporary)
+
         // Find an unqualified function using the current database
         intercept[AnalysisException](spark.catalog.getFunction("fn2"))
         spark.catalog.setCurrentDatabase(db)
@@ -403,6 +414,7 @@ class CatalogSuite
         assert(!spark.catalog.tableExists("tbl_x"))
         assert(!spark.catalog.tableExists("tbl_y"))
         assert(!spark.catalog.tableExists(db, "tbl_y"))
+        assert(!spark.catalog.tableExists(s"$db.tbl_y"))
 
         // Create objects.
         createTempTable("tbl_x")
@@ -413,11 +425,15 @@ class CatalogSuite
 
         // Find a qualified table
         assert(spark.catalog.tableExists(db, "tbl_y"))
+        assert(spark.catalog.tableExists(s"$db.tbl_y"))
 
         // Find an unqualified table using the current database
         assert(!spark.catalog.tableExists("tbl_y"))
         spark.catalog.setCurrentDatabase(db)
         assert(spark.catalog.tableExists("tbl_y"))
+
+        // Unable to find the table, although the temp view with the given name exists
+        assert(!spark.catalog.tableExists(db, "tbl_x"))
       }
     }
   }
@@ -429,6 +445,7 @@ class CatalogSuite
         assert(!spark.catalog.functionExists("fn1"))
         assert(!spark.catalog.functionExists("fn2"))
         assert(!spark.catalog.functionExists(db, "fn2"))
+        assert(!spark.catalog.functionExists(s"$db.fn2"))
 
         // Create objects.
         createTempFunction("fn1")
@@ -439,11 +456,15 @@ class CatalogSuite
 
         // Find a qualified function
         assert(spark.catalog.functionExists(db, "fn2"))
+        assert(spark.catalog.functionExists(s"$db.fn2"))
 
         // Find an unqualified function using the current database
         assert(!spark.catalog.functionExists("fn2"))
         spark.catalog.setCurrentDatabase(db)
         assert(spark.catalog.functionExists("fn2"))
+
+        // Unable to find the function, although the temp function with the given name exists
+        assert(!spark.catalog.functionExists(db, "fn1"))
       }
     }
   }

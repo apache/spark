@@ -56,6 +56,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleFunctionIdentifier
+    : functionIdentifier EOF
+    ;
+
 singleDataType
     : dataType EOF
     ;
@@ -491,6 +495,10 @@ rowFormat
 
 tableIdentifier
     : (db=identifier '.')? table=identifier
+    ;
+
+functionIdentifier
+    : (db=identifier '.')? function=identifier
     ;
 
 namedExpression
