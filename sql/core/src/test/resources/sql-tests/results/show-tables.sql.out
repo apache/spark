@@ -63,10 +63,10 @@ SHOW TABLES
 -- !query 7 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 7 output
-arraydata
-mapdata
 show_t1
 show_t2
+arraydata
+mapdata
 show_t3
 testdata
 
@@ -76,10 +76,10 @@ SHOW TABLES IN showdb
 -- !query 8 schema
 struct<database:string,tableName:string,isTemporary:boolean>
 -- !query 8 output
-arraydata
-mapdata
 show_t1
 show_t2
+arraydata
+mapdata
 show_t3
 testdata
 
@@ -118,14 +118,6 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query 12 schema
 struct<database:string,tableName:string,isTemporary:boolean,information:string>
 -- !query 12 output
-show_t3	true	CatalogTable(
-	Table: `show_t3`
-	Created: 
-	Last Access: 
-	Type: VIEW
-	Schema: [StructField(e,IntegerType,true)]
-	Storage())
-
 showdb	show_t1	false	CatalogTable(
 	Table: `showdb`.`show_t1`
 	Created: 
@@ -145,6 +137,14 @@ showdb	show_t2	false	CatalogTable(
 	Schema: [StructField(b,StringType,true), StructField(d,IntegerType,true)]
 	Provider: parquet
 	Storage(Location: sql/core/spark-warehouse/showdb.db/show_t2))
+
+	show_t3	true	CatalogTable(
+	Table: `show_t3`
+	Created: 
+	Last Access: 
+	Type: VIEW
+	Schema: [StructField(e,IntegerType,true)]
+	Storage())
 
 
 -- !query 13
