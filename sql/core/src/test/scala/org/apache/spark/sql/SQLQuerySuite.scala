@@ -2606,4 +2606,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
     }
   }
+
+  test("floor(0.0001)") {
+    val df = Seq(0).toDF("a")
+    withTempView("tb") {
+      df.createOrReplaceTempView("tb")
+      checkAnswer(sql("SELECT 1 > 0.00001 FROM tb"), Row(true))
+      checkAnswer(sql("SELECT floor(0.0001) FROM tb"), Row(0))
+      checkAnswer(sql("SELECT ceil(0.0001) FROM tb"), Row(1))
+      checkAnswer(sql("SELECT floor(0.00123) FROM tb"), Row(0))
+      checkAnswer(sql("SELECT floor(0.00010) FROM tb"), Row(0))
+    }
+  }
 }
