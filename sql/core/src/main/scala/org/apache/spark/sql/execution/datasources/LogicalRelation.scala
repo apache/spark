@@ -16,11 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.util.Utils
 
@@ -73,7 +73,7 @@ case class LogicalRelation(
   // expId can be different but the relation is still the same.
   override lazy val cleanArgs: Seq[Any] = Seq(relation)
 
-  @transient override def computeStats(conf: CatalystConf): Statistics = {
+  @transient override def computeStats(conf: SQLConf): Statistics = {
     catalogTable.flatMap(_.stats.map(_.toPlanStats(output))).getOrElse(
       Statistics(sizeInBytes = relation.sizeInBytes))
   }

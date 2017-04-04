@@ -15,17 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.deploy.yarn
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.util.RackResolver
+import org.apache.log4j.{Level, Logger}
 
 /**
- * Catalyst is a library for manipulating relational query plans.  All classes in catalyst are
- * considered an internal API to Spark SQL and are subject to change between minor releases.
+ * Wrapper around YARN's [[RackResolver]]. This allows Spark tests to easily override the
+ * default behavior, since YARN's class self-initializes the first time it's called, and
+ * future calls all use the initial configuration.
  */
-package object catalyst {
-  /**
-   * A JVM-global lock that should be used to prevent thread safety issues when using things in
-   * scala.reflect.*.  Note that Scala Reflection API is made thread-safe in 2.11, but not yet for
-   * 2.10.* builds.  See SI-6240 for more details.
-   */
-  protected[sql] object ScalaReflectionLock
+private[yarn] class SparkRackResolver {
+
+  // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
+
+  def resolve(conf: Configuration, hostName: String): String = {
+    RackResolver.resolve(conf, hostName).getNetworkLocation()
+  }
+
 }
