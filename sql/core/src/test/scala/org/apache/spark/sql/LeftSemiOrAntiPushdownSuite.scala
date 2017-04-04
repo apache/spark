@@ -31,6 +31,8 @@ import org.apache.spark.sql.test.SharedSQLContext
  */
 class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+  import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Join}
+  import org.apache.spark.sql.catalyst.plans.LeftSemiOrAnti
 
   // setupTestData()
 
@@ -80,6 +82,19 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
     t3.createOrReplaceTempView("t3")
     t4.createOrReplaceTempView("t4")
     t5.createOrReplaceTempView("t5")
+  }
+
+  private def checkLeftSemiOrAntiPlan(plan: LogicalPlan): Unit = {
+    plan match {
+      case j @ Join(_, _, LeftSemiOrAnti(_), _) =>
+      // This is the expected result.
+      case _ =>
+        fail(
+          s"""
+           |== FAIL: Top operator must be a LeftSemi or LeftAnti ===
+           |${plan.toString}
+           """.stripMargin)
+    }
   }
 
   /**
@@ -336,8 +351,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  exists (select 1 from t3 where t3a = t1a and t3b >= 1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -365,8 +379,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  not exists (select 1 from t3 where t3a = t1a and t3b >= 1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -394,8 +407,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  exists (select 1 from t3 where t3a = t1a and t3b >= 1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -424,8 +436,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  t2a not in (select t3a from t3 where t3b >= 1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -454,8 +465,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  not exists (select 1 from t3 where t3a = t1a and t3b > t2b)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -471,7 +481,8 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           |        on t3a = t1a and t3b > t2b
         """.stripMargin)
     checkAnswer(plan1, plan2)
-    // comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
+    val optPlan = plan1.queryExecution.optimizedPlan
+    checkLeftSemiOrAntiPlan(optPlan)
     plan1.show
   }
   /**
@@ -487,8 +498,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  not exists (select 1 from t3 where t3a = t1a and t3b >= 1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -516,8 +526,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  exists (select 1 from t3 where t3a = t2a and t3b >= 1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -538,6 +547,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
    * Expected result: No push down
    */
   test("TC 2.9: LeftSemi over left semi join with correlated columns on the left table") {
+    import org.apache.spark.sql.catalyst.plans.logical.Union
     val plan1 =
       sql(
         """
@@ -545,9 +555,12 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           |   (select * from t1 left semi join t2 on t1b = t2b and t2c >= 0)
           | select *
           | from   join
-          | where  exists (select 1 from t3 where t3a = t1a and t3c is not null)
-        """.
-          stripMargin)
+          | where  exists (select 1
+          |                from   (select * from t3
+          |                        union all
+          |                        select * from t4) t3
+          |                where  t3a = t1a and t3c is not null)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -558,11 +571,24 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           |           on t1b = t2b and t2c >= 0)
           | select *
           | from   join
-          |        left semi join t3
+          |        left semi join
+          |        (select * from t3
+          |         union all
+          |         select * from t4) t3
           |        on t3a = t1a and t3c is not null
         """.stripMargin)
     checkAnswer(plan1, plan2)
-    // comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
+    val optPlan = plan1.queryExecution.optimizedPlan
+    optPlan match {
+      case j @ Join(_, _: Union, LeftSemiOrAnti(_), _) =>
+      // This is the expected result.
+      case _ =>
+        fail(
+          s"""
+             |== FAIL: The right operand of the top operator must be a Union ===
+             |${optPlan.toString}
+           """.stripMargin)
+    }
     plan1.show
   }
   /**
@@ -578,8 +604,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  exists (select 1 from t3 where t3a = t1a and t3a = t2a)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -594,7 +619,8 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           |        on t3a = t1a and t3a = t2a
         """.stripMargin)
     checkAnswer(plan1, plan2)
-    // comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
+    val optPlan = plan1.queryExecution.optimizedPlan
+    checkLeftSemiOrAntiPlan(optPlan)
     plan1.show
   }
   /**
@@ -610,8 +636,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | select *
           | from   join
           | where  not exists (select 1 from t3 where t3b < -1)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -641,8 +666,7 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
           | from   join
           | where  not exists (select 1 from t3 where t3b < -1)
           | and    (t1c = 1 or t1c is null)
-        """.
-          stripMargin)
+        """.stripMargin)
     val plan2 =
       sql(
         """
@@ -656,6 +680,106 @@ class LeftSemiOrAntiPushdownSuite extends QueryTest with SharedSQLContext {
         """.stripMargin)
     checkAnswer(plan1, plan2)
     comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
+    plan1.show
+  }
+  /**
+   * TC 3.1: Negative case - LeftSemi over Aggregate
+   * Expected result: No push down
+   */
+  test("TC 3.1: Negative case - LeftSemi over Aggregate") {
+    val plan1 =
+      sql(
+        """
+          | select   t1b, min(t1a) as min
+          | from     t1 b
+          | group by t1b
+          | having   t1b in (select t1b+1
+          |                  from   t1 a
+          |                  where  a.t1a = min(b.t1a) )
+        """.stripMargin)
+    val plan2 =
+      sql(
+        """
+          | select   b.*
+          | from     (select   t1b, min(t1a) as min
+          |           from     t1
+          |           group by t1b) b
+          |          left semi join t1
+          |          on  b.t1b = t1.t1b+1
+          |          and b.min = t1.t1a
+          |          and t1.t1a is not null
+        """.stripMargin)
+    checkAnswer(plan1, plan2)
+    val optPlan = plan1.queryExecution.optimizedPlan
+    checkLeftSemiOrAntiPlan(optPlan)
+    plan1.show
+  }
+  /**
+   * TC 3.2: Negative case - LeftAnti over Window
+   * Expected result: No push down
+   */
+  test("TC 3.2: Negative case - LeftAnti over Window") {
+    val plan1 =
+      sql(
+        """
+          | select   b.t1b, b.min
+          | from     (select t1b, min(t1a) over (partition by t1b) min
+          |           from   t1) b
+          | where    not exists (select 1
+          |                      from   t1 a
+          |                      where  a.t1a = b.min
+          |                      and    a.t1b = b.t1b)
+        """.stripMargin)
+    val plan2 =
+      sql(
+        """
+          | select   b.t1b, b.min
+          | from     (select t1b, min(t1a) over (partition by t1b) min
+          |           from   t1) b
+          |          left anti join t1 a
+          |          on  a.t1a = b.min
+          |          and a.t1b = b.t1b
+        """.stripMargin)
+    checkAnswer(plan1, plan2)
+    val optPlan = plan1.queryExecution.optimizedPlan
+    checkLeftSemiOrAntiPlan(optPlan)
+    plan1.show
+  }
+  /**
+   * TC 3.3: Negative case - LeftSemi over Union
+   * Expected result: No push down
+   */
+  test("TC 3.3: Negative case - LeftSemi over Union") {
+    val plan1 =
+      sql(
+        """
+          | select   un.t2b, un.t2a
+          | from     (select t2b, t2a
+          |           from   t2
+          |           union all
+          |           select t3b, t3a
+          |           from   t3) un
+          | where    exists (select 1
+          |                  from   t1 a
+          |                  where  a.t1b = un.t2b
+          |                  and    a.t1a = un.t2a + case when rand() < 0 then 1 else 0 end)
+        """.stripMargin)
+    val plan2 =
+      sql(
+        """
+          | select   un.t2b, un.t2a
+          | from     (select t2b, t2a
+          |           from   t2
+          |           union all
+          |           select t3b, t3a
+          |           from   t3) un
+          |          left semi join t1 a
+          |          on  a.t1b = un.t2b
+          |          and a.t1a = un.t2a
+        """.stripMargin)
+    checkAnswer(plan1, plan2)
+    val optPlan = plan1.queryExecution.optimizedPlan
+    checkLeftSemiOrAntiPlan(optPlan)
     plan1.show
   }
 }

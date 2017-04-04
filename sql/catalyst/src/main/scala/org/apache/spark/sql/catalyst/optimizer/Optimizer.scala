@@ -846,7 +846,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
         val stayUp = rest ++ containingNonDeterministic
 
-        if (pushDown.nonEmpty) {
+        // Check if the remaining predicates do not contain columns from subquery
+        val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
+
+        if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
           val pushDownPredicate = pushDown.reduce(And)
           val newPlan = w.copy(child = Join(w.child, rightOp, joinType, Option(pushDownPredicate)))
           if (stayUp.isEmpty) newPlan else Filter(stayUp.reduce(And), newPlan)
@@ -920,10 +923,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
         val stayUp = rest ++ containingNonDeterministic
 
-        // Make sure that the remaining predicate does not contain subquery's columns
-        val nonPushDown = rest.flatMap(_.references).intersect(rightOp.output)
+        // Check if the remaining predicates do not contain columns from subquery
+        val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
 
-        if (pushDown.nonEmpty && nonPushDown.isEmpty) {
+        if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
           val pushDownPredicate = pushDown.reduce(And)
           val replaced = replaceAlias(pushDownPredicate, aliasMap)
           val newAggregate = aggregate.copy(child =
@@ -990,7 +993,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         }
         val stayUp = rest ++ containingNonDeterministic
 
-        if (pushDown.nonEmpty) {
+        // Check if the remaining predicates do not contain columns from subquery
+        val rightOpColumns = AttributeSet(stayUp.toSet).intersect(rightOp.outputSet)
+
+        if (pushDown.nonEmpty && rightOpColumns.isEmpty) {
           val pushDownCond = pushDown.reduceLeft(And)
           val output = union.output
           val newGrandChildren = union.children.map { grandchild =>
