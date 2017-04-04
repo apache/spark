@@ -1,5 +1,3 @@
-#!/bin/bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,21 +15,36 @@
 # limitations under the License.
 #
 
-# This scripts packages the SparkR source files (R and C files) and
-# creates a package that can be loaded in R. The package is by default installed to
-# $FWDIR/lib and the package can be loaded by using the following command in R:
-#
-#   library(SparkR, lib.loc="$FWDIR/lib")
-#
-# NOTE(shivaram): Right now we use $SPARK_HOME/R/lib to be the installation directory
-# to load the SparkR package on the worker nodes.
+# $example on$
+from pyspark.ml.feature import Imputer
+# $example off$
+from pyspark.sql import SparkSession
 
-set -o pipefail
-set -e
+"""
+An example demonstrating Imputer.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/imputer_example.py
+"""
 
-FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
-pushd "$FWDIR" > /dev/null
-. "$FWDIR/find-r.sh"
+if __name__ == "__main__":
+    spark = SparkSession\
+        .builder\
+        .appName("ImputerExample")\
+        .getOrCreate()
 
-# Generate Rd files if devtools is installed
-"$R_SCRIPT_PATH/Rscript" -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
+    # $example on$
+    df = spark.createDataFrame([
+        (1.0, float("nan")),
+        (2.0, float("nan")),
+        (float("nan"), 3.0),
+        (4.0, 4.0),
+        (5.0, 5.0)
+    ], ["a", "b"])
+
+    imputer = Imputer(inputCols=["a", "b"], outputCols=["out_a", "out_b"])
+    model = imputer.fit(df)
+
+    model.transform(df).show()
+    # $example off$
+
+    spark.stop()
