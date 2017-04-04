@@ -203,18 +203,7 @@ class MasterSuite extends SparkFunSuite
         html should include ("Spark Master at spark://")
         html should include ("""href="/static""")
         html should include ("""src="/static""")
-
-        val workerLinks = (WORKER_LINK_RE findAllMatchIn html).toList
-        workerLinks.size should be (2)
-        workerLinks foreach { case WORKER_LINK_RE(workerUrl, workerId) =>
-          workerUrl should be (s"/proxy/$workerId")
-          val url = s"$masterUrl/proxy/${workerId}/"
-          System.setProperty("spark.ui.proxyBase", workerUrl)
-          val workerHtml = Source.fromURL(url).getLines().mkString("\n")
-          workerHtml should include ("Spark Worker at")
-          workerHtml should include ("Running Executors (0)")
-          verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
-        }
+        verifyWorkerUI(html, masterUrl)
       }
     } finally {
       localCluster.stop()
@@ -244,6 +233,7 @@ class MasterSuite extends SparkFunSuite
           val url = s"$masterUrl/proxy/${workerId}/json"
           val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
           (workerResponse \ "cores").extract[Int] should be (2)
+          (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
         }
 
         // with LocalCluster, we have masters and workers in the same JVM, each overwriting
@@ -255,24 +245,30 @@ class MasterSuite extends SparkFunSuite
         val html = Source.fromURL(s"$masterUrl/").getLines().mkString("\n")
         html should include ("Spark Master at spark://")
         verifyStaticResourcesServedByProxy(html, reverseProxyUrl)
-
-        val workerLinks = (WORKER_LINK_RE findAllMatchIn html).toList
-        workerLinks.size should be (2)
-        workerLinks foreach { case WORKER_LINK_RE(workerUrl, workerId) =>
-          workerUrl should be (s"$reverseProxyUrl/proxy/$workerId")
-          // there is no real front-end proxy as defined in $reverseProxyUrl
-          // explicitly construct reverse proxy url directly targeting the master
-          val url = s"$masterUrl/proxy/${workerId}/"
-          System.setProperty("spark.ui.proxyBase", workerUrl)
-          val workerHtml = Source.fromURL(url).getLines().mkString("\n")
-          workerHtml should include ("Spark Worker at")
-          workerHtml should include ("Running Executors (0)")
-          verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
-        }
+        verifyWorkerUI(html, masterUrl, reverseProxyUrl)
       }
     } finally {
       localCluster.stop()
       System.getProperties().remove("spark.ui.proxyBase")
+    }
+  }
+
+  private def verifyWorkerUI(masterHtml: String, masterUrl: String,
+      reverseProxyUrl: String = ""): Unit = {
+    val workerLinks = (WORKER_LINK_RE findAllMatchIn masterHtml).toList
+    workerLinks.size should be (2)
+    workerLinks foreach {
+      case WORKER_LINK_RE(workerUrl, workerId) =>
+        workerUrl should be (s"$reverseProxyUrl/proxy/$workerId")
+        // there is no real front-end proxy as defined in $reverseProxyUrl
+        // construct url directly targeting the master
+        val url = s"$masterUrl/proxy/$workerId/"
+        System.setProperty("spark.ui.proxyBase", workerUrl)
+        val workerHtml = Source.fromURL(url).getLines().mkString("\n")
+        workerHtml should include ("Spark Worker at")
+        workerHtml should include ("Running Executors (0)")
+        verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
+      case _ => fail  // make sure we don't accidentially skip the tests
     }
   }
 
