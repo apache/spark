@@ -620,8 +620,8 @@ public class SparkLauncher {
       throw new IOException("Please make sure the spark jar " +
           "containing SparkSubmit is in the classpath.", cnfe);
     } catch (NoSuchMethodException nsme) {
-      throw new IOException("Please make sure the spark jar containing SparkSubmit " +
-          "version is correct.", nsme);
+      throw new IOException("Please make sure the version of the Spark jar containing " +
+          "SparkSubmit is correct.", nsme);
     }
     return handle;
   }

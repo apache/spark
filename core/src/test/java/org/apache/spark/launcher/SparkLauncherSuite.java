@@ -175,7 +175,6 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
-      .autoShutdown(true)
       .addAppArgs("proc");
     final Process app = launcher.launch();
 
@@ -189,10 +188,6 @@ public class SparkLauncherSuite {
     // This test is failed on Windows due to the failure of initiating executors
     // by the path length limitation. See SPARK-18718.
     assumeTrue(!Utils.isWindows());
-
-    SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
-    Map<String, String> env = new HashMap<>();
-    env.put("SPARK_PRINT_LAUNCH_COMMAND", "1");
 
     launcher
       .setMaster("local")

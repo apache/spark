@@ -55,7 +55,6 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.{CallerContext, Utils}
 
-
 private[spark] class Client(
     val args: ClientArguments,
     val hadoopConf: Configuration,

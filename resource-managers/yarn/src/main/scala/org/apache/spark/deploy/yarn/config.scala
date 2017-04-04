@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.config.ConfigBuilder
-import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 
 package object config {
@@ -356,4 +355,5 @@ package object config {
     CACHED_FILES_VISIBILITIES,
     CACHED_FILES_TYPES,
     CACHED_CONF_ARCHIVE)
+
 }

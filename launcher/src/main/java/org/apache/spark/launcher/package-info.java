@@ -53,14 +53,14 @@
  * <p>
  * Here is example of launching application in thread mode for YARN cluster mode
  * with the auto shutdown option enabled. Showing use case of both
- * {@link org.apache.spark.launcher.SparkLauncher#autoShutdown()} and
+ * {@link org.apache.spark.launcher.SparkLauncher#autoShutdown(boolean)} and
  * {@link org.apache.spark.launcher.SparkLauncher#launchAsThread(boolean)} methods
  * </p>
  *
  * <pre>
  * {@code
  *   import org.apache.spark.launcher.SparkAppHandle;
- *   import org.apache.spark.launcher.SparkLauncher;`
+ *   import org.apache.spark.launcher.SparkLauncher;
  *
  *   public class MyLauncher {
  *     public static void main(String[] args) throws Exception {

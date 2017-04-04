@@ -717,7 +717,7 @@ object SparkSubmit extends CommandLineUtils {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val sparkAppMainMethodArr = mainClass.getMethods().filter{_.getName() == "sparkMain"}
+    val sparkAppMainMethodArr = mainClass.getMethods().filter(_.getName == "sparkMain")
     val isSparkApp = sparkAppMainMethodArr.length > 0
 
     val childSparkConf = sysProps.filter{p => p._1.startsWith("spark.")}.toMap
