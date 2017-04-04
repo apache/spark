@@ -472,6 +472,34 @@ class DAGScheduler(
   }
 
   /**
+   * Get ancestor splits in ShuffledRDD.
+   */
+  private[spark] def parentSplitsInShuffledRDD(stageId: Int, pId: Int): Option[Map[Int, Set[Int]]] =
+  {
+    stageIdToStage.get(stageId) match {
+      case Some(stage) =>
+        val waitingForVisit = new Stack[Tuple2[RDD[_], Int]]
+        waitingForVisit.push((stage.rdd, pId))
+        val ret = new HashMap[Int, HashSet[Int]]()
+        while(waitingForVisit.nonEmpty) {
+          val (rdd, split) = waitingForVisit.pop()
+          rdd.dependencies.foreach {
+            case dep: ShuffleDependency[_, _, _] =>
+              ret.getOrElseUpdate(dep.shuffleId, new HashSet[Int]()).add(split)
+            case dep: NarrowDependency[_] =>
+              dep.getParents(split).foreach {
+                case parentSplit =>
+                  waitingForVisit.push((dep.rdd, parentSplit))
+              }
+          }
+        }
+        Some(ret.mapValues(_.toSet).toMap)
+      case None =>
+        None
+    }
+  }
+
+  /**
    * Registers the given jobId among the jobs that need the given stage and
    * all of that stage's ancestors.
    */

@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
@@ -32,6 +33,8 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
+
+// scalastyle:off
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
  * each task, retries tasks if they fail (up to a limited number of times), and
@@ -125,20 +128,20 @@ private[spark] class TaskSetManager(
   // of failures.
   // Duplicates are handled in dequeueTaskFromList, which ensures that a
   // task hasn't already started running before launching it.
-  private val pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
+  private var pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
 
   // Set of pending tasks for each host. Similar to pendingTasksForExecutor,
   // but at host level.
-  private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
+  private var pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
   // Set of pending tasks for each rack -- similar to the above.
-  private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
+  private var pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
   // Set containing pending tasks with no locality preferences.
   private[scheduler] var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
 
   // Set containing all pending tasks (also used as a stack, as above).
-  private val allPendingTasks = new ArrayBuffer[Int]
+  private var allPendingTasks = new ArrayBuffer[Int]
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet.
@@ -168,12 +171,11 @@ private[spark] class TaskSetManager(
     t.epoch = epoch
   }
 
-  // Add all our tasks to the pending lists. We do this in reverse order
-  // of task index so that tasks with low indices get launched first.
+  val sortedPendingTasks = new AtomicBoolean(false)
+
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
-
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
    * the set of currently available executors.  This is updated as executors are added and removed.
@@ -438,6 +440,11 @@ private[spark] class TaskSetManager(
         blacklist.isExecutorBlacklistedForTaskSet(execId)
     }
     if (!isZombie && !offerBlacklisted) {
+      if (!sortedPendingTasks.get()) {
+        sortedPendingTasks.set(true)
+        sortPendingTasks()
+      }
+
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
@@ -512,6 +519,42 @@ private[spark] class TaskSetManager(
     }
   }
 
+  private[this] def sortPendingTasks(): Unit = {
+    val taskIndexs = (0 until numTasks).toArray
+    implicit def ord = new Ordering[Int] {
+      override def compare(x: Int, y: Int): Int =
+        getTaskInputSizeFromShuffledRDD(tasks(x)) compare
+          getTaskInputSizeFromShuffledRDD(tasks(y))
+    }
+    if (tasks.nonEmpty) {
+      // Sort the tasks based on their input size from ShuffledRDD.
+      pendingTasksForExecutor.foreach {
+        case (k, v) => pendingTasksForExecutor(k) = v.sorted
+      }
+      pendingTasksForHost.foreach {
+        case (k, v) => pendingTasksForHost(k) = v.sorted
+      }
+      pendingTasksForRack.foreach {
+        case (k, v) => pendingTasksForRack(k) = v.sorted
+      }
+      pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.sorted
+      allPendingTasks = allPendingTasks.sorted
+    }
+  }
+
+  private[this] def getTaskInputSizeFromShuffledRDD(task: Task[_]): Long = {
+    sched.dagScheduler.parentSplitsInShuffledRDD(task.stageId, task.partitionId) match {
+      case Some(parentSplits) =>
+        parentSplits.map {
+          case (shuffleId, splits) =>
+            splits.map(SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
+              .flatMap(_._2.map(_._2)).sum).sum
+        }.sum
+      case None =>
+        0
+    }
+  }
+
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
@@ -560,7 +603,6 @@ private[spark] class TaskSetManager(
       emptyKeys.foreach(id => pendingTasks.remove(id))
       hasTasks
     }
-
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
         case TaskLocality.PROCESS_LOCAL => moreTasksToRunIn(pendingTasksForExecutor)
@@ -573,15 +615,11 @@ private[spark] class TaskSetManager(
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
         lastLaunchTime = curTime
-        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
-          s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
       } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
-        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
-          s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
@@ -833,6 +871,7 @@ private[spark] class TaskSetManager(
         s" has already succeeded).")
     } else {
       addPendingTask(index)
+      sortPendingTasks()
     }
 
     if (!isZombie && reason.countTowardsTaskFailures) {
@@ -904,6 +943,7 @@ private[spark] class TaskSetManager(
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
           addPendingTask(index)
+          sortPendingTasks()
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
           sched.dagScheduler.taskEnded(
