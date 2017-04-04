@@ -806,10 +806,6 @@ class JDBCSuite extends SparkFunSuite
         sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
           assert(!r.toString().contains(password))
         }
-
-        sql(s"DESC EXTENDED $tableName").collect().foreach { r =>
-          assert(!r.toString().contains(password))
-        }
       }
     }
   }

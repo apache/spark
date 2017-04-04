@@ -639,6 +639,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+    Compression will use <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
@@ -773,14 +774,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Whether to compress broadcast variables before sending them. Generally a good idea.
+    Compression will use <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>lz4</td>
   <td>
-    The codec used to compress internal data such as RDD partitions, broadcast variables and
-    shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
+    The codec used to compress internal data such as RDD partitions, event log, broadcast variables
+    and shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
     and <code>snappy</code>. You can also use fully qualified class names to specify the codec,
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
@@ -881,6 +883,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
     and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python).
     Can save substantial space at the cost of some extra CPU time.
+    Compression will use <code>spark.io.compression.codec</code>.
   </td>
 </tr>
 <tr>
