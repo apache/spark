@@ -249,6 +249,11 @@ private[spark] class ExecutorAllocationManager(
    * yarn-client mode when AM re-registers after a failure.
    */
   def reset(): Unit = synchronized {
+    /**
+     * When some tasks need to be scheduled, resetting the initializing field may cause
+     * it to not be set to false in yarn.
+     * SPARK-20079: https://issues.apache.org/jira/browse/SPARK-20079
+     */
     if (maxNumExecutorsNeeded() == 0) {
       initializing = true
     }
