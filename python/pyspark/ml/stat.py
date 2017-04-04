@@ -78,6 +78,11 @@ class Correlation(object):
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
 
+    @note For Spearman, a rank correlation, we need to create an RDD[Double] for each column
+    and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
+    which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
+    to avoid recomputing the common lineage.
+
     :param dataset:
       A dataset or a dataframe.
     :param column:
@@ -96,16 +101,16 @@ class Correlation(object):
     >>> from pyspark.ml.stat import Correlation
     >>> dataset = [[Vectors.dense([1, 0, 0, -2])],
     ...            [Vectors.dense([4, 5, 0, 3])],
-    ...            [Vectors.dense([6, 7, 0,  8])],
+    ...            [Vectors.dense([6, 7, 0, 8])],
     ...            [Vectors.dense([9, 0, 0, 1])]]
-    >>> dataset = spark.createDataFrame(dataset, ["features"])
+    >>> dataset = spark.createDataFrame(dataset, ['features'])
     >>> pearsonCorr = Correlation.corr(dataset, 'features', 'pearson').collect()[0][0]
     >>> print(str(pearsonCorr).replace('nan', 'NaN'))
     DenseMatrix([[ 1.        ,  0.05564149,         NaN,  0.40047142],
                  [ 0.05564149,  1.        ,         NaN,  0.91359586],
                  [        NaN,         NaN,  1.        ,         NaN],
                  [ 0.40047142,  0.91359586,         NaN,  1.        ]])
-    >>> spearmanCorr = Correlation.corr(dataset, 'features', method="spearman").collect()[0][0]
+    >>> spearmanCorr = Correlation.corr(dataset, 'features', method='spearman').collect()[0][0]
     >>> print(str(spearmanCorr).replace('nan', 'NaN'))
     DenseMatrix([[ 1.        ,  0.10540926,         NaN,  0.4       ],
                  [ 0.10540926,  1.        ,         NaN,  0.9486833 ],

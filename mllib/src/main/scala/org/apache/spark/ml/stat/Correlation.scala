@@ -38,7 +38,7 @@ object Correlation {
 
   /**
    * :: Experimental ::
-   * Compute the correlation matrix for the input RDD of Vectors using the specified method.
+   * Compute the correlation matrix for the input Dataset of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
    * @param dataset A dataset or a dataframe
