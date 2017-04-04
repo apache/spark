@@ -227,6 +227,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
+    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+      "extended type. In this mode, the microsecond portion of the timestamp value will be" +
+      "truncated.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_CACHE_METADATA = buildConf("spark.sql.parquet.cacheMetadata")
     .doc("Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
     .booleanConf
@@ -935,6 +942,8 @@ class SQLConf extends Serializable with Logging {
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
+  def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
+
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
@@ -1141,5 +1150,14 @@ class SQLConf extends Serializable with Logging {
       case(k, v) => if (v ne null) result.setConfString(k, v)
     }
     result
+  }
+
+  // For test only
+  private[spark] def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+    val cloned = clone()
+    entries.foreach {
+      case (entry, value) => cloned.setConfString(entry.key, value.toString)
+    }
+    cloned
   }
 }
