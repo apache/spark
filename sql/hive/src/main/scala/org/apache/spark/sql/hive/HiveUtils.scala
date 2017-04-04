@@ -21,6 +21,7 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashMap
@@ -338,7 +339,7 @@ private[spark] object HiveUtils extends Logging {
               logWarning(s"Hive jar path '$path' does not exist.")
               Nil
             } else {
-              files.filter(_.getName.toLowerCase.endsWith(".jar"))
+              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar"))
             }
           case path =>
             new File(path) :: Nil

@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
@@ -299,10 +300,11 @@ abstract class HiveComparisonTest
         // thus the tables referenced in those DDL commands cannot be extracted for use by our
         // test table auto-loading mechanism. In addition, the tests which use the SHOW TABLES
         // command expect these tables to exist.
-        val hasShowTableCommand = queryList.exists(_.toLowerCase.contains("show tables"))
+        val hasShowTableCommand =
+          queryList.exists(_.toLowerCase(Locale.ROOT).contains("show tables"))
         for (table <- Seq("src", "srcpart")) {
           val hasMatchingQuery = queryList.exists { query =>
-            val normalizedQuery = query.toLowerCase.stripSuffix(";")
+            val normalizedQuery = query.toLowerCase(Locale.ROOT).stripSuffix(";")
             normalizedQuery.endsWith(table) ||
               normalizedQuery.contains(s"from $table") ||
               normalizedQuery.contains(s"from default.$table")
@@ -444,7 +446,7 @@ abstract class HiveComparisonTest
           "create table",
           "drop index"
         )
-        !queryList.map(_.toLowerCase).exists { query =>
+        !queryList.map(_.toLowerCase(Locale.ROOT)).exists { query =>
           excludedSubstrings.exists(s => query.contains(s))
         }
       }

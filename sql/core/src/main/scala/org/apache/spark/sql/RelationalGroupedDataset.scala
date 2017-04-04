@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
@@ -108,7 +110,7 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     val exprToFunc: (Expression => Expression) = {
-      (inputExpr: Expression) => expr.toLowerCase match {
+      (inputExpr: Expression) => expr.toLowerCase(Locale.ROOT) match {
         // We special handle a few cases that have alias that are not in function registry.
         case "avg" | "average" | "mean" =>
           UnresolvedFunction("avg", inputExpr :: Nil, isDistinct = false)
