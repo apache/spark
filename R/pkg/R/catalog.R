@@ -62,7 +62,8 @@ createExternalTable <- function(x, ...) {
 #' "spark.sql.sources.default" will be used. When a \code{path} is specified, an external table is
 #' created from the data at the given path. Otherwise a managed table is created.
 #'
-#' @param tableName a name of the table.
+#' @param tableName the qualified or unqualified name that designates a table. If no database
+#'                  identifier is provided, it refers to a table in the current database.
 #' @param path (optional) the path of files to load.
 #' @param source (optional) the name of the data source.
 #' @param schema (optional) the schema of the data required for some data sources.
@@ -470,9 +471,9 @@ recoverPartitions <- function(tableName) {
   invisible(handledCallJMethod(catalog, "recoverPartitions", tableName))
 }
 
-#' Invalidate and refresh all the cached data and metadata of the given table
+#' Invalidates and refreshes all the cached data and metadata of the given table
 #'
-#' Invalidate and refresh all the cached data and metadata of the given table. For performance
+#' Invalidates and refreshes all the cached data and metadata of the given table. For performance
 #' reasons, Spark SQL or the external data source library it uses might cache certain metadata about
 #' a table, such as the location of blocks. When those change outside of Spark SQL, users should
 #' call this function to invalidate the cache.
