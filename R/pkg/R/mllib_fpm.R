@@ -27,7 +27,6 @@ setClass("FPGrowthModel", slots = list(jobj = "jobj"))
 #' FP-growth
 #'
 #' A parallel FP-growth algorithm to mine frequent itemsets.
-
 #' \code{spark.fpGrowth} fits a FP-growth model on a SparkDataFrame. Users can
 #' \code{spark.freqItemsets} to get frequent itemsets, \code{spark.associationRules} to get
 #' association rules, \code{predict} to make predictions on new data based on generated association
