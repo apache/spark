@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.expressions.objects.{MapObjects, NewInstance, UnresolvedMapObjects}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
@@ -2227,8 +2227,21 @@ class Analyzer(
           validateTopLevelTupleFields(deserializer, inputs)
           val resolved = resolveExpression(
             deserializer, LocalRelation(inputs), throws = true)
-          validateNestedTupleFields(resolved)
-          resolved
+          val result = resolved transformDown {
+            case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
+              inputData.dataType match {
+                case ArrayType(et, _) =>
+                  val expr = MapObjects(func, inputData, et, cls) transformUp {
+                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                      ExtractValue(child, fieldName, resolver)
+                  }
+                  expr
+                case other =>
+                  throw new AnalysisException("need an array field but got " + other.simpleString)
+              }
+          }
+          validateNestedTupleFields(result)
+          result
       }
     }
 
