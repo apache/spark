@@ -19,16 +19,16 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import scala.math.BigDecimal.RoundingMode
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
 
 object EstimationUtils {
 
   /** Check if each plan has rowCount in its statistics. */
-  def rowCountsExist(conf: CatalystConf, plans: LogicalPlan*): Boolean =
+  def rowCountsExist(conf: SQLConf, plans: LogicalPlan*): Boolean =
     plans.forall(_.stats(conf).rowCount.isDefined)
 
   /** Check if each attribute has column stat in the corresponding statistics. */
