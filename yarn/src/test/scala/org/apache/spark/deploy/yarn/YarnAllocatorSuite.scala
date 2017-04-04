@@ -17,10 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.{Arrays, List => JList}
-
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic
-import org.apache.hadoop.net.DNSToSwitchMapping
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -36,24 +33,16 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.ManualClock
 
-class MockResolver extends DNSToSwitchMapping {
+class MockResolver extends SparkRackResolver {
 
-  override def resolve(names: JList[String]): JList[String] = {
-    if (names.size > 0 && names.get(0) == "host3") Arrays.asList("/rack2")
-    else Arrays.asList("/rack1")
+  override def resolve(conf: Configuration, hostName: String): String = {
+    if (hostName == "host3") "/rack2" else "/rack1"
   }
 
-  override def reloadCachedMappings() {}
-
-  def reloadCachedMappings(names: JList[String]) {}
 }
 
 class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   val conf = new YarnConfiguration()
-  conf.setClass(
-    CommonConfigurationKeysPublic.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-    classOf[MockResolver], classOf[DNSToSwitchMapping])
-
   val sparkConf = new SparkConf()
   sparkConf.set("spark.driver.host", "localhost")
   sparkConf.set("spark.driver.port", "4040")
@@ -107,7 +96,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       rmClient,
       appAttemptId,
       new SecurityManager(sparkConf),
-      Map())
+      Map(),
+      new MockResolver())
   }
 
   def createContainer(host: String): Container = {
