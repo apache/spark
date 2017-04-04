@@ -55,8 +55,8 @@ The system currently supports three cluster managers:
 * [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark) -- In addition to the above,
 there is experimental support for Kubernetes. Kubernetes is an open-source platform
 for providing container-centric infrastructure. Kubernetes support is being actively
-developed in an [apache-spark-on-k8s](https://github.com/apache-spark-on-k8s/) Github organization
-and is intended to eventually merge into the Apache Spark project. For documentation, refer to that project's README.
+developed in an [apache-spark-on-k8s](https://github.com/apache-spark-on-k8s/) Github organization. 
+For documentation, refer to that project's README.
 
 # Submitting Applications
 
