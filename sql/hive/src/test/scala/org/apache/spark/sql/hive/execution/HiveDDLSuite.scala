@@ -708,23 +708,6 @@ class HiveDDLSuite
     }
   }
 
-  test("desc table for Hive table") {
-    withTable("tab1") {
-      val tabName = "tab1"
-      sql(s"CREATE TABLE $tabName(c1 int)")
-
-      assert(sql(s"DESC $tabName").collect().length == 1)
-
-      assert(
-        sql(s"DESC FORMATTED $tabName").collect()
-          .exists(_.getString(0) == "# Storage Information"))
-
-      assert(
-        sql(s"DESC EXTENDED $tabName").collect()
-          .exists(_.getString(0) == "# Detailed Table Information"))
-    }
-  }
-
   test("desc table for Hive table - partitioned table") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (b int)")
@@ -741,23 +724,6 @@ class HiveDDLSuite
     }
   }
 
-  test("desc formatted table for permanent view") {
-    withTable("tbl") {
-      withView("view1") {
-        sql("CREATE TABLE tbl(a int)")
-        sql("CREATE VIEW view1 AS SELECT * FROM tbl")
-        assert(sql("DESC FORMATTED view1").collect().containsSlice(
-          Seq(
-            Row("# View Information", "", ""),
-            Row("View Text:", "SELECT * FROM tbl", ""),
-            Row("View Default Database:", "default", ""),
-            Row("View Query Output Columns:", "[a]", "")
-          )
-        ))
-      }
-    }
-  }
-
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"
@@ -766,7 +732,7 @@ class HiveDDLSuite
 
       checkAnswer(
         sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("a", "int", "test")
+        Row("# col_name", "data_type", "comment") :: Row("a", "int", "test") :: Nil
       )
     }
   }
@@ -1218,23 +1184,6 @@ class HiveDDLSuite
       sql(s"SELECT * FROM ${targetTable.identifier}"))
   }
 
-  test("desc table for data source table") {
-    withTable("tab1") {
-      val tabName = "tab1"
-      spark.range(1).write.format("json").saveAsTable(tabName)
-
-      assert(sql(s"DESC $tabName").collect().length == 1)
-
-      assert(
-        sql(s"DESC FORMATTED $tabName").collect()
-          .exists(_.getString(0) == "# Storage Information"))
-
-      assert(
-        sql(s"DESC EXTENDED $tabName").collect()
-          .exists(_.getString(0) == "# Detailed Table Information"))
-    }
-  }
-
   test("create table with the same name as an index table") {
     val tabName = "tab1"
     val indexName = tabName + "_index"
@@ -1317,46 +1266,6 @@ class HiveDDLSuite
           assert(desc.contains(Row("id", "bigint", null)))
         }
       }
-    }
-  }
-
-  test("desc table for data source table - partitioned bucketed table") {
-    withTable("t1") {
-      spark
-        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
-        .bucketBy(2, "b").sortBy("c").partitionBy("d")
-        .saveAsTable("t1")
-
-      val formattedDesc = sql("DESC FORMATTED t1").collect()
-
-      assert(formattedDesc.containsSlice(
-        Seq(
-          Row("a", "bigint", null),
-          Row("b", "bigint", null),
-          Row("c", "bigint", null),
-          Row("d", "bigint", null),
-          Row("# Partition Information", "", ""),
-          Row("# col_name", "data_type", "comment"),
-          Row("d", "bigint", null),
-          Row("", "", ""),
-          Row("# Detailed Table Information", "", ""),
-          Row("Database:", "default", "")
-        )
-      ))
-
-      assert(formattedDesc.containsSlice(
-        Seq(
-          Row("Table Type:", "MANAGED", "")
-        )
-      ))
-
-      assert(formattedDesc.containsSlice(
-        Seq(
-          Row("Num Buckets:", "2", ""),
-          Row("Bucket Columns:", "[b]", ""),
-          Row("Sort Columns:", "[c]", "")
-        )
-      ))
     }
   }
 

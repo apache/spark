@@ -767,9 +767,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       sessionState.refreshTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
-
-      // Checks the DESCRIBE output.
-      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", null) :: Nil)
     }
   }
 
@@ -1381,7 +1378,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         checkAnswer(spark.table("old"), Row(1, "a"))
 
-        checkAnswer(sql("DESC old"), Row("i", "int", null) :: Row("j", "string", null) :: Nil)
+        val expectedSchema = StructType(Seq(
+          StructField("i", IntegerType, nullable = true),
+          StructField("j", StringType, nullable = true)))
+        assert(table("old").schema === expectedSchema)
       }
     }
   }

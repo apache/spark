@@ -207,6 +207,7 @@ abstract class HiveComparisonTest
   // This list contains indicators for those lines which do not have actual results and we
   // want to ignore.
   lazy val ignoredLineIndicators = Seq(
+    "# Detailed Table Information",
     "# Partition Information",
     "# col_name"
   )
@@ -358,7 +359,7 @@ abstract class HiveComparisonTest
               stringToFile(new File(failedDirectory, testCaseName), errorMessage + consoleTestCase)
               fail(errorMessage)
           }
-        }.toSeq
+        }
 
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (hiveQuery, catalyst)) =>
@@ -369,6 +370,7 @@ abstract class HiveComparisonTest
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTableCommand]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
