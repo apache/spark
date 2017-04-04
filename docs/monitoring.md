@@ -289,7 +289,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/jobs</code></td>
     <td>
       A list of all jobs for a given application.
-      <br><code>?status=[complete|succeeded|failed]</code> list only jobs in the specific state.
+      <br><code>?status=[running|succeeded|failed|unknown]</code> list only jobs in the specific state.
     </td>
   </tr>
   <tr>
