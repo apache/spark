@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.sql.Timestamp
 import java.util.TimeZone
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.hadoop.ParquetFileReader
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
@@ -246,8 +248,8 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   private def createRawData(): Dataset[Timestamp] = {
     import spark.implicits._
     val originalTsStrings = Seq(
-      "2015-12-31 23:50:59.123",
       "2015-12-31 22:49:59.123",
+      "2015-12-31 23:50:59.123",
       "2016-01-01 00:39:59.123",
       "2016-01-01 01:29:59.123"
     )
@@ -326,13 +328,25 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
       val key = ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY
     test(s"SPARK-12297: Read from Parquet tables with Timestamps; explicitTz = $explicitTz") {
       withTable(s"external_$baseTable") {
-        // TODO check predicate pushdown
         // we intentionally save this data directly, without creating a table, so we can
         // see that the data is read back differently depending on table properties
         val localTz = TimeZone.getDefault()
         val rawData = createRawData()
+        // adjust the raw parquet data based on the timezones, so that it should get read back the
+        // same way
+        val adjustedRawData = explicitTz match {
+          case Some(tzId) =>
+            val storageTz = TimeZone.getTimeZone(tzId)
+            import spark.implicits._
+            rawData.map { ts =>
+              val t = ts.getTime()
+              new Timestamp(t + storageTz.getOffset(t) - localTz.getOffset(t))
+            }
+          case _ =>
+            rawData
+        }
         withTempPath { path =>
-          rawData.write.parquet(path.getCanonicalPath)
+          adjustedRawData.write.parquet(path.getCanonicalPath)
           val options = Map("path" -> path.getCanonicalPath) ++
             explicitTz.map { tz => Map(key -> tz) }.getOrElse(Map())
 
@@ -348,19 +362,52 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
                 val collectedFromExternal =
                   spark.sql(s"select value from external_$baseTable").collect()
                     .map(_.getAs[Timestamp](0))
-                val expTimestamps = explicitTz match {
-                  case Some(tzId) =>
-                    val storageTz = TimeZone.getTimeZone(tzId)
-                    rawData.collect().map { ts =>
-                      val t = ts.getTime()
-                      new Timestamp(t - storageTz.getOffset(t) + localTz.getOffset(t))
-                    }
-                  case _ =>
-                    // no modification to raw data in parquet
-                    rawData.collect()
-                }
+                val expTimestamps = rawData.collect()
                 assert(collectedFromExternal === expTimestamps,
                   s"collected = ${collectedFromExternal.mkString(",")}")
+
+                // Now test that the behavior is still correct even with a filter which could get
+                // pushed down into parquet.  You would expect we'd need to do extra handling of
+                // this case, but it turns out we don't, because parquet does not read statistics
+                // from int96 fields, as they are unsigned.  See
+                // scalastyle:off line.size.limit
+                // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
+                // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
+                // scalastyle:on line.size.limit
+                //
+                // Just to be defensive in case anything ever changes in parquet, this test checks
+                // the assumption on column stats, and also the end-to-end behavior.
+
+                val hadoopConf = sparkContext.hadoopConfiguration
+                val fs = FileSystem.get(hadoopConf)
+                val parts = fs.listStatus(new Path(path.getCanonicalPath))
+                  .filter(_.getPath().getName().endsWith(".parquet"))
+                assert(parts.size == 1)
+                val oneFooter = ParquetFileReader.readFooter(hadoopConf, parts.head.getPath)
+                assert(oneFooter.getFileMetaData.getSchema.getColumns.size == 1)
+                val oneBlockMeta = oneFooter.getBlocks().get(0)
+                val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
+                val columnStats = oneBlockColumnMeta.getStatistics
+                // Column stats are written, but they are ignored when the data is read back as
+                // mentioned above, b/c int96 is unsigned.  This assert makes sure this holds even
+                // if we change parquet versions (if eg. there were ever statistics even on unsigned
+                // columns).
+                assert(columnStats.isEmpty)
+
+                // These queries should return the entire dataset, but if the predicates were
+                // applied to the raw values in parquet, they would incorrectly filter data out.
+                Seq(
+                  ">" -> "2015-12-31 22:00:00",
+                  "<" -> "2016-01-01 02:00:00"
+                ).foreach { case (comparison, value) =>
+                  val query =
+                    s"select value from external_$baseTable where value $comparison '$value'"
+                  val countWithFilter = spark
+                    .sql(query)
+                    .count()
+                  assert(countWithFilter === 4, query)
+                }
+
               }
             }
           }
