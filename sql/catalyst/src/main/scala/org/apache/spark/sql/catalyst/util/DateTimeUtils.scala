@@ -44,6 +44,7 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
+  final val MILLIS_PER_SECOND = 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
   final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
 
@@ -235,6 +236,24 @@ object DateTimeUtils {
     val day = julian_us / MICROS_PER_DAY
     val micros = julian_us % MICROS_PER_DAY
     (day.toInt, micros * 1000L)
+  }
+
+  /*
+   * Converts the timestamp to milliseconds since epoch. In spark timestamp values have microseconds
+   * precision, so this conversion is lossy.
+   */
+  def toMillis(us: SQLTimestamp): Long = {
+    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
+    // In millis precision the above needs to be represented as (-157700927877).
+    Math.floor(us.toDouble / MILLIS_PER_SECOND).toLong
+  }
+
+  /*
+   * Converts millseconds since epoch to SQLTimestamp.
+   */
+  def fromMillis(millis: Long): SQLTimestamp = {
+    millis * 1000L
   }
 
   /**

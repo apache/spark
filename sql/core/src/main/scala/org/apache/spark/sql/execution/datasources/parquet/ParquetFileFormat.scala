@@ -125,6 +125,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
       sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
+    conf.set(
+      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
+      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
@@ -300,6 +304,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key,
+      sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
 
     // Try to push down filters when filter push-down is enabled.
     val pushed =
@@ -410,7 +417,8 @@ object ParquetFileFormat extends Logging {
       val converter = new ParquetSchemaConverter(
         sparkSession.sessionState.conf.isParquetBinaryAsString,
         sparkSession.sessionState.conf.isParquetBinaryAsString,
-        sparkSession.sessionState.conf.writeLegacyParquetFormat)
+        sparkSession.sessionState.conf.writeLegacyParquetFormat,
+        sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis)
 
       converter.convert(schema)
     }
@@ -510,6 +518,7 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
+    val writeTimestampInMillis = sparkSession.sessionState.conf.isParquetINT64AsTimestampMillis
     val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
     val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
@@ -554,7 +563,8 @@ object ParquetFileFormat extends Logging {
             new ParquetSchemaConverter(
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
-              writeLegacyParquetFormat = writeLegacyParquetFormat)
+              writeLegacyParquetFormat = writeLegacyParquetFormat,
+              writeTimestampInMillis = writeTimestampInMillis)
 
           if (footers.isEmpty) {
             Iterator.empty

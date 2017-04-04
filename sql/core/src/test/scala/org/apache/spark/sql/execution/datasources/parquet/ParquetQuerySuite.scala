@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.sql.Timestamp
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -159,6 +160,78 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       df.write.parquet(file.getCanonicalPath)
       val df2 = spark.read.parquet(file.getCanonicalPath)
       checkAnswer(df2, df.collect().toSeq)
+    }
+  }
+
+  test("SPARK-10634 timestamp written and read as INT64 - TIMESTAMP_MILLIS") {
+    val data = (1 to 10).map(i => Row(i, new java.sql.Timestamp(i)))
+    val schema = StructType(List(StructField("d", IntegerType, false),
+      StructField("time", TimestampType, false)).toArray)
+    withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.parquet(file.getCanonicalPath)
+        ("true" :: "false" :: Nil).foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val df2 = spark.read.parquet(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-10634 timestamp written and read as INT64 - truncation") {
+    withTable("ts") {
+      sql("create table ts (c1 int, c2 timestamp) using parquet")
+      sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (2, null)")
+      sql("insert into ts values (3, '1965-01-01 10:11:12.123456')")
+      checkAnswer(
+        sql("select * from ts"),
+        Seq(
+          Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123456")),
+          Row(2, null),
+          Row(3, Timestamp.valueOf("1965-01-01 10:11:12.123456"))))
+    }
+
+    // The microsecond portion is truncated when written as TIMESTAMP_MILLIS.
+    withTable("ts") {
+      withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "true") {
+        sql("create table ts (c1 int, c2 timestamp) using parquet")
+        sql("insert into ts values (1, '2016-01-01 10:11:12.123456')")
+        sql("insert into ts values (2, null)")
+        sql("insert into ts values (3, '1965-01-01 10:11:12.125456')")
+        sql("insert into ts values (4, '1965-01-01 10:11:12.125')")
+        sql("insert into ts values (5, '1965-01-01 10:11:12.1')")
+        sql("insert into ts values (6, '1965-01-01 10:11:12.123456789')")
+        sql("insert into ts values (7, '0001-01-01 00:00:00.000000')")
+        checkAnswer(
+          sql("select * from ts"),
+          Seq(
+            Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+            Row(2, null),
+            Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+            Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+            Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+            Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+
+        // Read timestamps that were encoded as TIMESTAMP_MILLIS annotated as INT64
+        // with PARQUET_INT64_AS_TIMESTAMP_MILLIS set to false.
+        withSQLConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS.key -> "false") {
+          checkAnswer(
+            sql("select * from ts"),
+            Seq(
+              Row(1, Timestamp.valueOf("2016-01-01 10:11:12.123")),
+              Row(2, null),
+              Row(3, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(4, Timestamp.valueOf("1965-01-01 10:11:12.125")),
+              Row(5, Timestamp.valueOf("1965-01-01 10:11:12.1")),
+              Row(6, Timestamp.valueOf("1965-01-01 10:11:12.123")),
+              Row(7, Timestamp.valueOf("0001-01-01 00:00:00.000"))))
+        }
+      }
     }
   }
 
