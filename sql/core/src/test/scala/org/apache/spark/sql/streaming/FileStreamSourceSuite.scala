@@ -1084,7 +1084,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       withSQLConf(
         SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
         // Force deleting the old logs
-        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1"
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "1",
+        SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false"
       ) {
         val fileStream = createFileStream("text", src.getCanonicalPath)
         val filtered = fileStream.filter($"value" contains "keep")
@@ -1310,14 +1311,28 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         classOf[ExistsThrowsExceptionFileSystem].getName)
       // add the metadata entries as a pre-req
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
-    val metadataLog =
-      new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
+      val metadataLog =
+        new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
         dir.getAbsolutePath, Map.empty)
       // this method should throw an exception if `fs.exists` is called during resolveRelation
       newSource.getBatch(None, FileStreamSourceOffset(1))
+    }
+  }
+
+  test("getBatch should return a streaming DataFrame") {
+    withTempDir { temp =>
+      spark.conf.set(
+        s"fs.$scheme.impl",
+        classOf[ExistsThrowsExceptionFileSystem].getName)
+      val dir = new File(temp, "dir")
+
+      val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
+      dir.getAbsolutePath, Map.empty)
+      val df = newSource.getBatch(None, FileStreamSourceOffset(1))
+      assert(df.isStreaming, "FileStreamSource should return a streaming DataFrame")
     }
   }
 }

@@ -127,12 +127,18 @@ case class ExternalRDDScanExec[T](
   }
 }
 
-/** Logical plan node for scanning data from an RDD of InternalRow. */
+/** Logical plan node for scanning data from an RDD of InternalRow.
+ *
+ * @param dataFromStreaming indicate if this relation comes from a streaming source.
+ *                          In a streaming query, stream relation will be cut into a
+ *                          series of batch relations.
+ */
 case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     outputPartitioning: Partitioning = UnknownPartitioning(0),
-    outputOrdering: Seq[SortOrder] = Nil)(session: SparkSession)
+    outputOrdering: Seq[SortOrder] = Nil,
+    var dataFromStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
@@ -163,10 +169,12 @@ case class LogicalRDD(
 
   override def sameResult(plan: LogicalPlan): Boolean = {
     plan.canonicalized match {
-      case LogicalRDD(_, otherRDD, _, _) => rdd.id == otherRDD.id
+      case LogicalRDD(_, otherRDD, _, _, _) => rdd.id == otherRDD.id
       case _ => false
     }
   }
+
+  override def isStreaming: Boolean = dataFromStreaming
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 

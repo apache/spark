@@ -43,7 +43,15 @@ object LocalRelation {
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+/**
+ * @param dataFromStreaming indicate if this relation comes from a streaming source.
+ *                          In a streaming query, stream relation will be cut into a
+ *                          series of batch relations.
+ */
+case class LocalRelation(
+    output: Seq[Attribute],
+    data: Seq[InternalRow] = Nil,
+    var dataFromStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
@@ -68,11 +76,13 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
 
   override def sameResult(plan: LogicalPlan): Boolean = {
     plan.canonicalized match {
-      case LocalRelation(otherOutput, otherData) =>
+      case LocalRelation(otherOutput, otherData, _) =>
         otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
       case _ => false
     }
   }
+
+  override def isStreaming: Boolean = dataFromStreaming
 
   override def computeStats(conf: CatalystConf): Statistics =
     Statistics(sizeInBytes =

@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -57,10 +60,31 @@ trait Source {
   def getBatch(start: Option[Offset], end: Offset): DataFrame
 
   /**
+   * In a streaming query, stream relation will be cut into a series of batch relations.
+   * We need to mark the batch relation as streaming, i.e. data coming from a stream source,
+   * so we can apply those streaming strategies to it.
+   */
+  def markAsStreaming(df: DataFrame): DataFrame = {
+    val markAsStreaming = df.logicalPlan transform {
+      case logicalRDD @ LogicalRDD(_, _, _, _, false) =>
+        logicalRDD.dataFromStreaming = true
+        logicalRDD
+      case logicalRelation @ LogicalRelation(_, _, _, false) =>
+        logicalRelation.dataFromStreaming = true
+        logicalRelation
+      case localRelation @ LocalRelation(_, _, false) =>
+        localRelation.dataFromStreaming = true
+        localRelation
+    }
+
+    Dataset.ofRows(df.sparkSession, markAsStreaming).toDF()
+  }
+
+  /**
    * Informs the source that Spark has completed processing all data for offsets less than or
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
-  def commit(end: Offset) : Unit = {}
+  def commit(end: Offset): Unit = {}
 
   /** Stop this source and free any resources it has allocated. */
   def stop(): Unit
