@@ -899,7 +899,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         // Find all the aliased expressions in the aggregate list that don't include any actual
         // AggregateExpression, and create a map from the alias to the expression
-        lazy val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {
+        val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {
           case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
             (a.toAttribute, a.child)
         })
@@ -920,7 +920,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
         val stayUp = rest ++ containingNonDeterministic
 
-        if (pushDown.nonEmpty) {
+        // Make sure that the remaining predicate does not contain subquery's columns
+        val nonPushDown = rest.flatMap(_.references).intersect(rightOp.output)
+
+        if (pushDown.nonEmpty && nonPushDown.isEmpty) {
           val pushDownPredicate = pushDown.reduce(And)
           val replaced = replaceAlias(pushDownPredicate, aliasMap)
           val newAggregate = aggregate.copy(child =
