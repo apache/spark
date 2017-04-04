@@ -91,7 +91,7 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Converts to BlockMatrix. Creates blocks of `SparseMatrix` with size 1024 x 1024.
+   * Converts to BlockMatrix. Creates blocks with size 1024 x 1024.
    */
   @Since("1.3.0")
   def toBlockMatrix(): BlockMatrix = {
@@ -99,7 +99,7 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
+   * Converts to BlockMatrix. Blocks may be sparse or dense depending on the sparsity of the rows.
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
    *                     a smaller value. Must be an integer value greater than 0.
    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
@@ -108,28 +108,6 @@ class IndexedRowMatrix @Since("1.0.0") (
    */
   @Since("1.3.0")
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
-    // TODO: This implementation may be optimized
-    toCoordinateMatrix().toBlockMatrix(rowsPerBlock, colsPerBlock)
-  }
-
-  /**
-   * Converts to BlockMatrix. Creates blocks of `DenseMatrix` with size 1024 x 1024.
-   */
-  @Since("2.2.0")
-  def toBlockMatrixDense(): BlockMatrix = {
-    toBlockMatrixDense(1024, 1024)
-  }
-
-  /**
-   * Converts to BlockMatrix. Creates blocks of `SparseMatrix`.
-   * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
-   *                     a smaller value. Must be an integer value greater than 0.
-   * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
-   *                     a smaller value. Must be an integer value greater than 0.
-   * @return a [[BlockMatrix]]
-   */
-  @Since("2.2.0")
-  def toBlockMatrixDense(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
     require(rowsPerBlock > 0,
       s"rowsPerBlock needs to be greater than 0. rowsPerBlock: $rowsPerBlock")
     require(colsPerBlock > 0,
@@ -144,33 +122,48 @@ class IndexedRowMatrix @Since("1.0.0") (
     val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
     val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
 
-    val blocks: RDD[((Int, Int), Matrix)] = rows.flatMap{ ir =>
+    val blocks = rows.flatMap { ir: IndexedRow =>
       val blockRow = ir.index / rowsPerBlock
       val rowInBlock = ir.index % rowsPerBlock
 
-      ir.vector.toArray
-        .grouped(colsPerBlock)
-        .zipWithIndex
-        .map{ case (values, blockColumn) =>
-          ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values))
-        }
+      ir.vector match {
+        case SparseVector(size, indices, values) =>
+          indices.zip(values).map { case (index, value) =>
+            val blockColumn = index / colsPerBlock
+            val columnInBlock = index % colsPerBlock
+            ((blockRow.toInt, blockColumn.toInt), (rowInBlock.toInt, Array((value, columnInBlock))))
+          }
+        case DenseVector(values) =>
+          values.grouped(colsPerBlock)
+            .zipWithIndex
+            .map { case (values, blockColumn) =>
+              ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values.zipWithIndex))
+            }
+      }
     }.groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map{
       case ((blockRow, blockColumn), itr) =>
         val actualNumRows =
           if (blockRow == lastRowBlockIndex) lastRowBlockSize else rowsPerBlock
-        val actualNumColumns: Int =
+        val actualNumColumns =
           if (blockColumn == lastColBlockIndex) lastColBlockSize else colsPerBlock
 
         val arraySize = actualNumRows * actualNumColumns
         val matrixAsArray = new Array[Double](arraySize)
-        itr.foreach{ case (rowWithinBlock, values) =>
-          var i = 0
-          while (i < values.length) {
-            matrixAsArray.update(i * actualNumRows + rowWithinBlock, values(i))
-            i += 1
+        var countForValues = 0
+        itr.foreach { case (rowWithinBlock, valuesWithColumns) =>
+          valuesWithColumns.foreach { case (value, columnWithinBlock) =>
+            matrixAsArray.update(columnWithinBlock * actualNumRows + rowWithinBlock, value)
+            countForValues += 1
           }
         }
-        ((blockRow, blockColumn), new DenseMatrix(actualNumRows, actualNumColumns, matrixAsArray))
+        val denseMatrix = new DenseMatrix(actualNumRows, actualNumColumns, matrixAsArray)
+        val finalMatrix = if (countForValues / arraySize.toDouble > 0.5) {
+          denseMatrix
+        } else {
+          denseMatrix.toSparse
+        }
+
+        ((blockRow, blockColumn), finalMatrix)
     }
     new BlockMatrix(blocks, rowsPerBlock, colsPerBlock)
   }
