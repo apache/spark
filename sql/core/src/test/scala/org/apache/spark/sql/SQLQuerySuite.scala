@@ -2607,7 +2607,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("floor(0.0001)") {
+  test("SPARK-20211: should be able to floor or ceil with a decimal when its precision < scale") {
     val df = Seq(0).toDF("a")
     withTempView("tb") {
       df.createOrReplaceTempView("tb")
