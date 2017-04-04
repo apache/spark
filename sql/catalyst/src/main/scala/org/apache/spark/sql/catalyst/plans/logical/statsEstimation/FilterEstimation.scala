@@ -22,14 +22,14 @@ import scala.collection.mutable
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-case class FilterEstimation(plan: Filter, catalystConf: CatalystConf) extends Logging {
+case class FilterEstimation(plan: Filter, catalystConf: SQLConf) extends Logging {
 
   private val childStats = plan.child.stats(catalystConf)
 

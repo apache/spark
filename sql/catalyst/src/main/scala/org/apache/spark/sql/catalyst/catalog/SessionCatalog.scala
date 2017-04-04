@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object SessionCatalog {
@@ -52,7 +53,7 @@ class SessionCatalog(
     val externalCatalog: ExternalCatalog,
     globalTempViewManager: GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf,
+    conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader) extends Logging {
@@ -63,7 +64,7 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: CatalystConf) {
+      conf: SQLConf) {
     this(
       externalCatalog,
       new GlobalTempViewManager("global_temp"),
@@ -79,7 +80,7 @@ class SessionCatalog(
     this(
       externalCatalog,
       new SimpleFunctionRegistry,
-      SimpleCatalystConf(caseSensitiveAnalysis = true))
+      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
 
   /** List of temporary tables, mapping from table name to their logical plan. */
