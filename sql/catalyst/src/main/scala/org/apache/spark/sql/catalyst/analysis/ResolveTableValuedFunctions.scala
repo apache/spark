@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
@@ -105,7 +103,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
-      builtinFunctions.get(u.functionName) match {
+      builtinFunctions.get(u.functionName.toLowerCase()) match {
         case Some(tvf) =>
           val resolved = tvf.flatMap { case (argList, resolver) =>
             argList.implicitCast(u.functionArgs) match {

@@ -26,7 +26,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Test basic expression parsing. If a type of expression is supported it should be tested here.
+ * Test basic expression parsing.
+ * If the type of an expression is supported it should be tested here.
  *
  * Please note that some of the expressions test don't have to be sound expressions, only their
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or

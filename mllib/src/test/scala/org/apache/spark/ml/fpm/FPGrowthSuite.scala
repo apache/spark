@@ -34,7 +34,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("FPGrowth fit and transform with different data types") {
     Array(IntegerType, StringType, ShortType, LongType, ByteType).foreach { dt =>
-      val data = dataset.withColumn("features", col("features").cast(ArrayType(dt)))
+      val data = dataset.withColumn("items", col("items").cast(ArrayType(dt)))
       val model = new FPGrowth().setMinSupport(0.5).fit(data)
       val generatedRules = model.setMinConfidence(0.5).associationRules
       val expectedRules = spark.createDataFrame(Seq(
@@ -52,8 +52,8 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         (0, Array("1", "2"), Array.emptyIntArray),
         (0, Array("1", "2"), Array.emptyIntArray),
         (0, Array("1", "3"), Array(2))
-      )).toDF("id", "features", "prediction")
-        .withColumn("features", col("features").cast(ArrayType(dt)))
+      )).toDF("id", "items", "prediction")
+        .withColumn("items", col("items").cast(ArrayType(dt)))
         .withColumn("prediction", col("prediction").cast(ArrayType(dt)))
       assert(expectedTransformed.collect().toSet.equals(
         transformed.collect().toSet))
@@ -79,7 +79,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       (1, Array("1", "2", "3", "5")),
       (2, Array("1", "2", "3", "4")),
       (3, null.asInstanceOf[Array[String]])
-    )).toDF("id", "features")
+    )).toDF("id", "items")
     val model = new FPGrowth().setMinSupport(0.7).fit(dataset)
     val prediction = model.transform(df)
     assert(prediction.select("prediction").where("id=3").first().getSeq[String](0).isEmpty)
@@ -108,11 +108,11 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val dataset = spark.createDataFrame(Seq(
       Array("1", "3"),
       Array("2", "3")
-    ).map(Tuple1(_))).toDF("features")
+    ).map(Tuple1(_))).toDF("items")
     val model = new FPGrowth().fit(dataset)
 
     val prediction = model.transform(
-      spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("features")
+      spark.createDataFrame(Seq(Tuple1(Array("1", "2")))).toDF("items")
     ).first().getAs[Seq[String]]("prediction")
 
     assert(prediction === Seq("3"))
@@ -127,7 +127,7 @@ object FPGrowthSuite {
       (0, Array("1", "2")),
       (0, Array("1", "2")),
       (0, Array("1", "3"))
-    )).toDF("id", "features")
+    )).toDF("id", "items")
   }
 
   /**
