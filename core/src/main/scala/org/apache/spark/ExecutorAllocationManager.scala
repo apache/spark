@@ -369,13 +369,6 @@ private[spark] class ExecutorAllocationManager(
 
     val delta = numExecutorsTarget - oldNumExecutorsTarget
 
-    // If our target has not changed, do not send a message
-    // to the cluster manager and reset our exponential growth
-    if (delta == 0) {
-      numExecutorsToAdd = 1
-      return 0
-    }
-
     val addRequestAcknowledged = testing ||
       client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
     if (addRequestAcknowledged) {
