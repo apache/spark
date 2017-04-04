@@ -313,16 +313,4 @@ package object config {
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
       "that hosts fs.defaultFS does not need to be listed here.")
     .fallbackConf(NAMENODES_TO_ACCESS)
-
-  private[spark] val KEYTAB_CONTENT = ConfigBuilder("spark.yarn.keytab.content")
-    .doc("Base64 encoded content of spark.yarn.keytab")
-    .internal()
-    .stringConf
-    .createOptional
-
-  private[spark] val BOOTSTRAP_TOKENS = ConfigBuilder("spark.deploy.bootstrap.tokens")
-    .doc("Base64 encoded tokens to propogate to driver/executors laucnhed in standalone mode")
-    .internal()
-    .stringConf
-    .createOptional
 }

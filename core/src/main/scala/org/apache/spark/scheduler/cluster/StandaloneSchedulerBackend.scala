@@ -19,8 +19,6 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.commons.codec.binary.Base64
-import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.deploy.security.{AMCredentialRenewer, ConfigurableCredentialManager}
@@ -30,6 +28,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.BOOTSTRAP_TOKENS
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -157,30 +156,17 @@ private[spark] class StandaloneSchedulerBackend(
         Nil
       }
 
-
-    //////////////////////
-    //////////////////////
-
-    def base64EncodedValue(fn: DataOutputBuffer => Unit): String = {
-      val dob = new DataOutputBuffer
-      fn(dob)
-      dob.close()
-      new String(Base64.encodeBase64(dob.getData))
-    }
-
+    // Propagate security tokens to executors
     val bootstrap = if (credentials.getAllTokens.size() > 0) {
-      val bootstrapCredentials = base64EncodedValue { dob =>
+      val bootstrapCredentials = Utils.base64EncodedValue { dob =>
         credentials.writeTokenStorageToStream(dob)
       }
 
       logInfo("Security tokens will be sent to executors")
-      Map(BOOTSTRAP_TOKENS.key -> bootstrapCredentials)
+      Map(BOOTSTRAP_TOKENS -> bootstrapCredentials)
     } else Map.empty[String, String]
 
     val executorEnv = sc.executorEnvs.toMap ++ bootstrap
-
-    //////////////////////
-    //////////////////////
 
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)

@@ -19,22 +19,21 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 import java.net.URI
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
 import com.google.common.io.Files
-import org.apache.commons.codec.binary.Base64
-import org.apache.commons.io.IOUtils
-import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{BOOTSTRAP_TOKENS, CREDENTIALS_FILE_PATH, KEYTAB, KEYTAB_CONTENT}
+import org.apache.spark.internal.config.KEYTAB
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.BOOTSTRAP_TOKENS
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
+import org.apache.spark.{SecurityManager, SparkConf}
+
+import scala.collection.JavaConverters._
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -183,27 +182,14 @@ private[deploy] class DriverRunner(
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
       driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
 
-    ///////////////
-    ////////////////   we don't support user token propogation in cluster mode
-    ////////////////
-    ////
-//    if (driverDesc.command.environment.contains(BOOTSTRAP_TOKENS.key)) {
-//      val tokenFile = new File(driverDir, "driver-credentials-" + driverId)
-//      SparkHadoopUtil.get.decodeAndWriteToFile(driverDesc.command.environment,
-//        BOOTSTRAP_TOKENS.key, tokenFile)
-//      builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", tokenFile.toString)
-//    }
-
-    if (driverDesc.command.environment.contains(KEYTAB_CONTENT.key)) {
-      val keytab = driverDesc.command.environment.get(KEYTAB.key).get
+    // We only support propagtation of credentials if keytab is passed
+    // since we can't renew indefinitely without a keytab
+    if (driverDesc.command.environment.contains(BOOTSTRAP_TOKENS) && conf.contains(KEYTAB)) {
+      val keytab = conf.get(KEYTAB).get
       val keytabFile = new File(driverDir, keytab)
       SparkHadoopUtil.get.decodeAndWriteToFile(driverDesc.command.environment,
-        KEYTAB_CONTENT.key, keytabFile)
+        BOOTSTRAP_TOKENS, keytabFile)
     }
-    /////////////////////////////
-    ////////////////////
-    ////////////////////
-
 
     runDriver(builder, driverDir, driverDesc.supervise)
   }

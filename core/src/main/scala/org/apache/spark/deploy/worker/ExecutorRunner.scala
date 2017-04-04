@@ -18,20 +18,19 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
 import com.google.common.io.Files
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.deploy.{ApplicationDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.deploy.{ApplicationDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.BOOTSTRAP_TOKENS
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
+import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.BOOTSTRAP_TOKENS
+
+import scala.collection.JavaConverters._
 
 /**
  * Manages the execution of one executor process.
@@ -155,23 +154,15 @@ private[deploy] class ExecutorRunner(
       // parent process for the executor command
       builder.environment.put("SPARK_LAUNCH_WITH_SCALA", "0")
 
-
-      /////////////////////////////
-      /////////////////////////////
-      logInfo("Environment")
-      appDesc.command.environment.foreach(kv => logInfo(" * " + kv))
-
-      if (appDesc.command.environment.contains(BOOTSTRAP_TOKENS.key)) {
+      // Ensure delegation tokens are propagated if necessary
+      if (appDesc.command.environment.contains(BOOTSTRAP_TOKENS)) {
         val tokenFile = new File(executorDir, "executor-credentials-" + appId)
         SparkHadoopUtil.get.decodeAndWriteToFile(appDesc.command.environment,
-          BOOTSTRAP_TOKENS.key, tokenFile)
+          BOOTSTRAP_TOKENS, tokenFile)
         builder.environment.put("HADOOP_TOKEN_FILE_LOCATION", tokenFile.toString)
 
         logInfo("Wrote HADOOP_TOKEN_FILE_LOCATION to " + tokenFile)
       }
-
-      /////////////////////////////
-      /////////////////////////////
 
       // Add webUI log urls
       val baseUrl =

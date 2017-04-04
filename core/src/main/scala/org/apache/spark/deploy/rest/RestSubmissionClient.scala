@@ -28,9 +28,9 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import org.apache.commons.codec.binary.Base64
 import org.apache.commons.io
 import org.apache.hadoop.io.DataOutputBuffer
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.BOOTSTRAP_TOKENS
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkException, SPARK_VERSION => sparkVersion}
 
@@ -188,16 +188,14 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     message.sparkProperties = sparkProperties
     message.environmentVariables = environmentVariables
 
-    def base64EncodedValue(fn: DataOutputBuffer => Unit): String = {
+    def uti(fn: DataOutputBuffer => Unit): String = {
       val dob = new DataOutputBuffer
       fn(dob)
       dob.close()
       new String(Base64.encodeBase64(dob.getData))
     }
 
-    //////////
-    // Security propogation
-
+    // Propagate kerberos credentials if necessary
     if (sparkProperties.contains(PRINCIPAL.key)) {
       val principal = sparkProperties.get(PRINCIPAL.key).get
       val keytab = sparkProperties.get(KEYTAB.key).orNull
@@ -212,31 +210,14 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       logInfo("To enable the driver to login from keytab, credentials are are being copied" +
         " to the Master inside the CreateSubmissionRequest")
 
-      val keytabContent = base64EncodedValue { dob =>
+      val keytabContent = Utils.base64EncodedValue { dob =>
         io.IOUtils.copy(new FileInputStream(f), dob)
       }
 
-      message.environmentVariables += KEYTAB_CONTENT.key -> keytabContent
+      message.environmentVariables += BOOTSTRAP_TOKENS -> keytabContent
       // overwrite with localized version
-      message.environmentVariables += KEYTAB.key -> keytabFileName
       message.sparkProperties += KEYTAB.key -> keytabFileName
     }
-
-//    // Add credentials - works in the case of a user submitting a job
-//    // that completes < YARN max token renewal
-//    // The reason this is here is so you don't strictly need a keytab/principal
-//    // you only need that if you want to run a long running job... but maybe get rid of it?
-//    val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
-//    logInfo(s"USERS CURRENT CREDENTAILS ${credentials}")
-//    if (credentials.getAllTokens.size() > 0) {
-//      val bootstrapCredentials = base64EncodedValue { dob =>
-//        credentials.writeTokenStorageToStream(dob)
-//      }
-//
-//      logInfo("Security tokens will be sent to driver and executors")
-//      message.environmentVariables += BOOTSTRAP_TOKENS.key -> bootstrapCredentials
-//    }
-    //////////
 
     message.validate()
     message

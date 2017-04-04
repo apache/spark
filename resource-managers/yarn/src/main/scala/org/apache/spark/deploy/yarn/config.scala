@@ -231,30 +231,6 @@ package object config {
       .stringConf
       .createOptional
 
-  /* Security configuration. */
-
-//  private[spark] val CREDENTIAL_FILE_MAX_COUNT =
-//    ConfigBuilder("spark.yarn.credentials.file.retention.count")
-//      .intConf
-//      .createWithDefault(5)
-//
-//  private[spark] val CREDENTIALS_FILE_MAX_RETENTION =
-//    ConfigBuilder("spark.yarn.credentials.file.retention.days")
-//      .intConf
-//      .createWithDefault(5)
-
-//  private[spark] val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
-//    .doc("Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
-//      "fs.defaultFS does not need to be listed here.")
-//    .stringConf
-//    .toSequence
-//    .createWithDefault(Nil)
-//
-//  private[spark] val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
-//    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
-//      "that hosts fs.defaultFS does not need to be listed here.")
-//    .fallbackConf(NAMENODES_TO_ACCESS)
-
   /* Rolled log aggregation configuration. */
 
   private[spark] val ROLLED_LOG_INCLUDE_PATTERN =
@@ -272,11 +248,6 @@ package object config {
       .createOptional
 
   /* Private configs. */
-
-//  private[spark] val CREDENTIALS_FILE_PATH = ConfigBuilder("spark.yarn.credentials.file")
-//    .internal()
-//    .stringConf
-//    .createWithDefault(null)
 
   // Internal config to propagate the location of the user's jar to the driver/executors
   private[spark] val APP_JAR = ConfigBuilder("spark.yarn.user.jar")
@@ -330,17 +301,7 @@ package object config {
     .internal()
     .stringConf
     .createOptional
-
-//  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
-//    .internal()
-//    .timeConf(TimeUnit.MILLISECONDS)
-//    .createWithDefault(Long.MaxValue)
-//
-//  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.updateTime")
-//    .internal()
-//    .timeConf(TimeUnit.MILLISECONDS)
-//    .createWithDefault(Long.MaxValue)
-
+  
   // The list of cache-related config entries. This is used by Client and the AM to clean
   // up the environment so that these settings do not appear on the web UI.
   private[yarn] val CACHE_CONFIGS = Seq(
