@@ -72,10 +72,10 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def listTables(self, dbName=None):
-        """Returns a list of tables in the specified database.
+        """Returns a list of tables/views in the specified database.
 
         If no database is specified, the current database is used.
-        This includes all temporary tables.
+        This includes all temporary views.
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -115,7 +115,7 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def listColumns(self, tableName, dbName=None):
-        """Returns a list of columns for the given table in the specified database.
+        """Returns a list of columns for the given table/view in the specified database.
 
         If no database is specified, the current database is used.
 
@@ -277,12 +277,12 @@ class Catalog(object):
 
     @since(2.0)
     def refreshTable(self, tableName):
-        """Invalidate and refresh all the cached metadata of the given table."""
+        """Invalidates and refreshes all the cached data and metadata of the given table."""
         self._jcatalog.refreshTable(tableName)
 
     @since('2.1.1')
     def recoverPartitions(self, tableName):
-        """Recover all the partitions of the given table and update the catalog.
+        """Recovers all the partitions of the given table and update the catalog.
 
         Only works with a partitioned table, and not a temporary view.
         """
@@ -290,7 +290,7 @@ class Catalog(object):
 
     @since('2.2.0')
     def refreshByPath(self, path):
-        """Invalidate and refresh all the cached data (and the associated metadata) for any
+        """Invalidates and refreshes all the cached data (and the associated metadata) for any
         DataFrame that contains the given data source path.
         """
         self._jcatalog.refreshByPath(path)

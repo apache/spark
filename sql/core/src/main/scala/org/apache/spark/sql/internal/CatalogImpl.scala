@@ -141,7 +141,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Returns a list of columns for the given table temporary view.
+   * Returns a list of columns for the given table/view or temporary view.
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
@@ -150,7 +150,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Returns a list of columns for the given table in the specified database.
+   * Returns a list of columns for the given table/view or temporary view in the specified database.
    */
   @throws[AnalysisException]("database or table does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
