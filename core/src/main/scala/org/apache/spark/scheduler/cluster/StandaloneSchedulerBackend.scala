@@ -81,13 +81,6 @@ private[spark] class StandaloneSchedulerBackend(
 
 
   override def start() {
-    super.start()
-    launcherBackend.connect()
-
-
-
-    //////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////
 
     setupCredentials()
 
@@ -104,6 +97,7 @@ private[spark] class StandaloneSchedulerBackend(
     // If we use principal and keytab to login, also credentials can be renewed some time
     // after current time, we should pass the next renewal and updating time to credential
     // renewer and updater.
+
     if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
       nearestTimeOfNextRenewal != Long.MaxValue) {
 
@@ -114,6 +108,9 @@ private[spark] class StandaloneSchedulerBackend(
       val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
       val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
 
+      logInfo(s"Setting credential renewal time: ${renewalTime.toLong} ms,"
+        + s" update time ${updateTime.toLong} ms")
+
       conf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
       conf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
     }
@@ -123,18 +120,13 @@ private[spark] class StandaloneSchedulerBackend(
     if (conf.contains(CREDENTIALS_FILE_PATH.key)) {
       // If a principal and keytab have been set, use that to create new credentials for executors
       // periodically
-      val hconf = SparkHadoopUtil.get.newConfiguration(conf)
       credentialRenewer = credentialManager.credentialRenewer()
       credentialRenewer.scheduleLoginFromKeytab()
     }
     // NOTE we don't need an updater since the above accomplishes it already
 
-
-    //////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////
-
-
-
+    super.start()
+    launcherBackend.connect()
 
     // The endpoint for executors to talk to us
     val driverUrl = RpcEndpointAddress(
