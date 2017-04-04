@@ -592,7 +592,7 @@ case class DescribeTableCommand(
     append(buffer, "Table", tableIdentifier.table, "")
     partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
     append(buffer, "", "", "")
-    append(buffer, "# Table Storage Information", "", "")
+    append(buffer, "# Storage Information", "", "")
     table.bucketSpec match {
       case Some(spec) =>
         spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))

@@ -194,7 +194,7 @@ Table               	t
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
                     	                    	                    
-# Table Storage Information	                    	                    
+# Storage Information	                    	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
@@ -222,7 +222,7 @@ Table               	t
 Partition Values    	[c=Us, d=1]         	                    
 Location [not included in comparison]sql/core/spark-warehouse/t/c=Us/d=1	                    
                     	                    	                    
-# Table Storage Information	                    	                    
+# Storage Information	                    	                    
 Num Buckets         	2                   	                    
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
