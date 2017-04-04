@@ -432,7 +432,7 @@ private[spark] class Executor(
           setTaskFinishedAndClearInterruptStatus()
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled(t.reason)))
 
-        case _: InterruptedException if task.reasonIfKilled.isDefined =>
+        case _: Throwable if task.reasonIfKilled.isDefined =>
           val killReason = task.reasonIfKilled.getOrElse("unknown reason")
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
           setTaskFinishedAndClearInterruptStatus()
