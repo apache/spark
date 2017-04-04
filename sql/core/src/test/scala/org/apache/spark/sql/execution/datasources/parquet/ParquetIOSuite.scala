@@ -109,6 +109,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary g(ENUM);
         |  required binary h(DECIMAL(32,0));
         |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
+        |  required int64 j(TIMESTAMP_MILLIS);
         |  required fixed_len_byte_array(12) j(INTERVAL);
         |}
       """.stripMargin)
