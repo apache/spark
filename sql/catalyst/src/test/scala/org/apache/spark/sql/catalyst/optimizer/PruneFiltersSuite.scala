@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf.CONSTRAINT_PROPAGATION_ENABLED
 
 class PruneFiltersSuite extends PlanTest {
 
@@ -34,7 +34,7 @@ class PruneFiltersSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown and Pruning", Once,
         CombineFilters,
-        PruneFilters(SimpleCatalystConf(caseSensitiveAnalysis = true)),
+        PruneFilters(conf),
         PushDownPredicate,
         PushPredicateThroughJoin) :: Nil
   }
@@ -45,8 +45,7 @@ class PruneFiltersSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown and Pruning", Once,
         CombineFilters,
-        PruneFilters(SimpleCatalystConf(caseSensitiveAnalysis = true,
-          constraintPropagationEnabled = false)),
+        PruneFilters(conf.copy(CONSTRAINT_PROPAGATION_ENABLED -> false)),
         PushDownPredicate,
         PushPredicateThroughJoin) :: Nil
   }

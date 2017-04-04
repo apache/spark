@@ -21,10 +21,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, Literal}
 import org.apache.spark.sql.execution.datasources.DataSourceAnalysis
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -49,7 +49,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   Seq(true, false).foreach { caseSensitive =>
-    val rule = DataSourceAnalysis(SimpleCatalystConf(caseSensitive))
+    val rule = DataSourceAnalysis(new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive))
     test(
       s"convertStaticPartitions only handle INSERT having at least static partitions " +
         s"(caseSensitive: $caseSensitive)") {

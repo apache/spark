@@ -1151,4 +1151,13 @@ class SQLConf extends Serializable with Logging {
     }
     result
   }
+
+  // For test only
+  private[spark] def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+    val cloned = clone()
+    entries.foreach {
+      case (entry, value) => cloned.setConfString(entry.key, value.toString)
+    }
+    cloned
+  }
 }

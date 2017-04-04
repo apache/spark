@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -43,7 +43,7 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  class ResolveBroadcastHints(conf: CatalystConf) extends Rule[LogicalPlan] {
+  class ResolveBroadcastHints(conf: SQLConf) extends Rule[LogicalPlan] {
     private val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
 
     def resolver: Resolver = conf.resolver

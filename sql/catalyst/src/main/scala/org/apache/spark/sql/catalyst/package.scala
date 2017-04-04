@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.internal.SQLConf
-
 /**
  * Catalyst is a library for manipulating relational query plans.  All classes in catalyst are
  * considered an internal API to Spark SQL and are subject to change between minor releases.
@@ -30,10 +28,4 @@ package object catalyst {
    * 2.10.* builds.  See SI-6240 for more details.
    */
   protected[sql] object ScalaReflectionLock
-
-  /**
-   * This class is only here to minimize the change for ticket SPARK-19944
-   * (moves SQLConf from sql/core to sql/catalyst). This class should eventually be removed.
-   */
-  type CatalystConf = SQLConf
 }

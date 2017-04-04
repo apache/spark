@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -42,13 +43,13 @@ import org.apache.spark.sql.types._
  * to resolve attribute references.
  */
 object SimpleAnalyzer extends Analyzer(
-    new SessionCatalog(
-      new InMemoryCatalog,
-      EmptyFunctionRegistry,
-      new SimpleCatalystConf(caseSensitiveAnalysis = true)) {
-      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
-    },
-    new SimpleCatalystConf(caseSensitiveAnalysis = true))
+  new SessionCatalog(
+    new InMemoryCatalog,
+    EmptyFunctionRegistry,
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+    override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+  },
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -89,11 +90,11 @@ object AnalysisContext {
  */
 class Analyzer(
     catalog: SessionCatalog,
-    conf: CatalystConf,
+    conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
-  def this(catalog: SessionCatalog, conf: CatalystConf) = {
+  def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
@@ -2331,7 +2332,7 @@ class Analyzer(
   }
 
   /**
-   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
    * time zone.
    */
   object ResolveTimeZone extends Rule[LogicalPlan] {

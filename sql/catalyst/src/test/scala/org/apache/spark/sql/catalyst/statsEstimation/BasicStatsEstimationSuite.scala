@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 
@@ -116,10 +116,10 @@ class BasicStatsEstimationSuite extends StatsEstimationTestBase {
       expectedStatsCboOff: Statistics): Unit = {
     // Invalidate statistics
     plan.invalidateStatsCache()
-    assert(plan.stats(conf.copy(cboEnabled = true)) == expectedStatsCboOn)
+    assert(plan.stats(conf.copy(SQLConf.CBO_ENABLED -> true)) == expectedStatsCboOn)
 
     plan.invalidateStatsCache()
-    assert(plan.stats(conf.copy(cboEnabled = false)) == expectedStatsCboOff)
+    assert(plan.stats(conf.copy(SQLConf.CBO_ENABLED -> false)) == expectedStatsCboOff)
   }
 
   /** Check estimated stats when it's the same whether cbo is turned on or off. */
@@ -136,6 +136,6 @@ private case class DummyLogicalPlan(
     cboStats: Statistics) extends LogicalPlan {
   override def output: Seq[Attribute] = Nil
   override def children: Seq[LogicalPlan] = Nil
-  override def computeStats(conf: CatalystConf): Statistics =
+  override def computeStats(conf: SQLConf): Statistics =
     if (conf.cboEnabled) cboStats else defaultStats
 }

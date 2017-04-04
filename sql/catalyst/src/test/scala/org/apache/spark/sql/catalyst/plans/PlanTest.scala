@@ -18,18 +18,18 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Provides helper methods for comparing plans.
  */
 abstract class PlanTest extends SparkFunSuite with PredicateHelper {
 
-  protected val conf = SimpleCatalystConf(caseSensitiveAnalysis = true)
+  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
 
   /**
    * Since attribute references are given globally unique ids during analysis,
