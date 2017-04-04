@@ -194,7 +194,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       // totally there are 16 lines, including SparkListenerLogStart event and 15 other events
       assert(lines.size === 16)
 
-      val listenerBus = new LiveListenerBus
+      val listenerBus = new LiveListenerBus(sc)
       val memoryListener = new MemoryListener
       listenerBus.addListener(memoryListener)
 

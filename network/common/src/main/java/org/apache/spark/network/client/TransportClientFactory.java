@@ -88,9 +88,7 @@ public class TransportClientFactory implements Closeable {
   private EventLoopGroup workerGroup;
   private PooledByteBufAllocator pooledAllocator;
 
-  public PooledByteBufAllocator getPooledAllocator() {
-    return pooledAllocator;
-  }
+  public PooledByteBufAllocator getPooledAllocator() { return pooledAllocator; }
 
   public TransportClientFactory(
       TransportContext context,
