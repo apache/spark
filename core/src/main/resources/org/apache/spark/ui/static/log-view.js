@@ -51,7 +51,11 @@ function noNewAlert() {
   window.setTimeout(function () {alert.css("display", "none");}, 4000);
 }
 
+
 function getRESTEndPoint() {
+  // If the worker is served from the master through a proxy (see doc on spark.ui.reverseProxy), 
+  // we need to retain the leading ../proxy/<workerid>/ part of the URL when making REST requests.
+  // Similar logic is contained in executorspage.js function createRESTEndPoint.
   var words = document.baseURI.split('/');
   var ind = words.indexOf("proxy");
   if (ind > 0) {
