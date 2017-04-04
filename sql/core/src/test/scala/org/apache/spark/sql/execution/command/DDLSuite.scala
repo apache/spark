@@ -70,7 +70,6 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       tracksPartitionsInCatalog = true)
   }
 
-
   test("desc table for parquet data source table using in-memory catalog") {
     val tabName = "tab1"
     withTable(tabName) {
