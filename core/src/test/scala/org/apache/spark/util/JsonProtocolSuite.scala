@@ -101,7 +101,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
-      SparkListenerExecutorMetricsUpdate("exec3", null, Seq((1L, 2, 3, accumUpdates)))
+      SparkListenerExecutorMetricsUpdate("exec3", executorMetrics, Seq((1L, 2, 3, accumUpdates)))
     }
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
