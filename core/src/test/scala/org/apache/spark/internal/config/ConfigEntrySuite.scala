@@ -52,25 +52,7 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(dConf) === 20.0)
   }
 
-  test("conf entry: timezone") {
-    val tzStart = TimeZone.getDefault().getID()
-    val conf = new SparkConf()
-    val dConf = ConfigBuilder(testKey("tz"))
-      .stringConf
-      .createWithDefaultFunction(() => TimeZone.getDefault().getID())
 
-    val tzConf = conf.get(dConf)
-    assert(tzStart === tzConf)
-
-    // Pick a timezone which is not the current timezone
-    val availableTzs: Seq[String] = TimeZone.getAvailableIDs();
-    val newTz = availableTzs.find(_ != tzStart).getOrElse(tzStart)
-    TimeZone.setDefault(TimeZone.getTimeZone(newTz))
-
-    val tzChanged = conf.get(dConf)
-    assert(tzChanged === newTz)
-    TimeZone.setDefault(TimeZone.getTimeZone(tzStart))
-  }
 
   test("conf entry: boolean") {
     val conf = new SparkConf()
@@ -271,5 +253,14 @@ class ConfigEntrySuite extends SparkFunSuite {
       .stringConf
       .createWithDefault(null)
     testEntryRef(nullConf, ref(nullConf))
+  }
+
+  test("conf entry : default function") {
+    var data = 0
+    val conf = new SparkConf()
+    val iConf = ConfigBuilder(testKey("int")).intConf.createWithDefaultFunction(() => data)
+    assert(conf.get(iConf) === 0)
+    data = 2
+    assert(conf.get(iConf) === 2)
   }
 }
