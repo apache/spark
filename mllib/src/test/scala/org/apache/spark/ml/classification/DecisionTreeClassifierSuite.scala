@@ -351,6 +351,31 @@ class DecisionTreeClassifierSuite
     dt.fit(df)
   }
 
+  test("SPARK-3159: Check for reducible DecisionTree") {
+    import DecisionTreeClassifierSuite.hasPairsOfSameChildren
+
+    val df: DataFrame = TreeTests.getIrisDataset(sc).toDF()
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxBins(2)
+      .setMinInfoGain(0)
+      .setMinInstancesPerNode(1)
+      .setMaxDepth(3)
+      .setSeed(0)
+
+    val m1 = dt.setCanMergeChildren(false).fit(df)
+    assert(true === hasPairsOfSameChildren(m1.rootNode))
+
+    val m2 = dt.setCanMergeChildren(true).fit(df)
+    assert(false === hasPairsOfSameChildren(m2.rootNode))
+
+    val p1 = m1.transform(df).select(m1.getPredictionCol).collect()
+    val p2 = m2.transform(df).select(m2.getPredictionCol).collect()
+    assert(p1.zip(p2).forall { case (y1, y2) =>
+      y1.getDouble(0) === y2.getDouble(0)
+    })
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
