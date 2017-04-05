@@ -180,7 +180,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
   }
 
-
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -1137,6 +1136,19 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // the fault of the executor where the task was running.
     verify(blacklist, never())
       .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+  }
+
+  test("Schedule tasks based on size of input from ShuffledRDD.") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(4)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, 1, clock = clock)
+    manager.setTaskInputSizeFromShuffledRDD(taskSet.tasks.zip(Seq(1L, 100L, 1000L, 10000L)).toMap)
+    assert(manager.resourceOffer("exec", "host", ANY).get.index === 3)
+    assert(manager.resourceOffer("exec", "host", ANY).get.index === 2)
+    assert(manager.resourceOffer("exec", "host", ANY).get.index === 1)
+    assert(manager.resourceOffer("exec", "host", ANY).get.index === 0)
   }
 
   private def createTaskResult(

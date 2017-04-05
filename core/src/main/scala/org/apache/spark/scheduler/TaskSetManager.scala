@@ -33,8 +33,6 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
-
-// scalastyle:off
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
  * each task, retries tasks if they fail (up to a limited number of times), and
@@ -173,9 +171,14 @@ private[spark] class TaskSetManager(
 
   val sortedPendingTasks = new AtomicBoolean(false)
 
+  val taskInputSizeFromShuffledRDD = HashMap[Task[_], Long]()
+
+  // Add all our tasks to the pending lists. We do this in reverse order
+  // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
     addPendingTask(i)
   }
+
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
    * the set of currently available executors.  This is updated as executors are added and removed.
@@ -542,16 +545,31 @@ private[spark] class TaskSetManager(
     }
   }
 
+  // Visible for testing
+  private[spark] def setTaskInputSizeFromShuffledRDD(inputSize: Map[Task[_], Long]) = {
+    taskInputSizeFromShuffledRDD.clear()
+    inputSize.foreach{
+      case (k, v) => taskInputSizeFromShuffledRDD(k) = v
+    }
+  }
+
   private[this] def getTaskInputSizeFromShuffledRDD(task: Task[_]): Long = {
-    sched.dagScheduler.parentSplitsInShuffledRDD(task.stageId, task.partitionId) match {
-      case Some(parentSplits) =>
-        parentSplits.map {
-          case (shuffleId, splits) =>
-            splits.map(SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
-              .flatMap(_._2.map(_._2)).sum).sum
-        }.sum
+    taskInputSizeFromShuffledRDD.get(task) match {
+      case Some(size) => size
       case None =>
-        0
+        val size =
+          sched.dagScheduler.parentSplitsInShuffledRDD(task.stageId, task.partitionId) match {
+            case Some(parentSplits) =>
+              parentSplits.map {
+                case (shuffleId, splits) =>
+                  splits.map(sched.mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
+                    .flatMap(_._2.map(_._2)).sum).sum
+              }.sum
+            case None =>
+              0L
+          }
+        taskInputSizeFromShuffledRDD(task) = size
+        size
     }
   }
 
@@ -603,6 +621,7 @@ private[spark] class TaskSetManager(
       emptyKeys.foreach(id => pendingTasks.remove(id))
       hasTasks
     }
+
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
         case TaskLocality.PROCESS_LOCAL => moreTasksToRunIn(pendingTasksForExecutor)
@@ -615,11 +634,15 @@ private[spark] class TaskSetManager(
         // be scheduled at a particular locality level, there is no point in waiting
         // for the locality wait timeout (SPARK-4939).
         lastLaunchTime = curTime
+        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)}, " +
+          s"so moving to locality level ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
       } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
         // Jump to the next locality level, and reset lastLaunchTime so that the next locality
         // wait timer doesn't immediately expire
         lastLaunchTime += localityWaits(currentLocalityIndex)
+        logDebug(s"Moving to ${myLocalityLevels(currentLocalityIndex + 1)} after waiting for " +
+          s"${localityWaits(currentLocalityIndex)}ms")
         currentLocalityIndex += 1
       } else {
         return myLocalityLevels(currentLocalityIndex)
