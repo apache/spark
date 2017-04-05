@@ -411,18 +411,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           taskBuilder.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
 
           val labelsBuilder = taskBuilder.getLabelsBuilder
+          val labels = buildMesosLabels().asJava
 
-          taskLabels.split(",").foreach(label => {
-            label.split(":") match {
-              case Array(key, value) =>
-                labelsBuilder.addLabels(Label.newBuilder()
-                  .setKey(key)
-                  .setValue(value)
-                  .build())
-              case _ =>
-                logWarning(s"Unable to parse $label into a key:value label for the task.")
-            }
-          })
+          labelsBuilder.addAllLabels(labels)
 
           taskBuilder.setLabels(labelsBuilder)
 
@@ -438,6 +429,21 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       }
     }
     tasks.toMap
+  }
+
+  private def buildMesosLabels() : List[Label] = {
+   taskLabels.split(",").flatMap(label => {
+      label.split(":") match {
+        case Array(key, value) =>
+          Some(Label.newBuilder()
+            .setKey(key)
+            .setValue(value)
+            .build())
+        case _ =>
+          logWarning(s"Unable to parse $label into a key:value label for the task.")
+          None
+      }
+    }).toList
   }
 
   /** Extracts task needed resources from a list of available resources. */
