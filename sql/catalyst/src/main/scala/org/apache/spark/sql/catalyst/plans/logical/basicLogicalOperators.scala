@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{CatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTypes}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -64,7 +64,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(projectList))
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     if (conf.cboEnabled) {
       ProjectEstimation.estimate(conf, this).getOrElse(super.computeStats(conf))
     } else {
@@ -138,7 +138,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
     child.constraints.union(predicates.toSet)
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     if (conf.cboEnabled) {
       FilterEstimation(this, conf).estimate.getOrElse(super.computeStats(conf))
     } else {
@@ -191,7 +191,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     }
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val leftSize = left.stats(conf).sizeInBytes
     val rightSize = right.stats(conf).sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
@@ -208,7 +208,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
 
   override protected def validConstraints: Set[Expression] = leftConstraints
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     left.stats(conf).copy()
   }
 }
@@ -247,7 +247,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val sizeInBytes = children.map(_.stats(conf).sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -356,7 +356,7 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     def simpleEstimation: Statistics = joinType match {
       case LeftAnti | LeftSemi =>
         // LeftSemi and LeftAnti won't ever be bigger than left
@@ -382,7 +382,7 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   // set isBroadcastable to true so the child will be broadcasted
-  override def computeStats(conf: CatalystConf): Statistics =
+  override def computeStats(conf: SQLConf): Statistics =
     child.stats(conf).copy(isBroadcastable = true)
 }
 
@@ -538,7 +538,7 @@ case class Range(
 
   override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
   }
@@ -571,7 +571,7 @@ case class Aggregate(
     child.constraints.union(getAliasedConstraints(nonAgg))
   }
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     def simpleEstimation: Statistics = {
       if (groupingExpressions.isEmpty) {
         Statistics(
@@ -687,7 +687,7 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val sizeInBytes = super.computeStats(conf).sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -758,7 +758,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
       case _ => None
     }
   }
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val childStats = child.stats(conf)
     val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
@@ -778,7 +778,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
       case _ => None
     }
   }
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val childStats = child.stats(conf)
     if (limit == 0) {
@@ -827,7 +827,7 @@ case class Sample(
 
   override def output: Seq[Attribute] = child.output
 
-  override def computeStats(conf: CatalystConf): Statistics = {
+  override def computeStats(conf: SQLConf): Statistics = {
     val ratio = upperBound - lowerBound
     val childStats = child.stats(conf)
     var sizeInBytes = EstimationUtils.ceil(BigDecimal(childStats.sizeInBytes) * ratio)
@@ -893,7 +893,7 @@ case class RepartitionByExpression(
 case object OneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
-  override def computeStats(conf: CatalystConf): Statistics = Statistics(sizeInBytes = 1)
+  override def computeStats(conf: SQLConf): Statistics = Statistics(sizeInBytes = 1)
 }
 
 /** A logical plan for `dropDuplicates`. */

@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias, View}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
@@ -1382,7 +1383,7 @@ abstract class SessionCatalogSuite extends PlanTest {
     import org.apache.spark.sql.catalyst.dsl.plans._
 
     Seq(true, false) foreach { caseSensitive =>
-      val conf = SimpleCatalystConf(caseSensitive)
+      val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
       val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
       try {
         val analyzer = new Analyzer(catalog, conf)
