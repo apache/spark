@@ -546,7 +546,7 @@ sql <- function(x, ...) {
 
 #' Create a SparkDataFrame from a SparkSQL table or view
 #'
-#' Returns the specified table or view as a SparkDataFrame. The table or view must already exists or
+#' Returns the specified table or view as a SparkDataFrame. The table or view must already exist or
 #' have already been registered in the SparkSession.
 #'
 #' @param tableName the qualified or unqualified name that designates a table or view. If a database
