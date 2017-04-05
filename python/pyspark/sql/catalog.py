@@ -284,7 +284,7 @@ class Catalog(object):
     def recoverPartitions(self, tableName):
         """Recovers all the partitions of the given table and update the catalog.
 
-        Only works with a partitioned table, and not a temporary view.
+        Only works with a partitioned table, and not a view.
         """
         self._jcatalog.recoverPartitions(tableName)
 

@@ -447,7 +447,7 @@ abstract class Catalog {
 
   /**
    * Recovers all the partitions in the directory of a table and update the catalog.
-   * Only works with a partitioned table, and not a temporary view.
+   * Only works with a partitioned table, and not a view.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in the

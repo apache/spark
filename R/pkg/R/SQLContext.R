@@ -544,10 +544,10 @@ sql <- function(x, ...) {
   dispatchFunc("sql(sqlQuery)", x, ...)
 }
 
-#' Create a SparkDataFrame from a SparkSQL table or temporary view
+#' Create a SparkDataFrame from a SparkSQL table or view
 #'
-#' Returns the specified table or temporary view as a SparkDataFrame. The temporary view must have
-#' already been registered in the SparkSession.
+#' Returns the specified table or view as a SparkDataFrame. The table or view must already exists or
+#' have already been registered in the SparkSession.
 #'
 #' @param tableName the qualified or unqualified name that designates a table or view. If a database
 #'                  is specified, it identifies the table/view from the database.
