@@ -299,6 +299,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
     <td>A list of all stages for a given application.</td>
+    <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
