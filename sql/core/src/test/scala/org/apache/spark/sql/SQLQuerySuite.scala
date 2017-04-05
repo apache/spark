@@ -2598,4 +2598,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(!jobStarted.get(), "Command should not trigger a Spark job.")
   }
+
+  test("SPARK-20164: AnalysisException should be tolerant to null query plan") {
+    try {
+      throw new AnalysisException("", None, None, plan = null)
+    } catch {
+      case ae: AnalysisException => assert(ae.plan == null && ae.getMessage == ae.getSimpleMessage)
+    }
+  }
 }

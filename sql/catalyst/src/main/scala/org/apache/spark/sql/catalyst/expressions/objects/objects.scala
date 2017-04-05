@@ -448,6 +448,17 @@ object MapObjects {
   }
 }
 
+case class UnresolvedMapObjects(
+    function: Expression => Expression,
+    child: Expression,
+    customCollectionCls: Option[Class[_]] = None) extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+
+  override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
+    throw new UnsupportedOperationException("not resolved")
+  }
+}
+
 /**
  * Applies the given expression to every element of a collection of items, returning the result
  * as an ArrayType or ObjectType. This is similar to a typical map operation, but where the lambda
@@ -581,17 +592,24 @@ case class MapObjects private(
           // collection
           val collObjectName = s"${cls.getName}$$.MODULE$$"
           val getBuilderVar = s"$collObjectName.newBuilder()"
-
-          (s"""${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
-        $builderValue.sizeHint($dataLength);""",
+          (
+            s"""
+               ${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
+               $builderValue.sizeHint($dataLength);
+             """,
             genValue => s"$builderValue.$$plus$$eq($genValue);",
-            s"(${cls.getName}) $builderValue.result();")
+            s"(${cls.getName}) $builderValue.result();"
+          )
         case None =>
           // array
-          (s"""$convertedType[] $convertedArray = null;
-        $convertedArray = $arrayConstructor;""",
+          (
+            s"""
+               $convertedType[] $convertedArray = null;
+               $convertedArray = $arrayConstructor;
+             """,
             genValue => s"$convertedArray[$loopIndex] = $genValue;",
-            s"new ${classOf[GenericArrayData].getName}($convertedArray);")
+            s"new ${classOf[GenericArrayData].getName}($convertedArray);"
+          )
       }
 
     val code = s"""

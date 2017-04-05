@@ -21,12 +21,10 @@ import java.util.concurrent.Callable
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogUtils}
@@ -38,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPa
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,7 +48,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -217,8 +215,6 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     val table = r.tableMeta
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val cache = sparkSession.sessionState.catalog.tableRelationCache
-    val withHiveSupport =
-      sparkSession.sparkContext.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive"
 
     val plan = cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
@@ -233,8 +229,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             bucketSpec = table.bucketSpec,
             className = table.provider.get,
             options = table.storage.properties ++ pathOption,
-            // TODO: improve `InMemoryCatalog` and remove this limitation.
-            catalogTable = if (withHiveSupport) Some(table) else None)
+            catalogTable = Some(table))
 
         LogicalRelation(
           dataSource.resolveRelation(checkFilesExist = false),

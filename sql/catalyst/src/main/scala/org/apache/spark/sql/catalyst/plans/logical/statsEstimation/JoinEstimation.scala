@@ -21,12 +21,12 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.internal.SQLConf
 
 
 object JoinEstimation extends Logging {
@@ -34,7 +34,7 @@ object JoinEstimation extends Logging {
    * Estimate statistics after join. Return `None` if the join type is not supported, or we don't
    * have enough statistics for estimation.
    */
-  def estimate(conf: CatalystConf, join: Join): Option[Statistics] = {
+  def estimate(conf: SQLConf, join: Join): Option[Statistics] = {
     join.joinType match {
       case Inner | Cross | LeftOuter | RightOuter | FullOuter =>
         InnerOuterEstimation(conf, join).doEstimate()
@@ -47,7 +47,7 @@ object JoinEstimation extends Logging {
   }
 }
 
-case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging {
+case class InnerOuterEstimation(conf: SQLConf, join: Join) extends Logging {
 
   private val leftStats = join.left.stats(conf)
   private val rightStats = join.right.stats(conf)
@@ -288,7 +288,7 @@ case class InnerOuterEstimation(conf: CatalystConf, join: Join) extends Logging 
   }
 }
 
-case class LeftSemiAntiEstimation(conf: CatalystConf, join: Join) {
+case class LeftSemiAntiEstimation(conf: SQLConf, join: Join) {
   def doEstimate(): Option[Statistics] = {
     // TODO: It's error-prone to estimate cardinalities for LeftSemi and LeftAnti based on basic
     // column stats. Now we just propagate the statistics from left side. We should do more
