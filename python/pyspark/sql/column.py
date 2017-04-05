@@ -250,35 +250,44 @@ class Column(object):
         raise TypeError("Column is not iterable")
 
     # string methods
-    _rlike_doc = """ Return a Boolean :class:`Column` based on a regex match.
-                     :param other: an extended regex expression
+    _rlike_doc = """
+    Return a Boolean :class:`Column` based on a regex match.
 
-                     >>> df.filter(df.name.rlike('ice$')).collect()
-                     [Row(name=u'Alice', age=1)]
-                 """
-    _like_doc = """ Return a Boolean :class:`Column` based on a SQL LIKE match.
-                    :param other: a SQL LIKE pattern\n
-                    See :func:`rlike` for a regex version
+    :param other: an extended regex expression
 
-                    >>> df.filter(df.name.like('Al%')).collect()
-                    [Row(name=u'Alice', age=1)]
-                """
-    _startswith_doc = """ Return a Boolean :class:`Column` based on a string match.\n
-                          :param other: string at end of line (do not use a regex `^`)
+    >>> df.filter(df.name.rlike('ice$')).collect()
+    [Row(name=u'Alice', age=1)]
+    """
+    _like_doc = """
+    Return a Boolean :class:`Column` based on a SQL LIKE match.
 
-                          >>> df.filter(df.name.startswith('Al')).collect()
-                          [Row(name=u'Alice', age=1)]
-                          >>> df.filter(df.name.startswith('^Al')).collect()
-                          []
-                     """
-    _endswith_doc = """ Return a Boolean :class:`Column` based on matching end of string.\n
-                        :param other: string at end of line (do not use a regex `$`)
+    :param other: a SQL LIKE pattern
 
-                        >>> df.filter(df.name.endswith('ice')).collect()
-                        [Row(name=u'Alice', age=1)]
-                        >>> df.filter(df.name.endswith('ice$')).collect()
-                        []
-                    """
+    See :func:`rlike` for a regex version
+
+    >>> df.filter(df.name.like('Al%')).collect()
+    [Row(name=u'Alice', age=1)]
+    """
+    _startswith_doc = """
+    Return a Boolean :class:`Column` based on a string match.
+
+    :param other: string at end of line (do not use a regex `^`)
+
+    >>> df.filter(df.name.startswith('Al')).collect()
+    [Row(name=u'Alice', age=1)]
+    >>> df.filter(df.name.startswith('^Al')).collect()
+    []
+    """
+    _endswith_doc = """
+    Return a Boolean :class:`Column` based on matching end of string.
+
+    :param other: string at end of line (do not use a regex `$`)
+
+    >>> df.filter(df.name.endswith('ice')).collect()
+    [Row(name=u'Alice', age=1)]
+    >>> df.filter(df.name.endswith('ice$')).collect()
+    []
+    """
 
     contains = _bin_op("contains")
     rlike = _bin_op("rlike", _rlike_doc)
@@ -333,24 +342,26 @@ class Column(object):
     desc = _unary_op("desc", "Returns a sort expression based on the"
                              " descending order of the given column name.")
 
-    _isNull_doc = """ True if the current expression is null. Often combined with 
-                      :func:`DataFrame.filter` to select rows with null values.
+    _isNull_doc = """
+    True if the current expression is null. Often combined with
+    :func:`DataFrame.filter` to select rows with null values.
 
-                      >>> df2.collect()
-                      [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
-                      >>> df2.filter(df2.height.isNull).collect()
-                      [Row(name=u'Alice', height=None)]
-                  """
-    _isNotNull_doc = """ True if the current expression is null. Often combined with 
-                         :func:`DataFrame.filter` to select rows with non-null values.
+    >>> df2.collect()
+    [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
+    >>> df2.filter(df2.height.isNull).collect()
+    [Row(name=u'Alice', height=None)]
+    """
+    _isNotNull_doc = """
+    True if the current expression is null. Often combined with
+    :func:`DataFrame.filter` to select rows with non-null values.
 
-                         >>> df2.collect()
-                         [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
-                         >>> df2.filter(df2.height.isNotNull).collect()
-                         [Row(name=u'Tom', height=80)]
-                     """
+    >>> df2.collect()
+    [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None)]
+    >>> df2.filter(df2.height.isNotNull).collect()
+    [Row(name=u'Tom', height=80)]
+    """
 
-    isNull = _unary_op("isNull", _isNull_doc) 
+    isNull = _unary_op("isNull", _isNull_doc)
     isNotNull = _unary_op("isNotNull", _isNotNull_doc)
 
     @since(1.3)
