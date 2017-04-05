@@ -126,11 +126,11 @@ private[spark] class TaskSetManager(
   // of failures.
   // Duplicates are handled in dequeueTaskFromList, which ensures that a
   // task hasn't already started running before launching it.
-  private var pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
+  private val pendingTasksForExecutor = new HashMap[String, ArrayBuffer[Int]]
 
   // Set of pending tasks for each host. Similar to pendingTasksForExecutor,
   // but at host level.
-  private var pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
+  private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
   // Set of pending tasks for each rack -- similar to the above.
   private var pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
