@@ -164,7 +164,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals)
     MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
-      dataset.as[LabeledPoint], estimator, 2, modelEquals)
+      dataset.as[LabeledPoint], estimator, 2, modelEquals, outlierRatio = 3)
     MLTestingUtils.testOversamplingVsWeighting[LinearSVCModel, LinearSVC](
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
