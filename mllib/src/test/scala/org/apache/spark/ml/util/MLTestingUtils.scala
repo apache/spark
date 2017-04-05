@@ -260,12 +260,13 @@ object MLTestingUtils extends SparkFunSuite {
       data: Dataset[LabeledPoint],
       estimator: E with HasWeightCol,
       numClasses: Int,
-      modelEquals: (M, M) => Unit): Unit = {
+      modelEquals: (M, M) => Unit,
+      outlierRatio: Int): Unit = {
     import data.sqlContext.implicits._
     val outlierDS = data.withColumn("weight", lit(1.0)).as[Instance].flatMap {
       case Instance(l, w, f) =>
         val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
-        List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
+        List.fill(outlierRatio)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
     val trueModel = estimator.set(estimator.weightCol, "").fit(data)
     val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)
