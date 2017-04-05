@@ -516,6 +516,26 @@ See the [configuration page](configuration.html) for information on Spark config
     Fetcher Cache</a>
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.checkpoint</code></td>
+  <td>false</td>
+  <td>
+    If set, agents running tasks started by this framework will write the framework pid, executor pids and status updates to disk. 
+    If the agent exits (e.g., due to a crash or as part of upgrading Mesos), this checkpointed data allows the restarted agent to 
+    reconnect to executors that were started by the old instance of the agent. Enabling checkpointing improves fault tolerance,
+    at the cost of a (usually small) increase in disk I/O.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.failoverTimeout</code></td>
+  <td>0.0</td>
+  <td>
+    The amount of time (in seconds) that the master will wait for the scheduler to failover before it tears down the framework 
+    by killing all its tasks/executors. This should be non-zero if a framework expects to reconnect after a failure and not lose 
+    its tasks/executors.
+    NOTE: To avoid accidental destruction of tasks, productionframeworks typically set this to a large value (e.g., 1 week).
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
