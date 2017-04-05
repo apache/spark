@@ -350,7 +350,9 @@ private[tree] object LearningNode {
       if (node == null) {
         (None, 0)
 
-      } else if (node.isLeaf) {
+      } else if (node.isLeaf ||
+                 // sometimes, node is terminal while its isLeaf is not set.
+                 (node.leftChild.isEmpty && node.rightChild.isEmpty)) {
         (Some(node.stats.impurityCalculator.predict), 0)
 
       } else {
