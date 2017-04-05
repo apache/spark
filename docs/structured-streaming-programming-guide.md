@@ -1,6 +1,6 @@
 ---
 layout: global
-displayTitle: Structured Streaming Programming Guide [Alpha]
+displayTitle: Structured Streaming Programming Guide [Experimental]
 title: Structured Streaming Programming Guide
 ---
 
@@ -871,6 +871,65 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 </div>
 </div>
 
+### Streaming Deduplication
+You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
+
+- *With watermark* - If there is a upper bound on how late a duplicate record may arrive, then you can define a watermark on a event time column and deduplicate using both the guid and the event time columns. The query will use the watermark to remove old state data from past records that are not expected to get any duplicates any more. This bounds the amount of the state the query has to maintain.
+
+- *Without watermark* - Since there are no bounds on when a duplicate record may arrive, the query stores the data from all the past records as state.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val streamingDf = spark.readStream. ...  // columns: guid, eventTime, ...
+
+// Without watermark using guid column
+streamingDf.dropDuplicates("guid")
+
+// With watermark using guid and eventTime columns
+streamingDf
+  .withWatermark("eventTime", "10 seconds")
+  .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> streamingDf = spark.readStream. ...;  // columns: guid, eventTime, ...
+
+// Without watermark using guid column
+streamingDf.dropDuplicates("guid");
+
+// With watermark using guid and eventTime columns
+streamingDf
+  .withWatermark("eventTime", "10 seconds")
+  .dropDuplicates("guid", "eventTime");
+{% endhighlight %}
+
+
+</div>
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+streamingDf = spark.readStream. ...
+
+// Without watermark using guid column
+streamingDf.dropDuplicates("guid")
+
+// With watermark using guid and eventTime columns
+streamingDf \
+  .withWatermark("eventTime", "10 seconds") \
+  .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+</div>
+
+### Arbitrary Stateful Operations
+Many uscases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)). 
+
 ### Unsupported Operations
 There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
 Some of them are as follows.
@@ -891,7 +950,7 @@ Some of them are as follows.
 
     + Right outer join with a streaming Dataset on the left is not supported
 
-- Any kind of joins between two streaming Datasets are not yet supported.
+- Any kind of joins between two streaming Datasets is not yet supported.
 
 In addition, there are some Dataset methods that will not work on streaming Datasets. They are actions that will immediately run queries and return results, which does not make sense on a streaming Dataset. Rather, those functionalities can be done by explicitly starting a streaming query (see the next section regarding that).
 
@@ -952,13 +1011,6 @@ Here is the compatibility matrix.
     <th>Notes</th>        
   </tr>
   <tr>
-    <td colspan="2" style="vertical-align: middle;">Queries without aggregation</td>
-    <td style="vertical-align: middle;">Append, Update</td>
-    <td style="vertical-align: middle;">
-        Complete mode not supported as it is infeasible to keep all data in the Result Table.
-    </td>
-  </tr>
-  <tr>
     <td rowspan="2" style="vertical-align: middle;">Queries with aggregation</td>
     <td style="vertical-align: middle;">Aggregation on event-time with watermark</td>
     <td style="vertical-align: middle;">Append, Update, Complete</td>
@@ -987,12 +1039,40 @@ Here is the compatibility matrix.
     </td>  
   </tr>
   <tr>
+    <td colspan="2" style="vertical-align: middle;">Queries with <code>mapGroupsWithState</code></td>
+    <td style="vertical-align: middle;">Update</td>
+    <td style="vertical-align: middle;"></td>
+  </tr>
+  <tr>
+    <td rowspan="2" style="vertical-align: middle;">Queries with <code>flatMapGroupsWithState</code></td>
+    <td style="vertical-align: middle;">Append operation mode</td>
+    <td style="vertical-align: middle;">Append</td>
+    <td style="vertical-align: middle;">
+      Aggregations are allowed after <code>flatMapGroupsWithState</code>.
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align: middle;">Update operation mode</td>
+    <td style="vertical-align: middle;">Update</td>
+    <td style="vertical-align: middle;">
+      Aggregations not allowed after <code>flatMapGroupsWithState</code>.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" style="vertical-align: middle;">Other queries</td>
+    <td style="vertical-align: middle;">Append, Update</td>
+    <td style="vertical-align: middle;">
+      Complete mode not supported as it is infeasible to keep all unaggregated data in the Result Table.
+    </td>
+  </tr>
+  <tr>
     <td></td>
     <td></td>
     <td></td>
     <td></td>
   </tr>
 </table>
+
 
 #### Output Sinks
 There are a few types of built-in output sinks.
