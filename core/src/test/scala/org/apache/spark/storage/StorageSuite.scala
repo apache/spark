@@ -362,8 +362,8 @@ class StorageSuite extends SparkFunSuite {
 
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
-    assert(status.onHeapMemUsed === actualOnHeapMemUsed)
-    assert(status.offHeapMemUsed === actualOffHeapMemUsed)
+    assert(status.onHeapMemUsed.get === actualOnHeapMemUsed)
+    assert(status.offHeapMemUsed.get === actualOffHeapMemUsed)
 
     assert(status.memRemaining === status.maxMem - actualMemUsed)
     assert(status.onHeapMemRemaining.get === status.maxOnHeapMem.get - actualOnHeapMemUsed)
@@ -379,8 +379,8 @@ class StorageSuite extends SparkFunSuite {
     status.updateBlock(RDDBlockId(1, 1), BlockStatus(offheap, 4L, 0L))
     assert(status.memUsed === actualMemUsed)
     assert(status.diskUsed === actualDiskUsed)
-    assert(status.onHeapMemUsed === actualOnHeapMemUsed)
-    assert(status.offHeapMemUsed === actualOffHeapMemUsed)
+    assert(status.onHeapMemUsed.get === actualOnHeapMemUsed)
+    assert(status.offHeapMemUsed.get === actualOffHeapMemUsed)
 
     status.removeBlock(TestBlockId("fire"))
     status.removeBlock(TestBlockId("man"))
@@ -402,8 +402,8 @@ class StorageSuite extends SparkFunSuite {
 
     assert(status.memUsed === 0L)
     assert(status.diskUsed === 0L)
-    assert(status.onHeapMemUsed === 0L)
-    assert(status.offHeapMemUsed === 0L)
+    assert(status.onHeapMemUsed === None)
+    assert(status.offHeapMemUsed === None)
 
     assert(status.memRemaining === status.maxMem)
     assert(status.onHeapMemRemaining === None)

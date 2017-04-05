@@ -156,12 +156,16 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val dataDistributions0 =
         (updatedRddJson \ "dataDistribution").extract[Seq[RDDDataDistribution]]
       dataDistributions0.length should be (1)
-      val distribution0 = dataDistributions0.head
-      distribution0.memoryUsed should be (distribution0.onHeapMemoryUsed)
-      distribution0.memoryRemaining should be (
-        distribution0.onHeapMemoryRemaining + distribution0.offHeapMemoryRemaining)
-      distribution0.onHeapMemoryUsed should not be (0L)
-      distribution0.offHeapMemoryUsed should be (0L)
+      val dist0 = dataDistributions0.head
+
+      dist0.onHeapMemoryUsed should not be (None)
+      dist0.memoryUsed should be (dist0.onHeapMemoryUsed.get)
+      dist0.onHeapMemoryRemaining should not be (None)
+      dist0.offHeapMemoryRemaining should not be (None)
+      dist0.memoryRemaining should be (
+        dist0.onHeapMemoryRemaining.get + dist0.offHeapMemoryRemaining.get)
+      dist0.onHeapMemoryUsed should not be (Some(0L))
+      dist0.offHeapMemoryUsed should be (Some(0L))
 
       rdd.unpersist()
       rdd.persist(StorageLevels.OFF_HEAP).count()
@@ -171,12 +175,16 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val dataDistributions1 =
         (updatedRddJson1 \ "dataDistribution").extract[Seq[RDDDataDistribution]]
       dataDistributions1.length should be (1)
-      val distribution1 = dataDistributions1.head
-      distribution1.memoryUsed should be (distribution1.offHeapMemoryUsed)
-      distribution1.memoryRemaining should be (
-        distribution1.onHeapMemoryRemaining + distribution1.offHeapMemoryRemaining)
-      distribution1.onHeapMemoryUsed should be (0L)
-      distribution1.offHeapMemoryUsed should not be (0L)
+      val dist1 = dataDistributions1.head
+
+      dist1.offHeapMemoryUsed should not be (None)
+      dist1.memoryUsed should be (dist1.offHeapMemoryUsed.get)
+      dist1.onHeapMemoryRemaining should not be (None)
+      dist1.offHeapMemoryRemaining should not be (None)
+      dist1.memoryRemaining should be (
+        dist1.onHeapMemoryRemaining.get + dist1.offHeapMemoryRemaining.get)
+      dist1.onHeapMemoryUsed should be (Some(0L))
+      dist1.offHeapMemoryUsed should not be (Some(0L))
     }
   }
 

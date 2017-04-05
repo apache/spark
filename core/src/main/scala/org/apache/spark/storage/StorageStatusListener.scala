@@ -74,6 +74,8 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
     synchronized {
       val blockManagerId = blockManagerAdded.blockManagerId
       val executorId = blockManagerId.executorId
+      // The onHeap and offHeap memory are always defined for new applications,
+      // but they can be missing if we are replaying old event logs.
       val storageStatus = new StorageStatus(blockManagerId, blockManagerAdded.maxMem,
         blockManagerAdded.maxOnHeapMem, blockManagerAdded.maxOffHeapMem)
       executorIdToStorageStatus(executorId) = storageStatus

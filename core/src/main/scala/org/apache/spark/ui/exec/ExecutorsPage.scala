@@ -115,9 +115,8 @@ private[spark] object ExecutorsPage {
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
-    // Only maxOnHeapMem and maxOffHeapMem are defined these two fields are not None.
-    val onHeapMemUsed = status.maxOnHeapMem.map(_ => status.onHeapMemUsed)
-    val offHeapMemUsed = status.maxOffHeapMem.map(_ => status.offHeapMemUsed)
+    val onHeapMemUsed = status.onHeapMemUsed
+    val offHeapMemUsed = status.offHeapMemUsed
     val maxOnHeapMem = status.maxOnHeapMem
     val maxOffHeapMem = status.maxOffHeapMem
     val diskUsed = status.diskUsed

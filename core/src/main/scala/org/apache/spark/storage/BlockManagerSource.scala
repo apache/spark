@@ -54,10 +54,10 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager)
     _.getStorageStatus.map(_.memUsed).sum)
 
   registerGauge(MetricRegistry.name("memory", "onHeapMemUsed_MB"),
-    _.getStorageStatus.map(_.onHeapMemUsed).sum)
+    _.getStorageStatus.map(_.onHeapMemUsed.getOrElse(0L)).sum)
 
   registerGauge(MetricRegistry.name("memory", "offHeapMemUsed_MB"),
-    _.getStorageStatus.map(_.offHeapMemUsed).sum)
+    _.getStorageStatus.map(_.offHeapMemUsed.getOrElse(0L)).sum)
 
   registerGauge(MetricRegistry.name("disk", "diskSpaceUsed_MB"),
     _.getStorageStatus.map(_.diskUsed).sum)

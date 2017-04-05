@@ -37,8 +37,6 @@ import org.apache.spark.internal.Logging
 @DeveloperApi
 class StorageStatus(
     val blockManagerId: BlockManagerId,
-    // Explicitly adding this maxMemory field to handle maxOnHeapMem and maxOffHeapMem not
-    // existing issue, this happened when trying to replay old event log.
     val maxMemory: Long,
     val maxOnHeapMem: Option[Long],
     val maxOffHeapMem: Option[Long]) {
@@ -185,32 +183,38 @@ class StorageStatus(
   def memRemaining: Long = maxMem - memUsed
 
   /** Return the memory used by caching RDDs */
-  def cacheSize: Long = onHeapCacheSize + offHeapCacheSize
+  def cacheSize: Long = onHeapCacheSize.getOrElse(0L) + offHeapCacheSize.getOrElse(0L)
 
   /** Return the memory used by this block manager. */
-  def memUsed: Long = onHeapMemUsed + offHeapMemUsed
+  def memUsed: Long = onHeapMemUsed.getOrElse(0L) + offHeapMemUsed.getOrElse(0L)
 
   /** Return the on-heap memory remaining in this block manager. */
-  def onHeapMemRemaining: Option[Long] = maxOnHeapMem.map(_ - onHeapMemUsed)
+  def onHeapMemRemaining: Option[Long] =
+    for (m <- maxOnHeapMem; o <- onHeapMemUsed) yield m - o
 
   /** Return the off-heap memory remaining in this block manager. */
-  def offHeapMemRemaining: Option[Long] = maxOffHeapMem.map(_ - offHeapMemUsed)
+  def offHeapMemRemaining: Option[Long] =
+    for (m <- maxOffHeapMem; o <- offHeapMemUsed) yield m - o
 
   /** Return the on-heap memory used by this block manager. */
-  def onHeapMemUsed: Long = _nonRddStorageInfo.onHeapUsage + onHeapCacheSize
+  def onHeapMemUsed: Option[Long] = onHeapCacheSize.map(_ + _nonRddStorageInfo.onHeapUsage)
 
   /** Return the off-heap memory used by this block manager. */
-  def offHeapMemUsed: Long = _nonRddStorageInfo.offHeapUsage + offHeapCacheSize
+  def offHeapMemUsed: Option[Long] = offHeapCacheSize.map(_ + _nonRddStorageInfo.offHeapUsage)
 
   /** Return the memory used by on-heap caching RDDs */
-  def onHeapCacheSize: Long = _rddStorageInfo.collect {
+  def onHeapCacheSize: Option[Long] = maxOnHeapMem.map { _ =>
+    _rddStorageInfo.collect {
       case (_, storageInfo) if !storageInfo.level.useOffHeap => storageInfo.memoryUsage
-  }.sum
+    }.sum
+  }
 
   /** Return the memory used by off-heap caching RDDs */
-  def offHeapCacheSize: Long = _rddStorageInfo.collect {
+  def offHeapCacheSize: Option[Long] = maxOffHeapMem.map { _ =>
+    _rddStorageInfo.collect {
       case (_, storageInfo) if storageInfo.level.useOffHeap => storageInfo.memoryUsage
-  }.sum
+    }.sum
+  }
 
   /** Return the disk space used by this block manager. */
   def diskUsed: Long = _nonRddStorageInfo.diskUsage + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum

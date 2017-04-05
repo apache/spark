@@ -116,10 +116,10 @@ class RDDDataDistribution private[spark](
     val memoryUsed: Long,
     val memoryRemaining: Long,
     val diskUsed: Long,
-    val onHeapMemoryUsed: Long,
-    val offHeapMemoryUsed: Long,
-    val onHeapMemoryRemaining: Long,
-    val offHeapMemoryRemaining: Long)
+    val onHeapMemoryUsed: Option[Long],
+    val offHeapMemoryUsed: Option[Long],
+    val onHeapMemoryRemaining: Option[Long],
+    val offHeapMemoryRemaining: Option[Long])
 
 class RDDPartitionInfo private[spark](
     val blockName: String,

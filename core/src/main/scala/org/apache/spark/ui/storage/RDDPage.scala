@@ -156,12 +156,12 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     <tr>
       <td>{worker.address}</td>
       <td>
-        {Utils.bytesToString(worker.onHeapMemoryUsed)}
-        ({Utils.bytesToString(worker.onHeapMemoryRemaining)} Remaining)
+        {Utils.bytesToString(worker.onHeapMemoryUsed.getOrElse(0L))}
+        ({Utils.bytesToString(worker.onHeapMemoryRemaining.getOrElse(0L))} Remaining)
       </td>
       <td>
-        {Utils.bytesToString(worker.offHeapMemoryUsed)}
-        ({Utils.bytesToString(worker.offHeapMemoryRemaining)} Remaining)
+        {Utils.bytesToString(worker.offHeapMemoryUsed.getOrElse(0L))}
+        ({Utils.bytesToString(worker.offHeapMemoryRemaining.getOrElse(0L))} Remaining)
       </td>
       <td>{Utils.bytesToString(worker.diskUsed)}</td>
     </tr>
