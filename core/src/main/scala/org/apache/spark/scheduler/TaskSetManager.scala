@@ -133,7 +133,7 @@ private[spark] class TaskSetManager(
   private val pendingTasksForHost = new HashMap[String, ArrayBuffer[Int]]
 
   // Set of pending tasks for each rack -- similar to the above.
-  private var pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
+  private val pendingTasksForRack = new HashMap[String, ArrayBuffer[Int]]
 
   // Set containing pending tasks with no locality preferences.
   private[scheduler] var pendingTasksWithNoPrefs = new ArrayBuffer[Int]
