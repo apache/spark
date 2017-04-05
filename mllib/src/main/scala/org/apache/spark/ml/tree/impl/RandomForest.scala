@@ -229,10 +229,10 @@ private[spark] object RandomForest extends Logging {
         .zipWithIndex
         .map(_.swap)
         .filter(_._2 > 0)
-        .map{ case (id, count) => s"tree: $id, num of nodes merged: $count" }
-        .mkString("", "\n", "\n")
+        .map { case (id, count) => s"tree: $id, num of nodes merged: $count" }
+        .mkString("Merge info:\n", "\n", "\n")
 
-      logInfo("Merge info: \n" + mergeCountsOfTreesInfo)
+      logInfo(mergeCountsOfTreesInfo)
     }
 
     val numFeatures = metadata.numFeatures
