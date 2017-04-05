@@ -49,15 +49,7 @@ case class StarSchemaDetection(conf: SQLConf) extends PredicateHelper {
    * The algorithm currently returns only the star join with the largest fact table.
    * Choosing the largest fact table on the driving arm to avoid large inners is in
    * general a good heuristic. This restriction will be lifted to observe multiple
-   * star joins e.g.
-   *
-   * F1-D1-D2
-   * |
-   * F2-D3_D4
-   *
-   * or
-   *
-   * F1-D1-D2-(D3-S31-S32)
+   * star joins.
    *
    * The highlights of the algorithm are the following:
    *
