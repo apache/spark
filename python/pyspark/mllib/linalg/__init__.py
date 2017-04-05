@@ -75,8 +75,9 @@ def _convert_to_vector(l):
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
         # Make sure the converted csc_matrix has sorted indices.
-        csc = l.tocsr().tocsc()
-        assert csc.has_sorted_indices, "Converted CSC matrix should have sorted indices"
+        csc = l.tocsc()
+        if not csc.has_sorted_indices:
+            csc.sort_indices()
         return SparseVector(l.shape[0], csc.indices, csc.data)
     else:
         raise TypeError("Cannot convert type %s into Vector" % type(l))
