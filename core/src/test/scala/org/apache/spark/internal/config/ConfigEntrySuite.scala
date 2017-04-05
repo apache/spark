@@ -17,7 +17,6 @@
 
 package org.apache.spark.internal.config
 
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -51,8 +50,6 @@ class ConfigEntrySuite extends SparkFunSuite {
     conf.set(dConf, 20.0)
     assert(conf.get(dConf) === 20.0)
   }
-
-
 
   test("conf entry: boolean") {
     val conf = new SparkConf()
@@ -258,7 +255,7 @@ class ConfigEntrySuite extends SparkFunSuite {
   test("conf entry : default function") {
     var data = 0
     val conf = new SparkConf()
-    val iConf = ConfigBuilder(testKey("int")).intConf.createWithDefaultFunction(() => data)
+    val iConf = ConfigBuilder(testKey("intval")).intConf.createWithDefaultFunction(() => data)
     assert(conf.get(iConf) === 0)
     data = 2
     assert(conf.get(iConf) === 2)
