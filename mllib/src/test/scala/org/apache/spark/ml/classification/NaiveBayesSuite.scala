@@ -178,7 +178,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       MLTestingUtils.testArbitrarilyScaledWeights[NaiveBayesModel, NaiveBayes](
         dataset.as[LabeledPoint], estimatorNoSmoothing, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[NaiveBayesModel, NaiveBayes](
-        dataset.as[LabeledPoint], estimatorWithSmoothing, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimatorWithSmoothing, numClasses, modelEquals, outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[NaiveBayesModel, NaiveBayes](
         dataset.as[LabeledPoint], estimatorWithSmoothing, modelEquals, seed)
     }

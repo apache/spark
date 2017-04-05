@@ -1874,7 +1874,7 @@ class LogisticRegressionSuite
       MLTestingUtils.testArbitrarilyScaledWeights[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LogisticRegressionModel, LogisticRegression](
-        dataset.as[LabeledPoint], estimator, numClasses, modelEquals)
+        dataset.as[LabeledPoint], estimator, numClasses, modelEquals, outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[LogisticRegressionModel, LogisticRegression](
         dataset.as[LabeledPoint], estimator, modelEquals, seed)
     }
