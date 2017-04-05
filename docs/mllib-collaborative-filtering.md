@@ -55,6 +55,17 @@ This approach is named "ALS-WR" and discussed in the paper
 It makes `lambda` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
+### Scaling of the regularization parameter
+
+Since v1.1, we scale the regularization parameter `lambda` in solving each least squares problem by
+the number of ratings the user generated in updating user factors,
+or the number of ratings the product received in updating product factors.
+This approach is named "ALS-WR" and discussed in the paper
+"[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
+It makes `lambda` less dependent on the scale of the dataset.
+So we can apply the best parameter learned from a sampled subset to the full dataset
+and expect similar performance.
+
 ## Examples
 
 <div class="codetabs">
