@@ -169,7 +169,7 @@ private[spark] class TaskSetManager(
     t.epoch = epoch
   }
 
-  val sortedPendingTasks = new AtomicBoolean(false)
+  private val sortedPendingTasks = new AtomicBoolean(false)
 
   val taskInputSizeFromShuffledRDD = HashMap[Task[_], Long]()
 
@@ -443,8 +443,7 @@ private[spark] class TaskSetManager(
         blacklist.isExecutorBlacklistedForTaskSet(execId)
     }
     if (!isZombie && !offerBlacklisted) {
-      if (!sortedPendingTasks.get()) {
-        sortedPendingTasks.set(true)
+      if (sortedPendingTasks.compareAndSet(false, true)) {
         sortPendingTasks()
       }
 
@@ -524,33 +523,29 @@ private[spark] class TaskSetManager(
 
   private[this] def sortPendingTasks(): Unit = {
     val taskIndexs = (0 until numTasks).toArray
-    implicit def ord = new Ordering[Int] {
-      override def compare(x: Int, y: Int): Int =
-        getTaskInputSizeFromShuffledRDD(tasks(x)) compare
-          getTaskInputSizeFromShuffledRDD(tasks(y))
+    def ordFunc(x: Int, y: Int): Boolean = {
+      getTaskInputSizeFromShuffledRDD(tasks(x)) < getTaskInputSizeFromShuffledRDD(tasks(y))
     }
     if (tasks.nonEmpty) {
       // Sort the tasks based on their input size from ShuffledRDD.
       pendingTasksForExecutor.foreach {
-        case (k, v) => pendingTasksForExecutor(k) = v.sorted
+        case (k, v) => pendingTasksForExecutor(k) = v.sortWith(ordFunc)
       }
       pendingTasksForHost.foreach {
-        case (k, v) => pendingTasksForHost(k) = v.sorted
+        case (k, v) => pendingTasksForHost(k) = v.sortWith(ordFunc)
       }
       pendingTasksForRack.foreach {
-        case (k, v) => pendingTasksForRack(k) = v.sorted
+        case (k, v) => pendingTasksForRack(k) = v.sortWith(ordFunc)
       }
-      pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.sorted
-      allPendingTasks = allPendingTasks.sorted
+      pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.sortWith(ordFunc)
+      allPendingTasks = allPendingTasks.sortWith(ordFunc)
     }
   }
 
   // Visible for testing
   private[spark] def setTaskInputSizeFromShuffledRDD(inputSize: Map[Task[_], Long]) = {
     taskInputSizeFromShuffledRDD.clear()
-    inputSize.foreach{
-      case (k, v) => taskInputSizeFromShuffledRDD(k) = v
-    }
+    taskInputSizeFromShuffledRDD ++= inputSize
   }
 
   private[this] def getTaskInputSizeFromShuffledRDD(task: Task[_]): Long = {
