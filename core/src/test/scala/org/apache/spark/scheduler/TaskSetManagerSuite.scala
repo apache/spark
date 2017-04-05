@@ -1144,9 +1144,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(4)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, 1, clock = clock)
-    manager.setTaskInputSizeFromShuffledRDD(taskSet.tasks.zip(Seq(1L, 100L, 1000L, 10000L)).toMap)
-    assert(manager.resourceOffer("exec", "host", ANY).get.index === 3)
+    manager.setTaskInputSizeFromShuffledRDD(taskSet.tasks.zip(Seq(1L, 100L, 10000L, 1000L)).toMap)
     assert(manager.resourceOffer("exec", "host", ANY).get.index === 2)
+    assert(manager.resourceOffer("exec", "host", ANY).get.index === 3)
     assert(manager.resourceOffer("exec", "host", ANY).get.index === 1)
     assert(manager.resourceOffer("exec", "host", ANY).get.index === 0)
   }
