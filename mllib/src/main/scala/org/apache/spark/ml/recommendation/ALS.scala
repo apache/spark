@@ -76,8 +76,6 @@ import org.apache.spark.util.random.XORShiftRandom
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
   with DefaultParamsWritable {
 
-  import org.apache.spark.ml.recommendation.ALS.Rating
-
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("als"))
 
@@ -214,13 +212,6 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 @DeveloperApi
 object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
 
-  /**
-   * :: DeveloperApi ::
-   * Rating class for better code readability.
-   */
-  @DeveloperApi
-  case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
-
   @Since("1.6.0")
   override def load(path: String): ALS = super.load(path)
 
@@ -355,51 +346,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       blockRatings.unpersist()
     }
     (userIdAndFactors, itemIdAndFactors)
-  }
-
-  /**
-   * Factor block that stores factors (Array[Float]) in an Array.
-   */
-  private type FactorBlock = Array[Array[Float]]
-
-  /**
-   * Out-link block that stores, for each dst (item/user) block, which src (user/item) factors to
-   * send. For example, outLinkBlock(0) contains the local indices (not the original src IDs) of the
-   * src factors in this block to send to dst block 0.
-   */
-  private type OutBlock = Array[Array[Int]]
-
-  /**
-   * In-link block for computing src (user/item) factors. This includes the original src IDs
-   * of the elements within this block as well as encoded dst (item/user) indices and corresponding
-   * ratings. The dst indices are in the form of (blockId, localIndex), which are not the original
-   * dst IDs. To compute src factors, we expect receiving dst factors that match the dst indices.
-   * For example, if we have an in-link record
-   *
-   * {srcId: 0, dstBlockId: 2, dstLocalIndex: 3, rating: 5.0},
-   *
-   * and assume that the dst factors are stored as dstFactors: Map[Int, Array[Array[Float]]], which
-   * is a blockId to dst factors map, the corresponding dst factor of the record is dstFactor(2)(3).
-   *
-   * We use a CSC-like (compressed sparse column) format to store the in-link information. So we can
-   * compute src factors one after another using only one normal equation instance.
-   *
-   * @param srcIds src ids (ordered)
-   * @param dstPtrs dst pointers. Elements in range [dstPtrs(i), dstPtrs(i+1)) of dst indices and
-   *                ratings are associated with srcIds(i).
-   * @param dstEncodedIndices encoded dst indices
-   * @param ratings ratings
-   * @see [[LocalIndexEncoder]]
-   */
-  private[recommendation] case class InBlock[@specialized(Int, Long) ID: ClassTag](
-      srcIds: Array[ID],
-      dstPtrs: Array[Int],
-      dstEncodedIndices: Array[Int],
-      ratings: Array[Float]) {
-    /** Size of the block. */
-    def size: Int = ratings.length
-    require(dstEncodedIndices.length == size)
-    require(dstPtrs.length == srcIds.length + 1)
   }
 
   /**
@@ -936,13 +882,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       encoded & localIndexMask
     }
   }
-
-  /**
-   * Partitioner used by ALS. We require that getPartition is a projection. That is, for any key k,
-   * we have getPartition(getPartition(k)) = getPartition(k). Since the default HashPartitioner
-   * satisfies this requirement, we simply use a type alias here.
-   */
-  private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
 
   /**
    * Private function to clean up all of the shuffles files from the dependencies and their parents.
