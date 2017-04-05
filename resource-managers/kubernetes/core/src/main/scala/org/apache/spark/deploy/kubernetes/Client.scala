@@ -252,8 +252,8 @@ private[spark] class Client(
     sparkConf.set("spark.app.id", kubernetesAppId)
     sparkConf.setIfMissing("spark.app.name", appName)
     sparkConf.setIfMissing("spark.driver.port", DEFAULT_DRIVER_PORT.toString)
-    sparkConf.setIfMissing("spark.blockmanager.port",
-      DEFAULT_BLOCKMANAGER_PORT.toString)
+    sparkConf.setIfMissing("spark.driver.blockManager.port", DEFAULT_BLOCKMANAGER_PORT.toString)
+    sparkConf.setIfMissing("spark.blockManager.port", DEFAULT_BLOCKMANAGER_PORT.toString)
     sparkConf.get(KUBERNETES_SUBMIT_OAUTH_TOKEN).foreach { _ =>
       sparkConf.set(KUBERNETES_SUBMIT_OAUTH_TOKEN, "<present_but_redacted>")
     }
