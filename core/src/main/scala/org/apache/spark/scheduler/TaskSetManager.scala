@@ -553,16 +553,14 @@ private[spark] class TaskSetManager(
       case Some(size) => size
       case None =>
         val size =
-          sched.dagScheduler.parentSplitsInShuffledRDD(task.stageId, task.partitionId) match {
-            case Some(parentSplits) =>
+          sched.dagScheduler.parentSplitsInShuffledRDD(task.stageId, task.partitionId).map {
+            case parentSplits =>
               parentSplits.map {
                 case (shuffleId, splits) =>
                   splits.map(sched.mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
                     .flatMap(_._2.map(_._2)).sum).sum
               }.sum
-            case None =>
-              0L
-          }
+          }.getOrElse(0L)
         taskInputSizeFromShuffledRDD(task) = size
         size
     }
