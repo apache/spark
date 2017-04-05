@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 object FailureSinglton {
   var firstTime = true
