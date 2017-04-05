@@ -67,7 +67,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
 
-  private val taskLabels = conf.get("spark.mesos.task.labels", "").toString
+  private val taskLabels = conf.get("spark.mesos.task.labels", "")
 
   private[this] val shutdownTimeoutMS =
     conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
@@ -431,8 +431,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     tasks.toMap
   }
 
-  private def buildMesosLabels() : List[Label] = {
-   taskLabels.split(",").flatMap(label => {
+  private def buildMesosLabels(): List[Label] = {
+   taskLabels.split(",").flatMap(label =>
       label.split(":") match {
         case Array(key, value) =>
           Some(Label.newBuilder()
@@ -443,7 +443,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           logWarning(s"Unable to parse $label into a key:value label for the task.")
           None
       }
-    }).toList
+    ).toList
   }
 
   /** Extracts task needed resources from a list of available resources. */
