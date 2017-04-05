@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode, Node}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -422,5 +422,26 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
     assert(newTree.numFeatures === numFeatures)
+  }
+
+  /** check if there exists pairs of leaf nodes with same prediction of the same parent. */
+  def hasPairsOfSameChildren(node: Node): Boolean = {
+    def check(node: Node): (Boolean, Option[Double]) = node match {
+      case n: LeafNode => (false, Some(n.prediction))
+      case n: InternalNode =>
+        val (leftFound, leftPredict) = check(n.leftChild)
+        val (rightFound, rightPredict) = check(n.rightChild)
+
+        if (leftFound || rightFound ||
+          (leftPredict.isDefined && leftPredict == rightPredict)) {
+          (true, None)
+        } else {
+          (false, None)
+        }
+    }
+
+    val (found, _) = check(node)
+
+    found
   }
 }
