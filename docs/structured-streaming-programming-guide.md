@@ -919,8 +919,8 @@ streamingDf = spark.readStream. ...
 streamingDf.dropDuplicates("guid")
 
 // With watermark using guid and eventTime columns
-streamingDf
-  .withWatermark("eventTime", "10 seconds")
+streamingDf \
+  .withWatermark("eventTime", "10 seconds") \
   .dropDuplicates("guid", "eventTime")
 {% endhighlight %}
 

@@ -253,6 +253,3 @@ public final class JavaStructuredSessionization {
     public void setExpired(boolean expired) { this.expired = expired; }
   }
 }
-
-
-
