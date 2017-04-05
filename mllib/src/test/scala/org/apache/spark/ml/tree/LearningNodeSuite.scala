@@ -28,7 +28,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 class LearningNodeSuite extends SparkFunSuite with MLlibTestSparkContext {
   import LearningNodeSuite._
 
-  test("check: create a new full binary tree.") {
+  test("SPARK-3159: Check for reducible DecisionTree") {
     val classA = TreeUtils.makeImpurityStats(2, 0)
     val classB = TreeUtils.makeImpurityStats(2, 1)
 
