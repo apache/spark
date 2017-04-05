@@ -17,11 +17,10 @@
 
 package org.apache.spark.ml.recommendation
 
-import java.{util => ju}
 import java.io.IOException
-import java.util.Locale
+import java.util.Arrays
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuilder
 import scala.reflect.ClassTag
 import scala.util.Sorting
 import scala.util.hashing.byteswap64
@@ -445,14 +444,14 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
   }
 
   /**
-   * Builder for [[RatingBlock]]. `mutable.ArrayBuilder` is used to avoid boxing/unboxing.
+   * Builder for [[RatingBlock]]. `ArrayBuilder` is used to avoid boxing/unboxing.
    */
   private[recommendation] class RatingBlockBuilder[@specialized(Int, Long) ID: ClassTag]
     extends Serializable {
 
-    private val srcIds = mutable.ArrayBuilder.make[ID]
-    private val dstIds = mutable.ArrayBuilder.make[ID]
-    private val ratings = mutable.ArrayBuilder.make[Float]
+    private val srcIds = ArrayBuilder.make[ID]
+    private val dstIds = ArrayBuilder.make[ID]
+    private val ratings = ArrayBuilder.make[Float]
     var size = 0
 
     /** Adds a rating. */
@@ -540,9 +539,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       encoder: LocalIndexEncoder)(
       implicit ord: Ordering[ID]) {
 
-    private val srcIds = mutable.ArrayBuilder.make[ID]
-    private val dstEncodedIndices = mutable.ArrayBuilder.make[Int]
-    private val ratings = mutable.ArrayBuilder.make[Float]
+    private val srcIds = ArrayBuilder.make[ID]
+    private val dstEncodedIndices = ArrayBuilder.make[Int]
+    private val ratings = ArrayBuilder.make[Float]
 
     /**
      * Adds a dst block of (srcId, dstLocalIndex, rating) tuples.
@@ -597,8 +596,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       val sz = length
       assert(sz > 0, "Empty in-link block should not exist.")
       sort()
-      val uniqueSrcIdsBuilder = mutable.ArrayBuilder.make[ID]
-      val dstCountsBuilder = mutable.ArrayBuilder.make[Int]
+      val uniqueSrcIdsBuilder = ArrayBuilder.make[ID]
+      val dstCountsBuilder = ArrayBuilder.make[Int]
       var preSrcId = srcIds(0)
       uniqueSrcIdsBuilder += preSrcId
       var curCount = 1
@@ -785,12 +784,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       .persist(storageLevel)
     val outBlocks = inBlocks.mapValues { case InBlock(srcIds, dstPtrs, dstEncodedIndices, _) =>
       val encoder = new LocalIndexEncoder(dstPart.numPartitions)
-      val activeIds = Array.fill(dstPart.numPartitions)(mutable.ArrayBuilder.make[Int])
+      val activeIds = Array.fill(dstPart.numPartitions)(ArrayBuilder.make[Int])
       var i = 0
       val seen = new Array[Boolean](dstPart.numPartitions)
       while (i < srcIds.length) {
         var j = dstPtrs(i)
-        ju.Arrays.fill(seen, false)
+        Arrays.fill(seen, false)
         while (j < dstPtrs(i + 1)) {
           val dstBlockId = encoder.blockId(dstEncodedIndices(j))
           if (!seen(dstBlockId)) {

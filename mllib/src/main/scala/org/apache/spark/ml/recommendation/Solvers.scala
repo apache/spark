@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.recommendation
 
-import java.{util => ju}
+import java.util.Arrays
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
@@ -173,8 +173,8 @@ private[recommendation] trait Solvers {
 
     /** Resets everything to zero, which should be called after each solve. */
     def reset(): Unit = {
-      ju.Arrays.fill(ata, 0.0)
-      ju.Arrays.fill(atb, 0.0)
+      Arrays.fill(ata, 0.0)
+      Arrays.fill(atb, 0.0)
     }
   }
 
