@@ -49,13 +49,14 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  * no effect.
  *
  * The major difference between `mapGroupsWithState` and `flatMapGroupsWithState` is that the
- * former allows the function to return one and only one record, where as the latter is more
- * allows the function to return any number of records (including zero). Furthermore, the
- * `flatMapGroupsWithState` is associated with a operation output mode, which can be either
+ * former allows the function to return one and only one record, whereas the latter
+ * allows the function to return any number of records (including no records). Furthermore, the
+ * `flatMapGroupsWithState` is associated with an operation output mode, which can be either
  * `Append` or `Update`. Semantically, this defines whether the output records of one trigger
  * is effectively replacing the previously output records (from previous triggers) or is appending
- * to the list of previously output records. Essentially, this defines how the semantic result table
- * is updated, and will allow you to reason about the semantics of later operations.
+ * to the list of previously output records. Essentially, this defines how the semantic Result Table
+ * (refer to programming guide) is updated, and allows us to reason about the semantics of
+ * later operations.
  *
  * Important points to note about the function (both mapGroupsWithState and flatMapGroupsWithState).
  *  - In a trigger, the function will be called only the groups present in the batch. So do not
