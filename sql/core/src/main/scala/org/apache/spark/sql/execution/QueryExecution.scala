@@ -114,28 +114,32 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
 
   /**
-   * Returns the result as a hive compatible sequence of strings. This is for testing only.
+   * Returns the result as a hive compatible sequence of strings.
    */
   def hiveResultString(): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
-      // If it is a describe command for a Hive table, we want to have the output format
-      // be similar with Hive.
-      desc.run(sparkSession).map {
-        case Row(name: String, dataType: String, comment) =>
-          Seq(name, dataType,
-            Option(comment.asInstanceOf[String]).getOrElse(""))
-            .map(s => String.format(s"%-20s", s))
-            .mkString("\t")
+      SQLExecution.withNewExecutionId(sparkSession, this) {
+        // If it is a describe command for a Hive table, we want to have the output format
+        // be similar with Hive.
+        desc.run(sparkSession).map {
+          case Row(name: String, dataType: String, comment) =>
+            Seq(name, dataType,
+              Option(comment.asInstanceOf[String]).getOrElse(""))
+              .map(s => String.format(s"%-20s", s))
+              .mkString("\t")
+        }
       }
     // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
     case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
       command.executeCollect().map(_.getString(1))
     case other =>
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = analyzed.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
+      SQLExecution.withNewExecutionId(sparkSession, this) {
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        // We need the types so we can output struct field names
+        val types = analyzed.output.map(_.dataType)
+        // Reformat to match hive tab delimited output.
+        result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
+      }
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
