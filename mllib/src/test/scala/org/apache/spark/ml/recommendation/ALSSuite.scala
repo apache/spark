@@ -34,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.recommendation.ALS._
+import org.apache.spark.ml.recommendation.RatingBlocks._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -146,19 +147,19 @@ class ALSSuite
     assert(Vectors.dense(x1) ~== Vectors.dense(-0.1155556, 3.28) relTol 1e-6)
   }
 
-  test("RatingBlockBuilder") {
-    val emptyBuilder = new RatingBlockBuilder[Int]()
+  test("RatingBlock.Builder") {
+    val emptyBuilder = new RatingBlock.Builder[Int]()
     assert(emptyBuilder.size === 0)
     val emptyBlock = emptyBuilder.build()
     assert(emptyBlock.srcIds.isEmpty)
     assert(emptyBlock.dstIds.isEmpty)
     assert(emptyBlock.ratings.isEmpty)
 
-    val builder0 = new RatingBlockBuilder()
+    val builder0 = new RatingBlock.Builder()
       .add(Rating(0, 1, 2.0f))
       .add(Rating(3, 4, 5.0f))
     assert(builder0.size === 2)
-    val builder1 = new RatingBlockBuilder()
+    val builder1 = new RatingBlock.Builder()
       .add(Rating(6, 7, 8.0f))
       .merge(builder0.build())
     assert(builder1.size === 3)
@@ -171,7 +172,7 @@ class ALSSuite
 
   test("UncompressedInBlock") {
     val encoder = new LocalIndexEncoder(10)
-    val uncompressed = new UncompressedInBlockBuilder[Int](encoder)
+    val uncompressed = new UncompressedInBlock.Builder[Int](encoder)
       .add(0, Array(1, 0, 2), Array(0, 1, 4), Array(1.0f, 2.0f, 3.0f))
       .add(1, Array(3, 0), Array(2, 5), Array(4.0f, 5.0f))
       .build()
