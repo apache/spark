@@ -237,17 +237,16 @@ class SQLContext(object):
     def registerJavaUDAF(self, name, javaClassName):
         """Register a java UDAF so it can be used in SQL statements.
 
-        :param name:  name of the UDF
+        :param name:  name of the UDAF
         :param javaClassName: fully qualified name of java class
 
         >>> sqlContext.registerJavaUDAF("javaUDAF",
         ...   "org.apache.spark.sql.hive.aggregate.MyDoubleAvg")
         >>> df = sqlContext.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
         >>> df.registerTempTable("df")
-        >>> sqlContext.sql("SELECT name,javaUDAF(id) as avg from df group by name").collect()
+        >>> sqlContext.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
         [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
         """
-
         self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession

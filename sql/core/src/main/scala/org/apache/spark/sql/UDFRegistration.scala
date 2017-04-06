@@ -491,15 +491,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
             case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
             case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
-            case n => logError(s"UDF class with ${n} type arguments is not supported ")
+            case n =>
+              throw new IOException(s"UDF class with ${n} type arguments is not supported.")
           }
         } catch {
           case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-            logError(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+            throw new IOException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
         }
       }
     } catch {
-      case e: ClassNotFoundException => logError(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e: ClassNotFoundException => throw new IOException(s"Can not load class ${className}, please make sure it is on the classpath")
     }
 
   }
@@ -519,9 +520,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val udaf = clazz.newInstance().asInstanceOf[UserDefinedAggregateFunction]
       register(name, udaf)
     } catch {
-      case e: ClassNotFoundException => logError(s"Can not load class ${className}, please make sure it is on the classpath")
+      case e: ClassNotFoundException => throw new IOException(s"Can not load class ${className}, please make sure it is on the classpath")
       case e @ (_: InstantiationException | _: IllegalArgumentException) =>
-        logError(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+        throw new IOException(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
     }
   }
 
