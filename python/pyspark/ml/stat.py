@@ -79,9 +79,9 @@ class Correlation(object):
     Methods currently supported: `pearson` (default), `spearman`.
 
     .. note:: For Spearman, a rank correlation, we need to create an RDD[Double] for each column
-    and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
-    which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
-    to avoid recomputing the common lineage.
+      and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
+      which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
+      to avoid recomputing the common lineage.
 
     :param dataset:
       A dataset or a dataframe.
