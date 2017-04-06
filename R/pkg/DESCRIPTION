@@ -32,6 +32,7 @@ Collate:
     'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
+    'catalog.R'
     'WindowSpec.R'
     'backend.R'
     'broadcast.R'
