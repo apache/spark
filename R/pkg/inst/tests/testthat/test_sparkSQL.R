@@ -281,7 +281,7 @@ test_that("create DataFrame from RDD", {
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
-  invisible(insertInto(df, "people"))
+  insertInto(df, "people")
   expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age,
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
@@ -1268,7 +1268,16 @@ test_that("column calculation", {
 
 test_that("test HiveContext", {
   setHiveContext(sc)
-  df <- createExternalTable("json", jsonPath, "json")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+  df <- read.df(jsonPathNa, "json", schema)
+  insertInto(df, "people")
+  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
+  sql("DROP TABLE people")
+
+  df <- createTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
   df2 <- sql("select * from json")
@@ -1276,25 +1285,26 @@ test_that("test HiveContext", {
   expect_equal(count(df2), 3)
 
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
+  saveAsTable(df, "json2", "json", "append", path = jsonPath2)
   df3 <- sql("select * from json2")
   expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  saveAsTable(df, "hivetestbl", path = hivetestDataPath)
   df4 <- sql("select * from hivetestbl")
   expect_is(df4, "SparkDataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
+  saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath)
   df5 <- sql("select * from parquetest")
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
+
   unsetHiveContext()
 })
 

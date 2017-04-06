@@ -557,7 +557,7 @@ setMethod("insertInto",
             jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
             write <- callJMethod(x@sdf, "write")
             write <- callJMethod(write, "mode", jmode)
-            callJMethod(write, "insertInto", tableName)
+            invisible(callJMethod(write, "insertInto", tableName))
           })
 
 #' Cache
@@ -2894,7 +2894,7 @@ setMethod("saveAsTable",
             write <- callJMethod(write, "format", source)
             write <- callJMethod(write, "mode", jmode)
             write <- callJMethod(write, "options", options)
-            callJMethod(write, "saveAsTable", tableName)
+            invisible(callJMethod(write, "saveAsTable", tableName))
           })
 
 #' summary
