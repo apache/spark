@@ -3,7 +3,7 @@
 set -euo pipefail
 version=$(git describe --tags)
 
-PALANTIR_FLAGS=(-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pmesos -Pyarn -Phive-thriftserver -Phive -Psparkr)
+PALANTIR_FLAGS=(-Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr)
 
 publish_artifacts() {
   tmp_settings="tmp-settings.xml"
@@ -28,4 +28,4 @@ make_dist() {
 
 publish_artifacts
 make_dist hadoop-2.8.0-palantir3 "${PALANTIR_FLAGS[*]}" --clean
-make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pmesos -Pyarn -Psparkr" --clean
+make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Pyarn -Psparkr" --clean
