@@ -106,16 +106,16 @@ class Correlation(object):
     >>> dataset = spark.createDataFrame(dataset, ['features'])
     >>> pearsonCorr = Correlation.corr(dataset, 'features', 'pearson').collect()[0][0]
     >>> print(str(pearsonCorr).replace('nan', 'NaN'))
-    DenseMatrix([[ 1.        ,  0.05564149,         NaN,  0.40047142],
-                 [ 0.05564149,  1.        ,         NaN,  0.91359586],
+    DenseMatrix([[ 1.        ,  0.0556...,         NaN,  0.4004...],
+                 [ 0.0556...,  1.        ,         NaN,  0.9135...],
                  [        NaN,         NaN,  1.        ,         NaN],
-                 [ 0.40047142,  0.91359586,         NaN,  1.        ]])
+                 [ 0.4004...,  0.9135...,         NaN,  1.        ]])
     >>> spearmanCorr = Correlation.corr(dataset, 'features', method='spearman').collect()[0][0]
     >>> print(str(spearmanCorr).replace('nan', 'NaN'))
-    DenseMatrix([[ 1.        ,  0.10540926,         NaN,  0.4       ],
-                 [ 0.10540926,  1.        ,         NaN,  0.9486833 ],
+    DenseMatrix([[ 1.        ,  0.1054...,         NaN,  0.4       ],
+                 [ 0.1054...,  1.        ,         NaN,  0.9486... ],
                  [        NaN,         NaN,  1.        ,         NaN],
-                 [ 0.4       ,  0.9486833 ,         NaN,  1.        ]])
+                 [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
 
     .. versionadded:: 2.2.0
 
