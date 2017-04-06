@@ -251,4 +251,13 @@ class ConfigEntrySuite extends SparkFunSuite {
       .createWithDefault(null)
     testEntryRef(nullConf, ref(nullConf))
   }
+
+  test("conf entry : default function") {
+    var data = 0
+    val conf = new SparkConf()
+    val iConf = ConfigBuilder(testKey("intval")).intConf.createWithDefaultFunction(() => data)
+    assert(conf.get(iConf) === 0)
+    data = 2
+    assert(conf.get(iConf) === 2)
+  }
 }
