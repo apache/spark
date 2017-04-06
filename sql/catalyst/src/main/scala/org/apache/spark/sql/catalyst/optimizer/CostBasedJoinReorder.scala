@@ -441,7 +441,7 @@ case class JoinReorderDPFilters(conf: SQLConf) extends PredicateHelper {
 }
 
 /**
- * Helper class that keeps information about the join graph as sets of Int.
+ * Helper class that keeps information about the join graph as sets of item/plan ids.
  * It currently stores the star/non-star plans. It can be
  * extended with the set of connected/unconnected plans.
  */
