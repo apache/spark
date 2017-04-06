@@ -404,7 +404,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {
-        s"$termDict == null"
+        s"$termDictAccessor == null"
       } else {
         s"!$matching.equals($termLastMatchingAccessor) " +
           s"|| !$replace.equals($termLastReplaceAccessor)"

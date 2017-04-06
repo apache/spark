@@ -330,7 +330,7 @@ case class NewInstance(
       ctx.addMutableState(javaType, ev.value, s"${ev.value} = ${ctx.defaultValue(javaType)};")
 
     val constructorCall = outer.map { gen =>
-      s"$valueAccessor.new ${cls.getSimpleName}($argString)"
+      s"${gen.value}.new ${cls.getSimpleName}($argString)"
     }.getOrElse {
       s"new $className($argString)"
     }
