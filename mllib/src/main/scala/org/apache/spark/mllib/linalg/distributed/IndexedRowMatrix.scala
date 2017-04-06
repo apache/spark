@@ -140,7 +140,7 @@ class IndexedRowMatrix @Since("1.0.0") (
               ((blockRow.toInt, blockColumn), (rowInBlock.toInt, values.zipWithIndex))
             }
       }
-    }.groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map{
+    }.groupByKey(GridPartitioner(numRowBlocks, numColBlocks, rows.getNumPartitions)).map {
       case ((blockRow, blockColumn), itr) =>
         val actualNumRows =
           if (blockRow == lastRowBlockIndex) lastRowBlockSize else rowsPerBlock
@@ -157,7 +157,7 @@ class IndexedRowMatrix @Since("1.0.0") (
           }
         }
         val denseMatrix = new DenseMatrix(actualNumRows, actualNumColumns, matrixAsArray)
-        val finalMatrix = if (countForValues / arraySize.toDouble > 0.5) {
+        val finalMatrix = if (countForValues / arraySize.toDouble >= 0.5) {
           denseMatrix
         } else {
           denseMatrix.toSparse
@@ -165,7 +165,7 @@ class IndexedRowMatrix @Since("1.0.0") (
 
         ((blockRow, blockColumn), finalMatrix)
     }
-    new BlockMatrix(blocks, rowsPerBlock, colsPerBlock)
+    new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, this.numRows(), this.numCols())
   }
 
   /**

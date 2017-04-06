@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Matrices, Vectors}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 
@@ -87,28 +87,73 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(coordMat.toBreeze() === idxRowMat.toBreeze())
   }
 
-  test("toBlockMatrix") {
-    val idxRowMat = new IndexedRowMatrix(indexedRows)
+  test("toBlockMatrix dense backing") {
+    val idxRowMatDense = new IndexedRowMatrix(indexedRows)
 
     // Tests when n % colsPerBlock != 0
-    val blockMat = idxRowMat.toBlockMatrix(2, 2)
+    val blockMat = idxRowMatDense.toBlockMatrix(2, 2)
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
-    assert(blockMat.toBreeze() === idxRowMat.toBreeze())
+    assert(blockMat.toBreeze() === idxRowMatDense.toBreeze())
 
     // Tests when m % rowsPerBlock != 0
-    val blockMat2 = idxRowMat.toBlockMatrix(3, 1)
+    val blockMat2 = idxRowMatDense.toBlockMatrix(3, 1)
     assert(blockMat2.numRows() === m)
     assert(blockMat2.numCols() === n)
-    assert(blockMat2.toBreeze() === idxRowMat.toBreeze())
+    assert(blockMat2.toBreeze() === idxRowMatDense.toBreeze())
 
     intercept[IllegalArgumentException] {
-      idxRowMat.toBlockMatrix(-1, 2)
+      idxRowMatDense.toBlockMatrix(-1, 2)
     }
     intercept[IllegalArgumentException] {
-      idxRowMat.toBlockMatrix(2, 0)
+      idxRowMatDense.toBlockMatrix(2, 0)
     }
+    assert(blockMat.blocks.map { case (_, matrix: Matrix) =>
+      matrix.isInstanceOf[DenseMatrix]}.reduce(_ && _))
   }
+
+  test("toBlockMatrix sparse backing") {
+    val sparseData = Seq(
+      (3L, Vectors.sparse(3, Seq((0, 4.0))))
+    ).map(x => IndexedRow(x._1, x._2))
+
+    val idxRowMatSparse = new IndexedRowMatrix(sc.parallelize(sparseData))
+
+    // Tests when n % colsPerBlock != 0
+    val blockMat = idxRowMatSparse.toBlockMatrix(2, 2)
+    assert(blockMat.numRows() === m)
+    assert(blockMat.numCols() === n)
+    assert(blockMat.toBreeze() === idxRowMatSparse.toBreeze())
+
+    // Tests when m % rowsPerBlock != 0
+    val blockMat2 = idxRowMatSparse.toBlockMatrix(3, 1)
+    assert(blockMat2.numRows() === m)
+    assert(blockMat2.numCols() === n)
+    assert(blockMat2.toBreeze() === idxRowMatSparse.toBreeze())
+
+    assert(blockMat.blocks.map { case (_, matrix: Matrix) =>
+      matrix.isInstanceOf[SparseMatrix]}.reduce(_ && _))
+  }
+
+  test("toBlockMatrix mixed backing") {
+    val mixedData = Seq(
+      (0L, Vectors.dense(1, 2, 3)),
+      (3L, Vectors.sparse(3, Seq((0, 4.0)))))
+
+    val idxRowMatMixed = new IndexedRowMatrix(
+      sc.parallelize(mixedData.map(x => IndexedRow(x._1, x._2))))
+
+    val blockMat = idxRowMatMixed.toBlockMatrix(2, 2)
+    assert(blockMat.numRows() === m)
+    assert(blockMat.numCols() === n)
+    assert(blockMat.toBreeze() === idxRowMatMixed.toBreeze())
+
+    val blocks = blockMat.blocks.collect()
+
+    blocks.forall { case((row, col), matrix) =>
+      if (row == 0) matrix.isInstanceOf[DenseMatrix] else matrix.isInstanceOf[SparseMatrix]}
+  }
+
 
   test("multiply a local matrix") {
     val A = new IndexedRowMatrix(indexedRows)
