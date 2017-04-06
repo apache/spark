@@ -87,8 +87,8 @@ private[recommendation] object RatingBlocks extends RatingBlockMixin with Loggin
    * Partitions raw ratings into blocks.
    *
    * @param ratings raw ratings
-   * @param srcPart partitioner for src IDs
-   * @param dstPart partitioner for dst IDs
+   * @param srcPartitioner partitioner for src IDs
+   * @param dstPartitioner partitioner for dst IDs
    * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
    */
   private[this] def groupRatingsByPartitionPair[ID: ClassTag](
@@ -148,10 +148,13 @@ private[recommendation] object RatingBlocks extends RatingBlockMixin with Loggin
   private[this] def makeBlocks[ID: ClassTag](
       prefix: String,
       ratingBlocks: RDD[((Int, Int), RatingBlock[ID])],
-      srcPart: Partitioner,
-      dstPart: Partitioner,
+      srcPartitioner: Partitioner,
+      dstPartitioner: Partitioner,
       storageLevel: StorageLevel)(
       implicit srcOrd: Ordering[ID]): (RDD[(Int, InBlock[ID])], RDD[(Int, OutBlock)]) = {
+
+    val encoder = new LocalIndexEncoder(dstPartitioner.numPartitions)
+
     val inBlocks = ratingBlocks.map {
       case ((srcBlockId, dstBlockId), RatingBlock(srcIds, dstIds, ratings)) =>
         // The implementation is a faster version of
@@ -175,43 +178,43 @@ private[recommendation] object RatingBlocks extends RatingBlockMixin with Loggin
           dstIdToLocalIndex.update(sortedDstIds(i), i)
           i += 1
         }
-        logDebug(
-          "Converting to local indices took " + (System.nanoTime() - start) / 1e9 + " seconds.")
+        logDebug("Converting to local indices took " +
+          (System.nanoTime() - start) / 1e9 + " seconds.")
         val dstLocalIndices = dstIds.map(dstIdToLocalIndex.apply)
         (srcBlockId, (dstBlockId, srcIds, dstLocalIndices, ratings))
-    }.groupByKey(new ALSPartitioner(srcPart.numPartitions))
-      .mapValues { iter =>
-        val builder =
-          new UncompressedInBlock.Builder[ID](new LocalIndexEncoder(dstPart.numPartitions))
-        iter.foreach { case (dstBlockId, srcIds, dstLocalIndices, ratings) =>
-          builder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
-        }
-        builder.build().compress()
-      }.setName(prefix + "InBlocks")
-      .persist(storageLevel)
-    val outBlocks = inBlocks.mapValues { case InBlock(srcIds, dstPtrs, dstEncodedIndices, _) =>
-      val encoder = new LocalIndexEncoder(dstPart.numPartitions)
-      val activeIds = Array.fill(dstPart.numPartitions)(ArrayBuilder.make[Int])
-      var i = 0
-      val seen = new Array[Boolean](dstPart.numPartitions)
-      while (i < srcIds.length) {
-        var j = dstPtrs(i)
-        Arrays.fill(seen, false)
-        while (j < dstPtrs(i + 1)) {
-          val dstBlockId = encoder.blockId(dstEncodedIndices(j))
-          if (!seen(dstBlockId)) {
-            activeIds(dstBlockId) += i // add the local index in this out-block
-            seen(dstBlockId) = true
+    }.groupByKey(
+      srcPartitioner
+    ).mapValues { iter =>
+      val builder = new UncompressedInBlock.Builder[ID](encoder)
+      iter.foreach((builder.add _).tupled)
+      builder.build().compress()
+    }.setName(
+      prefix + "InBlocks"
+    ).persist(storageLevel)
+
+    val outBlocks = inBlocks.mapValues {
+      case InBlock(srcIds, dstPtrs, dstEncodedIndices, _) =>
+        val activeIds = Array.fill(dstPartitioner.numPartitions)(ArrayBuilder.make[Int])
+        val seen = new Array[Boolean](dstPartitioner.numPartitions)
+
+        for (i <- 0 until srcIds.length) {
+          Arrays.fill(seen, false)
+
+          for (j <- dstPtrs(i) until dstPtrs(i + 1)) {
+            val b = encoder.blockId(dstEncodedIndices(j))
+
+            if (!seen(b)) {
+              activeIds(b) += i
+              seen(b) = true
+            }
           }
-          j += 1
         }
-        i += 1
-      }
-      activeIds.map { x =>
-        x.result()
-      }
-    }.setName(prefix + "OutBlocks")
-      .persist(storageLevel)
+
+        activeIds.map(_.result)
+    }.setName(
+      prefix + "OutBlocks"
+    ).persist(storageLevel)
+
     (inBlocks, outBlocks)
   }
 
