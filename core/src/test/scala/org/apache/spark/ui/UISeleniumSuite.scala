@@ -39,7 +39,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
+import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -103,6 +103,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
       .set("spark.ui.killEnabled", killEnabled.toString)
+      .set("spark.memory.offHeap.size", "64m")
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -151,6 +152,39 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val updatedRddJson = getJson(ui, "storage/rdd/0")
       (updatedRddJson  \ "storageLevel").extract[String] should be (
         StorageLevels.MEMORY_ONLY.description)
+
+      val dataDistributions0 =
+        (updatedRddJson \ "dataDistribution").extract[Seq[RDDDataDistribution]]
+      dataDistributions0.length should be (1)
+      val dist0 = dataDistributions0.head
+
+      dist0.onHeapMemoryUsed should not be (None)
+      dist0.memoryUsed should be (dist0.onHeapMemoryUsed.get)
+      dist0.onHeapMemoryRemaining should not be (None)
+      dist0.offHeapMemoryRemaining should not be (None)
+      dist0.memoryRemaining should be (
+        dist0.onHeapMemoryRemaining.get + dist0.offHeapMemoryRemaining.get)
+      dist0.onHeapMemoryUsed should not be (Some(0L))
+      dist0.offHeapMemoryUsed should be (Some(0L))
+
+      rdd.unpersist()
+      rdd.persist(StorageLevels.OFF_HEAP).count()
+      val updatedStorageJson1 = getJson(ui, "storage/rdd")
+      updatedStorageJson1.children.length should be (1)
+      val updatedRddJson1 = getJson(ui, "storage/rdd/0")
+      val dataDistributions1 =
+        (updatedRddJson1 \ "dataDistribution").extract[Seq[RDDDataDistribution]]
+      dataDistributions1.length should be (1)
+      val dist1 = dataDistributions1.head
+
+      dist1.offHeapMemoryUsed should not be (None)
+      dist1.memoryUsed should be (dist1.offHeapMemoryUsed.get)
+      dist1.onHeapMemoryRemaining should not be (None)
+      dist1.offHeapMemoryRemaining should not be (None)
+      dist1.memoryRemaining should be (
+        dist1.onHeapMemoryRemaining.get + dist1.offHeapMemoryRemaining.get)
+      dist1.onHeapMemoryUsed should be (Some(0L))
+      dist1.offHeapMemoryUsed should not be (Some(0L))
     }
   }
 

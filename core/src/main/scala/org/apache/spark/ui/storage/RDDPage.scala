@@ -147,7 +147,8 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
   /** Header fields for the worker table */
   private def workerHeader = Seq(
     "Host",
-    "Memory Usage",
+    "On Heap Memory Usage",
+    "Off Heap Memory Usage",
     "Disk Usage")
 
   /** Render an HTML row representing a worker */
@@ -155,8 +156,12 @@ private[ui] class RDDPage(parent: StorageTab) extends WebUIPage("rdd") {
     <tr>
       <td>{worker.address}</td>
       <td>
-        {Utils.bytesToString(worker.memoryUsed)}
-        ({Utils.bytesToString(worker.memoryRemaining)} Remaining)
+        {Utils.bytesToString(worker.onHeapMemoryUsed.getOrElse(0L))}
+        ({Utils.bytesToString(worker.onHeapMemoryRemaining.getOrElse(0L))} Remaining)
+      </td>
+      <td>
+        {Utils.bytesToString(worker.offHeapMemoryUsed.getOrElse(0L))}
+        ({Utils.bytesToString(worker.offHeapMemoryRemaining.getOrElse(0L))} Remaining)
       </td>
       <td>{Utils.bytesToString(worker.diskUsed)}</td>
     </tr>
