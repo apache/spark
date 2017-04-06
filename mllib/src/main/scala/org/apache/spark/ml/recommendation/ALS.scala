@@ -225,6 +225,32 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
   /**
    * :: DeveloperApi ::
    * Implementation of the ALS algorithm.
+   *
+   * This implementation of the ALS factorization algorithm partitions the two
+   * sets of factors among Spark workers so as to reduce network communication
+   * by only sending one copy of each factor vector to each Spark worker on each
+   * iteration, and only if needed.  This is achieved by precomputing some
+   * information about the ratings matrix to determine which users require which
+   * item factors and vice versa.  See the Scaladoc for [[RatingBlocks]] for a
+   * detailed explanation of how the precomputation is done.
+   *
+   * In addition, since each iteration of calculating the factor matrices
+   * depends on the known ratings, which are spread across Spark partitions, a
+   * naive implementation would incur significant network communication overhead
+   * between Spark workers, as the ratings RDD would be repeatedly shuffled
+   * during each iteration.  This implementation reduces that overhead by
+   * performing the shuffling operation up front, precomputing each partition's
+   * ratings dependencies and duplicating those values to the appropriate
+   * workers before starting iterations to solve for the factor matrices.  See
+   * the Scaladoc for [[RatingBlocks]] for a detailed explanation of how the
+   * precomputation is done.
+   *
+   * Note that the term "rating block" is a bit of a misnomer, as the ratings
+   * are not partitioned by contiguous blocks from the ratings matrix but by a
+   * hash function on the rating's location in the matrix.  If it helps you to
+   * visualize the partitions, it is easier to think of the term "block" as
+   * referring to a subset of an RDD containing the ratings rather than a
+   * contiguous submatrix of the ratings matrix.
    */
   @DeveloperApi
   def train[ID: ClassTag]( // scalastyle:ignore
@@ -242,95 +268,172 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       checkpointInterval: Int = 10,
       seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
+
     require(!ratings.isEmpty(), s"No ratings available from $ratings")
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
+
     val sc = ratings.sparkContext
+
+    // Precompute the rating dependencies of each partition
     val ratingBlocks = RatingBlocks.create(
       ratings = ratings,
       numUserBlocks = numUserBlocks,
       numItemBlocks = numItemBlocks,
       storageLevel = intermediateRDDStorageLevel)
+
+    // These are the user and item factor matrices that, once trained, are
+    // multiplied together to estimate the rating matrix.  The two matrices are
+    // stored in RDDs, partitioned by column such that each factor column resides
+    // on the same Spark worker as its corresponding user or item.
+    var (userFactors, itemFactors) = {
+      val seedGen = new XORShiftRandom(seed)
+      val userFactors = initFactors(ratingBlocks.userIn, rank, seedGen.nextLong())
+      val itemFactors = initFactors(ratingBlocks.itemIn, rank, seedGen.nextLong())
+      (userFactors, itemFactors)
+    }
+
+    // Encoders for storing each user/item's partition ID and index within its
+    // partition using a single integer; used as an optimization
     val userLocalIndexEncoder = new LocalIndexEncoder(numUserBlocks)
     val itemLocalIndexEncoder = new LocalIndexEncoder(numItemBlocks)
+
     val solver = if (nonnegative) new NNLSSolver else new CholeskySolver
-    val seedGen = new XORShiftRandom(seed)
-    var userFactors = initialize(ratingBlocks.userIn, rank, seedGen.nextLong())
-    var itemFactors = initialize(ratingBlocks.itemIn, rank, seedGen.nextLong())
-    var previousCheckpointFile: Option[String] = None
-    val shouldCheckpoint: Int => Boolean = (iter) =>
-      sc.checkpointDir.isDefined && checkpointInterval != -1 && (iter % checkpointInterval == 0)
-    val deletePreviousCheckpointFile: () => Unit = () =>
-      previousCheckpointFile.foreach { file =>
+
+    var previousCheckpointFile: Option[Path] = None
+
+    def shouldCheckpoint(iter: Int): Boolean = {
+      sc.checkpointDir.isDefined &&
+      checkpointInterval != -1 &&
+      (iter % checkpointInterval == 0)
+    }
+
+    def deletePreviousCheckpointFile(): Unit = {
+      for (file <- previousCheckpointFile) {
         try {
-          val checkpointFile = new Path(file)
-          checkpointFile.getFileSystem(sc.hadoopConfiguration).delete(checkpointFile, true)
+          file.getFileSystem(sc.hadoopConfiguration).delete(file, true)
         } catch {
           case e: IOException =>
             logWarning(s"Cannot delete checkpoint file $file:", e)
         }
       }
+    }
+
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
-        userFactors.setName(s"userFactors-$iter").persist(intermediateRDDStorageLevel)
+        userFactors
+          .setName(s"userFactors-$iter")
+          .persist(intermediateRDDStorageLevel)
+
         val previousItemFactors = itemFactors
-        itemFactors = computeFactors(userFactors, ratingBlocks.userOut, ratingBlocks.itemIn,
-          rank, regParam, userLocalIndexEncoder, implicitPrefs, alpha, solver)
+        itemFactors = computeFactors(
+          userFactors,
+          ratingBlocks.userOut,
+          ratingBlocks.itemIn,
+          rank,
+          regParam,
+          userLocalIndexEncoder,
+          implicitPrefs,
+          alpha,
+          solver
+        )
         previousItemFactors.unpersist()
-        itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
+
+        itemFactors
+          .setName(s"itemFactors-$iter")
+          .persist(intermediateRDDStorageLevel)
+
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
         val deps = itemFactors.dependencies
         if (shouldCheckpoint(iter)) {
-          itemFactors.checkpoint() // itemFactors gets materialized in computeFactors
+          // itemFactors gets materialized in computeFactors
+          itemFactors.checkpoint()
         }
+
         val previousUserFactors = userFactors
-        userFactors = computeFactors(itemFactors, ratingBlocks.itemOut, ratingBlocks.userIn,
-          rank, regParam, itemLocalIndexEncoder, implicitPrefs, alpha, solver)
+        userFactors = computeFactors(
+          itemFactors,
+          ratingBlocks.itemOut,
+          ratingBlocks.userIn,
+          rank,
+          regParam,
+          itemLocalIndexEncoder,
+          implicitPrefs,
+          alpha,
+          solver
+        )
+
         if (shouldCheckpoint(iter)) {
-          ALS.cleanShuffleDependencies(sc, deps)
+          cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
-          previousCheckpointFile = itemFactors.getCheckpointFile
+          previousCheckpointFile = itemFactors.getCheckpointFile.map(new Path(_))
         }
         previousUserFactors.unpersist()
       }
     } else {
       for (iter <- 0 until maxIter) {
-        itemFactors = computeFactors(userFactors, ratingBlocks.userOut, ratingBlocks.itemIn,
-          rank, regParam, userLocalIndexEncoder, solver = solver)
+        itemFactors = computeFactors(
+          userFactors,
+          ratingBlocks.userOut,
+          ratingBlocks.itemIn,
+          rank,
+          regParam,
+          userLocalIndexEncoder,
+          solver = solver
+        )
+
         if (shouldCheckpoint(iter)) {
           val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
-          ALS.cleanShuffleDependencies(sc, deps)
+          cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
-          previousCheckpointFile = itemFactors.getCheckpointFile
+          previousCheckpointFile = itemFactors.getCheckpointFile.map(new Path(_))
         }
-        userFactors = computeFactors(itemFactors, ratingBlocks.itemOut, ratingBlocks.userIn,
-          rank, regParam, itemLocalIndexEncoder, solver = solver)
+
+        userFactors = computeFactors(
+          itemFactors,
+          ratingBlocks.itemOut,
+          ratingBlocks.userIn,
+          rank,
+          regParam,
+          itemLocalIndexEncoder,
+          solver = solver
+        )
       }
     }
+
     val userIdAndFactors = ratingBlocks.userIn
       .mapValues(_.srcIds)
       .join(userFactors)
-      .mapPartitions({ items =>
-        items.flatMap { case (_, (ids, factors)) =>
+      .mapPartitions(
+        _.flatMap { case (_, (ids, factors)) =>
           ids.view.zip(factors)
-        }
-      // Preserve the partitioning because IDs are consistent with the partitioners in
-      // ratingBlocks.userIn and userFactors.
-      }, preservesPartitioning = true)
+        },
+        // Preserve the partitioning because IDs are consistent with
+        // the partitioners in ratingBlocks.userIn and userFactors
+        preservesPartitioning = true
+      )
       .setName("userFactors")
       .persist(finalRDDStorageLevel)
+
     val itemIdAndFactors = ratingBlocks.itemIn
       .mapValues(_.srcIds)
       .join(itemFactors)
-      .mapPartitions({ items =>
-        items.flatMap { case (_, (ids, factors)) =>
+      .mapPartitions(
+        _.flatMap { case (_, (ids, factors)) =>
           ids.view.zip(factors)
-        }
-      }, preservesPartitioning = true)
+        },
+        // Preserve the partitioning because IDs are consistent with
+        // the partitioners in ratingBlocks.itemIn and itemFactors
+        preservesPartitioning = true
+      )
       .setName("itemFactors")
       .persist(finalRDDStorageLevel)
+
+    // PLEASE_ADVISE(danielyli): Is manual unpersisting needed?  According to the Spark Programming
+    // Guide (https://spark.apache.org/docs/latest/programming-guide.html#removing-data), Spark
+    // handles this automatically.
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
       itemFactors.unpersist()
@@ -340,6 +443,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
       ratingBlocks.itemIn.unpersist()
       ratingBlocks.itemOut.unpersist()
     }
+
     (userIdAndFactors, itemIdAndFactors)
   }
 
@@ -350,18 +454,18 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
    * @param rank rank
    * @return initialized factor blocks
    */
-  private[this] def initialize[ID](
+  private[this] def initFactors[ID](
       inBlocks: RDD[(Int, InBlock[ID])],
       rank: Int,
       seed: Long): RDD[(Int, FactorBlock)] = {
-    // Choose a unit vector uniformly at random from the unit sphere, but from the
-    // "first quadrant" where all elements are nonnegative. This can be done by choosing
-    // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
-    // This appears to create factorizations that have a slightly better reconstruction
-    // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.map { case (srcBlockId, inBlock) =>
+      // PLEASE_ADVISE(danielyli): Is `byteswap64(seed ^ srcBlockId.value)` needed?
+      // Wouldn't `srcBlockId.value`, or even simply the time, be sufficient?
       val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
       val factors = Array.fill(inBlock.srcIds.length) {
+        // We choose elements from the Normal(0, 1) distribution because it seems to
+        // create factorizations that have a slightly better reconstruction (< 1%)
+        // compared to picking elements uniformly from [0, 1].
         val factor = Array.fill(rank)(random.nextGaussian().toFloat)
         val nrm = blas.snrm2(rank, factor, 1)
         blas.sscal(rank, 1.0f / nrm, factor, 1)
