@@ -175,7 +175,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             bucketSpec = None,
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
-          val created = LogicalRelation(fsRelation, catalogTable = Some(updatedTable))
+          val created = LogicalRelation(fsRelation, updatedTable)
           tableRelationCache.put(tableIdentifier, created)
           created
         }
@@ -203,7 +203,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),
-              catalogTable = Some(updatedTable))
+              table = updatedTable)
 
           tableRelationCache.put(tableIdentifier, created)
           created
@@ -212,7 +212,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logicalRelation
       })
     }
-    result.copy(expectedOutputAttributes = Some(relation.output))
+    result.copy(output = relation.output)
   }
 
   private def inferIfNeeded(
