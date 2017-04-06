@@ -572,7 +572,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         // first attempt will hang
         if (!SparkContextSuite.isTaskStarted) {
           SparkContextSuite.isTaskStarted = true
-          Thread.sleep(9999999)
+          try {
+            Thread.sleep(9999999)
+          } catch {
+            case t: Throwable =>
+              // SPARK-20217 should not fail stage if task throws non-interrupted exception
+              throw new RuntimeException("killed")
+          }
         }
         // second attempt succeeds immediately
       }
