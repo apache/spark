@@ -168,18 +168,6 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
- * Interface for creating history listeners defined in other modules like SQL, which are used to
- * rebuild the history UI.
- */
-private[spark] trait SparkHistoryListenerFactory {
-  /**
-   * Create listeners used to rebuild the history UI.
-   */
-  def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener]
-}
-
-
-/**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
  * extend SparkListener or SparkFirehoseListener directly, rather than implementing this class.
  *

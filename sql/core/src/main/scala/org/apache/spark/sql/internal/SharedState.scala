@@ -32,7 +32,6 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
@@ -82,11 +81,6 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * Class for caching query results reused in future executions.
    */
   val cacheManager: CacheManager = new CacheManager
-
-  /**
-   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
-   */
-  val listener: SQLListener = createListenerAndUI(sparkContext)
 
   /**
    * A catalog that interacts with external systems.
@@ -142,19 +136,6 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val jarClassLoader = new NonClosableMutableURLClassLoader(
     org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
-  /**
-   * Create a SQLListener then add it into SparkContext, and create a SQLTab if there is SparkUI.
-   */
-  private def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (SparkSession.sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (SparkSession.sqlListener.compareAndSet(null, listener)) {
-        sc.listenerBus.addToStatusQueue(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
-      }
-    }
-    SparkSession.sqlListener.get()
-  }
 }
 
 object SharedState extends Logging {

@@ -31,7 +31,7 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 /**
  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
  */
-private[spark] class AppStatusStore(store: KVStore) {
+private[spark] class AppStatusStore(val store: KVStore) {
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
     val it = store.view(classOf[JobDataWrapper]).asScala.map(_.info)
@@ -212,9 +212,11 @@ private[spark] object AppStatusStore {
    */
   def createLiveStore(conf: SparkConf, bus: LiveListenerBus): AppStatusStore = {
     val store = new InMemoryStore()
-    val stateStore = new AppStatusStore(store)
     bus.addToStatusQueue(new AppStatusListener(store, conf, true))
-    stateStore
+    AppStatusPlugin.loadPlugins().foreach { p =>
+      p.setupListeners(conf, store, l => bus.addToStatusQueue(l), true)
+    }
+    new AppStatusStore(store)
   }
 
 }

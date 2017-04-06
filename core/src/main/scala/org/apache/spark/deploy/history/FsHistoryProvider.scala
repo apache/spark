@@ -41,7 +41,7 @@ import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
-import org.apache.spark.status.{AppStatusListener, AppStatusStore, AppStatusStoreMetadata, KVUtils}
+import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.SparkUI
@@ -318,6 +318,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val listener = if (needReplay) {
       val _listener = new AppStatusListener(kvstore, conf, false)
       replayBus.addListener(_listener)
+      AppStatusPlugin.loadPlugins().foreach { plugin =>
+        plugin.setupListeners(conf, kvstore, l => replayBus.addListener(l), false)
+      }
       Some(_listener)
     } else {
       None
@@ -335,11 +338,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     try {
-      val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
-        Utils.getContextOrSparkClassLoader).asScala
-      listenerFactories.foreach { listenerFactory =>
-        val listeners = listenerFactory.createListeners(conf, loadedUI.ui)
-        listeners.foreach(replayBus.addListener)
+      AppStatusPlugin.loadPlugins().foreach { plugin =>
+        plugin.setupUI(loadedUI.ui)
       }
 
       val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))

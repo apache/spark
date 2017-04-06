@@ -24,34 +24,54 @@ import scala.xml.{Node, NodeSeq}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
 
-  private val listener = parent.listener
+  private val sqlStore = parent.sqlStore
 
   override def render(request: HttpServletRequest): Seq[Node] = {
     val currentTime = System.currentTimeMillis()
-    val content = listener.synchronized {
+    val running = new mutable.ArrayBuffer[SQLExecutionUIData]()
+    val completed = new mutable.ArrayBuffer[SQLExecutionUIData]()
+    val failed = new mutable.ArrayBuffer[SQLExecutionUIData]()
+
+    sqlStore.executionsList().foreach { e =>
+      val isRunning = e.jobs.exists { case (_, status) => status == JobExecutionStatus.RUNNING }
+      val isFailed = e.jobs.exists { case (_, status) => status == JobExecutionStatus.FAILED }
+      if (isRunning) {
+        running += e
+      } else if (isFailed) {
+        failed += e
+      } else {
+        completed += e
+      }
+    }
+
+    val content = {
       val _content = mutable.ListBuffer[Node]()
-      if (listener.getRunningExecutions.nonEmpty) {
+
+      if (running.nonEmpty) {
         _content ++=
           new RunningExecutionTable(
-            parent, s"Running Queries (${listener.getRunningExecutions.size})", currentTime,
-            listener.getRunningExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
+            parent, s"Running Queries (${running.size})", currentTime,
+            running.sortBy(_.submissionTime).reverse).toNodeSeq
       }
-      if (listener.getCompletedExecutions.nonEmpty) {
+
+      if (completed.nonEmpty) {
         _content ++=
           new CompletedExecutionTable(
-            parent, s"Completed Queries (${listener.getCompletedExecutions.size})", currentTime,
-            listener.getCompletedExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
+            parent, s"Completed Queries (${completed.size})", currentTime,
+            completed.sortBy(_.submissionTime).reverse).toNodeSeq
       }
-      if (listener.getFailedExecutions.nonEmpty) {
+
+      if (failed.nonEmpty) {
         _content ++=
           new FailedExecutionTable(
-            parent, s"Failed Queries (${listener.getFailedExecutions.size})", currentTime,
-            listener.getFailedExecutions.sortBy(_.submissionTime).reverse).toNodeSeq
+            parent, s"Failed Queries (${failed.size})", currentTime,
+            failed.sortBy(_.submissionTime).reverse).toNodeSeq
       }
       _content
     }
@@ -65,26 +85,26 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
       <div>
         <ul class="unstyled">
           {
-            if (listener.getRunningExecutions.nonEmpty) {
+            if (running.nonEmpty) {
               <li>
                 <a href="#running-execution-table"><strong>Running Queries:</strong></a>
-                {listener.getRunningExecutions.size}
+                {running.size}
               </li>
             }
           }
           {
-            if (listener.getCompletedExecutions.nonEmpty) {
+            if (completed.nonEmpty) {
               <li>
                 <a href="#completed-execution-table"><strong>Completed Queries:</strong></a>
-                {listener.getCompletedExecutions.size}
+                {completed.size}
               </li>
             }
           }
           {
-            if (listener.getFailedExecutions.nonEmpty) {
+            if (failed.nonEmpty) {
               <li>
                 <a href="#failed-execution-table"><strong>Failed Queries:</strong></a>
-                {listener.getFailedExecutions.size}
+                {failed.size}
               </li>
             }
           }
@@ -114,23 +134,19 @@ private[ui] abstract class ExecutionTable(
 
   protected def row(currentTime: Long, executionUIData: SQLExecutionUIData): Seq[Node] = {
     val submissionTime = executionUIData.submissionTime
-    val duration = executionUIData.completionTime.getOrElse(currentTime) - submissionTime
+    val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
+      submissionTime
 
-    val runningJobs = executionUIData.runningJobs.map { jobId =>
-      <a href={jobURL(jobId)}>
-        [{jobId.toString}]
-      </a>
+    def jobLinks(status: JobExecutionStatus): Seq[Node] = {
+      executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
+        if (jobStatus == status) {
+          <a href={jobURL(jobId)}>[{jobId.toString}]</a>
+        } else {
+          None
+        }
+      }.toSeq
     }
-    val succeededJobs = executionUIData.succeededJobs.sorted.map { jobId =>
-      <a href={jobURL(jobId)}>
-        [{jobId.toString}]
-      </a>
-    }
-    val failedJobs = executionUIData.failedJobs.sorted.map { jobId =>
-      <a href={jobURL(jobId)}>
-        [{jobId.toString}]
-      </a>
-    }
+
     <tr>
       <td>
         {executionUIData.executionId.toString}
@@ -146,17 +162,17 @@ private[ui] abstract class ExecutionTable(
       </td>
       {if (showRunningJobs) {
         <td>
-          {runningJobs}
+          {jobLinks(JobExecutionStatus.RUNNING)}
         </td>
       }}
       {if (showSucceededJobs) {
         <td>
-          {succeededJobs}
+          {jobLinks(JobExecutionStatus.SUCCEEDED)}
         </td>
       }}
       {if (showFailedJobs) {
         <td>
-          {failedJobs}
+          {jobLinks(JobExecutionStatus.FAILED)}
         </td>
       }}
     </tr>
