@@ -751,8 +751,7 @@ object SparkSubmit extends CommandLineUtils {
 
     try {
       if (isSparkApp) {
-        val envvars = Map[String, String]() ++ sys.env
-        mainMethod.invoke(null, childArgs.toArray, childSparkConf, envvars.toMap)
+        mainMethod.invoke(null, childArgs.toArray, childSparkConf)
       } else {
         mainMethod.invoke(null, childArgs.toArray)
       }

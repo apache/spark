@@ -1142,8 +1142,7 @@ private object Client extends SparkApp with Logging {
 
   override def sparkMain(
     args: Array[String],
-    conf: scala.collection.immutable.Map[String, String],
-    envvars: scala.collection.immutable.Map[String, String]): Unit = {
+    conf: scala.collection.immutable.Map[String, String]): Unit = {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
@@ -1163,7 +1162,7 @@ private object Client extends SparkApp with Logging {
     sparkConf.remove("spark.jars")
     sparkConf.remove("spark.files")
     val argsForClient = new ClientArguments(args)
-    new Client(argsForClient, sparkConf, envvars).run()
+    new Client(argsForClient, sparkConf).run()
   }
 
   // Alias for the user jar

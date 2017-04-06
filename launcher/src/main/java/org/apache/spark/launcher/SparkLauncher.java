@@ -586,6 +586,7 @@ public class SparkLauncher {
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_IF_SHUTDOWN,
         String.valueOf(autoShutdown));
+    setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(autoShutdown));
     try {
       handle.setChildProc(pb.start(), loggerName);
     } catch (IOException ioe) {

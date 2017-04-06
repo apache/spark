@@ -30,11 +30,9 @@ private[spark] trait SparkApp {
    *
    * @param args    - all arguments for SparkApp.
    * @param conf    - Spark Configuration.
-   * @param envvars - system environment Variables.
    */
   def sparkMain(
     args: Array[String],
-    conf: Map[String, String],
-    envvars: Map[String, String]): Unit
+    conf: Map[String, String]): Unit
 
 }
