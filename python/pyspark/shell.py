@@ -24,6 +24,7 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 import atexit
 import os
 import platform
+import warnings
 
 import py4j
 
@@ -47,8 +48,14 @@ try:
     else:
         spark = SparkSession.builder.getOrCreate()
 except py4j.protocol.Py4JError:
+    if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+        warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                      "please make sure you build spark with hive")
     spark = SparkSession.builder.getOrCreate()
 except TypeError:
+    if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
+        warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
+                      "please make sure you build spark with hive")
     spark = SparkSession.builder.getOrCreate()
 
 sc = spark.sparkContext
