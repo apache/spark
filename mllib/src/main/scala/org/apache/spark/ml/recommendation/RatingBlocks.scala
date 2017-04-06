@@ -145,7 +145,7 @@ private[recommendation] object RatingBlocks extends RatingBlockMixin with Loggin
    * @param dstPartitioner partitioner for `dst IDs`
    * @return (in-blocks, out-blocks)
    */
-  private def makeBlocks[ID: ClassTag](
+  private[this] def makeBlocks[ID: ClassTag](
       prefix: String,
       ratingBlocks: RDD[((Int, Int), RatingBlock[ID])],
       srcPart: Partitioner,

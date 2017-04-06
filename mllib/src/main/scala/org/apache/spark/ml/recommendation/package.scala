@@ -29,7 +29,7 @@ package object recommendation {
    * Class storing a known rating a user has assigned to an item.
    */
   @DeveloperApi
-  case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
+  final case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   /**
    * Partitioner used by ALS. We require that getPartition is a projection. That is, for any key k,
@@ -72,7 +72,7 @@ package object recommendation {
    * @param ratings ratings
    * @see [[LocalIndexEncoder]]
    */
-  private[recommendation] case class InBlock[@specialized(Int, Long) ID: ClassTag](
+  private[recommendation] final case class InBlock[@specialized(Int, Long) ID: ClassTag](
       srcIds: Array[ID],
       dstPtrs: Array[Int],
       dstEncodedIndices: Array[Int],

@@ -29,7 +29,7 @@ private[recommendation] trait RatingBlockMixin {
   /**
    * A class holding ratings using primitive arrays.
    */
-  case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
+  final case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
       srcIds: Array[ID],
       dstIds: Array[ID],
       ratings: Array[Float]) {

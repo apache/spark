@@ -341,7 +341,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
    * @param rank rank
    * @return initialized factor blocks
    */
-  private def initialize[ID](
+  private[this] def initialize[ID](
       inBlocks: RDD[(Int, InBlock[ID])],
       rank: Int,
       seed: Long): RDD[(Int, FactorBlock)] = {
@@ -376,7 +376,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
    * @param solver solver for least squares problems
    * @return dst factors
    */
-  private def computeFactors[ID](
+  private[this] def computeFactors[ID](
       srcFactorBlocks: RDD[(Int, FactorBlock)],
       srcOutBlocks: RDD[(Int, OutBlock)],
       dstInBlocks: RDD[(Int, InBlock[ID])],
@@ -445,7 +445,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
    * Computes the Gramian matrix of user or item factors, which is only used in implicit preference.
    * Caching of the input factors is handled in [[ALS#train]].
    */
-  private def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], rank: Int): NormalEquation = {
+  private[this] def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], rank: Int): NormalEquation = {
     factorBlocks.values.aggregate(new NormalEquation(rank))(
       seqOp = (ne, factors) => {
         factors.foreach(ne.add(_, 0.0))
@@ -457,7 +457,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging with Solvers {
   /**
    * Private function to clean up all of the shuffles files from the dependencies and their parents.
    */
-  private[spark] def cleanShuffleDependencies[T](
+  private[recommendation] def cleanShuffleDependencies[T](
       sc: SparkContext,
       deps: Seq[Dependency[_]],
       blocking: Boolean = false): Unit = {

@@ -27,13 +27,13 @@ import org.apache.spark.mllib.optimization.NNLS
 private[recommendation] trait Solvers {
 
   /** Trait for least squares solvers applied to the normal equation. */
-  private[recommendation] trait LeastSquaresNESolver extends Serializable {
+  trait LeastSquaresNESolver extends Serializable {
     /** Solves a least squares problem with regularization (possibly with other constraints). */
     def solve(ne: NormalEquation, lambda: Double): Array[Float]
   }
 
   /** Cholesky solver for least square problems. */
-  private[recommendation] class CholeskySolver extends LeastSquaresNESolver {
+  class CholeskySolver extends LeastSquaresNESolver {
 
     /**
      * Solves a least squares problem with L2 regularization:
@@ -67,7 +67,7 @@ private[recommendation] trait Solvers {
   }
 
   /** NNLS solver. */
-  private[recommendation] class NNLSSolver extends LeastSquaresNESolver {
+  class NNLSSolver extends LeastSquaresNESolver {
     private var rank: Int = -1
     private var workspace: NNLS.Workspace = _
     private var ata: Array[Double] = _
@@ -131,7 +131,7 @@ private[recommendation] trait Solvers {
    *
    * \sum,,i,, c,,i,, (a,,i,, a,,i,,^T^ x - b,,i,, a,,i,,) + lambda * x = 0.
    */
-  private[recommendation] class NormalEquation(val k: Int) extends Serializable {
+  class NormalEquation(val k: Int) extends Serializable {
 
     /** Number of entries in the upper triangular part of a k-by-k matrix. */
     val triK = k * (k + 1) / 2

@@ -99,8 +99,7 @@ private[recommendation] object UncompressedInBlock {
    *
    * @param encoder encoder for dst indices
    */
-  private[recommendation] class Builder[@specialized(Int, Long) ID: ClassTag](
-      encoder: LocalIndexEncoder)(
+  class Builder[@specialized(Int, Long) ID: ClassTag](encoder: LocalIndexEncoder)(
       implicit ord: Ordering[ID]) {
 
     private val srcIds = ArrayBuilder.make[ID]
