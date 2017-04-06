@@ -39,6 +39,19 @@ object SQLExecution {
     executionIdToQueryExecution.get(executionId)
   }
 
+  private val testing = sys.props.contains("spark.testing")
+
+  private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
+    // only throw an exception during tests. a missing execution ID should not fail a job.
+    if (testing && sparkSession.sparkContext.getLocalProperty(EXECUTION_ID_KEY) == null) {
+      // Attention testers: when a test fails with this exception, it means that the action that
+      // started execution of a query didn't call withNewExecutionId. The execution ID should be
+      // set by calling withNewExecutionId in the action that begins execution, like
+      // Dataset.collect or DataFrameWriter.insertInto.
+      throw new IllegalStateException("Execution ID should be set")
+    }
+  }
+
   /**
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
