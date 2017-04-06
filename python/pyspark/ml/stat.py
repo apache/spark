@@ -78,7 +78,7 @@ class Correlation(object):
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
 
-    Notice: For Spearman, a rank correlation, we need to create an RDD[Double] for each column
+    .. note:: For Spearman, a rank correlation, we need to create an RDD[Double] for each column
     and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
     which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
     to avoid recomputing the common lineage.
