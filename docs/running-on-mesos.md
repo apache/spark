@@ -368,6 +368,15 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.task.labels</code></td>
+  <td>(none)</td>
+  <td>
+    Set the Mesos labels to add to each task. Labels are free-form key-value pairs.
+    Key-value pairs should be separated by a colon, and commas used to list more than one.
+    Ex. key:value,key2:value2.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.executor.home</code></td>
   <td>driver side <code>SPARK_HOME</code></td>
   <td>
