@@ -175,13 +175,22 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       itemCol, ratingCol, predictionCol, maxIter, regParam, nonnegative, checkpointInterval,
       seed, intermediateStorageLevel, finalStorageLevel)
 
-    val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
-      numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
-      maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
-      alpha = $(alpha), nonnegative = $(nonnegative),
+    val (userFactors, itemFactors) = ALS.train(
+      ratings,
+      rank = $(rank),
+      numUserBlocks = $(numUserBlocks),
+      numItemBlocks = $(numItemBlocks),
+      maxIter = $(maxIter),
+      regParam = $(regParam),
+      implicitPrefs = $(implicitPrefs),
+      alpha = $(alpha),
+      nonnegative = $(nonnegative),
       intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)),
       finalRDDStorageLevel = StorageLevel.fromString($(finalStorageLevel)),
-      checkpointInterval = $(checkpointInterval), seed = $(seed))
+      checkpointInterval = $(checkpointInterval),
+      seed = $(seed)
+    )
+
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
