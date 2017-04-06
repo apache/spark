@@ -147,6 +147,14 @@ private[spark] class TypedConfigBuilder[T](
     }
   }
 
+  /** Creates a [[ConfigEntry]] with a function to determine the default value */
+  def createWithDefaultFunction(defaultFunc: () => T): ConfigEntry[T] = {
+    val entry = new ConfigEntryWithDefaultFunction[T](parent.key, defaultFunc, converter,
+      stringConverter, parent._doc, parent._public)
+    parent._onCreate.foreach(_ (entry))
+    entry
+  }
+
   /**
    * Creates a [[ConfigEntry]] that has a default value. The default value is provided as a
    * [[String]] and must be a valid value for the entry.
