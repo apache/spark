@@ -206,7 +206,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     //  and d3_fk1 = s3_pk1
     //
     // Default join reordering: d1, f1, d2, d3, s3
-    // Star join reordering: f1, d1, d3, d2,, d3
+    // Star join reordering: f1, d1, d3, d2, s3
 
     val query =
       d1.join(f1).join(d2).join(s3).join(d3)
@@ -242,7 +242,7 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     //  and d3_fk1 = s3_pk1
     //
     // Default join reordering: d1, f1, d2, d3, s3
-    // Star join reordering: f1, d1, d3, d2, d3
+    // Star join reordering: f1, d1, d3, d2, s3
     val query =
       d1.join(f1).join(d2).join(s3).join(d3)
         .where((nameToAttr("f1_fk1") === nameToAttr("d1_pk1")) &&
