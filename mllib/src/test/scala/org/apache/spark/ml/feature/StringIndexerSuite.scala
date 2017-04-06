@@ -45,12 +45,11 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    val indexerModel = indexer.fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(indexer)
+    MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
 
-    val transformed = indexer.transform(df)
+    val transformed = indexerModel.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("a", "c", "b"))

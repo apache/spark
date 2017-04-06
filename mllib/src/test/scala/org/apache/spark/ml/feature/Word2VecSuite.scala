@@ -57,15 +57,14 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val docDF = doc.zip(expected).toDF("text", "expected")
 
-    val model = new Word2Vec()
+    val w2v = new Word2Vec()
       .setVectorSize(3)
       .setInputCol("text")
       .setOutputCol("result")
       .setSeed(42L)
-      .fit(docDF)
+    val model = w2v.fit(docDF)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(w2v, model)
 
     // These expectations are just magic values, characterizing the current
     // behavior.  The test needs to be updated to be more general, see SPARK-11502

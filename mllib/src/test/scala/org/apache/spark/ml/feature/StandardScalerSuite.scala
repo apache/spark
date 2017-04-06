@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
@@ -77,10 +77,11 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Standardization with default parameter") {
     val df0 = data.zip(resWithStd).toSeq.toDF("features", "expected")
 
-    val standardScaler0 = new StandardScaler()
+    val standardScalerEst0 = new StandardScaler()
       .setInputCol("features")
       .setOutputCol("standardized_features")
-      .fit(df0)
+    val standardScaler0 = standardScalerEst0.fit(df0)
+    MLTestingUtils.checkCopyAndUids(standardScalerEst0, standardScaler0)
 
     assertResult(standardScaler0.transform(df0))
   }

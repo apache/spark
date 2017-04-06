@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{MLTestingUtils, SchemaUtils}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DataTypes
@@ -57,6 +57,8 @@ private[ml] object LSHTest {
     val inputCol = model.getInputCol
     val outputCol = model.getOutputCol
     val transformedData = model.transform(dataset)
+
+    MLTestingUtils.checkCopyAndUids(lsh, model)
 
     // Check output column type
     SchemaUtils.checkColumnType(

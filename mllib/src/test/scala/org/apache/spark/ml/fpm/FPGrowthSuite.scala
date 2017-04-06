@@ -17,9 +17,10 @@
 package org.apache.spark.ml.fpm
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -121,7 +122,9 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setMinConfidence(0.5678)
     assert(fpGrowth.getMinSupport === 0.4567)
     assert(model.getMinConfidence === 0.5678)
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(fpGrowth, model)
+    ParamsSuite.checkParams(fpGrowth)
+    ParamsSuite.checkParams(model)
   }
 
   test("read/write") {

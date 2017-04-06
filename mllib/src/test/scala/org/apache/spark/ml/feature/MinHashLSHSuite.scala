@@ -63,7 +63,7 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCol("values")
     val model = mh.fit(dataset)
     assert(mh.uid === model.uid)
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(mh, model)
   }
 
   test("hashFunction") {

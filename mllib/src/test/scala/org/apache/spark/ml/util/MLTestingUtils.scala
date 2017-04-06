@@ -31,11 +31,15 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 object MLTestingUtils extends SparkFunSuite {
-  def checkCopy(model: Model[_]): Unit = {
+
+  def checkCopyAndUids[T <: Estimator[_]](estimator: T, model: Model[_]): Unit = {
+    assert(estimator.uid === model.uid, "Model uid does not match parent estimator")
+
+    // copied model must have the same parent
     val copied = model.copy(ParamMap.empty)
       .asInstanceOf[Model[_]]
-    assert(copied.parent.uid == model.parent.uid)
     assert(copied.parent == model.parent)
+    assert(copied.parent.uid == model.parent.uid)
   }
 
   def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
