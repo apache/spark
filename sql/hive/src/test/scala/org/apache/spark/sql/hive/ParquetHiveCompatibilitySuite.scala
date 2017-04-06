@@ -367,9 +367,9 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
                   s"collected = ${collectedFromExternal.mkString(",")}")
 
                 // Now test that the behavior is still correct even with a filter which could get
-                // pushed down into parquet.  You would expect we'd need to do extra handling of
-                // this case, but it turns out we don't, because parquet does not read statistics
-                // from int96 fields, as they are unsigned.  See
+                // pushed down into parquet.  We don't need extra handling for pushed down
+                // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
+                // does not read statistics from int96 fields, as they are unsigned.  See
                 // scalastyle:off line.size.limit
                 // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
                 // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
@@ -402,9 +402,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
                 ).foreach { case (comparison, value) =>
                   val query =
                     s"select value from external_$baseTable where value $comparison '$value'"
-                  val countWithFilter = spark
-                    .sql(query)
-                    .count()
+                  val countWithFilter = spark.sql(query).count()
                   assert(countWithFilter === 4, query)
                 }
 
