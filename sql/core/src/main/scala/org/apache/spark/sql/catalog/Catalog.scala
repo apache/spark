@@ -283,7 +283,7 @@ abstract class Catalog {
 
   /**
    * :: Experimental ::
-   * Creates a table from the given path based on a data source and a set of options.
+   * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
@@ -321,7 +321,7 @@ abstract class Catalog {
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Creates a table from the given path based on a data source and a set of options.
+   * Creates a table based on the dataset in a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
@@ -357,7 +357,7 @@ abstract class Catalog {
 
   /**
    * :: Experimental ::
-   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Create a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
@@ -397,7 +397,7 @@ abstract class Catalog {
   /**
    * :: Experimental ::
    * (Scala-specific)
-   * Create a table from the given path based on a data source, a schema and a set of options.
+   * Create a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
@@ -447,6 +447,7 @@ abstract class Catalog {
 
   /**
    * Recovers all the partitions in the directory of a table and update the catalog.
+   * Only works with a partitioned table, and not a view.
    *
    * @param tableName is either a qualified or unqualified name that designates a table.
    *                  If no database identifier is provided, it refers to a table in the
@@ -493,10 +494,10 @@ abstract class Catalog {
   def clearCache(): Unit
 
   /**
-   * Invalidates and refreshes all the cached metadata of the given table. For performance reasons,
-   * Spark SQL or the external data source library it uses might cache certain metadata about a
-   * table, such as the location of blocks. When those change outside of Spark SQL, users should
-   * call this function to invalidate the cache.
+   * Invalidates and refreshes all the cached data and metadata of the given table. For performance
+   * reasons, Spark SQL or the external data source library it uses might cache certain metadata
+   * about a table, such as the location of blocks. When those change outside of Spark SQL, users
+   * should call this function to invalidate the cache.
    *
    * If this table is cached as an InMemoryRelation, drop the original cached version and make the
    * new version cached lazily.
