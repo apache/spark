@@ -39,56 +39,7 @@ private[recommendation] final case class RatingBlocks[ID](
 )
 
 @DeveloperApi
-private[recommendation] object RatingBlocks extends Logging {
-
-  /**
-   * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
-   */
-  private[recommendation] case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
-      srcIds: Array[ID],
-      dstIds: Array[ID],
-      ratings: Array[Float]) {
-    /** Size of the block. */
-    def size: Int = srcIds.length
-    require(dstIds.length == srcIds.length)
-    require(ratings.length == srcIds.length)
-  }
-
-  private[recommendation] object RatingBlock {
-
-    /** Builder for [[RatingBlock]]. `ArrayBuilder` is used to avoid boxing/unboxing. */
-    class Builder[@specialized(Int, Long) ID: ClassTag] extends Serializable {
-
-      private val srcIds = ArrayBuilder.make[ID]
-      private val dstIds = ArrayBuilder.make[ID]
-      private val ratings = ArrayBuilder.make[Float]
-      var size = 0
-
-      /** Adds a rating. */
-      def add(r: Rating[ID]): this.type = {
-        size += 1
-        srcIds += r.user
-        dstIds += r.item
-        ratings += r.rating
-        this
-      }
-
-      /** Merges another [[RatingBlock.Builder]]. */
-      def merge(other: RatingBlock[ID]): this.type = {
-        size += other.srcIds.length
-        srcIds ++= other.srcIds
-        dstIds ++= other.dstIds
-        ratings ++= other.ratings
-        this
-      }
-
-      /** Builds a [[RatingBlock]]. */
-      def build(): RatingBlock[ID] = {
-        RatingBlock[ID](srcIds.result(), dstIds.result(), ratings.result())
-      }
-    }
-
-  }
+private[recommendation] object RatingBlocks extends RatingBlockMixin with Logging {
 
   @DeveloperApi
   def create[ID: ClassTag: Ordering](
