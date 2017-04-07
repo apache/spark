@@ -1012,7 +1012,7 @@ private[spark] object RandomForest extends Logging {
       def weightedMean(pre: (Double, Int), cur: (Double, Int)): Double = {
         val (preValue, preCount) = pre
         val (curValue, curCount) = cur
-        (preValue * preCount + curValue * curCount) / (preCount + curCount)
+        (preValue * preCount + curValue * curCount) / (preCount.toDouble + curCount)
       }
 
       // if possible splits is not enough or just enough, just return all possible splits
