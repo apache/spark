@@ -135,15 +135,15 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("PartitioningAwareFileIndex - file filtering") {
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("abcd"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut(".ab"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_metadata"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("a._COPYING_"))
+  test("InMemoryFileIndex - file filtering") {
+    assert(!InMemoryFileIndex.shouldFilterOut("abcd"))
+    assert(InMemoryFileIndex.shouldFilterOut(".ab"))
+    assert(InMemoryFileIndex.shouldFilterOut("_cd"))
+    assert(!InMemoryFileIndex.shouldFilterOut("_metadata"))
+    assert(!InMemoryFileIndex.shouldFilterOut("_common_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("_ab_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("_cd_common_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("a._COPYING_"))
   }
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
