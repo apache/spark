@@ -231,16 +231,17 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
             options = table.storage.properties ++ pathOption,
             catalogTable = Some(table))
 
-        LogicalRelation(
-          dataSource.resolveRelation(checkFilesExist = false),
-          catalogTable = Some(table))
+        LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
       }
     }).asInstanceOf[LogicalRelation]
 
-    // It's possible that the table schema is empty and need to be inferred at runtime. We should
-    // not specify expected outputs for this case.
-    val expectedOutputs = if (r.output.isEmpty) None else Some(r.output)
-    plan.copy(expectedOutputAttributes = expectedOutputs)
+    if (r.output.isEmpty) {
+      // It's possible that the table schema is empty and need to be inferred at runtime. For this
+      // case, we don't need to change the output of the cached plan.
+      plan
+    } else {
+      plan.copy(output = r.output)
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {

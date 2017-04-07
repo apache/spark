@@ -175,7 +175,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             bucketSpec = None,
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
-          val created = LogicalRelation(fsRelation, catalogTable = Some(updatedTable))
+          val created = LogicalRelation(fsRelation, updatedTable)
           tableRelationCache.put(tableIdentifier, created)
           created
         }
@@ -203,7 +203,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),
-              catalogTable = Some(updatedTable))
+              table = updatedTable)
 
           tableRelationCache.put(tableIdentifier, created)
           created
@@ -212,7 +212,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logicalRelation
       })
     }
-    result.copy(expectedOutputAttributes = Some(relation.output))
+    // The inferred schema may have different filed names as the table schema, we should respect
+    // it, but also respect the exprId in table relation output.
+    assert(result.output.length == relation.output.length &&
+      result.output.zip(relation.output).forall { case (a1, a2) => a1.dataType == a2.dataType })
+    val newOutput = result.output.zip(relation.output).map {
+      case (a1, a2) => a1.withExprId(a2.exprId)
+    }
+    result.copy(output = newOutput)
   }
 
   private def inferIfNeeded(

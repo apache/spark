@@ -27,7 +27,7 @@ import com.google.common.base.Objects
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -403,14 +403,14 @@ object CatalogTypes {
  */
 case class CatalogRelation(
     tableMeta: CatalogTable,
-    dataCols: Seq[Attribute],
-    partitionCols: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
+    dataCols: Seq[AttributeReference],
+    partitionCols: Seq[AttributeReference]) extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
   assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
 
   // The partition column should always appear after data columns.
-  override def output: Seq[Attribute] = dataCols ++ partitionCols
+  override def output: Seq[AttributeReference] = dataCols ++ partitionCols
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
