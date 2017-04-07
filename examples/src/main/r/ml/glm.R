@@ -56,6 +56,15 @@ summary(binomialGLM)
 # Prediction
 binomialPredictions <- predict(binomialGLM, binomialTestDF)
 head(binomialPredictions)
+
+# Fit a generalized linear model of family "tweedie" with spark.glm
+training3 <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+tweedieDF <- transform(training3, label = training3$label * exp(randn(10)))
+tweedieGLM <- spark.glm(tweedieDF, label ~ features, family = "tweedie",
+                        var.power = 1.2, link.power = 0)
+
+# Model summary
+summary(tweedieGLM)
 # $example off$
 
 sparkR.session.stop()
