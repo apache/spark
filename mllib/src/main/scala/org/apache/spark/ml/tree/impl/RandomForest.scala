@@ -996,7 +996,7 @@ private[spark] object RandomForest extends Logging {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
-    val splits = if (featureSamples.isEmpty) {
+    val splits: Array[Double] = if (featureSamples.isEmpty) {
       Array.empty[Double]
     } else {
       val numSplits = metadata.numSplits(featureIndex)
@@ -1009,10 +1009,20 @@ private[spark] object RandomForest extends Logging {
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
 
+      def weightedMean(pre: (Double, Int), cru: (Double, Int)): Double = {
+        val (preValue, preCount) = pre
+        val (curValue, curCount) = cru
+        (preValue * preCount + curValue * curCount) / (preCount + curCount)
+      }
+
       // if possible splits is not enough or just enough, just return all possible splits
       val possibleSplits = valueCounts.length - 1
       if (possibleSplits <= numSplits) {
-        valueCounts.map(_._1).init
+        valueCounts
+          .sliding(2)
+          .map{x => weightedMean(x(0), x(1))}
+          .toArray
+
       } else {
         // stride between splits
         val stride: Double = numSamples.toDouble / (numSplits + 1)
@@ -1037,7 +1047,10 @@ private[spark] object RandomForest extends Logging {
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
           if (previousGap < currentGap) {
-            splitsBuilder += valueCounts(index - 1)._1
+            val pre = valueCounts(index - 1)
+            val cru = valueCounts(index)
+
+            splitsBuilder += weightedMean(pre, cru)
             targetCount += stride
           }
           index += 1
