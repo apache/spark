@@ -1027,7 +1027,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[First]] expression.
    */
   override def visitFirst(ctx: FirstContext): Expression = withOrigin(ctx) {
-    val ignoreNullsExpr = ctx.IGNORE != null && ctx.NULLS != null
+    val ignoreNullsExpr = ctx.IGNORE != null
     First(expression(ctx.expression), Literal(ignoreNullsExpr)).toAggregateExpression()
   }
 
@@ -1035,7 +1035,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[Last]] expression.
    */
   override def visitLast(ctx: LastContext): Expression = withOrigin(ctx) {
-    val ignoreNullsExpr = ctx.IGNORE != null && ctx.NULLS != null
+    val ignoreNullsExpr = ctx.IGNORE != null
     Last(expression(ctx.expression), Literal(ignoreNullsExpr)).toAggregateExpression()
   }
 
