@@ -305,6 +305,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
     </td>
   </tr>
   <tr>
