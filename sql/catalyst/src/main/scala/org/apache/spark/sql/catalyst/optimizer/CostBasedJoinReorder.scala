@@ -59,7 +59,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
       // We also need to check if costs of all items can be evaluated.
       if (items.size > 2 && items.size <= conf.joinReorderDPThreshold && conditions.nonEmpty &&
           items.forall(_.stats(conf).rowCount.isDefined)) {
-        JoinReorderDP(conf).search(conf, items, conditions, output)
+        JoinReorderDP.search(conf, items, conditions, output)
       } else {
         plan
       }
@@ -132,7 +132,7 @@ case class CostBasedJoinReorder(conf: SQLConf) extends Rule[LogicalPlan] with Pr
  * For cost evaluation, since physical costs for operators are not available currently, we use
  * cardinalities and sizes to compute costs.
  */
-case class JoinReorderDP(conf: SQLConf) extends PredicateHelper with Logging {
+object JoinReorderDP extends PredicateHelper with Logging {
 
   def search(
       conf: SQLConf,
