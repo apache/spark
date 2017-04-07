@@ -87,17 +87,6 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(splits(0).length === 0)
   }
 
-  test("SPARK-16957: Use weighted midpoints for split values.") {
-    val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
-      Map(), Set(),
-      Array(2), Gini, QuantileStrategy.Sort,
-      0, 0, 0.0, 0, 0
-    )
-    val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
-    val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-    assert(splits === Array(0.5))
-  }
-
   test("find splits for a continuous feature") {
     // find splits for normal case
     {
@@ -113,6 +102,18 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(fakeMetadata.numBins(0) === 6)
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
+    }
+
+    // SPARK-16957: Use weighted midpoints for split values.
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(2), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
+      val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits === Array(0.5))
     }
 
     // find splits should not return identical splits
