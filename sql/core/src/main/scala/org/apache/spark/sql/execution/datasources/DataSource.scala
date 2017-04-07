@@ -125,7 +125,8 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
+      new InMemoryFileIndex(sparkSession, globbedPaths, options, None,
+        format.getPathFilter(options), fileStatusCache)
     }
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
@@ -316,7 +317,8 @@ case class DataSource(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath)
+        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
+          format.getPathFilter(options))
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -369,7 +371,8 @@ case class DataSource(
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
           new InMemoryFileIndex(
-            sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
+            sparkSession, globbedPaths, options, Some(partitionSchema),
+            format.getPathFilter(options), fileStatusCache)
         }
 
         HadoopFsRelation(

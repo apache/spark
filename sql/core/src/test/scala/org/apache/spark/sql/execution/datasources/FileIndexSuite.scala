@@ -38,7 +38,8 @@ class FileIndexSuite extends SharedSQLContext {
       stringToFile(file, "text")
 
       val path = new Path(file.getCanonicalPath)
-      val catalog = new InMemoryFileIndex(spark, Seq(path), Map.empty, None) {
+      val catalog = new InMemoryFileIndex(spark, Seq(path), Map.empty, None,
+          PathFilter.defaultPathFilter) {
         def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
         def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
       }
@@ -135,21 +136,10 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("PartitioningAwareFileIndex - file filtering") {
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("abcd"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut(".ab"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_metadata"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("a._COPYING_"))
-  }
-
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
       override val rootPaths: Seq[Path])
-      extends PartitioningAwareFileIndex(spark, Map.empty, None) {
+      extends PartitioningAwareFileIndex(spark, Map.empty, None, PathFilter.defaultPathFilter) {
 
       override def refresh(): Unit = {}
 
@@ -201,7 +191,8 @@ class FileIndexSuite extends SharedSQLContext {
       val dirPath = new Path(dir.getAbsolutePath)
       val fs = dirPath.getFileSystem(spark.sessionState.newHadoopConf())
       val catalog =
-        new InMemoryFileIndex(spark, Seq(dirPath), Map.empty, None, fileStatusCache) {
+        new InMemoryFileIndex(
+            spark, Seq(dirPath), Map.empty, None, PathFilter.defaultPathFilter, fileStatusCache) {
           def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
           def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
         }

@@ -85,7 +85,8 @@ class CatalogFileIndex(
         sparkSession, new Path(baseLocation.get), fileStatusCache, partitionSpec, Option(timeNs))
     } else {
       new InMemoryFileIndex(
-        sparkSession, rootPaths, table.storage.properties, partitionSchema = None)
+        sparkSession, rootPaths, table.storage.properties, partitionSchema = None,
+        PathFilter.defaultPathFilter)
     }
   }
 
@@ -120,4 +121,5 @@ private class PrunedInMemoryFileIndex(
     partitionSpec.partitions.map(_.path),
     Map.empty,
     Some(partitionSpec.partitionColumns),
+    PathFilter.defaultPathFilter,
     fileStatusCache)

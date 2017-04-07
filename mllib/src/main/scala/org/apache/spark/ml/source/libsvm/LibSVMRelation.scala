@@ -90,10 +90,9 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
     val libSVMOptions = new LibSVMOptions(options)
     val numFeatures: Int = libSVMOptions.numFeatures.getOrElse {
       // Infers number of features if the user doesn't specify (a valid) one.
-      val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
-      val path = if (dataFiles.length == 1) {
-        dataFiles.head.getPath.toUri.toString
-      } else if (dataFiles.isEmpty) {
+      val path = if (files.length == 1) {
+        files.head.getPath.toUri.toString
+      } else if (files.isEmpty) {
         throw new IOException("No input path specified for libsvm data")
       } else {
         throw new IOException("Multiple input paths are not supported for libsvm data.")
