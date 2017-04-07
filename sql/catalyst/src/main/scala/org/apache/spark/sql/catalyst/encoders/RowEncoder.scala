@@ -136,14 +136,16 @@ object RowEncoder {
     case t @ MapType(kt, vt, valueNullable) =>
       val keys =
         Invoke(
-          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]]), returnNullable = false),
+          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedKeys = serializerFor(keys, ArrayType(kt, false))
 
       val values =
         Invoke(
-          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]]), returnNullable = false),
+          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
@@ -262,7 +264,8 @@ object RowEncoder {
         input :: Nil)
 
     case _: DecimalType =>
-      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]), returnNullable = false)
+      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
+        returnNullable = false)
 
     case StringType =>
       Invoke(input, "toString", ObjectType(classOf[String]), returnNullable = false)
