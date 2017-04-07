@@ -767,32 +767,6 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
-    // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
-    // pushed beneath must satisfy the following conditions:
-    // 1. All the expressions are part of window partitioning key. The expressions can be compound.
-    // 2. Deterministic.
-    // 3. Placed before any non-deterministic predicates.
-    case filter @ Filter(condition, w: Window)
-        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
-      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
-
-      val (candidates, containingNonDeterministic) =
-        splitConjunctivePredicates(condition).span(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
-        cond.references.subsetOf(partitionAttrs)
-      }
-
-      val stayUp = rest ++ containingNonDeterministic
-
-      if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
-        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
-      } else {
-        filter
-      }
-
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic) =>
       // Find all the aliased expressions in the aggregate list that don't include any actual
@@ -821,6 +795,32 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+      } else {
+        filter
+      }
+
+    // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
+    // pushed beneath must satisfy the following conditions:
+    // 1. All the expressions are part of window partitioning key. The expressions can be compound.
+    // 2. Deterministic.
+    // 3. Placed before any non-deterministic predicates.
+    case filter @ Filter(condition, w: Window)
+      if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
+
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        cond.references.subsetOf(partitionAttrs)
+      }
+
+      val stayUp = rest ++ containingNonDeterministic
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
+        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
       } else {
         filter
       }
