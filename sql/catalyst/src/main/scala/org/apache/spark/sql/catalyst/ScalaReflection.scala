@@ -251,19 +251,22 @@ object ScalaReflection extends ScalaReflection {
           getPath :: Nil)
 
       case t if t <:< localTypeOf[java.lang.String] =>
-        Invoke(getPath, "toString", ObjectType(classOf[String]))
+        Invoke(getPath, "toString", ObjectType(classOf[String]), returnNullable = false)
 
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
-        Invoke(getPath, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+        Invoke(getPath, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
+          returnNullable = false)
 
       case t if t <:< localTypeOf[BigDecimal] =>
-        Invoke(getPath, "toBigDecimal", ObjectType(classOf[BigDecimal]))
+        Invoke(getPath, "toBigDecimal", ObjectType(classOf[BigDecimal]), returnNullable = false)
 
       case t if t <:< localTypeOf[java.math.BigInteger] =>
-        Invoke(getPath, "toJavaBigInteger", ObjectType(classOf[java.math.BigInteger]))
+        Invoke(getPath, "toJavaBigInteger", ObjectType(classOf[java.math.BigInteger]),
+          returnNullable = false)
 
       case t if t <:< localTypeOf[scala.math.BigInt] =>
-        Invoke(getPath, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]))
+        Invoke(getPath, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]),
+          returnNullable = false)
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
@@ -284,7 +287,7 @@ object ScalaReflection extends ScalaReflection {
         val arrayCls = arrayClassFor(elementType)
 
         if (elementNullable) {
-          Invoke(arrayData, "array", arrayCls)
+          Invoke(arrayData, "array", arrayCls, returnNullable = false)
         } else {
           val primitiveMethod = elementType match {
             case t if t <:< definitions.IntTpe => "toIntArray"
@@ -297,7 +300,7 @@ object ScalaReflection extends ScalaReflection {
             case other => throw new IllegalStateException("expect primitive array element type " +
               "but got " + other)
           }
-          Invoke(arrayData, primitiveMethod, arrayCls)
+          Invoke(arrayData, primitiveMethod, arrayCls, returnNullable = false)
         }
 
       case t if t <:< localTypeOf[Seq[_]] =>
@@ -330,19 +333,21 @@ object ScalaReflection extends ScalaReflection {
           Invoke(
             MapObjects(
               p => deserializerFor(keyType, Some(p), walkedTypePath),
-              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
+              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType),
+                returnNullable = false),
               schemaFor(keyType).dataType),
             "array",
-            ObjectType(classOf[Array[Any]]))
+            ObjectType(classOf[Array[Any]]), returnNullable = false)
 
         val valueData =
           Invoke(
             MapObjects(
               p => deserializerFor(valueType, Some(p), walkedTypePath),
-              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
+              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType),
+                returnNullable = false),
               schemaFor(valueType).dataType),
             "array",
-            ObjectType(classOf[Array[Any]]))
+            ObjectType(classOf[Array[Any]]), returnNullable = false)
 
         StaticInvoke(
           ArrayBasedMapData.getClass,
@@ -356,7 +361,8 @@ object ScalaReflection extends ScalaReflection {
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
           dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
-        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
+        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil,
+          returnNullable = false)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
         val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
@@ -365,7 +371,8 @@ object ScalaReflection extends ScalaReflection {
           udt.getClass,
           Nil,
           dataType = ObjectType(udt.getClass))
-        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
+        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil,
+          returnNullable = false)
 
       case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
@@ -577,7 +584,7 @@ object ScalaReflection extends ScalaReflection {
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
           dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
-        Invoke(obj, "serialize", udt, inputObject :: Nil)
+        Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
         val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
@@ -586,7 +593,7 @@ object ScalaReflection extends ScalaReflection {
           udt.getClass,
           Nil,
           dataType = ObjectType(udt.getClass))
-        Invoke(obj, "serialize", udt, inputObject :: Nil)
+        Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
