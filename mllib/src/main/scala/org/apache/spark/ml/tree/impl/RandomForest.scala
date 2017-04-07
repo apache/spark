@@ -1024,7 +1024,7 @@ private[spark] object RandomForest extends Logging {
       } else if (possibleSplits <= numSplits) {
         valueCounts
           .sliding(2)
-          .map{x => weightedMean(x(0), x(1))}
+          .map(x => weightedMean(x(0), x(1)))
           .toArray
 
       } else {
