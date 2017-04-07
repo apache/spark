@@ -44,7 +44,7 @@ gaussianGLM2 <- glm(label ~ features, gaussianDF, family = "gaussian")
 summary(gaussianGLM2)
 
 # Fit a generalized linear model of family "binomial" with spark.glm
-training2 <- read.df("/data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
+training2 <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 training2 <- transform(training2, label = cast(training2$label > 1, "integer"))
 df_list2 <- randomSplit(training2, c(7, 3), 2)
 binomialDF <- df_list2[[1]]
