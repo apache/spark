@@ -40,7 +40,7 @@ object CatalystTypeConverters {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
-  private def isPrimitive(dataType: DataType): Boolean = {
+  def isPrimitive(dataType: DataType): Boolean = {
     dataType match {
       case BooleanType => true
       case ByteType => true
