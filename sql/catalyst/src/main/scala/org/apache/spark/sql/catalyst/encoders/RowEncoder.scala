@@ -247,7 +247,7 @@ object RowEncoder {
         udtClass,
         Nil,
         dataType = ObjectType(udtClass))
-      Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil, returnNullable = false)
+      Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
       StaticInvoke(
