@@ -1141,10 +1141,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   test("Schedule tasks based on size of input from ShuffledRDD.") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc)
-    val taskSet = FakeTask.createTaskSet(4)
+    val tasks = Array.tabulate[Task[_]](4) { i =>
+      new FakeTask(stageId = 0, partitionId = i, prefLocs = Nil)
+    }
+    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      Some(tasks.zip(Seq(1L, 100L, 10000L, 1000L)).toMap))
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, 1, clock = clock)
-    manager.setTaskInputSizeFromShuffledRDD(taskSet.tasks.zip(Seq(1L, 100L, 10000L, 1000L)).toMap)
     assert(manager.resourceOffer("exec", "host", ANY).get.index === 2)
     assert(manager.resourceOffer("exec", "host", ANY).get.index === 3)
     assert(manager.resourceOffer("exec", "host", ANY).get.index === 1)

@@ -171,8 +171,6 @@ private[spark] class TaskSetManager(
 
   private val sortedPendingTasks = new AtomicBoolean(false)
 
-  val taskInputSizeFromShuffledRDD = HashMap[Task[_], Long]()
-
   // Add all our tasks to the pending lists. We do this in reverse order
   // of task index so that tasks with low indices get launched first.
   for (i <- (0 until numTasks).reverse) {
@@ -522,47 +520,26 @@ private[spark] class TaskSetManager(
   }
 
   private[this] def sortPendingTasks(): Unit = {
-    val taskIndexs = (0 until numTasks).toArray
-    def ordFunc(x: Int, y: Int): Boolean = {
-      getTaskInputSizeFromShuffledRDD(tasks(x)) < getTaskInputSizeFromShuffledRDD(tasks(y))
-    }
-    if (tasks.nonEmpty) {
-      // Sort the tasks based on their input size from ShuffledRDD.
-      pendingTasksForExecutor.foreach {
-        case (k, v) => pendingTasksForExecutor(k) = v.sortWith(ordFunc)
-      }
-      pendingTasksForHost.foreach {
-        case (k, v) => pendingTasksForHost(k) = v.sortWith(ordFunc)
-      }
-      pendingTasksForRack.foreach {
-        case (k, v) => pendingTasksForRack(k) = v.sortWith(ordFunc)
-      }
-      pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.sortWith(ordFunc)
-      allPendingTasks = allPendingTasks.sortWith(ordFunc)
-    }
-  }
-
-  // Visible for testing
-  private[spark] def setTaskInputSizeFromShuffledRDD(inputSize: Map[Task[_], Long]) = {
-    taskInputSizeFromShuffledRDD.clear()
-    taskInputSizeFromShuffledRDD ++= inputSize
-  }
-
-  private[this] def getTaskInputSizeFromShuffledRDD(task: Task[_]): Long = {
-    taskInputSizeFromShuffledRDD.get(task) match {
-      case Some(size) => size
-      case None =>
-        val size =
-          sched.dagScheduler.parentSplitsInShuffledRDD(task.stageId, task.partitionId).map {
-            case parentSplits =>
-              parentSplits.map {
-                case (shuffleId, splits) =>
-                  splits.map(sched.mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
-                    .flatMap(_._2.map(_._2)).sum).sum
-              }.sum
-          }.getOrElse(0L)
-        taskInputSizeFromShuffledRDD(task) = size
-        size
+    taskSet.taskInputSizesFromShuffledRDDOpt match {
+      case Some(taskInputSizeFromShuffledRDD) =>
+        def ordFunc(x: Int, y: Int): Boolean = {
+          taskInputSizeFromShuffledRDD(tasks(x)) < taskInputSizeFromShuffledRDD(tasks(y))
+        }
+        if (tasks.nonEmpty) {
+          // Sort the tasks based on their input size from ShuffledRDD.
+          pendingTasksForExecutor.foreach {
+            case (k, v) => pendingTasksForExecutor(k) = v.sortWith(ordFunc)
+          }
+          pendingTasksForHost.foreach {
+            case (k, v) => pendingTasksForHost(k) = v.sortWith(ordFunc)
+          }
+          pendingTasksForRack.foreach {
+            case (k, v) => pendingTasksForRack(k) = v.sortWith(ordFunc)
+          }
+          pendingTasksWithNoPrefs = pendingTasksWithNoPrefs.sortWith(ordFunc)
+          allPendingTasks = allPendingTasks.sortWith(ordFunc)
+        }
+      case None => // no-op
     }
   }
 

@@ -483,14 +483,27 @@ class DAGScheduler(
         val ret = new HashMap[Int, HashSet[Int]]()
         while(waitingForVisit.nonEmpty) {
           val (rdd, split) = waitingForVisit.pop()
-          rdd.dependencies.foreach {
-            case dep: ShuffleDependency[_, _, _] =>
-              ret.getOrElseUpdate(dep.shuffleId, new HashSet[Int]()).add(split)
-            case dep: NarrowDependency[_] =>
-              dep.getParents(split).foreach {
-                case parentSplit =>
-                  waitingForVisit.push((dep.rdd, parentSplit))
-              }
+          if (getCacheLocs(rdd)(split) == Nil) {
+            rdd.dependencies.foreach {
+              case dep: ShuffleDependency[_, _, _] =>
+                val noPartitionerConflict = rdd.partitioner match {
+                  case Some(partitioner) =>
+                    partitioner.isInstanceOf[HashPartitioner] &&
+                    dep.partitioner.isInstanceOf[HashPartitioner] &&
+                    partitioner.numPartitions == dep.partitioner.numPartitions
+                  case None => true
+                }
+                if (noPartitionerConflict) {
+                  ret.getOrElseUpdate(dep.shuffleId, new HashSet[Int]()).add(split)
+                }
+              case dep: NarrowDependency[_] =>
+                dep.getParents(split).foreach {
+                  case parentSplit =>
+                    if (getCacheLocs(dep.rdd)(parentSplit) == Nil) {
+                      waitingForVisit.push((dep.rdd, parentSplit))
+                    }
+                }
+            }
           }
         }
         Some(ret.mapValues(_.toSet).toMap)
@@ -1086,7 +1099,8 @@ class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
-        tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
+        tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties,
+        Some(getTaskInputSizesFromShuffledRDD(tasks))))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
@@ -1106,6 +1120,25 @@ class DAGScheduler(
 
       submitWaitingChildStages(stage)
     }
+  }
+
+  // Visible for testing.
+  private[spark] def getTaskInputSizesFromShuffledRDD(tasks: Seq[Task[_]]): Map[Task[_], Long] = {
+    val taskInputSizeFromShuffledRDD = HashMap[Task[_], Long]()
+    tasks.foreach {
+      case task =>
+        val size =
+          parentSplitsInShuffledRDD(task.stageId, task.partitionId).map {
+            case parentSplits =>
+              parentSplits.map {
+                case (shuffleId, splits) =>
+                  splits.map(mapOutputTracker.getMapSizesByExecutorId(shuffleId, _)
+                    .flatMap(_._2.map(_._2)).sum).sum
+              }.sum
+          }.getOrElse(0L)
+        taskInputSizeFromShuffledRDD(task) = size
+    }
+    taskInputSizeFromShuffledRDD.toMap
   }
 
   /**
