@@ -929,7 +929,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
-case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
+case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
@@ -945,7 +945,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == null) {
-      throw new RuntimeException(errMsg);
+      throw new NullPointerException(errMsg)
     }
     result
   }
@@ -961,7 +961,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
       ${childGen.code}
 
       if (${childGen.isNull}) {
-        throw new RuntimeException($errMsgField);
+        throw new NullPointerException($errMsgField);
       }
      """
     ev.copy(code = code, isNull = "false", value = childGen.value)
