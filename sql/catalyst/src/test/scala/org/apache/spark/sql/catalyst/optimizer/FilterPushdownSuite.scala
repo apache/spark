@@ -134,15 +134,20 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("nondeterministic: can't push down filter with nondeterministic condition through project") {
+  test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
-      .select(Rand(10).as('rand), 'a)
-      .where('rand > 5 || 'a > 5)
+      .select('a)
+      .where(Rand(10) > 5 || 'a > 5)
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
 
-    comparePlans(optimized, originalQuery)
+    val correctAnswer = testRelation
+      .where(Rand(10) > 5 || 'a > 5)
+      .select('a)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("nondeterministic: can't push down filter through project with nondeterministic field") {
@@ -154,6 +159,34 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
+  }
+
+  test("nondeterministic: can't push down filter through aggregate with nondeterministic field") {
+    val originalQuery = testRelation
+      .groupBy('a)('a, Rand(10).as('rand))
+      .where('a > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("nondeterministic: push down part of filter through aggregate with deterministic field") {
+    val originalQuery = testRelation
+      .groupBy('a)('a)
+      .where('a > 5 && Rand(10) > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .where('a > 5)
+      .groupBy('a)('a)
+      .where(Rand(10) > 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   test("filters: combines filters") {
