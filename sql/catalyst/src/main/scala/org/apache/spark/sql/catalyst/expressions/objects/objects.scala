@@ -227,7 +227,7 @@ case class Invoke(
       val funcResult = ctx.freshName("funcResult")
       // If the function can return null, we do an extra check to make sure our null bit is still
       // set correctly.
-      val postNullCheck = if (!returnNullable) {
+      val postNullCheckAndAssign = if (!returnNullable) {
         s"${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;"
       } else {
         s"""
@@ -241,7 +241,7 @@ case class Invoke(
       s"""
         Object $funcResult = null;
         ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
-        $postNullCheck
+        $postNullCheckAndAssign
       """
     }
 
