@@ -1015,13 +1015,13 @@ private[spark] object RandomForest extends Logging {
         (preValue * preCount + curValue * curCount) / (preCount.toDouble + curCount)
       }
 
-      // if possible splits is not enough or just enough, just return all possible splits
       val possibleSplits = valueCounts.length - 1
       if (possibleSplits == 0) {
         // constant feature
         Array.empty[Double]
 
       } else if (possibleSplits <= numSplits) {
+        // if possible splits is not enough or just enough, just return all possible splits
         valueCounts
           .sliding(2)
           .map(x => weightedMean(x(0), x(1)))
