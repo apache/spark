@@ -74,12 +74,12 @@ private[sql] object Dataset {
  * in parallel using functional or relational operations. Each Dataset also has an untyped view
  * called a `DataFrame`, which is a Dataset of [[Row]].
  *
- * Operations available on Datasets are divided into transformations and actions. Transformations
- * are the ones that produce new Datasets, and actions are the ones that trigger computation and
+ * Operations available on DataSets are divided into transformations and actions. Transformations
+ * are the ones that produce new DataSets, and actions are the ones that trigger computation and
  * return results. Example transformations include map, filter, select, and aggregate (`groupBy`).
  * Example actions count, show, or writing data out to file systems.
  *
- * Datasets are "lazy", i.e. computations are only triggered when an action is invoked. Internally,
+ * DataSets are "lazy", i.e. computations are only triggered when an action is invoked. Internally,
  * a Dataset represents a logical plan that describes the computation required to produce the data.
  * When an action is invoked, Spark's query optimizer optimizes the logical plan and generates a
  * physical plan for efficient execution in a parallel and distributed manner. To explore the
@@ -100,7 +100,7 @@ private[sql] object Dataset {
  *   Dataset<Person> people = spark.read().parquet("...").as(Encoders.bean(Person.class)); // Java
  * }}}
  *
- * Datasets can also be created through transformations available on existing Datasets. For example,
+ * DataSets can also be created through transformations available on existing DataSets. For example,
  * the following creates a new Dataset by applying a filter on the existing one:
  * {{{
  *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
