@@ -225,19 +225,19 @@ case class Invoke(
       getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
+      // If the function can return null, we do an extra check to make sure our null bit is still
+      // set correctly.
+      val postNullCheck = if (returnNullable) {
+        s"${ev.isNull} = ${ev.value} == null;"
+      } else {
+        ""
+      }
       s"""
         Object $funcResult = null;
         ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
         ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
+        $postNullCheck
       """
-    }
-
-    // If the function can return null, we do an extra check to make sure our null bit is still set
-    // correctly.
-    val postNullCheck = if (ctx.defaultValue(dataType) == "null" && returnNullable) {
-      s"${ev.isNull} = ${ev.value} == null;"
-    } else {
-      ""
     }
 
     val code = s"""
@@ -250,7 +250,6 @@ case class Invoke(
         if (!${ev.isNull}) {
           $evaluate
         }
-        $postNullCheck
       }
      """
     ev.copy(code = code)
