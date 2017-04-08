@@ -225,23 +225,11 @@ case class Invoke(
       getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
-      if (!returnNullable) {
-        s"""
-          Object $funcResult = null;
-          ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
-          ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
-        """
-      } else {
-        s"""
-          Object $funcResult = null;
-          ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
-          if ($funcResult == null) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
-          }
-        """
-      }
+      s"""
+        Object $funcResult = null;
+        ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
+        ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
+      """
     }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
@@ -616,7 +604,7 @@ case class MapObjects private(
                $convertedArray = $arrayConstructor;
              """,
             genValue => s"$convertedArray[$loopIndex] = $genValue;",
-            s"new ${classOf[GenericArrayData].getName}($convertedArray); /*###*/"
+            s"new ${classOf[GenericArrayData].getName}($convertedArray);"
           )
       }
 
