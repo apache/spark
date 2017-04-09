@@ -116,7 +116,7 @@ private object ParallelCollectionRDD {
    */
   def slice[T: ClassTag](seq: Seq[T], numSlices: Int): Seq[Seq[T]] = {
     if (numSlices < 1) {
-      throw new IllegalArgumentException("Positive number of slices required")
+      throw new IllegalArgumentException("Positive number of partitions required")
     }
     // Sequences need to be sliced at the same set of index positions for operations
     // like RDD.zip() to behave as expected
