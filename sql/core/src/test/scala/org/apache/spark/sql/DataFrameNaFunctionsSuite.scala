@@ -148,7 +148,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq[(java.lang.Long, java.lang.Double)]((null, 3.14), (9123146099426677101L, null),
         (9123146560113991650L, 1.6), (null, null)).toDF("a", "b").na.fill(0.2),
-      Row(0, 3.14) :: Row(9123146099426677101L, 0.3) :: Row(9123146560113991650L, 1.6)
+      Row(0, 3.14) :: Row(9123146099426677101L, 0.2) :: Row(9123146560113991650L, 1.6)
         :: Row(0, 0.2) :: Nil
     )
 
