@@ -35,42 +35,46 @@ import java.util.Random;
  *   <wordsPerMessage> is the number of words per message
  */
 public class JavaKafkaWordCountProducer {
-    public static void main(String[] args) {
-        if (args.length < 4) {
-            System.err.println("Usage: JavaKafkaWordCountProducer <metadataBrokerList> <topic> " +
-                    "<messagesPerSec> <wordsPerMessage>");
-            System.exit(1);
-        }
+  private JavaKafkaWordCountProducer(){
 
-        String topic = args[1];
-        String messagesPerSec = args[2];
-        String wordsPerMessage = args[3];
+  }
 
-        // Zookeeper connection properties
-        Map props = new HashMap<String, Object>();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, args[0]);
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.StringSerializer");
-        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                "org.apache.kafka.common.serialization.StringSerializer");
-
-        KafkaProducer producer = new KafkaProducer<String, String>(props);
-
-        // Send some messages
-        while (true) {
-            for (int i = 1; i <= Integer.valueOf(messagesPerSec); i++) {
-                String str = "";
-                for (int j = 1; j <= Integer.valueOf(wordsPerMessage); j++) {
-                    str = str + String.valueOf(new Random().nextInt(10)) + " ";
-                }
-                ProducerRecord message = new ProducerRecord<String, String>(topic, null, str);
-                producer.send(message);
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+  public static void main(String[] args) {
+    if (args.length < 4) {
+      System.err.println("Usage: JavaKafkaWordCountProducer <metadataBrokerList> <topic> " +
+              "<messagesPerSec> <wordsPerMessage>");
+      System.exit(1);
     }
+
+    String topic = args[1];
+    String messagesPerSec = args[2];
+    String wordsPerMessage = args[3];
+
+    // Zookeeper connection properties
+    Map props = new HashMap<String, Object>();
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, args[0]);
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+            "org.apache.kafka.common.serialization.StringSerializer");
+    props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+            "org.apache.kafka.common.serialization.StringSerializer");
+
+    KafkaProducer producer = new KafkaProducer<String, String>(props);
+
+    // Send some messages
+    while (true) {
+      for (int i = 1; i <= Integer.valueOf(messagesPerSec); i++) {
+        String str = "";
+        for (int j = 1; j <= Integer.valueOf(wordsPerMessage); j++) {
+          str = str + String.valueOf(new Random().nextInt(10)) + " ";
+        }
+        ProducerRecord message = new ProducerRecord<String, String>(topic, null, str);
+        producer.send(message);
+      }
+      try {
+        Thread.sleep(1000);
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
+  }
 }
