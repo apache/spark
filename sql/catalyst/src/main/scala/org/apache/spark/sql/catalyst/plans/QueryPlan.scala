@@ -391,7 +391,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   /**
    * Do some simple transformation on this plan before canonicalizing. Implementations can override
-   * this method to provide customer canonicalize logic without rewriting the whole logic.
+   * this method to provide customized canonicalize logic without rewriting the whole logic.
    */
   protected def preCanonicalized: PlanType = this
 

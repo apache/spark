@@ -265,7 +265,7 @@ case class FileSourceScanExec(
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
-        "requiredSchema" -> requiredSchema.catalogString,
+        "ReadSchema" -> requiredSchema.catalogString,
         "Batched" -> supportsBatch.toString,
         "PartitionFilters" -> seqToString(partitionFilters),
         "PushedFilters" -> seqToString(pushedDownFilters),
