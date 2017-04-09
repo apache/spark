@@ -32,7 +32,7 @@ import org.apache.spark.sql.SparkSession;
 
 /**
  * Transitive closure on a graph, implemented in Java.
- * Usage: JavaTC [partitions]
+ * Usage: JavaTC [slices]
  */
 public final class JavaTC {
 
