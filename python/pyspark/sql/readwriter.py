@@ -112,7 +112,7 @@ class DataFrameReader(OptionUtils):
 
         You can set the following option(s) for reading files:
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or parttion values.
+                in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -124,7 +124,7 @@ class DataFrameReader(OptionUtils):
 
         You can set the following option(s) for reading files:
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or parttion values.
+                in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:
@@ -223,7 +223,7 @@ class DataFrameReader(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param wholeFile: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
 
@@ -341,12 +341,12 @@ class DataFrameReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
-        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
-                                        being read should be skipped. If None is set, it uses
-                                        the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
-                                         being read should be skipped. If None is set, it uses
-                                         the default value, ``false``.
+        :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
+                                        values being read should be skipped. If None is set, it
+                                        uses the default value, ``false``.
+        :param ignoreTrailingWhiteSpace: A flag indicating whether or not trailing whitespaces from
+                                         values being read should be skipped. If None is set, it
+                                         uses the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
                           applies to all supported types including the string type.
@@ -363,16 +363,14 @@ class DataFrameReader(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
                                   ``-1`` meaning unlimited length.
-        :param maxMalformedLogPerPartition: sets the maximum number of malformed rows Spark will
-                                            log for each partition. Malformed records beyond this
-                                            number will be ignored. If None is set, it
-                                            uses the default value, ``10``.
+        :param maxMalformedLogPerPartition: this parameter is no longer used since Spark 2.2.0.
+                                            If specified, it is ignored.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
@@ -533,7 +531,7 @@ class DataFrameWriter(OptionUtils):
 
         You can set the following option(s) for writing files:
             * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or parttion values.
+                timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
@@ -545,7 +543,7 @@ class DataFrameWriter(OptionUtils):
 
         You can set the following option(s) for writing files:
             * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or parttion values.
+                timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:
@@ -658,7 +656,7 @@ class DataFrameWriter(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -711,7 +709,8 @@ class DataFrameWriter(OptionUtils):
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
-            timestampFormat=None, escapeQuoteEscaping=None, escapeUnquotedValues=None):
+            timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
+            escapeQuoteEscaping=None, escapeUnquotedValues=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -733,10 +732,10 @@ class DataFrameWriter(OptionUtils):
                       empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
-        :param escapeQuotes: A flag indicating whether values containing quotes should always
+        :param escapeQuotes: a flag indicating whether values containing quotes should always
                              be enclosed in quotes. If None is set, it uses the default value
                              ``true``, escaping all values containing a quote character.
-        :param quoteAll: A flag indicating whether all values should always be enclosed in
+        :param quoteAll: a flag indicating whether all values should always be enclosed in
                           quotes. If None is set, it uses the default value ``false``,
                           only escaping values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
@@ -750,7 +749,13 @@ class DataFrameWriter(OptionUtils):
         :param timestampFormat: sets the string that indicates a timestamp format. Custom date
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSZZ``.
+                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+        :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
+                                        values being written should be skipped. If None is set, it
+                                        uses the default value, ``true``.
+        :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
+                                         values being written should be skipped. If None is set, it
+                                         uses the default value, ``true``.
         :param escapeQuoteEscaping: sets the single character used for escaping the quote-escape
                                     character. If None is set, it uses the default value, ``\0``.
         :param escapeUnquotedValues: processes escape sequences in unquoted values. If None is set,
@@ -762,6 +767,8 @@ class DataFrameWriter(OptionUtils):
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
                        nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
                        dateFormat=dateFormat, timestampFormat=timestampFormat,
+                       ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
+                       ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
                        escapeQuoteEscaping=escapeQuoteEscaping,
                        escapeUnquotedValues=escapeUnquotedValues)
         self._jwrite.csv(path)

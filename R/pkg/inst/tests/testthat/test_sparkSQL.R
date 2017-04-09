@@ -60,6 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
+filesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
@@ -137,6 +138,59 @@ test_that("structType and structField", {
   expect_is(testSchema, "structType")
   expect_is(testSchema$fields()[[2]], "structField")
   expect_equal(testSchema$fields()[[1]]$dataType.toString(), "StringType")
+})
+
+test_that("structField type strings", {
+  # positive cases
+  primitiveTypes <- list(byte = "ByteType",
+                         integer = "IntegerType",
+                         float = "FloatType",
+                         double = "DoubleType",
+                         string = "StringType",
+                         binary = "BinaryType",
+                         boolean = "BooleanType",
+                         timestamp = "TimestampType",
+                         date = "DateType")
+
+  complexTypes <- list("map<string,integer>" = "MapType(StringType,IntegerType,true)",
+                       "array<string>" = "ArrayType(StringType,true)",
+                       "struct<a:string>" = "StructType(StructField(a,StringType,true))")
+
+  typeList <- c(primitiveTypes, complexTypes)
+  typeStrings <- names(typeList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- typeList[[i]]
+    testField <- structField("_col", typeString)
+    expect_is(testField, "structField")
+    expect_true(testField$nullable())
+    expect_equal(testField$dataType.toString(), expected)
+  }
+
+  # negative cases
+  primitiveErrors <- list(Byte = "Byte",
+                          INTEGER = "INTEGER",
+                          numeric = "numeric",
+                          character = "character",
+                          raw = "raw",
+                          logical = "logical")
+
+  complexErrors <- list("map<string, integer>" = " integer",
+                        "array<String>" = "String",
+                        "struct<a:string >" = "string ",
+                        "map <string,integer>" = "map <string,integer>",
+                        "array< string>" = " string",
+                        "struct<a: string>" = " string")
+
+  errorList <- c(primitiveErrors, complexErrors)
+  typeStrings <- names(errorList)
+
+  for (i in seq_along(typeStrings)){
+    typeString <- typeStrings[i]
+    expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
+    expect_error(structField("_col", typeString), expected)
+  }
 })
 
 test_that("create DataFrame from RDD", {
@@ -227,7 +281,7 @@ test_that("create DataFrame from RDD", {
   setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
-  invisible(insertInto(df, "people"))
+  insertInto(df, "people")
   expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age,
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
@@ -591,16 +645,20 @@ test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
-  tables <- tables()
+  expect_equal(length(tableNames("default")), 1)
+  tables <- listTables()
   expect_equal(count(tables), 1)
+  expect_equal(count(tables()), count(tables))
+  expect_true("tableName" %in% colnames(tables()))
+  expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
   suppressWarnings(registerTempTable(df, "table2"))
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 2)
   suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
-  tables <- tables()
+  tables <- listTables()
   expect_equal(count(tables), 0)
 })
 
@@ -632,6 +690,9 @@ test_that("test cache, uncache and clearCache", {
   uncacheTable("table1")
   clearCache()
   expect_true(dropTempView("table1"))
+
+  expect_error(uncacheTable("foo"),
+      "Error in uncacheTable : no such table - Table or view 'foo' not found in database 'default'")
 })
 
 test_that("insertInto() on a registered table", {
@@ -838,6 +899,17 @@ test_that("cache(), storageLevel(), persist(), and unpersist() on a DataFrame", 
 
   # make sure the data is collectable
   expect_true(is.data.frame(collect(df)))
+})
+
+test_that("setCheckpointDir(), checkpoint() on a DataFrame", {
+  checkpointDir <- file.path(tempdir(), "cproot")
+  expect_true(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
+
+  setCheckpointDir(checkpointDir)
+  df <- read.json(jsonPath)
+  df <- checkpoint(df)
+  expect_is(df, "SparkDataFrame")
+  expect_false(length(list.files(path = checkpointDir, all.files = TRUE)) == 0)
 })
 
 test_that("schema(), dtypes(), columns(), names() return the correct values/format", {
@@ -1196,7 +1268,16 @@ test_that("column calculation", {
 
 test_that("test HiveContext", {
   setHiveContext(sc)
-  df <- createExternalTable("json", jsonPath, "json")
+
+  schema <- structType(structField("name", "string"), structField("age", "integer"),
+                       structField("height", "float"))
+  createTable("people", source = "json", schema = schema)
+  df <- read.df(jsonPathNa, "json", schema)
+  insertInto(df, "people")
+  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age, c(16))
+  sql("DROP TABLE people")
+
+  df <- createTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
   df2 <- sql("select * from json")
@@ -1204,25 +1285,26 @@ test_that("test HiveContext", {
   expect_equal(count(df2), 3)
 
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
+  saveAsTable(df, "json2", "json", "append", path = jsonPath2)
   df3 <- sql("select * from json2")
   expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  saveAsTable(df, "hivetestbl", path = hivetestDataPath)
   df4 <- sql("select * from hivetestbl")
   expect_is(df4, "SparkDataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
+  saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath)
   df5 <- sql("select * from parquetest")
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
+
   unsetHiveContext()
 })
 
@@ -1339,6 +1421,10 @@ test_that("column functions", {
   expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 
   # Test to_json(), from_json()
+  df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
@@ -1354,9 +1440,8 @@ test_that("column functions", {
   # passing option
   df <- as.DataFrame(list(list("col" = "{\"date\":\"21/10/2014\"}")))
   schema2 <- structType(structField("date", "date"))
-  expect_error(tryCatch(collect(select(df, from_json(df$col, schema2))),
-                        error = function(e) { stop(e) }),
-               paste0(".*(java.lang.NumberFormatException: For input string:).*"))
+  s <- collect(select(df, from_json(df$col, schema2)))
+  expect_equal(s[[1]][[1]], NA)
   s <- collect(select(df, from_json(df$col, schema2, dateFormat = "dd/MM/yyyy")))
   expect_is(s[[1]][[1]]$date, "Date")
   expect_equal(as.character(s[[1]][[1]]$date), "2014-10-21")
@@ -1364,6 +1449,18 @@ test_that("column functions", {
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
   expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
+
+  # check if array type in string is correctly supported.
+  jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
+  df <- as.DataFrame(list(list("people" = jsonArr)))
+  schema <- structType(structField("name", "string"))
+  arr <- collect(select(df, alias(from_json(df$people, schema, asJsonArray = TRUE), "arrcol")))
+  expect_equal(ncol(arr), 1)
+  expect_equal(nrow(arr), 1)
+  expect_is(arr[[1]][[1]], "list")
+  expect_equal(length(arr$arrcol[[1]]), 2)
+  expect_equal(arr$arrcol[[1]][[1]]$name, "Bob")
+  expect_equal(arr$arrcol[[1]][[2]]$name, "Alice")
 })
 
 test_that("column binary mathfunctions", {
@@ -2741,7 +2838,7 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 
   # more tests for SPARK-16538
   createOrReplaceTempView(df, "table")
-  SparkR::tables()
+  SparkR::listTables()
   SparkR::sql("SELECT 1")
   suppressWarnings(SparkR::sql(sqlContext, "SELECT * FROM table"))
   suppressWarnings(SparkR::dropTempTable(sqlContext, "table"))
@@ -2895,6 +2992,90 @@ test_that("Collect on DataFrame when NAs exists at the top of a timestamp column
   expect_equal(class(ldf3$col1), "numeric")
   expect_equal(class(ldf3$col2), c("POSIXct", "POSIXt"))
   expect_equal(class(ldf3$col3), c("POSIXct", "POSIXt"))
+})
+
+test_that("catalog APIs, currentDatabase, setCurrentDatabase, listDatabases", {
+  expect_equal(currentDatabase(), "default")
+  expect_error(setCurrentDatabase("default"), NA)
+  expect_error(setCurrentDatabase("foo"),
+               "Error in setCurrentDatabase : analysis error - Database 'foo' does not exist")
+  dbs <- collect(listDatabases())
+  expect_equal(names(dbs), c("name", "description", "locationUri"))
+  expect_equal(dbs[[1]], "default")
+})
+
+test_that("catalog APIs, listTables, listColumns, listFunctions", {
+  tb <- listTables()
+  count <- count(tables())
+  expect_equal(nrow(tb), count)
+  expect_equal(colnames(tb), c("name", "database", "description", "tableType", "isTemporary"))
+
+  createOrReplaceTempView(as.DataFrame(cars), "cars")
+
+  tb <- listTables()
+  expect_equal(nrow(tb), count + 1)
+  tbs <- collect(tb)
+  expect_true(nrow(tbs[tbs$name == "cars", ]) > 0)
+  expect_error(listTables("bar"),
+               "Error in listTables : no such database - Database 'bar' not found")
+
+  c <- listColumns("cars")
+  expect_equal(nrow(c), 2)
+  expect_equal(colnames(c),
+               c("name", "description", "dataType", "nullable", "isPartition", "isBucket"))
+  expect_equal(collect(c)[[1]][[1]], "speed")
+  expect_error(listColumns("foo", "default"),
+       "Error in listColumns : analysis error - Table 'foo' does not exist in database 'default'")
+
+  f <- listFunctions()
+  expect_true(nrow(f) >= 200) # 250
+  expect_equal(colnames(f),
+               c("name", "database", "description", "className", "isTemporary"))
+  expect_equal(take(orderBy(f, "className"), 1)$className,
+               "org.apache.spark.sql.catalyst.expressions.Abs")
+  expect_error(listFunctions("foo_db"),
+               "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
+
+  # recoverPartitions does not work with tempory view
+  expect_error(recoverPartitions("cars"),
+               "no such table - Table or view 'cars' not found in database 'default'")
+  expect_error(refreshTable("cars"), NA)
+  expect_error(refreshByPath("/"), NA)
+
+  dropTempView("cars")
+})
+
+compare_list <- function(list1, list2) {
+  # get testthat to show the diff by first making the 2 lists equal in length
+  expect_equal(length(list1), length(list2))
+  l <- max(length(list1), length(list2))
+  length(list1) <- l
+  length(list2) <- l
+  expect_equal(sort(list1, na.last = TRUE), sort(list2, na.last = TRUE))
+}
+
+# This should always be the **very last test** in this test file.
+test_that("No extra files are created in SPARK_HOME by starting session and making calls", {
+  # Check that it is not creating any extra file.
+  # Does not check the tempdir which would be cleaned up after.
+  filesAfter <- list.files(path = sparkRDir, all.files = TRUE)
+
+  expect_true(length(sparkRFilesBefore) > 0)
+  # first, ensure derby.log is not there
+  expect_false("derby.log" %in% filesAfter)
+  # second, ensure only spark-warehouse is created when calling SparkSession, enableHiveSupport = F
+  # note: currently all other test files have enableHiveSupport = F, so we capture the list of files
+  # before creating a SparkSession with enableHiveSupport = T at the top of this test file
+  # (filesBefore). The test here is to compare that (filesBefore) against the list of files before
+  # any test is run in run-all.R (sparkRFilesBefore).
+  # sparkRWhitelistSQLDirs is also defined in run-all.R, and should contain only 2 whitelisted dirs,
+  # here allow the first value, spark-warehouse, in the diff, everything else should be exactly the
+  # same as before any test is run.
+  compare_list(sparkRFilesBefore, setdiff(filesBefore, sparkRWhitelistSQLDirs[[1]]))
+  # third, ensure only spark-warehouse and metastore_db are created when enableHiveSupport = T
+  # note: as the note above, after running all tests in this file while enableHiveSupport = T, we
+  # check the list of files again. This time we allow both whitelisted dirs to be in the diff.
+  compare_list(sparkRFilesBefore, setdiff(filesAfter, sparkRWhitelistSQLDirs))
 })
 
 unlink(parquetPath)

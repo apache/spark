@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 object FailureSinglton {
   var firstTime = true
@@ -272,11 +273,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        q.batchCommitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
       },
       StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      // The commit log blown, causing the last batch to re-run
       CheckLastBatch((20L, 1), (85L, 1)),
       AssertOnQuery { q =>
         clock.getTimeMillis() == 90000L
@@ -322,11 +325,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
+        q.batchCommitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true
       },
       StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      // Commit log blown, causing a re-run of the last batch
       CheckLastBatch((20L, 1), (85L, 1)),
 
       // advance clock to 100 days, should retain keys >= 90

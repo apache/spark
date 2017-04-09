@@ -93,7 +93,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -130,7 +130,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -146,7 +146,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or parttion values.</li>
+   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
    * </ul>
    *
    * @since 1.4.0
@@ -337,6 +337,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *    +---+---+
    * }}}
    *
+   * In this method, save mode is used to determine the behavior if the data source table exists in
+   * Spark catalog. We will always overwrite the underlying data of data source (e.g. a table in
+   * JDBC data source) if the table doesn't exist in Spark catalog, and will always append to the
+   * underlying data of data source if the table already exists.
+   *
    * When the DataFrame is created from a non-partitioned `HadoopFsRelation` with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
    * and Parquet), the table is persisted in a Hive compatible format, which means other systems
@@ -472,7 +477,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
@@ -572,7 +577,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * a quote character.</li>
    * <li>`escapeUnquotedValues` (default `false`): processes escape sequences in unquoted values.
    * </li>
-   * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
+   * <li>`quoteAll` (default `false`): a flag indicating whether all values should always be
    * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
@@ -582,9 +587,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
+   * <li>`ignoreLeadingWhiteSpace` (default `true`): a flag indicating whether or not leading
+   * whitespaces from values being written should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `true`): a flag indicating defines whether or not
+   * trailing whitespaces from values being written should be skipped.</li>
    * </ul>
    *
    * @since 2.0.0

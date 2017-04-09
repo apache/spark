@@ -92,7 +92,7 @@ object ScalaReflection extends ScalaReflection {
    * Array[T].  Special handling is performed for primitive types to map them back to their raw
    * JVM form instead of the Scala Array that handles auto boxing.
    */
-  private def arrayClassFor(tpe: `Type`): DataType = ScalaReflectionLock.synchronized {
+  private def arrayClassFor(tpe: `Type`): ObjectType = ScalaReflectionLock.synchronized {
     val cls = tpe match {
       case t if t <:< definitions.IntTpe => classOf[Array[Int]]
       case t if t <:< definitions.LongTpe => classOf[Array[Long]]
@@ -178,15 +178,17 @@ object ScalaReflection extends ScalaReflection {
      * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
      * `Data` with int and long, because we lost the information that `b` should be a string.
      *
-     * This method help us "remember" the required data type by adding a `UpCast`.  Note that we
-     * don't need to cast struct type because there must be `UnresolvedExtractValue` or
-     * `GetStructField` wrapping it, thus we only need to handle leaf type.
+     * This method help us "remember" the required data type by adding a `UpCast`. Note that we
+     * only need to do this for leaf nodes.
      */
     def upCastToExpectedType(
         expr: Expression,
         expected: DataType,
         walkedTypePath: Seq[String]): Expression = expected match {
       case _: StructType => expr
+      case _: ArrayType => expr
+      // TODO: ideally we should also skip MapType, but nested StructType inside MapType is rare and
+      // it's not trivial to support by-name resolution for StructType inside MapType.
       case _ => UpCast(expr, expected, walkedTypePath)
     }
 
@@ -265,96 +267,60 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-
-        // TODO: add runtime null check for primitive array
-        val primitiveMethod = elementType match {
-          case t if t <:< definitions.IntTpe => Some("toIntArray")
-          case t if t <:< definitions.LongTpe => Some("toLongArray")
-          case t if t <:< definitions.DoubleTpe => Some("toDoubleArray")
-          case t if t <:< definitions.FloatTpe => Some("toFloatArray")
-          case t if t <:< definitions.ShortTpe => Some("toShortArray")
-          case t if t <:< definitions.ByteTpe => Some("toByteArray")
-          case t if t <:< definitions.BooleanTpe => Some("toBooleanArray")
-          case _ => None
-        }
-
-        primitiveMethod.map { method =>
-          Invoke(getPath, method, arrayClassFor(elementType))
-        }.getOrElse {
-          val className = getClassNameFromType(elementType)
-          val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
-          Invoke(
-            MapObjects(
-              p => deserializerFor(elementType, Some(p), newTypePath),
-              getPath,
-              schemaFor(elementType).dataType),
-            "array",
-            arrayClassFor(elementType))
-        }
-
-      case t if t <:< localTypeOf[Seq[_]] =>
-        val TypeRef(_, _, Seq(elementType)) = t
-        val Schema(dataType, nullable) = schemaFor(elementType)
+        val Schema(_, elementNullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
 
         val mapFunction: Expression => Expression = p => {
           val converter = deserializerFor(elementType, Some(p), newTypePath)
-          if (nullable) {
+          if (elementNullable) {
             converter
           } else {
             AssertNotNull(converter, newTypePath)
           }
         }
 
-        val array = Invoke(
-          MapObjects(mapFunction, getPath, dataType),
-          "array",
-          ObjectType(classOf[Array[Any]]))
+        val arrayData = UnresolvedMapObjects(mapFunction, getPath)
+        val arrayCls = arrayClassFor(elementType)
 
-        val wrappedArray = StaticInvoke(
-          scala.collection.mutable.WrappedArray.getClass,
-          ObjectType(classOf[Seq[_]]),
-          "make",
-          array :: Nil)
-
-        if (localTypeOf[scala.collection.mutable.WrappedArray[_]] <:< t.erasure) {
-          wrappedArray
+        if (elementNullable) {
+          Invoke(arrayData, "array", arrayCls)
         } else {
-          // Convert to another type using `to`
-          val cls = mirror.runtimeClass(t.typeSymbol.asClass)
-          import scala.collection.generic.CanBuildFrom
-          import scala.reflect.ClassTag
-
-          // Some canBuildFrom methods take an implicit ClassTag parameter
-          val cbfParams = try {
-            cls.getDeclaredMethod("canBuildFrom", classOf[ClassTag[_]])
-            StaticInvoke(
-              ClassTag.getClass,
-              ObjectType(classOf[ClassTag[_]]),
-              "apply",
-              StaticInvoke(
-                cls,
-                ObjectType(classOf[Class[_]]),
-                "getClass"
-              ) :: Nil
-            ) :: Nil
-          } catch {
-            case _: NoSuchMethodException => Nil
+          val primitiveMethod = elementType match {
+            case t if t <:< definitions.IntTpe => "toIntArray"
+            case t if t <:< definitions.LongTpe => "toLongArray"
+            case t if t <:< definitions.DoubleTpe => "toDoubleArray"
+            case t if t <:< definitions.FloatTpe => "toFloatArray"
+            case t if t <:< definitions.ShortTpe => "toShortArray"
+            case t if t <:< definitions.ByteTpe => "toByteArray"
+            case t if t <:< definitions.BooleanTpe => "toBooleanArray"
+            case other => throw new IllegalStateException("expect primitive array element type " +
+              "but got " + other)
           }
-
-          Invoke(
-            wrappedArray,
-            "to",
-            ObjectType(cls),
-            StaticInvoke(
-              cls,
-              ObjectType(classOf[CanBuildFrom[_, _, _]]),
-              "canBuildFrom",
-              cbfParams
-            ) :: Nil
-          )
+          Invoke(arrayData, primitiveMethod, arrayCls)
         }
+
+      case t if t <:< localTypeOf[Seq[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(_, elementNullable) = schemaFor(elementType)
+        val className = getClassNameFromType(elementType)
+        val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
+
+        val mapFunction: Expression => Expression = p => {
+          val converter = deserializerFor(elementType, Some(p), newTypePath)
+          if (elementNullable) {
+            converter
+          } else {
+            AssertNotNull(converter, newTypePath)
+          }
+        }
+
+        val companion = t.normalize.typeSymbol.companionSymbol.typeSignature
+        val cls = companion.declaration(newTermName("newBuilder")) match {
+          case NoSymbol => classOf[Seq[_]]
+          case _ => mirror.runtimeClass(t.typeSymbol.asClass)
+        }
+        UnresolvedMapObjects(mapFunction, getPath, Some(cls))
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
@@ -470,14 +436,15 @@ object ScalaReflection extends ScalaReflection {
   private def serializerFor(
       inputObject: Expression,
       tpe: `Type`,
-      walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
+      walkedTypePath: Seq[String],
+      seenTypeSet: Set[`Type`] = Set.empty): Expression = ScalaReflectionLock.synchronized {
 
     def toCatalystArray(input: Expression, elementType: `Type`): Expression = {
       dataTypeFor(elementType) match {
         case dt: ObjectType =>
           val clsName = getClassNameFromType(elementType)
           val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
-          MapObjects(serializerFor(_, elementType, newPath), input, dt)
+          MapObjects(serializerFor(_, elementType, newPath, seenTypeSet), input, dt)
 
          case dt @ (BooleanType | ByteType | ShortType | IntegerType | LongType |
                     FloatType | DoubleType) =>
@@ -511,7 +478,7 @@ object ScalaReflection extends ScalaReflection {
         val className = getClassNameFromType(optType)
         val newPath = s"""- option value class: "$className"""" +: walkedTypePath
         val unwrapped = UnwrapOption(dataTypeFor(optType), inputObject)
-        serializerFor(unwrapped, optType, newPath)
+        serializerFor(unwrapped, optType, newPath, seenTypeSet)
 
       // Since List[_] also belongs to localTypeOf[Product], we put this case before
       // "case t if definedByConstructorParams(t)" to make sure it will match to the
@@ -534,9 +501,9 @@ object ScalaReflection extends ScalaReflection {
         ExternalMapToCatalyst(
           inputObject,
           dataTypeFor(keyType),
-          serializerFor(_, keyType, keyPath),
+          serializerFor(_, keyType, keyPath, seenTypeSet),
           dataTypeFor(valueType),
-          serializerFor(_, valueType, valuePath),
+          serializerFor(_, valueType, valuePath, seenTypeSet),
           valueNullable = !valueType.typeSymbol.asClass.isPrimitive)
 
       case t if t <:< localTypeOf[String] =>
@@ -622,6 +589,11 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "serialize", udt, inputObject :: Nil)
 
       case t if definedByConstructorParams(t) =>
+        if (seenTypeSet.contains(t)) {
+          throw new UnsupportedOperationException(
+            s"cannot have circular references in class, but got the circular reference of class $t")
+        }
+
         val params = getConstructorParameters(t)
         val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
           if (javaKeywords.contains(fieldName)) {
@@ -634,7 +606,8 @@ object ScalaReflection extends ScalaReflection {
             returnNullable = !fieldType.typeSymbol.asClass.isPrimitive)
           val clsName = getClassNameFromType(fieldType)
           val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
-          expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType, newPath) :: Nil
+          expressions.Literal(fieldName) ::
+          serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t) :: Nil
         })
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
@@ -643,7 +616,6 @@ object ScalaReflection extends ScalaReflection {
         throw new UnsupportedOperationException(
           s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
     }
-
   }
 
   /**

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
+import org.apache.spark.sql.catalyst.expressions.objects.{MapObjects, NewInstance, UnresolvedMapObjects}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -42,13 +43,13 @@ import org.apache.spark.sql.types._
  * to resolve attribute references.
  */
 object SimpleAnalyzer extends Analyzer(
-    new SessionCatalog(
-      new InMemoryCatalog,
-      EmptyFunctionRegistry,
-      new SimpleCatalystConf(caseSensitiveAnalysis = true)) {
-      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
-    },
-    new SimpleCatalystConf(caseSensitiveAnalysis = true))
+  new SessionCatalog(
+    new InMemoryCatalog,
+    EmptyFunctionRegistry,
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+    override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+  },
+  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -58,13 +59,12 @@ object SimpleAnalyzer extends Analyzer(
  *
  * @param defaultDatabase The default database used in the view resolution, this overrules the
  *                        current catalog database.
- * @param nestedViewLevel The nested level in the view resolution, this enables us to limit the
+ * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
- *                        TODO Limit the depth of nested views.
  */
 case class AnalysisContext(
     defaultDatabase: Option[String] = None,
-    nestedViewLevel: Int = 0)
+    nestedViewDepth: Int = 0)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -77,7 +77,7 @@ object AnalysisContext {
   def withAnalysisContext[A](database: Option[String])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(defaultDatabase = database,
-      nestedViewLevel = originContext.nestedViewLevel + 1)
+      nestedViewDepth = originContext.nestedViewDepth + 1)
     set(context)
     try f finally { set(originContext) }
   }
@@ -90,11 +90,11 @@ object AnalysisContext {
  */
 class Analyzer(
     catalog: SessionCatalog,
-    conf: CatalystConf,
+    conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
-  def this(catalog: SessionCatalog, conf: CatalystConf) = {
+  def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
@@ -487,14 +487,16 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         def outputName(value: Literal, aggregate: Expression): String = {
+          val utf8Value = Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
+          val stringValue: String = Option(utf8Value).map(_.toString).getOrElse("null")
           if (singleAgg) {
-            value.toString
+            stringValue
           } else {
             val suffix = aggregate match {
               case n: NamedExpression => n.name
               case _ => toPrettySQL(aggregate)
             }
-            value + "_" + suffix
+            stringValue + "_" + suffix
           }
         }
         if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
@@ -525,7 +527,7 @@ class Analyzer(
         } else {
           val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
             def ifExpr(expr: Expression) = {
-              If(EqualTo(pivotColumn, value), expr, Literal(null))
+              If(EqualNullSafe(pivotColumn, value), expr, Literal(null))
             }
             aggregates.map { aggregate =>
               val filteredAggregate = aggregate.transformDown {
@@ -598,6 +600,12 @@ class Analyzer(
       case view @ View(desc, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc.viewDefaultDatabase) {
+          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
+            view.failAnalysis(s"The depth of view ${view.desc.identifier} exceeds the maximum " +
+              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
+              "avoid errors. Increase the value of spark.sql.view.maxNestedViewDepth to work " +
+              "aroud this.")
+          }
           execute(child)
         }
         view.copy(child = newChild)
@@ -961,9 +969,9 @@ class Analyzer(
       case s @ Sort(orders, global, child)
         if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction, nullOrdering)
+              SortOrder(child.output(index - 1), direction, nullOrdering, Set.empty)
             } else {
               s.failAnalysis(
                 s"ORDER BY position $index is not in select list " +
@@ -2219,8 +2227,21 @@ class Analyzer(
           validateTopLevelTupleFields(deserializer, inputs)
           val resolved = resolveExpression(
             deserializer, LocalRelation(inputs), throws = true)
-          validateNestedTupleFields(resolved)
-          resolved
+          val result = resolved transformDown {
+            case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
+              inputData.dataType match {
+                case ArrayType(et, _) =>
+                  val expr = MapObjects(func, inputData, et, cls) transformUp {
+                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                      ExtractValue(child, fieldName, resolver)
+                  }
+                  expr
+                case other =>
+                  throw new AnalysisException("need an array field but got " + other.simpleString)
+              }
+          }
+          validateNestedTupleFields(result)
+          result
       }
     }
 
@@ -2324,7 +2345,7 @@ class Analyzer(
   }
 
   /**
-   * Replace [[TimeZoneAwareExpression]] without [[TimeZone]] by its copy with session local
+   * Replace [[TimeZoneAwareExpression]] without timezone id by its copy with session local
    * time zone.
    */
   object ResolveTimeZone extends Rule[LogicalPlan] {
@@ -2495,7 +2516,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
         substitutedPlan.withNewChildren(expandedPlan :: Nil)
       } else if (windowExpressions.size > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
-          "of rows, therefore they are not currently not supported.")
+          "of rows, therefore they are currently not supported.")
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

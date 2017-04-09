@@ -258,6 +258,11 @@ public class JavaSQLDataSourceExample {
 
     jdbcDF2.write()
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
+
+    // Specifying create table column data types on write
+    jdbcDF.write()
+      .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties);
     // $example off:jdbc_dataset$
   }
 }
