@@ -401,8 +401,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * do not use `BindReferences` here as the plan may take the expression as a parameter with type
    * `Attribute`, and replace it with `BoundReference` will cause error.
    */
-  protected def normalizeExprId[T <: Expression](e: T, input: AttributeSeq = allAttributes): T = {
+  def normalizeExprId[T <: Expression](e: T, input: AttributeSeq = allAttributes): T = {
     e.transformUp {
+      case s: SubqueryExpression => s.canonicalize(input)
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {

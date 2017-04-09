@@ -59,6 +59,14 @@ abstract class SubqueryExpression(
         children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
     case _ => false
   }
+
+  def canonicalize(attrs: AttributeSeq): SubqueryExpression = {
+    // Normalize the outer references in the subquery plan.
+    val subPlan = plan.transformAllExpressions {
+      case OuterReference(r) => plan.normalizeExprId(r, attrs)
+    }
+    withNewPlan(subPlan).canonicalized.asInstanceOf[SubqueryExpression]
+  }
 }
 
 object SubqueryExpression {
@@ -236,6 +244,12 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
+  override lazy val canonicalized: Expression = {
+    ScalarSubquery(
+      plan.canonicalized,
+      children.map(_.canonicalized),
+      ExprId(0))
+  }
 }
 
 object ScalarSubquery {
@@ -268,6 +282,12 @@ case class ListQuery(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def toString: String = s"list#${exprId.id} $conditionString"
+  override lazy val canonicalized: Expression = {
+    ListQuery(
+      plan.canonicalized,
+      children.map(_.canonicalized),
+      ExprId(0))
+  }
 }
 
 /**
@@ -290,4 +310,10 @@ case class Exists(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(plan = plan)
   override def toString: String = s"exists#${exprId.id} $conditionString"
+  override lazy val canonicalized: Expression = {
+    Exists(
+      plan.canonicalized,
+      children.map(_.canonicalized),
+      ExprId(0))
+  }
 }
