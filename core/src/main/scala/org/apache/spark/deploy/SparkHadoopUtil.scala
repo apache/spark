@@ -349,7 +349,7 @@ class SparkHadoopUtil extends Logging {
       }
     } catch {
       case e: IOException =>
-        logDebug("Failed to decode $token: $e", e)
+        logDebug(s"Failed to decode $token: $e", e)
     }
     buffer.toString
   }
