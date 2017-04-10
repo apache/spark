@@ -2235,6 +2235,8 @@ class SQLTests(ReusedPySparkTestCase):
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+        self.spark.sql("DROP TABLE IF EXISTS pyspark_bucket")
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
