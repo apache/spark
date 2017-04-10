@@ -2194,40 +2194,33 @@ class SQLTests(ReusedPySparkTestCase):
         ]
         df = self.spark.createDataFrame(data, ["x", "y", "z"])
 
+        def count_bucketed_cols(names, table="pyspark_bucket"):
+            """Given a sequence of column names and a table name
+            query the catalog and return number o columns which are
+            used for bucketing
+            """
+            cols = self.spark.catalog.listColumns(table)
+            num = len([c for c in cols if c.name in names and c.isBucket])
+            return num
+
         # Test write with one bucketing column
         df.write.bucketBy(3, "x").mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(
-            len([c for c in self.spark.catalog.listColumns("pyspark_bucket")
-                 if c.name == "x" and c.isBucket]),
-            1
-        )
+        self.assertEqual(count_bucketed_cols(["x"]), 1)
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
         # Test write two bucketing columns
         df.write.bucketBy(3, "x", "y").mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(
-            len([c for c in self.spark.catalog.listColumns("pyspark_bucket")
-                 if c.name in ("x", "y") and c.isBucket]),
-            2
-        )
+        self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
         # Test write with bucket and sort
         df.write.bucketBy(2, "x").sortBy("z").mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(
-            len([c for c in self.spark.catalog.listColumns("pyspark_bucket")
-                 if c.name == "x" and c.isBucket]),
-            1
-        )
+        self.assertEqual(count_bucketed_cols(["x"]), 1)
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
         # Test write with a list of columns
         df.write.bucketBy(3, ["x", "y"]).mode("overwrite").saveAsTable("pyspark_bucket")
-        self.assertEqual(
-            len([c for c in self.spark.catalog.listColumns("pyspark_bucket")
-                 if c.name in ("x", "y") and c.isBucket]),
-            2
-        )
+        self.assertEqual(count_bucketed_cols(["x", "y"]), 2)
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
         # Test write with bucket and sort with a list of columns
