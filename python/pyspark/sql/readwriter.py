@@ -569,6 +569,9 @@ class DataFrameWriter(OptionUtils):
 
         :param numBuckets: the number of buckets to save
         :param cols: name of columns
+        
+        .. note:: Applicable for file-based data sources in combination with 
+                  :py:meth:`DataFrameWriter.saveAsTable`.
 
         >>> (df.write.format('parquet')
         ...     .bucketBy(100, 'year', 'month')
