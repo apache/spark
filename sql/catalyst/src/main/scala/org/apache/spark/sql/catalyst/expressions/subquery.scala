@@ -60,10 +60,10 @@ abstract class SubqueryExpression(
   }
   def canonicalize(attrs: AttributeSeq): SubqueryExpression = {
     // Normalize the outer references in the subquery plan.
-    val subPlan = plan.transformAllExpressions {
-      case OuterReference(r) => QueryPlan.normalizeExprId(r, attrs)
+    val normalizedPlan = plan.transformAllExpressions {
+      case OuterReference(r) => OuterReference(QueryPlan.normalizeExprId(r, attrs))
     }
-    withNewPlan(subPlan).canonicalized.asInstanceOf[SubqueryExpression]
+    withNewPlan(normalizedPlan).canonicalized.asInstanceOf[SubqueryExpression]
   }
 }
 
