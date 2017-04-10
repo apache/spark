@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -475,13 +476,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           case None => // OK.
         }
         // Also make sure that the format and serde are as desired.
-        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
-        assert(catalogTable.storage.outputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.inputFormat.get.toLowerCase(Locale.ROOT).contains(format))
+        assert(catalogTable.storage.outputFormat.get.toLowerCase(Locale.ROOT).contains(format))
         val serde = catalogTable.storage.serde.get
         format match {
           case "sequence" | "text" => assert(serde.contains("LazySimpleSerDe"))
           case "rcfile" => assert(serde.contains("LazyBinaryColumnarSerDe"))
-          case _ => assert(serde.toLowerCase.contains(format))
+          case _ => assert(serde.toLowerCase(Locale.ROOT).contains(format))
         }
     }
 

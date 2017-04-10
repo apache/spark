@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -74,11 +74,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
 
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
       parameters
         .keySet
-        .filter(_.toLowerCase.startsWith("kafka."))
+        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
         .map { k => k.drop(6).toString -> parameters(k) }
         .toMap
 
@@ -115,11 +115,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     // partial data since Kafka will assign partitions to multiple consumers having the same group
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = s"spark-kafka-relation-${UUID.randomUUID}"
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
       parameters
         .keySet
-        .filter(_.toLowerCase.startsWith("kafka."))
+        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
         .map { k => k.drop(6).toString -> parameters(k) }
         .toMap
 
@@ -192,7 +192,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   private def kafkaParamsForProducer(parameters: Map[String, String]): Map[String, String] = {
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}' is not supported as keys "
@@ -207,7 +207,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
     parameters
       .keySet
-      .filter(_.toLowerCase.startsWith("kafka."))
+      .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
       .map { k => k.drop(6).toString -> parameters(k) }
       .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
@@ -272,7 +272,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
   private def validateGeneralOptions(parameters: Map[String, String]): Unit = {
     // Validate source options
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase, v) }
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedStrategies =
       caseInsensitiveParams.filter { case (k, _) => STRATEGY_OPTION_KEYS.contains(k) }.toSeq
 
@@ -451,8 +451,10 @@ private[kafka010] object KafkaSourceProvider {
       offsetOptionKey: String,
       defaultOffsets: KafkaOffsetRangeLimit): KafkaOffsetRangeLimit = {
     params.get(offsetOptionKey).map(_.trim) match {
-      case Some(offset) if offset.toLowerCase == "latest" => LatestOffsetRangeLimit
-      case Some(offset) if offset.toLowerCase == "earliest" => EarliestOffsetRangeLimit
+      case Some(offset) if offset.toLowerCase(Locale.ROOT) == "latest" =>
+        LatestOffsetRangeLimit
+      case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
+        EarliestOffsetRangeLimit
       case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
       case None => defaultOffsets
     }

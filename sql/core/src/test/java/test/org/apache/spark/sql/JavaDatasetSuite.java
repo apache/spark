@@ -119,7 +119,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> parMapped = ds.mapPartitions((MapPartitionsFunction<String, String>) it -> {
       List<String> ls = new LinkedList<>();
       while (it.hasNext()) {
-        ls.add(it.next().toUpperCase(Locale.ENGLISH));
+        ls.add(it.next().toUpperCase(Locale.ROOT));
       }
       return ls.iterator();
     }, Encoders.STRING());

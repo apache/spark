@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -491,7 +491,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
         reader.load()
       }
       expectedMsgs.foreach { m =>
-        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
       }
     }
 
@@ -524,7 +524,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
           .option(s"$key", value)
         reader.load()
       }
-      assert(ex.getMessage.toLowerCase.contains("not supported"))
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
     testUnsupportedConfig("kafka.group.id")

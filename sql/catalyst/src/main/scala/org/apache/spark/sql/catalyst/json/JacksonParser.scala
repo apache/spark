@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -126,7 +127,7 @@ class JacksonParser(
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
           val value = parser.getText
-          val lowerCaseValue = value.toLowerCase
+          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
           if (lowerCaseValue.equals("nan") ||
             lowerCaseValue.equals("infinity") ||
             lowerCaseValue.equals("-infinity") ||
@@ -146,7 +147,7 @@ class JacksonParser(
         case VALUE_STRING =>
           // Special case handling for NaN and Infinity.
           val value = parser.getText
-          val lowerCaseValue = value.toLowerCase
+          val lowerCaseValue = value.toLowerCase(Locale.ROOT)
           if (lowerCaseValue.equals("nan") ||
             lowerCaseValue.equals("infinity") ||
             lowerCaseValue.equals("-infinity") ||

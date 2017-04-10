@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
 
 import org.scalatest.Matchers
@@ -239,7 +239,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     }
 
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.toLowerCase.contains("serializable"))
+    assert(thrown.getMessage.toLowerCase(Locale.ROOT).contains("serializable"))
   }
 
   test("shuffle with different compression settings (SPARK-3426)") {

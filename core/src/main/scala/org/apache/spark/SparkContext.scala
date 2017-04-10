@@ -361,7 +361,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def setLogLevel(logLevel: String) {
     // let's allow lowercase or mixed case too
-    val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
+    val upperCased = logLevel.toUpperCase(Locale.ROOT)
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")

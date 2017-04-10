@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import java.util.Locale
+
 import scala.util.Try
 
 import org.apache.spark.ml.PredictorParams
@@ -218,7 +220,8 @@ private[ml] trait TreeClassifierParams extends Params {
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
+    (value: String) =>
+      TreeClassifierParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "gini")
 
@@ -230,7 +233,7 @@ private[ml] trait TreeClassifierParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -247,7 +250,8 @@ private[ml] trait TreeClassifierParams extends Params {
 
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
-  final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] =
+    Array("entropy", "gini").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait DecisionTreeClassifierParams
@@ -267,7 +271,8 @@ private[ml] trait TreeRegressorParams extends Params {
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
+    (value: String) =>
+      TreeRegressorParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
 
@@ -279,7 +284,7 @@ private[ml] trait TreeRegressorParams extends Params {
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase
+  final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -295,7 +300,8 @@ private[ml] trait TreeRegressorParams extends Params {
 
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
-  final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] =
+    Array("variance").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
@@ -417,7 +423,8 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
       s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
       s", (0.0-1.0], [1-n].",
     (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(
+        value.toLowerCase(Locale.ROOT))
       || Try(value.toInt).filter(_ > 0).isSuccess
       || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
@@ -431,13 +438,13 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
-  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
+  final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
 
 private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
-    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
+    Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait RandomForestClassifierParams
@@ -509,7 +516,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 private[ml] object GBTClassifierParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: logistic */
-  final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
+  final val supportedLossTypes: Array[String] =
+    Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
@@ -523,12 +531,13 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTClassifierParams.supportedLossTypes.mkString(", ")}",
-    (value: String) => GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase))
+    (value: String) =>
+      GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(lossType -> "logistic")
 
   /** @group getParam */
-  def getLossType: String = $(lossType).toLowerCase
+  def getLossType: String = $(lossType).toLowerCase(Locale.ROOT)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldClassificationLoss = {
@@ -544,7 +553,8 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
 private[ml] object GBTRegressorParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
-  final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
+  final val supportedLossTypes: Array[String] =
+    Array("squared", "absolute").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
@@ -558,12 +568,13 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTRegressorParams.supportedLossTypes.mkString(", ")}",
-    (value: String) => GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase))
+    (value: String) =>
+      GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(lossType -> "squared")
 
   /** @group getParam */
-  def getLossType: String = $(lossType).toLowerCase
+  def getLossType: String = $(lossType).toLowerCase(Locale.ROOT)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {

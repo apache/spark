@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -153,7 +154,7 @@ private[hive] class HiveClientImpl(
         hadoopConf.iterator().asScala.foreach { entry =>
           val key = entry.getKey
           val value = entry.getValue
-          if (key.toLowerCase.contains("password")) {
+          if (key.toLowerCase(Locale.ROOT).contains("password")) {
             logDebug(s"Applying Hadoop and Hive config to Hive Conf: $key=xxx")
           } else {
             logDebug(s"Applying Hadoop and Hive config to Hive Conf: $key=$value")
@@ -168,7 +169,7 @@ private[hive] class HiveClientImpl(
         hiveConf.setClassLoader(initClassLoader)
         // 2: we set all spark confs to this hiveConf.
         sparkConf.getAll.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
+          if (k.toLowerCase(Locale.ROOT).contains("password")) {
             logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
           } else {
             logDebug(s"Applying Spark config to Hive Conf: $k=$v")
@@ -177,7 +178,7 @@ private[hive] class HiveClientImpl(
         }
         // 3: we set all entries in config to this hiveConf.
         extraConfig.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
+          if (k.toLowerCase(Locale.ROOT).contains("password")) {
             logDebug(s"Applying extra config to HiveConf: $k=xxx")
           } else {
             logDebug(s"Applying extra config to HiveConf: $k=$v")
@@ -622,7 +623,7 @@ private[hive] class HiveClientImpl(
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
-    if (cmd.toLowerCase.startsWith("set")) { logDebug(s"Changing config: $cmd") }
+    if (cmd.toLowerCase(Locale.ROOT).startsWith("set")) { logDebug(s"Changing config: $cmd") }
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")

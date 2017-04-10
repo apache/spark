@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
+import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -184,14 +185,14 @@ case class RelationConversions(
     conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: CatalogRelation): Boolean = {
-    (relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("parquet") &&
-      conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)) ||
-      (relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("orc") &&
-        conf.getConf(HiveUtils.CONVERT_METASTORE_ORC))
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   private def convert(relation: CatalogRelation): LogicalRelation = {
-    if (relation.tableMeta.storage.serde.getOrElse("").toLowerCase.contains("parquet")) {
+    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    if (serde.contains("parquet")) {
       val options = Map(ParquetOptions.MERGE_SCHEMA ->
         conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       sessionCatalog.metastoreCatalog

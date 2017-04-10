@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import java.util.Locale
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
@@ -173,7 +175,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
     " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
-    (o: String) => ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase))
+    (o: String) =>
+      ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.6.0")

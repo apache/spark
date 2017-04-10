@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Locale
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -654,7 +656,7 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
   override def load(path: String): LogisticRegression = super.load(path)
 
   private[classification] val supportedFamilyNames =
-    Array("auto", "binomial", "multinomial").map(_.toLowerCase)
+    Array("auto", "binomial", "multinomial").map(_.toLowerCase(Locale.ROOT))
 }
 
 /**

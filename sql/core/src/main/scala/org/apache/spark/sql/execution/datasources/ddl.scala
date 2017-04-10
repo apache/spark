@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
@@ -75,7 +77,7 @@ case class CreateTempViewUsing(
   }
 
   def run(sparkSession: SparkSession): Seq[Row] = {
-    if (provider.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (provider.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, " +
         "you can't use it with CREATE TEMP VIEW USING")
     }

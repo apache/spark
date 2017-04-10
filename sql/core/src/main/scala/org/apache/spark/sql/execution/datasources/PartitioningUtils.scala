@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -194,7 +194,7 @@ object PartitioningUtils {
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
       // uncleaned. Here we simply ignore them.
-      if (currentPath.getName.toLowerCase == "_temporary") {
+      if (currentPath.getName.toLowerCase(Locale.ROOT) == "_temporary") {
         return (None, None)
       }
 

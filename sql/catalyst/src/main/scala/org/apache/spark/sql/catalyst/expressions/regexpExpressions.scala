@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -60,7 +61,7 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase} ${right.sql}"
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
 

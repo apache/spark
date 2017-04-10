@@ -19,6 +19,7 @@ package org.apache.spark.ml.recommendation
 
 import java.{util => ju}
 import java.io.IOException
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -40,8 +41,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -118,10 +118,11 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
     "useful in cross-validation or production scenarios, for handling user/item ids the model " +
     "has not seen in the training data. Supported values: " +
     s"${ALSModel.supportedColdStartStrategies.mkString(",")}.",
-    (s: String) => ALSModel.supportedColdStartStrategies.contains(s.toLowerCase))
+    (s: String) =>
+      ALSModel.supportedColdStartStrategies.contains(s.toLowerCase(Locale.ROOT)))
 
   /** @group expertGetParam */
-  def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase
+  def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
 }
 
 /**

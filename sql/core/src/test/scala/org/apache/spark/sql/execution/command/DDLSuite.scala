@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
@@ -190,7 +191,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       sql(query)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
   }
 
   private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
@@ -1813,7 +1814,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable(tabName) {
           sql(s"CREATE TABLE $tabName(col1 int, col2 string) USING parquet ")
           val message = intercept[AnalysisException] {
-            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase}")
+            sql(s"SHOW COLUMNS IN $db.showcolumn FROM ${db.toUpperCase(Locale.ROOT)}")
           }.getMessage
           assert(message.contains("SHOW COLUMNS with conflicting databases"))
         }

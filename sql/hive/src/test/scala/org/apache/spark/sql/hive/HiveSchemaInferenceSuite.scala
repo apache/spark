@@ -18,18 +18,15 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
-import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode.{Value => InferenceMode, _}

@@ -894,7 +894,7 @@ object DateTimeUtils {
    * (Because 1970-01-01 is Thursday).
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
-    val dowString = string.toString.toUpperCase
+    val dowString = string.toString.toUpperCase(Locale.ROOT)
     dowString match {
       case "SU" | "SUN" | "SUNDAY" => 3
       case "MO" | "MON" | "MONDAY" => 4
@@ -951,7 +951,7 @@ object DateTimeUtils {
     if (format == null) {
       TRUNC_INVALID
     } else {
-      format.toString.toUpperCase match {
+      format.toString.toUpperCase(Locale.ROOT) match {
         case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
         case _ => TRUNC_INVALID

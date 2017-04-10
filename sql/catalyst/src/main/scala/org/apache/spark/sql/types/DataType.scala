@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -49,7 +51,9 @@ abstract class DataType extends AbstractDataType {
 
   /** Name of the type used in JSON serialization. */
   def typeName: String = {
-    this.getClass.getSimpleName.stripSuffix("$").stripSuffix("Type").stripSuffix("UDT").toLowerCase
+    this.getClass.getSimpleName
+      .stripSuffix("$").stripSuffix("Type").stripSuffix("UDT")
+      .toLowerCase(Locale.ROOT)
   }
 
   private[sql] def jsonValue: JValue = typeName
@@ -69,7 +73,7 @@ abstract class DataType extends AbstractDataType {
   /** Readable string representation for the type with truncation */
   private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 
-  def sql: String = simpleString.toUpperCase
+  def sql: String = simpleString.toUpperCase(Locale.ROOT)
 
   /**
    * Check if `this` and `other` are the same data type when ignoring nullability

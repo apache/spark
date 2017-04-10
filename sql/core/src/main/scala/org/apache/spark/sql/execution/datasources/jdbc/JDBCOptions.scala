@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
@@ -55,7 +55,7 @@ class JDBCOptions(
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    parameters.originalMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
+    parameters.originalMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase(Locale.ROOT)))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -141,7 +141,7 @@ object JDBCOptions {
   private val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
-    jdbcOptionNames += name.toLowerCase
+    jdbcOptionNames += name.toLowerCase(Locale.ROOT)
     name
   }
 

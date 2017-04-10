@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
@@ -221,7 +223,7 @@ class FileStreamSinkSuite extends StreamTest {
           df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
         }
         Seq(mode, "not support").foreach { w =>
-          assert(e.getMessage.toLowerCase.contains(w))
+          assert(e.getMessage.toLowerCase(Locale.ROOT).contains(w))
         }
       }
 

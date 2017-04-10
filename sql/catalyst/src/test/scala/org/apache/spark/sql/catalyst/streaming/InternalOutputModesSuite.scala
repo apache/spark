@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.streaming
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.streaming.OutputMode
 
@@ -40,7 +42,7 @@ class InternalOutputModesSuite extends SparkFunSuite {
       val acceptedModes = Seq("append", "update", "complete")
       val e = intercept[IllegalArgumentException](InternalOutputModes(outputMode))
       (Seq("output mode", "unknown", outputMode) ++ acceptedModes).foreach { s =>
-        assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
       }
     }
     testMode("Xyz")
