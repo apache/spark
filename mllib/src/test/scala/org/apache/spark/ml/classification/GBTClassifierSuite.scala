@@ -97,8 +97,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.getProbabilityCol === "probability")
     assert(model.hasParent)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(gbt, model)
   }
 
   test("setThreshold, getThreshold") {
@@ -261,8 +260,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       .setSeed(123)
     val model = gbt.fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(gbt, model)
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)

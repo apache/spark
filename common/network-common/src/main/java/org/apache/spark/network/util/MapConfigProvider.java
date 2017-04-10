@@ -43,6 +43,12 @@ public class MapConfigProvider extends ConfigProvider {
   }
 
   @Override
+  public String get(String name, String defaultValue) {
+    String value = config.get(name);
+    return value == null ? defaultValue : value;
+  }
+
+  @Override
   public Iterable<Map.Entry<String, String>> getAll() {
     return config.entrySet();
   }

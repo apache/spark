@@ -758,11 +758,11 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // implies that, for a given input row, the output are determined by the expression's initial
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
+    // This also applies to Aggregate.
     case filter @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) &&
         !SubqueryExpression.hasCorrelatedSubquery(condition) &&
         !SubExprUtils.containsOuter(condition) =>
-
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
       val aliasMap = AttributeMap(fields.collect {
@@ -770,6 +770,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       })
 
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+
 
     // Similar to the above Filter over Project
     // LeftSemi/LeftAnti over Project
@@ -860,7 +861,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
 
-    case filter @ Filter(condition, aggregate: Aggregate) =>
+    case filter @ Filter(condition, aggregate: Aggregate)
+      if aggregate.aggregateExpressions.forall(_.deterministic) =>
       // Find all the aliased expressions in the aggregate list that don't include any actual
       // AggregateExpression, and create a map from the alias to the expression
       val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {

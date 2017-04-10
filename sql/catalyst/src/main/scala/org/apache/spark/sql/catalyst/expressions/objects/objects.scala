@@ -225,23 +225,24 @@ case class Invoke(
       getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
+      // If the function can return null, we do an extra check to make sure our null bit is still
+      // set correctly.
+      val assignResult = if (!returnNullable) {
+        s"${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;"
+      } else {
+        s"""
+          if ($funcResult != null) {
+            ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
+          } else {
+            ${ev.isNull} = true;
+          }
+        """
+      }
       s"""
         Object $funcResult = null;
         ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
-        if ($funcResult == null) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
-        }
+        $assignResult
       """
-    }
-
-    // If the function can return null, we do an extra check to make sure our null bit is still set
-    // correctly.
-    val postNullCheck = if (ctx.defaultValue(dataType) == "null") {
-      s"${ev.isNull} = ${ev.value} == null;"
-    } else {
-      ""
     }
 
     val code = s"""
@@ -254,7 +255,6 @@ case class Invoke(
         if (!${ev.isNull}) {
           $evaluate
         }
-        $postNullCheck
       }
      """
     ev.copy(code = code)
@@ -448,6 +448,17 @@ object MapObjects {
   }
 }
 
+case class UnresolvedMapObjects(
+    function: Expression => Expression,
+    child: Expression,
+    customCollectionCls: Option[Class[_]] = None) extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+
+  override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
+    throw new UnsupportedOperationException("not resolved")
+  }
+}
+
 /**
  * Applies the given expression to every element of a collection of items, returning the result
  * as an ArrayType or ObjectType. This is similar to a typical map operation, but where the lambda
@@ -581,17 +592,24 @@ case class MapObjects private(
           // collection
           val collObjectName = s"${cls.getName}$$.MODULE$$"
           val getBuilderVar = s"$collObjectName.newBuilder()"
-
-          (s"""${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
-        $builderValue.sizeHint($dataLength);""",
+          (
+            s"""
+               ${classOf[Builder[_, _]].getName} $builderValue = $getBuilderVar;
+               $builderValue.sizeHint($dataLength);
+             """,
             genValue => s"$builderValue.$$plus$$eq($genValue);",
-            s"(${cls.getName}) $builderValue.result();")
+            s"(${cls.getName}) $builderValue.result();"
+          )
         case None =>
           // array
-          (s"""$convertedType[] $convertedArray = null;
-        $convertedArray = $arrayConstructor;""",
+          (
+            s"""
+               $convertedType[] $convertedArray = null;
+               $convertedArray = $arrayConstructor;
+             """,
             genValue => s"$convertedArray[$loopIndex] = $genValue;",
-            s"new ${classOf[GenericArrayData].getName}($convertedArray);")
+            s"new ${classOf[GenericArrayData].getName}($convertedArray);"
+          )
       }
 
     val code = s"""
@@ -971,7 +989,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
  * `Int` field named `i`.  Expression `s.i` is nullable because `s` can be null.  However, for all
  * non-null `s`, `s.i` can't be null.
  */
-case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
+case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
@@ -987,7 +1005,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == null) {
-      throw new RuntimeException(errMsg)
+      throw new NullPointerException(errMsg)
     }
     result
   }
@@ -1003,7 +1021,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
       ${childGen.code}
 
       if (${childGen.isNull}) {
-        throw new RuntimeException($errMsgField);
+        throw new NullPointerException($errMsgField);
       }
      """
     ev.copy(code = code, isNull = "false", value = childGen.value)

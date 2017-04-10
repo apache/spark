@@ -752,7 +752,7 @@ object SQLConf {
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .stringConf
-      .createWithDefault(TimeZone.getDefault().getID())
+      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
@@ -1153,7 +1153,7 @@ class SQLConf extends Serializable with Logging {
   }
 
   // For test only
-  private[spark] def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+  def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
     val cloned = clone()
     entries.foreach {
       case (entry, value) => cloned.setConfString(entry.key, value.toString)
