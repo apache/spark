@@ -1,0 +1,63 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.examples.ml
+
+// $example on$
+import org.apache.spark.ml.{FuncTransformer, Pipeline, PipelineModel}
+// $example off$
+import org.apache.spark.sql.SparkSession
+// $example on$
+import org.apache.spark.util.Utils
+// $example off$
+
+/**
+ * An example demonstrating creating a custom [[org.apache.spark.ml.FuncTransformer]].
+ *
+ * Run with
+ * {{{
+ * bin/run-example ml.FuncTransformerExample
+ * }}}
+ */
+object FuncTransformerExample {
+
+  // $example on$
+  def main(args: Array[String]) {
+    val spark = SparkSession
+      .builder()
+      .appName("FuncTransformerExample")
+      .getOrCreate()
+    import spark.implicits._
+
+    // $example on$
+    val df = Seq(0.0, 1.0, 2.0, 3.0).toDF("value")
+
+    val labelConverter = new FuncTransformer((i: Double) => if (i >= 1) 1 else 0)
+    labelConverter.transform(df).show()
+
+    val doubleToVector = new FuncTransformer((i: Double) => i + 1)
+    doubleToVector.transform(df).show()
+
+    // pipeline example
+    val pipeline = new Pipeline().setStages(Array(labelConverter, doubleToVector))
+    val pipelineModel = pipeline.fit(df)
+    pipelineModel.transform(df).show()
+    // $example off$
+
+    spark.stop()
+  }
+}
