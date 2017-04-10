@@ -43,14 +43,16 @@ private[ui] class StageTableBase(
     killEnabled: Boolean,
     isFailedStage: Boolean) {
   val allParameters = request.getParameterMap().asScala.toMap
+  //stripXSS is called to remove suspicious characters used in XSS attacks
+  allParameters.mapValues(UIUtils.stripXSS(_))
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
 
-  val parameterStagePage = request.getParameter(stageTag + ".page")
-  val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
-  val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
-  val parameterStagePageSize = request.getParameter(stageTag + ".pageSize")
-  val parameterStagePrevPageSize = request.getParameter(stageTag + ".prevPageSize")
+  val parameterStagePage = UIUtils.stripXSS(request.getParameter(stageTag + ".page"))
+  val parameterStageSortColumn = UIUtils.stripXSS(request.getParameter(stageTag + ".sort"))
+  val parameterStageSortDesc = UIUtils.stripXSS(request.getParameter(stageTag + ".desc"))
+  val parameterStagePageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".pageSize"))
+  val parameterStagePrevPageSize = UIUtils.stripXSS(request.getParameter(stageTag + ".prevPageSize"))
 
   val stagePage = Option(parameterStagePage).map(_.toInt).getOrElse(1)
   val stageSortColumn = Option(parameterStageSortColumn).map { sortColumn =>
@@ -512,4 +514,3 @@ private[ui] class StageDataSource(
     }
   }
 }
-

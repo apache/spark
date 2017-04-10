@@ -27,6 +27,7 @@ import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
+import org.apache.commons.lang3.StringEscapeUtils
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -526,5 +527,22 @@ private[spark] object UIUtils extends Logging {
     } else {
       origHref
     }
+  }
+
+  /**
+   * Remove suspicious characters of user input to prevent Cross-Site scripting (XSS) attacks
+   *
+   * For more information about XSS testing:
+   * https://www.owasp.org/index.php/XSS_Filter_Evasion_Cheat_Sheet and
+   * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
+   */
+  def stripXSS(url: String): String = {
+    var strippedXSSUrl = url
+    if (strippedXSSUrl != null) {
+      // Avoid null characters or single quote
+      strippedXSSUrl = strippedXSSUrl.replaceAll("(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)", "")
+      strippedXSSUrl = StringEscapeUtils.escapeHtml4(strippedXSSUrl)
+    }
+    strippedXSSUrl
   }
 }
