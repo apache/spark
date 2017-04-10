@@ -125,7 +125,7 @@ abstract class SerializerInstance {
  * A stream for writing serialized objects.
  */
 @DeveloperApi
-abstract class SerializationStream {
+abstract class SerializationStream extends Closeable {
   /** The most general-purpose method to write an object. */
   def writeObject[T: ClassTag](t: T): SerializationStream
   /** Writes the object representing the key of a key-value pair. */
@@ -149,7 +149,7 @@ abstract class SerializationStream {
  * A stream for reading serialized objects.
  */
 @DeveloperApi
-abstract class DeserializationStream {
+abstract class DeserializationStream extends Closeable {
   /** The most general-purpose method to read an object. */
   def readObject[T: ClassTag](): T
   /** Reads the object representing the key of a key-value pair. */
