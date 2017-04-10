@@ -48,10 +48,8 @@ abstract class Exchange extends UnaryExecNode {
 case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
   extends LeafExecNode {
 
-  override def sameResult(plan: SparkPlan): Boolean = {
-    // Ignore this wrapper. `plan` could also be a ReusedExchange, so we reverse the order here.
-    plan.sameResult(child)
-  }
+  // Ignore this wrapper for canonicalizing.
+  override lazy val canonicalized: SparkPlan = child.canonicalized
 
   def doExecute(): RDD[InternalRow] = {
     child.execute()
