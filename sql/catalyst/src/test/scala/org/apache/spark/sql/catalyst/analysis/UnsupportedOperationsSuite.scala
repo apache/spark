@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{FlatMapGroupsWithState, _}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends Command
@@ -696,7 +697,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         testBody
       }
       expectedMsgs.foreach { m =>
-        if (!e.getMessage.toLowerCase.contains(m.toLowerCase)) {
+        if (!e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT))) {
           fail(s"Exception message should contain: '$m', " +
             s"actual exception message:\n\t'${e.getMessage}'")
         }

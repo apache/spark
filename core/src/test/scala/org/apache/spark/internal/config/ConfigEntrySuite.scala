@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -132,7 +133,7 @@ class ConfigEntrySuite extends SparkFunSuite {
     val conf = new SparkConf()
     val transformationConf = ConfigBuilder(testKey("transformation"))
       .stringConf
-      .transform(_.toLowerCase())
+      .transform(_.toLowerCase(Locale.ROOT))
       .createWithDefault("FOO")
 
     assert(conf.get(transformationConf) === "foo")

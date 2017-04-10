@@ -71,9 +71,9 @@ class CSVOptions(
     val param = parameters.getOrElse(paramName, default.toString)
     if (param == null) {
       default
-    } else if (param.toLowerCase == "true") {
+    } else if (param.toLowerCase(Locale.ROOT) == "true") {
       true
-    } else if (param.toLowerCase == "false") {
+    } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
       throw new Exception(s"$paramName flag can be true or false")
