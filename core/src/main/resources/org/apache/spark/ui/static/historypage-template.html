@@ -39,7 +39,7 @@
           Started
         </span>
       </th>
-      <th>
+      <th class="completedColumn">
         <span data-toggle="tooltip" data-placement="above" title="The completed time of this application.">
           Completed
         </span>
@@ -73,7 +73,7 @@
       {{#attempts}}
       <td class="attemptIDSpan"><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
       <td>{{startTime}}</td>
-      <td>{{endTime}}</td>
+      <td class="completedColumn">{{endTime}}</td>
       <td><span title="{{duration}}" class="durationClass">{{duration}}</span></td>
       <td>{{sparkUser}}</td>
       <td>{{lastUpdated}}</td>
