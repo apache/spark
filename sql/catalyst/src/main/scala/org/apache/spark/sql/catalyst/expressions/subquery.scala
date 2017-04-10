@@ -47,7 +47,6 @@ abstract class SubqueryExpression(
     plan: LogicalPlan,
     children: Seq[Expression],
     exprId: ExprId) extends PlanExpression[LogicalPlan] {
-
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
   override lazy val references: AttributeSet =
     if (plan.resolved) super.references -- plan.outputSet else super.references
@@ -59,11 +58,10 @@ abstract class SubqueryExpression(
         children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
     case _ => false
   }
-
   def canonicalize(attrs: AttributeSeq): SubqueryExpression = {
     // Normalize the outer references in the subquery plan.
     val subPlan = plan.transformAllExpressions {
-      case OuterReference(r) => plan.normalizeExprId(r, attrs)
+      case OuterReference(r) => QueryPlan.normalizeExprId(r, attrs)
     }
     withNewPlan(subPlan).canonicalized.asInstanceOf[SubqueryExpression]
   }
